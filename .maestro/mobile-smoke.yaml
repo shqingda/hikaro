@@ -1,0 +1,10 @@
+appId: dev.hikaro.mobile
+---
+- launchApp
+- assertVisible: "Hikaro"
+- assertVisible: "Connect a computer"
+- tapOn: "Pair computer"
+- assertVisible: "Pair a computer"
+- assertVisible: "Scan pairing code"
+- back
+- assertVisible: "Message Hikaro"

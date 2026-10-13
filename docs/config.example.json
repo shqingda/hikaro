@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "example": { "command": "your-mcp-server", "args": [] }
+  },
+  "lspServers": {
+    "typescript": {
+      "command": "typescript-language-server",
+      "args": ["--stdio"],
+      "extensions": [".ts", ".tsx", ".js", ".jsx"]
+    }
+  },
+  "index": {
+    "enabled": false
+  },
+  "browser": { "enabled": false },
+  "plugins": []
+}

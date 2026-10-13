@@ -1,0 +1,10 @@
+{
+  "name": "@hikaro/remote",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/client.ts",
+  "dependencies": {
+    "@hikaro/crypto": "workspace:*"
+  }
+}

@@ -1,0 +1,12 @@
+packages:
+  - "packages/*"
+  - "apps/cli"
+  - "apps/relay"
+minimumReleaseAge: 0
+allowBuilds:
+  workerd: true
+  sharp: true
+  esbuild: true
+  node-pty: true
+  "@google/genai": false
+  protobufjs: false

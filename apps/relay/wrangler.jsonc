@@ -1,0 +1,16 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "hikaro-relay",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "durable_objects": {
+    "bindings": [{ "name": "HOSTS", "class_name": "HostRelay" }],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["HostRelay"] }],
+  "queues": {
+    "producers": [
+      { "binding": "NOTIFICATIONS", "queue": "hikaro-notifications" },
+    ],
+    "consumers": [{ "queue": "hikaro-notifications", "max_batch_size": 20 }],
+  },
+}

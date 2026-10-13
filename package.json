@@ -1,0 +1,50 @@
+{
+  "name": "hikaro",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.11.2",
+  "engines": {
+    "node": ">=24.21.0"
+  },
+  "scripts": {
+    "dev": "tsx apps/cli/src/index.ts",
+    "build": "node scripts/build.mjs",
+    "start": "node dist/hikaro.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "check": "pnpm typecheck && pnpm test && pnpm build",
+    "bench": "node scripts/bench.mjs",
+    "postinstall": "node scripts/prepare-native.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test:pi": "pnpm build && node scripts/pi-smoke.mjs",
+    "check:relay": "pnpm --filter @hikaro/relay typecheck"
+  },
+  "dependencies": {
+    "@anthropic-ai/sandbox-runtime": "0.0.79",
+    "@earendil-works/pi-ai": "1.2.0",
+    "@earendil-works/pi-tui": "1.2.0",
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "@napi-rs/keyring": "2.1.1",
+    "ajv": "8.20.0",
+    "node-pty": "1.1.0",
+    "playwright": "1.64.0",
+    "qrcode-terminal": "0.12.0",
+    "quickjs-emscripten": "0.32.0",
+    "tweetnacl": "1.0.3",
+    "ws": "8.22.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.0",
+    "@types/node": "24.10.1",
+    "@types/qrcode-terminal": "0.12.2",
+    "@types/ws": "8.18.1",
+    "esbuild": "0.28.2",
+    "prettier": "3.9.10",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vitest": "5.0.4"
+  }
+}
