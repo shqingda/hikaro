@@ -202,7 +202,10 @@ export class ModelPanel implements Component {
           : this.input.render(width)),
       );
     }
-    if (this.list) lines.push(...this.list.render(width));
+    if (this.list) {
+      if (this.input) lines.push("");
+      lines.push(...this.list.render(width));
+    }
     if (this.message)
       lines.push(...new Text(dim(this.message), 1, 1).render(width));
     if (this.error)

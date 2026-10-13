@@ -206,9 +206,6 @@ importers:
         specifier: 4.6.7
         version: 4.6.7
     devDependencies:
-      '@playwright/test':
-        specifier: 1.64.0
-        version: 1.64.0
       '@types/node':
         specifier: 24.10.1
         version: 24.10.1
@@ -244,8 +241,6 @@ importers:
       wrangler:
         specifier: 4.149.0
         version: 4.149.0(@cloudflare/workers-types@5.20261013.1)(@types/node@24.10.1)
-
-  packages/client-state: {}
 
   packages/core: {}
 
@@ -901,11 +896,6 @@ packages:
 
   '@oxc-project/types@0.153.0':
     resolution: {integrity: sha512-jSNrRIyvPVLL5E1z/tS5zLAprosGz/FuI1PWwEOz59j3E4TTTzSpqKb/RDGqJhhW0QHYISGXxq582wGx6T11Tw==}
-
-  '@playwright/test@1.64.0':
-    resolution: {integrity: sha512-oTN9FNYuN6bqQMwiho6jJKLCG2/QOYCixGXuCjRmzOq23eODeukuY2XiAVoVpAECbuezMt1MHQjAiQxK8F+Y+g==}
-    engines: {node: '>=20'}
-    hasBin: true
 
   '@pondwader/socks5-server@1.0.10':
     resolution: {integrity: sha512-bQY06wzzR8D2+vVCUoBsr5QS2U6UgPUQRmErNwtsuI6vLcyRKkafjkr3KxbtGFf9aBBIV2mcvlsKD1UYaIV+sg==}
@@ -2775,10 +2765,6 @@ snapshots:
       '@napi-rs/keyring-win32-x64-msvc': 2.1.1
 
   '@oxc-project/types@0.153.0': {}
-
-  '@playwright/test@1.64.0':
-    dependencies:
-      playwright: 1.64.0
 
   '@pondwader/socks5-server@1.0.10': {}
 

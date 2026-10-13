@@ -33,7 +33,7 @@ const { values, positionals } = parseArgs({
 async function main() {
   if (values.help) {
     console.log(
-      `hikaro — independent coding agent\n\nUsage: hikaro [--demo] [--provider anthropic --model MODEL]\n  --trust             Allow file edits inside this workspace\n  --prompt, -p TEXT   Run once and print the response\n  --rpc               JSONL protocol over stdin/stdout\n  --models            List provider/model identifiers\n  --session ID        Resume a saved session\n  --continue, -c      Resume last opened session (default in TUI)\n  --new               Start a new interactive session\n  --base-url URL      OpenAI-compatible endpoint\n  --cwd PATH          Workspace (defaults to current directory)\n  --home PATH         Data directory (defaults to ~/.hikaro)\n\nAPI keys use provider environment variables. Shell commands require approval.\nUse --demo to try the UI without credentials.`,
+      `hikaro — independent coding agent\n\nUsage: hikaro [--demo] [--provider anthropic --model MODEL]\n  --trust             Allow file edits inside this workspace\n  --prompt, -p TEXT   Run once and print the response\n  --rpc               JSONL protocol over stdin/stdout\n  --models            List provider/model identifiers\n  --session ID        Resume a saved session\n  --continue, -c      Resume last opened session (default in TUI)\n  --new               Start a new interactive session\n  --base-url URL      OpenAI-compatible endpoint\n  --cwd PATH          Workspace (defaults to current directory)\n  --home PATH         Data directory (defaults to ~/.hikaro)\n\nAPI keys use provider environment variables. Interactive /permissions controls workspace approval mode.\nUse --demo to try the UI without credentials.`,
     );
     return;
   }
@@ -115,6 +115,8 @@ async function main() {
           backend.steer(text.slice(7));
           return;
         }
+        if (text.startsWith("/permissions"))
+          return "Pi owns tool permissions in this backend. Use the native Hikaro backend to change /permissions.";
         return "External Pi bridge: /steer text. Ctrl+D exits. Pi owns tools and permissions.";
       },
       onExit: leave,
@@ -158,8 +160,17 @@ async function main() {
   const tui = createTerminal();
   let view: InstanceType<typeof HikaroView>;
   let exiting = false;
+  const { loadPermissionMode } =
+    await import("../../../packages/runtime/src/permissions.ts");
+  const { homedir } = await import("node:os");
+  const { join } = await import("node:path");
+  const permissionMode = await loadPermissionMode(
+    options.home ?? join(homedir(), ".hikaro"),
+    options.cwd,
+  );
   const runtime = await Runtime.open({
     ...options,
+    permissionMode,
     approve: (r, s) => view.approve(r, s),
   });
   const { loadTuiPreferences, saveTuiPreferences } =
@@ -395,6 +406,27 @@ async function main() {
           );
       };
       switch (command) {
+        case "permissions": {
+          if (agent.busy)
+            throw Error(
+              "Finish or cancel the run before changing permissions.",
+            );
+          const { openPermissions } =
+            await import("../../../packages/tui/src/permissions.ts");
+          const { permissionModeSchema, permissionOptions } =
+            await import("../../../packages/runtime/src/permissions.ts");
+          const apply = async (
+            mode: import("../../../packages/runtime/src/permissions.ts").PermissionMode,
+          ) => {
+            await runtime.setPermissionMode(mode);
+            view.notice(
+              `Permissions: ${permissionOptions.find((option) => option.value === mode)!.label} · saved for this workspace.`,
+            );
+          };
+          if (arg) await apply(permissionModeSchema.parse(arg));
+          else await openPermissions(view, runtime.permissionMode, apply);
+          return;
+        }
         case "settings":
           if (agent.busy)
             throw Error("Finish or cancel the run before changing settings.");
@@ -412,12 +444,12 @@ async function main() {
         case "resources":
           return `Skills (${runtime.resources.skills.length}):\n${runtime.resources.skills.map((s) => s.name + " · " + s.path).join("\n")}\n\nInstructions:\n${runtime.resources.instructions.join("\n") || "None"}`;
         case "status":
-          return `Model (active): ${agent.options.provider.id}/${agent.options.provider.model}\nContext budget: ${agent.options.provider.contextWindow}\nReasoning: ${agent.options.session.modelSelection?.settings.reasoning ?? "auto"}\nSpeed: ${agent.options.session.modelSelection?.settings.speed ?? "default"}\nSession: ${session.id}\nWorkspace: ${session.cwd}\nSkills: ${runtime.resources.skills.length}\nInput/output: ${agent.usage.input}/${agent.usage.output}\nEstimated API cost: $${agent.usage.cost.toFixed(4)}`;
+          return `Model (active): ${agent.options.provider.id}/${agent.options.provider.model}\nContext budget: ${agent.options.provider.contextWindow}\nReasoning: ${agent.options.session.modelSelection?.settings.reasoning ?? "auto"}\nSpeed: ${agent.options.session.modelSelection?.settings.speed ?? "default"}\nPermissions: ${runtime.permissionMode}\nSession: ${session.id}\nWorkspace: ${session.cwd}\nSkills: ${runtime.resources.skills.length}\nInput/output: ${agent.usage.input}/${agent.usage.output}\nEstimated API cost: $${agent.usage.cost.toFixed(4)}`;
         case "quit":
           exit();
           return;
         case "help":
-          return "/new  /sessions  /resume [ID]  /rename TITLE  /export\n/fork  /compact  /model provider/model\n/settings  /context [default]  /thinking [default]  /speed [default]\n/status  /resources\n/steer instructions  /tools  /older  /newer  /latest  /quit\n!COMMAND runs a sandboxed terminal command. Ctrl+C cancels. Ctrl+D exits. Shift+Enter adds a line.\nNew prompts queue while the agent works. Shell approval is per operation.";
+          return "/new  /sessions  /resume [ID]  /rename TITLE  /export\n/fork  /compact  /model provider/model\n/settings  /permissions [ask|auto|full]\n/context [default]  /thinking [default]  /speed [default]\n/status  /resources\n/steer instructions  /tools  /older  /newer  /latest  /quit\n!COMMAND follows the current permission mode. Ctrl+C cancels. Ctrl+D exits. Shift+Enter adds a line.\nNew prompts queue while the agent works.";
         case "new":
           await bind(await runtime.session());
           return;

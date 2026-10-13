@@ -3,7 +3,10 @@ import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import type { Plugin, ToolContext } from "../../core/src/types.ts";
 import type { IPty } from "node-pty";
-export function terminalPlugin(trusted: boolean): Plugin {
+export function terminalPlugin(
+  trusted: boolean | (() => boolean),
+  fullAccess: () => boolean = () => false,
+): Plugin {
   return {
     id: "hikaro.terminal",
     apiVersion: 1,
@@ -27,7 +30,7 @@ export function terminalPlugin(trusted: boolean): Plugin {
       host.registerTool({
         name: "terminal_start",
         description:
-          "Start an interactive/background command in a workspace sandbox. Returns an ID for terminal_read, terminal_send, terminal_stop. Up to 8 live terminals. Unrestricted mode requires approval.",
+          "Start an interactive/background command. Uses a workspace sandbox unless unrestricted or Full Access is selected. Expanded access follows the permission mode. Returns an ID for terminal_read, terminal_send, terminal_stop. Up to 8 live terminals.",
         schema: z.object({
           command: z.string().min(1).max(16000),
           unrestricted: z.boolean().default(false),
@@ -35,15 +38,19 @@ export function terminalPlugin(trusted: boolean): Plugin {
           rows: z.number().int().min(5).max(100).default(30),
         }),
         async execute(args, ctx) {
+          const unrestricted = args.unrestricted || fullAccess();
           if (
             [...terminals.values()].filter((t) => t.exitCode === undefined)
               .length >= 8
           )
             throw Error("Terminal concurrency limit reached");
-          if (!trusted || args.unrestricted)
+          if (
+            !(typeof trusted === "function" ? trusted() : trusted) ||
+            unrestricted
+          )
             if (
               !(await ctx.approve(
-                `Start ${args.unrestricted ? "unrestricted" : "sandboxed"} terminal:\n${args.command}`,
+                `Start ${unrestricted ? "unrestricted" : "sandboxed"} terminal:\n${args.command}`,
               ))
             )
               throw Error("Permission denied");
@@ -54,7 +61,7 @@ export function terminalPlugin(trusted: boolean): Plugin {
               process.env[k] ? [[k, process.env[k]!]] : [],
             ),
           );
-          const pty = args.unrestricted
+          const pty = unrestricted
             ? spawn("/bin/zsh", ["-f", "-c", args.command], {
                 cwd: ctx.cwd,
                 env,

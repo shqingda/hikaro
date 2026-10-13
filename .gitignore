@@ -1,6 +1,5 @@
 node_modules/
 dist/
-.expo/
 .wrangler/
 coverage/
 .DS_Store

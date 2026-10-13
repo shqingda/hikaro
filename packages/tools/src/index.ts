@@ -46,12 +46,14 @@ async function allowedPath(
   path: string,
   write: boolean,
   trusted: boolean,
+  reviewRead = false,
 ) {
   const resolved = await resolvePath(ctx.cwd, path);
   if (
     (!resolved.inside &&
       !(!write && ctx.readonlyResources?.includes(resolved.path))) ||
-    (write && !trusted)
+    (write && !trusted) ||
+    (reviewRead && resolved.inside)
   ) {
     if (
       !(await ctx.approve(
@@ -177,7 +179,13 @@ export async function runProcess(
     });
   });
 }
-export function codingPlugin(options: { trusted: boolean }): Plugin {
+export function codingPlugin(options: {
+  trusted: boolean | (() => boolean);
+  fullAccess?: () => boolean;
+  reviewReads?: () => boolean;
+}): Plugin {
+  const trusted = () =>
+    typeof options.trusted === "function" ? options.trusted() : options.trusted;
   return {
     id: "hikaro.coding",
     apiVersion: 1,
@@ -192,7 +200,13 @@ export function codingPlugin(options: { trusted: boolean }): Plugin {
           limit: z.number().int().min(1).max(1000).default(200),
         }),
         async execute({ path, offset, limit }, ctx) {
-          const p = await allowedPath(ctx, path, false, options.trusted);
+          const p = await allowedPath(
+            ctx,
+            path,
+            false,
+            trusted(),
+            options.reviewReads?.(),
+          );
           if ((await stat(p)).size > 2_000_000)
             throw Error(
               "File exceeds 2 MB. Use shell tools to inspect a bounded region.",
@@ -218,7 +232,7 @@ export function codingPlugin(options: { trusted: boolean }): Plugin {
           expected: z.string().optional(),
         }),
         async execute({ path, content, expected }, ctx) {
-          const p = await allowedPath(ctx, path, true, options.trusted);
+          const p = await allowedPath(ctx, path, true, trusted());
           let current: string | undefined;
           try {
             current = await readFile(p, "utf8");
@@ -247,7 +261,7 @@ export function codingPlugin(options: { trusted: boolean }): Plugin {
           newText: z.string(),
         }),
         async execute({ path, oldText, newText }, ctx) {
-          const p = await allowedPath(ctx, path, true, options.trusted);
+          const p = await allowedPath(ctx, path, true, trusted());
           const old = await readFile(p, "utf8");
           const index = old.indexOf(oldText);
           if (index < 0 || old.indexOf(oldText, index + oldText.length) !== -1)
@@ -296,14 +310,15 @@ export function codingPlugin(options: { trusted: boolean }): Plugin {
       host.registerTool({
         name: "shell",
         description:
-          "Run a workspace sandboxed shell command without network. Set unrestricted only when expanded permissions are necessary; this requires approval.",
+          "Run a workspace sandboxed shell command without network. Set unrestricted when expanded access is necessary; approval depends on the selected permission mode. Full Access runs host commands without the sandbox.",
         schema: z.object({
           command: z.string().min(1).max(16000),
           timeoutMs: z.number().int().min(100).max(300000).default(60000),
           unrestricted: z.boolean().default(false),
         }),
         async execute({ command, timeoutMs, unrestricted }, ctx) {
-          if (unrestricted || !options.trusted) {
+          unrestricted ||= options.fullAccess?.() ?? false;
+          if (unrestricted || !trusted()) {
             if (
               !(await ctx.approve(
                 `Run ${unrestricted ? "unrestricted host" : "workspace sandbox"} command:\n${command}`,

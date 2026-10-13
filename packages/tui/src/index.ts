@@ -2,7 +2,6 @@ import {
   TuiAltScreen,
   ProcessTerminal,
   Text,
-  Editor,
   Container,
   ScrollView,
   VStack,
@@ -15,6 +14,7 @@ import {
   type MarkdownTheme,
 } from "@earendil-works/pi-tui";
 import { ModelPanel } from "./model-panel.ts";
+import { ActivityEditor } from "./activity-editor.ts";
 import { defaultTuiPreferences, type TuiPreferences } from "./preferences.ts";
 import { stripVTControlCharacters } from "node:util";
 import type {
@@ -176,12 +176,13 @@ export class HikaroView {
   private modelPanel?: ModelPanel;
   readonly historyHint = new Text("", 1, 0);
   readonly header: Text;
-  readonly editor: Editor;
+  readonly editor: ActivityEditor;
   readonly layout: VStack;
   private draft?: MessageComponent;
   private draftText = "";
   private nextMessage = 1;
   private busy = false;
+  private activity = "Working";
   private disposed = false;
   private approval?: {
     resolve: (value: boolean) => void;
@@ -226,10 +227,10 @@ export class HikaroView {
       1,
       1,
     );
-    this.editor = new Editor(
+    this.editor = new ActivityEditor(
       tui,
       {
-        borderColor: muted,
+        borderColor: (text) => (this.busy ? accent(text) : muted(text)),
         selectList: {
           selectedPrefix: accent,
           selectedText: bold,
@@ -270,6 +271,7 @@ export class HikaroView {
             name: "settings",
             description: "Display, notifications and startup preferences",
           },
+          { name: "permissions", description: "Workspace approval policy" },
           {
             name: "context",
             description: "Select context budget · active / default",
@@ -623,14 +625,18 @@ export class HikaroView {
     if (event.type === "run.start") {
       this.setError("");
       this.busy = true;
+      this.activity =
+        event.data.operation === "compact" ? "Compacting" : "Working";
       this.draft = undefined;
       this.draftText = "";
       this.thinkingDraft = undefined;
       this.thinkingText = "";
     } else if (event.type === "text.delta") {
+      this.activity = "Working";
       if (this.history.hasNewer) {
         this.pendingMessages = true;
         this.updateHistoryHint();
+        this.updateFooter();
         return;
       }
       if (!this.draft) {
@@ -647,6 +653,7 @@ export class HikaroView {
       );
       this.draft.setText(this.draftText);
     } else if (event.type === "thinking.delta") {
+      this.activity = "Thinking";
       if (this.preferences.showThinking && !this.history.hasNewer) {
         if (!this.thinkingDraft) {
           this.thinkingDraft = new Text("", 1, 1);
@@ -709,11 +716,14 @@ export class HikaroView {
       }
     } else if (event.type === "tool.start") {
       this.lastTool = sanitize(String(event.data.name));
+      this.activity = `Running ${this.lastTool}`;
       if (this.detail)
         this.notice(
           `${event.data.name} ${JSON.stringify(event.data.arguments ?? {}).slice(0, 500)}`,
         );
     } else if (event.type === "tool.end") {
+      this.lastTool = "";
+      this.activity = "Working";
       const result = event.data.result as
         { text?: string; isError?: boolean } | undefined;
       if (result?.isError && !this.detail)
@@ -815,6 +825,16 @@ export class HikaroView {
     this.tui.requestRender();
   }
   private updateFooter() {
+    this.editor.setActivity(
+      this.busy && !this.disposed
+        ? this.approval
+          ? "Approval required"
+          : this.dialog
+            ? "Waiting for input"
+            : this.activity
+        : "",
+      !this.approval && !this.dialog && !this.modelPanel,
+    );
     if (this.modelPanel) {
       this.footer.setText("");
       return;
@@ -829,7 +849,7 @@ export class HikaroView {
                 ? "Type yes to confirm · Esc cancels"
                 : "Enter submits · Esc cancels"
               : this.busy
-                ? `Working${this.lastTool ? " · " + this.lastTool : ""} · Ctrl+C stops · new prompts queue`
+                ? "Ctrl+C stops · new prompts queue"
                 : `Enter send · Shift+Enter newline · /help${this.status.size ? " · " + [...this.status.values()].join(" · ") : ""}`),
       ),
     );
@@ -870,6 +890,7 @@ export class HikaroView {
     this.removeScheme?.();
     if (this.disposed) return;
     this.disposed = true;
+    this.editor.dispose();
     this.removeInput();
     this.unsubscribe?.();
     this.dialogs = [];

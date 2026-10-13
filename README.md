@@ -1,6 +1,6 @@
 # hikaro
 
-Independent TypeScript coding agent. Current scope: fullscreen TUI and bidirectional Pi integration. See [TODO.md](TODO.md) for implementation and acceptance status. Electron and Expo experiments are retained but excluded from the active workspace, default installation and delivery plan. Cloud configuration remains optional.
+Independent TypeScript coding agent. Current scope: fullscreen TUI and bidirectional Pi integration. See [TODO.md](TODO.md) for implementation and acceptance status. Desktop and mobile experiments and their dedicated tests have been removed. Cloud configuration remains optional.
 
 ## Run
 
@@ -30,7 +30,11 @@ pnpm start -p 'Explain this project'       # noninteractive; approvals denied
 pnpm start --rpc                          # versioned JSONL client protocol
 ```
 
-`--trust` permits edits inside the selected workspace. Shell and PTY tools use a macOS sandbox with no network by default. Unrestricted shell, external paths, configured MCP servers, and browser actions require approval. Third-party in-process plugins are trusted code.
+Native TUI permissions default to **Ask for approval**: workspace file edits and sandboxed commands are allowed; external file access, unrestricted commands, MCP and browser actions ask for approval. `/permissions` selects **Ask for approval**, **Approve for me**, or **Full Access**, and saves the choice for the current canonical workspace in `~/.hikaro/permissions.json` (or the selected home). Enter applies it immediately while agents are idle. `/permissions ask`, `/permissions auto`, and `/permissions full` select a mode directly.
+
+**Approve for me** uses conservative local rules, with no extra model request. Ordinary workspace file operations and known literal read commands can pass automatically. Sensitive paths, shell expansion, unknown commands/tools and expanded access still ask. Commands remain in the macOS workspace sandbox with no network. **Full Access** permits external file tools and runs shell/PTY commands on the host with network access, without approval. Existing processes retain the access they had when started.
+
+Noninteractive/RPC hosts keep the existing `--trust` and per-operation approval behavior; they do not inherit the TUI's saved mode. Third-party in-process plugins are trusted code. The external Pi backend owns its own permissions; Hikaro's selector cannot change those.
 
 ## Terminal controls
 
@@ -43,8 +47,9 @@ pnpm start --rpc                          # versioned JSONL client protocol
 | `/fork`, `/compact` | Branch history or create a continuation summary |
 | `/model`, `/login` | Search models or connect a provider |
 | `/settings` | Tool details, thinking visibility, usage footer, completion bell and startup behavior |
+| `/permissions [ask\|auto\|full]` | Select workspace permissions; Enter applies and saves; Esc closes |
 | `/context`, `/thinking`, `/speed` | Choose and apply a model setting immediately; append `default` for new-session defaults |
-| `!COMMAND` | Run a sandboxed terminal command directly, without a model request |
+| `!COMMAND` | Run a terminal command under the current permission mode, without a model request |
 | `/resources`, `/status` | Skills/instructions and current session/model usage |
 | `/model provider/model` | Switch model directly while idle |
 | `/steer text` | Add instructions to the active run |
@@ -58,7 +63,9 @@ pnpm start --rpc                          # versioned JSONL client protocol
 
 Drafts are saved on session switches and orderly exit. They are not crash recovery or per-keystroke autosave. The last session can be deleted; deleting the current session opens a fresh blank session.
 
-Data defaults to `~/.hikaro`; override with `--home` or `HIKARO_HOME`. Sessions are SQLite event streams. Large tool results are saved as artifacts. Process logs have a 50 MiB cap, reported when reached. Closing the Electron window keeps its host process alive; quitting the application stops that host.
+The editor's top border shows an animated **Working**, **Thinking**, **Running TOOL**, or **Compacting** indicator. It pauses while waiting for approval/input and stops on completion, cancellation, session binding and exit. Thinking status is independent of whether reasoning text is displayed.
+
+Data defaults to `~/.hikaro`; override with `--home` or `HIKARO_HOME`. Sessions are SQLite event streams. Large tool results are saved as artifacts. Process logs have a 50 MiB cap, reported when reached.
 
 ## Pi integration
 
@@ -83,7 +90,7 @@ Compatibility targets Pi **1.2.0's public RPC and extension interfaces**. Arbitr
 
 ## Optional integrations
 
-Copy the relevant entries from [config.example.json](docs/config.example.json) into `~/.hikaro/config.json`. All integrations are disabled unless configured. Project files cannot silently enable executable plugins or servers.
+Copy the relevant entries from [config.example.json](templates/config.example.json) into `~/.hikaro/config.json`. All integrations are disabled unless configured. Project files cannot silently enable executable plugins or servers.
 
 - MCP: stdio and Streamable HTTP; deferred tool discovery through `tool_search`.
 - Skills: `.agents/skills` and `.hikaro/skills`; workspace `AGENTS.md` instructions.

@@ -35,10 +35,17 @@ import { codemodePlugin } from "../../tools/src/codemode.ts";
 import { z } from "zod";
 import { JobScheduler } from "../../core/src/jobs.ts";
 import { randomUUID, createHash } from "node:crypto";
+import {
+  canAutoApprove,
+  permissionModeSchema,
+  savePermissionMode,
+  type PermissionMode,
+} from "./permissions.ts";
 export type RuntimeOptions = {
   cwd: string;
   home?: string;
   trusted?: boolean;
+  permissionMode?: PermissionMode;
   demo?: boolean;
   provider?: string;
   model?: string;
@@ -67,6 +74,40 @@ export class Runtime {
     readonly options: RuntimeOptions,
     readonly store: SQLiteStore,
   ) {}
+  get permissionMode(): PermissionMode {
+    return this.options.permissionMode ?? "ask";
+  }
+  private workspaceTrusted() {
+    return this.options.permissionMode === undefined
+      ? (this.options.trusted ?? false)
+      : this.options.permissionMode !== "auto";
+  }
+  private async approve(request: PermissionRequest, signal: AbortSignal) {
+    signal.throwIfAborted();
+    if (this.options.permissionMode === "full") return true;
+    if (this.options.permissionMode === "auto") {
+      const allowed = await canAutoApprove(request, this.options.cwd).catch(
+        () => false,
+      );
+      signal.throwIfAborted();
+      if (allowed) return true;
+    }
+    return this.options.approve(request, signal);
+  }
+  async setPermissionMode(mode: PermissionMode) {
+    const next = permissionModeSchema.parse(mode);
+    if ([...this.agents.values()].some((agent) => agent.busy))
+      throw Error("Finish or cancel the run before changing permissions.");
+    const previous = this.options.permissionMode;
+    this.options.permissionMode = next;
+    try {
+      await savePermissionMode(this.options.home!, this.options.cwd, next);
+    } catch (error) {
+      this.options.permissionMode = previous;
+      throw error;
+    }
+    return next;
+  }
   static async open(options: RuntimeOptions) {
     const home = options.home ?? join(homedir(), ".hikaro");
     await mkdir(home, { recursive: true, mode: 0o700 });
@@ -93,11 +134,20 @@ export class Runtime {
     );
     try {
       await runtime.plugins.load(
-        codingPlugin({ trusted: options.trusted ?? false }),
+        codingPlugin({
+          trusted: () => runtime.workspaceTrusted(),
+          fullAccess: () => runtime.options.permissionMode === "full",
+          reviewReads: () => runtime.options.permissionMode === "auto",
+        }),
       );
       await runtime.plugins.load(codemodePlugin());
       const { terminalPlugin } = await import("../../tools/src/terminal.ts");
-      await runtime.plugins.load(terminalPlugin(options.trusted ?? false));
+      await runtime.plugins.load(
+        terminalPlugin(
+          () => runtime.workspaceTrusted(),
+          () => runtime.options.permissionMode === "full",
+        ),
+      );
       try {
         const config = JSON.parse(
           await readFile(join(home, "config.json"), "utf8"),
@@ -389,7 +439,7 @@ export class Runtime {
         store: this.store,
         provider: await this.provider(session.modelSelection),
         tools: this.tools,
-        approve: this.options.approve,
+        approve: (request, signal) => this.approve(request, signal),
         depth,
         budget,
         saveArtifact: async (callId, result) => {
