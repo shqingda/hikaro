@@ -6,6 +6,8 @@ import {
   CURSOR_MARKER,
   matchesKey,
   isKeyRelease,
+  truncateToWidth,
+  visibleWidth,
   type Component,
   type SelectItem,
 } from "@earendil-works/pi-tui";
@@ -29,14 +31,20 @@ export class ModelPanel implements Component {
   private help?: string;
   private allowDelete = false;
   private allowRename = false;
+  private allowDefault: boolean | ((item: SelectItem) => boolean) = false;
+  private enterAction: string | ((item: SelectItem) => string) = "confirm";
   private cancelValue?: string;
   private input?: Input;
   private list?: SelectList;
+  private items: SelectItem[] = [];
+  private matches: SelectItem[] = [];
+  private emptyMessage = "No matching options";
   private secret = false;
   private pending?: { resolve: (v: any) => void; reject: (e: Error) => void };
   constructor(
     readonly signal: AbortSignal,
     private refresh: () => void,
+    private maxRows: (width: number) => number = () => 18,
   ) {
     signal.addEventListener(
       "abort",
@@ -56,6 +64,11 @@ export class ModelPanel implements Component {
       allowDelete?: boolean;
       allowRename?: boolean;
       cancelValue?: string;
+      search?: boolean;
+      selectedValue?: string;
+      emptyMessage?: string;
+      allowDefault?: boolean | ((item: SelectItem) => boolean);
+      enterAction?: string | ((item: SelectItem) => string);
     },
   ): Promise<Selection> {
     this.title = title;
@@ -64,30 +77,51 @@ export class ModelPanel implements Component {
     this.help = help;
     this.allowDelete = options?.allowDelete ?? false;
     this.allowRename = options?.allowRename ?? false;
+    this.allowDefault = options?.allowDefault ?? false;
+    this.enterAction = options?.enterAction ?? "confirm";
     this.cancelValue = options?.cancelValue;
     this.secret = false;
-    this.input = new Input({
-      prompt: "> ",
-      placeholder: "Search…",
-      placeholderStyle: dim,
+    this.items = items;
+    this.emptyMessage = options?.emptyMessage ?? "No matching options";
+    this.input = undefined;
+    if (options?.search ?? items.length > 5) {
+      this.input = new Input({
+        prompt: "> ",
+        placeholder: "Search…",
+        placeholderStyle: dim,
+      });
+      this.input.focused = true;
+    }
+    this.updateList(options?.selectedValue);
+    this.refresh();
+    return new Promise((resolve, reject) => {
+      this.pending = { resolve, reject };
     });
-    this.list = new SelectList(items, 8, {
+  }
+  private updateList(selectedValue?: string) {
+    const query = (this.input?.getValue() ?? "").trim().toLowerCase();
+    const matches = this.items.filter((item) =>
+      [item.label, item.description ?? "", item.value].some((text) =>
+        clean(text).toLowerCase().includes(query),
+      ),
+    );
+    this.matches = matches;
+    this.list = new SelectList(matches, 8, {
       selectedPrefix: accent,
       selectedText: accent,
       description: dim,
       scrollInfo: dim,
-      noMatch: dim,
+      noMatch: () => dim(`  ${this.emptyMessage}`),
     });
-    this.input.focused = true;
+    if (selectedValue !== undefined) {
+      const index = matches.findIndex((item) => item.value === selectedValue);
+      if (index >= 0) this.list.setSelectedIndex(index);
+    }
     this.list.onSelect = (item) => {
       const p = this.pending;
       this.pending = undefined;
       p?.resolve({ value: item.value, makeDefault: false });
     };
-    this.refresh();
-    return new Promise((resolve, reject) => {
-      this.pending = { resolve, reject };
-    });
   }
   prompt(
     title: string,
@@ -178,7 +212,11 @@ export class ModelPanel implements Component {
           action: "rename",
         });
       }
-    } else if (this.list && matchesKey(data, "ctrl+s")) {
+    } else if (
+      this.list &&
+      this.defaultEnabled() &&
+      matchesKey(data, "ctrl+s")
+    ) {
       const item = this.list.getSelectedItem();
       if (item) {
         const p = this.pending;
@@ -186,13 +224,152 @@ export class ModelPanel implements Component {
         p?.resolve({ value: item.value, makeDefault: true });
       }
     } else {
+      const previous = this.input?.getValue();
       this.input?.handleInput(data);
-      if (this.list) this.list.setFilter(this.input!.getValue());
+      if (this.list && previous !== this.input?.getValue())
+        this.updateList(this.list.getSelectedItem()?.value);
     }
     this.refresh();
   }
+  private defaultEnabled() {
+    const item = this.list?.getSelectedItem();
+    return (
+      !!item &&
+      (typeof this.allowDefault === "function"
+        ? this.allowDefault(item)
+        : this.allowDefault)
+    );
+  }
+  private helpLines(width: number, compact: boolean) {
+    if (!this.list)
+      return new Text(
+        dim(
+          this.pending
+            ? "Enter continue · Esc cancel"
+            : "Waiting… · Esc cancel",
+        ),
+        1,
+        compact ? 0 : 1,
+      ).render(width);
+    const item = this.list.getSelectedItem();
+    const action =
+      typeof this.enterAction === "function"
+        ? item
+          ? this.enterAction(item)
+          : "confirm"
+        : this.enterAction;
+    const base = compact
+      ? `↑↓ · Enter ${action} · Esc`
+      : (this.help ?? `↑↓ select · Enter ${action} · Esc cancel`);
+    const extras = [
+      ...(this.defaultEnabled() ? ["Ctrl+S active + default"] : []),
+      ...(compact && this.allowDelete ? ["Del/Ctrl+D delete"] : []),
+      ...(compact && this.allowRename ? ["Ctrl+R rename"] : []),
+    ];
+    const text = base + (extras.length ? "\n" + extras.join(" · ") : "");
+    return new Text(dim(text), 1, compact ? 0 : 1).render(width);
+  }
+  private choiceRows(width: number, available: number) {
+    if (available <= 0) return [];
+    if (!this.matches.length)
+      return new Text(dim(this.emptyMessage), 1, 0)
+        .render(width)
+        .slice(0, available);
+    const text = (value: string) =>
+      clean(value)
+        .replace(/[\r\n]+/g, " ")
+        .trim();
+    const selected = this.list!.getSelectedItem()!.value;
+    const index = this.matches.findIndex((item) => item.value === selected);
+    const primary = Math.min(
+      32,
+      Math.max(
+        ...this.matches.map((item) => visibleWidth(text(item.label)) + 2),
+      ),
+    );
+    const rows = new Map<number, string[]>();
+    const row = (at: number) => {
+      if (rows.has(at)) return rows.get(at)!;
+      const item = this.matches[at]!;
+      const label = text(item.label),
+        description = text(item.description ?? "");
+      const prefix = item.value === selected ? "→ " : "  ";
+      const gap = " ".repeat(Math.max(2, primary - visibleWidth(label)));
+      if (visibleWidth(prefix + label + gap + description) <= width) {
+        const lines = [
+          item.value === selected
+            ? accent(prefix + label + (description ? gap + description : ""))
+            : prefix + label + (description ? dim(gap + description) : ""),
+        ];
+        rows.set(at, lines);
+        return lines;
+      }
+      const wrappedLabel = new Text(label, 0, 0).render(Math.max(1, width - 2));
+      const lines = wrappedLabel.map(
+        (line, part) => (part ? "  " : prefix) + line,
+      );
+      if (description)
+        lines.push(
+          ...new Text(description, 0, 0)
+            .render(Math.max(1, width - 4))
+            .map((line) => "    " + line),
+        );
+      const styled = lines.map(
+        item.value === selected ? accent : (line) => dim(line),
+      );
+      rows.set(at, styled);
+      return styled;
+    };
+    const room = Math.max(1, available - (this.matches.length > 1 ? 1 : 0));
+    if (row(index).length > room) {
+      const visible = row(index).slice(0, Math.max(0, available - 1));
+      return [
+        ...visible,
+        dim(truncateToWidth("  … Resize to read more", width, "…")),
+      ];
+    }
+    let start = index,
+      end = index + 1,
+      used = row(index).length;
+    while (
+      start > 0 &&
+      index - start < 3 &&
+      used + row(start - 1).length <= room
+    )
+      used += row(--start).length;
+    while (
+      end < this.matches.length &&
+      end - start < 8 &&
+      used + row(end).length <= room
+    )
+      used += row(end++).length;
+    while (start > 0 && end - start < 8 && used + row(start - 1).length <= room)
+      used += row(--start).length;
+    const visible: string[] = [];
+    for (let at = start; at < end; at++) visible.push(...row(at));
+    if (start || end < this.matches.length)
+      visible.push(
+        dim(
+          truncateToWidth(
+            `  (${index + 1}/${this.matches.length}) · ↑↓`,
+            width,
+            "…",
+          ),
+        ),
+      );
+    return visible;
+  }
   render(width: number) {
-    const lines = new Text(accent(this.title), 1, 1).render(width);
+    const budget = Math.max(0, Math.floor(this.maxRows(width)));
+    if (budget < 4)
+      return new Text(dim("Resize terminal · Esc"), 0, 0)
+        .render(width)
+        .slice(0, budget);
+    const compact = width < 72 || budget < 16;
+    const title = compact
+      ? truncateToWidth(clean(this.title), Math.max(1, width - 2), "…")
+      : this.title;
+    const lines = new Text(accent(title), 1, compact ? 0 : 1).render(width);
     if (this.input) {
       lines.push(
         ...(this.secret
@@ -202,28 +379,31 @@ export class ModelPanel implements Component {
           : this.input.render(width)),
       );
     }
-    if (this.list) {
-      if (this.input) lines.push("");
-      lines.push(...this.list.render(width));
-    }
-    if (this.message)
-      lines.push(...new Text(dim(this.message), 1, 1).render(width));
-    if (this.error)
-      lines.push(...new Text(red(this.error), 1, 1).render(width));
-    lines.push(
-      ...new Text(
-        dim(
-          this.list
-            ? (this.help ??
-                "↑↓ select · Enter confirm · Ctrl+S default · Esc cancel")
-            : this.pending
-              ? "Enter continue · Esc cancel"
-              : "Waiting… · Esc cancel",
-        ),
-        1,
-        1,
-      ).render(width),
+    const help = this.helpLines(width, compact);
+    const message = this.message
+      ? new Text(dim(this.message), 1, compact ? 0 : 1).render(width)
+      : [];
+    const error = this.error
+      ? new Text(red(this.error), 1, compact ? 0 : 1).render(width)
+      : [];
+    if (this.list && this.input) lines.push("");
+    if (lines.length + help.length + (this.list ? 1 : 0) > budget)
+      return new Text(dim("Resize terminal · Esc close"), 0, 0)
+        .render(width)
+        .slice(0, budget);
+    const noticeRoom = Math.max(
+      0,
+      budget - lines.length - help.length - (this.list ? 2 : 0),
     );
+    const notices = [...message, ...error].slice(0, noticeRoom);
+    if (this.list)
+      lines.push(
+        ...this.choiceRows(
+          width,
+          budget - lines.length - help.length - notices.length,
+        ),
+      );
+    lines.push(...notices, ...help);
     return lines;
   }
   invalidate() {

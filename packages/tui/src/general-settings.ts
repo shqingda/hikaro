@@ -8,6 +8,7 @@ export async function openGeneralSettings(
   const { panel, signal, close } = view.openModelPanel();
   let preferences = { ...current },
     warning = "";
+  let selectedValue: string | undefined;
   const fields: Array<{
     key: Exclude<keyof TuiPreferences, "version">;
     label: string;
@@ -41,7 +42,9 @@ export async function openGeneralSettings(
         })),
         warning,
         "↑↓ select · Enter toggle and save · Esc close",
+        { search: false, selectedValue, enterAction: "toggle" },
       );
+      selectedValue = selected.value;
       const key = fields.find((field) => field.key === selected.value)!.key;
       const next = { ...preferences, [key]: !preferences[key] };
       try {

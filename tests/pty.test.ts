@@ -483,3 +483,43 @@ describe("permissions and activity indicator", () => {
     });
   }, 20000);
 });
+
+describe("TUI interaction fixes", () => {
+  it("searches session titles and preserves settings focus with a persistent permission mode", async () => {
+    await withCriticalTui(async (tui) => {
+      await tui.wait("Permissions · Ask for approval", 0);
+      const a = await tui.session();
+      await tui.wait("Sessions · page 1", tui.send("/sessions\r"));
+      await tui.wait("> E2E B", tui.send("E2E B"));
+      await tui.wait("Enter send", tui.send("\r"));
+      const b = await tui.session();
+      expect(b).not.toBe(a);
+      await tui.wait("Settings · saved immediately", tui.send("/settings\r"));
+      await tui.wait("→ Completion bell", tui.send("\x1b[B\x1b[B\x1b[B"));
+      await tui.wait(/→ Completion bell[\s\S]*On/, tui.send("\r"));
+      await tui.wait(/→ Completion bell[\s\S]*Off/, tui.send("\r"));
+      await tui.wait("→ Usage footer", tui.send("\x1b[A"));
+      await tui.wait(/→ Usage footer[\s\S]*Hide/, tui.send("\r"));
+      await tui.wait("Permissions · Ask for approval", tui.send("\x1b"));
+      await tui.wait(
+        "Permissions · Full Access",
+        tui.send("/permissions full\r"),
+      );
+      return (db) => {
+        const saved = JSON.parse(
+          readFileSync(join(tui.home, "tui-preferences.json"), "utf8"),
+        );
+        expect(saved).toMatchObject({
+          completionBell: false,
+          showUsage: false,
+          showToolDetails: false,
+        });
+        expect(
+          db
+            .prepare("SELECT sessionId FROM workspace_state WHERE cwd=?")
+            .get(tui.cwd),
+        ).toMatchObject({ sessionId: b });
+      };
+    }, true);
+  }, 20000);
+});

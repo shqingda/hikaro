@@ -122,6 +122,7 @@ async function main() {
       onExit: leave,
     });
     view.bind(backend);
+    view.setPermissionLabel("Managed by Pi");
     view.notice("Connected to Pi. Pi owns execution, tools, and permissions.");
     tui.setLayoutRoot(view.layout);
     tui.setFocus(view.editor);
@@ -160,7 +161,7 @@ async function main() {
   const tui = createTerminal();
   let view: InstanceType<typeof HikaroView>;
   let exiting = false;
-  const { loadPermissionMode } =
+  const { loadPermissionMode, permissionOptions } =
     await import("../../../packages/runtime/src/permissions.ts");
   const { homedir } = await import("node:os");
   const { join } = await import("node:path");
@@ -251,6 +252,11 @@ async function main() {
       ),
     );
   const updateStatus = () => {
+    view.setPermissionLabel(
+      permissionOptions.find(
+        (option) => option.value === runtime.permissionMode,
+      )!.label,
+    );
     const preferences = agent.options.session.modelSelection?.settings ?? {};
     const usage = agent.usage;
     view.setInfo(
@@ -419,6 +425,7 @@ async function main() {
             mode: import("../../../packages/runtime/src/permissions.ts").PermissionMode,
           ) => {
             await runtime.setPermissionMode(mode);
+            updateStatus();
             view.notice(
               `Permissions: ${permissionOptions.find((option) => option.value === mode)!.label} · saved for this workspace.`,
             );

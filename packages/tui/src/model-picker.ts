@@ -41,6 +41,16 @@ export async function openModelPicker(
             : []),
         ],
         warning,
+        undefined,
+        {
+          search: true,
+          emptyMessage: "No matching models",
+          allowDefault: (item) =>
+            choices.some(
+              (model) => model.provider + "/" + model.id === item.value,
+            ),
+          enterAction: "select",
+        },
       );
       if (choice.value === "__settings") {
         close();
@@ -75,6 +85,8 @@ export async function openModelPicker(
             : "not configured",
         })),
         warning,
+        undefined,
+        { search: true, emptyMessage: "No matching providers" },
       );
       const provider = providers.find((p) => p.id === picked.value)!;
       if (!provider.configured || loginOnly) {

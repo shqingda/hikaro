@@ -170,6 +170,7 @@ export class HikaroView {
     scrollbar: "auto",
   });
   readonly footer = new Text("", 1, 0);
+  readonly permissionStatus = new Text("", 1, 0);
   readonly inputError = new Text("", 1, 0);
   readonly modelSlot = new Container();
   private modelController?: AbortController;
@@ -307,10 +308,12 @@ export class HikaroView {
         component: this.modelSlot,
         basis: "auto",
         maxSize: 18,
+        shrink: 0,
         visible: () => !!this.modelPanel,
       },
       { component: this.editor, basis: "auto", maxSize: 10 },
       this.inputError,
+      this.permissionStatus,
       this.footer,
     ]);
     this.updateFooter();
@@ -419,8 +422,24 @@ export class HikaroView {
     if (this.modelPanel) throw Error("Model picker is already open");
     this.setError("");
     const controller = new AbortController();
-    const panel = new ModelPanel(controller.signal, () =>
-      this.tui.requestRender(),
+    const panel = new ModelPanel(
+      controller.signal,
+      () => this.tui.requestRender(),
+      (width) =>
+        Math.min(
+          18,
+          Math.max(
+            0,
+            this.tui.terminal.rows -
+              this.header.render(width).length -
+              this.historyHint.render(width).length -
+              Math.min(10, this.editor.render(width).length) -
+              this.inputError.render(width).length -
+              this.permissionStatus.render(width).length -
+              this.footer.render(width).length -
+              1,
+          ),
+        ),
     );
     this.modelController = controller;
     this.modelPanel = panel;
@@ -491,6 +510,13 @@ export class HikaroView {
   setInfo(info: string) {
     this.info = sanitize(info);
     this.updateFooter();
+    this.tui.requestRender();
+  }
+  setPermissionLabel(label: string) {
+    const text = `Permissions · ${sanitize(label)}`;
+    this.permissionStatus.setText(
+      label === "Full Access" ? accent(text) : muted(text),
+    );
     this.tui.requestRender();
   }
   setPreferences(preferences: TuiPreferences) {

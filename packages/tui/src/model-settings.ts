@@ -100,9 +100,17 @@ export async function openModelControl(
         `/${field} · ${scope} · ${selection.provider}/${selection.model}`,
         items,
         warning,
-        scope === "active"
-          ? "↑↓ select · Enter apply now · Ctrl+S active + default · Esc cancel"
-          : "↑↓ select · Enter save default · Esc cancel",
+        undefined,
+        {
+          allowDefault: (item) =>
+            scope === "active" && item.value !== "__scope",
+          enterAction: (item) =>
+            item.value === "__scope"
+              ? "switch scope"
+              : scope === "active"
+                ? "apply now"
+                : "save default",
+        },
       );
       if (picked.value === "__scope") {
         scope = scope === "active" ? "default" : "active";

@@ -1,6 +1,6 @@
 # Validation status
 
-Updated: 2026-10-13. Implementation, test coverage, completed verification and pending acceptance are separate states. See [TODO.md](../TODO.md) for delivery order. Documentation and styling edits have no independent tests or benchmarks. Critical TUI workflow verification is recorded below.
+Updated: 2026-10-14. Implementation, test coverage, completed verification and pending acceptance are separate states. See [TODO.md](../TODO.md) for delivery order. Documentation and styling edits have no independent tests or benchmarks. Critical TUI workflow verification is recorded below.
 
 ## Current delivery scope
 
@@ -77,7 +77,7 @@ Workspace: Hikaro on macOS; Node **26.11.1**, pnpm **12.11.2**. The three new sc
 
 All three critical scenarios have passing results. The original fullscreen/Unicode/resize/exit scenario stayed skipped. No full suite, other E2E, build or benchmark ran. Documentation and search-field spacing changes did not trigger independent tests.
 
-The failed title lookup exposed a pre-existing limitation: `SelectList.setFilter` matches internal `value` prefixes, which are session IDs, rather than visible titles. This was recorded as pending title-filtering work in TODO. Production filtering was not changed in this task.
+The failed title lookup exposed a pre-existing limitation: `SelectList.setFilter` matches internal `value` prefixes, which are session IDs, rather than visible titles. It was recorded in TODO and left unchanged in that run. Page-local visible-name filtering was subsequently fixed on 2026-10-14; cross-page and full-session search remain pending.
 
 ## Implemented minimal node-pty E2E
 
@@ -111,11 +111,48 @@ Approve for me uses conservative local rules without another model call. Ordinar
 
 | Targeted command                                                                                                                | Result                                                                                                                     |
 | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm exec vitest run tests/permissions.test.ts tests/pty.test.ts -t 'permissions\|activity indicator'` | 4 passed, 1 E2E failed, 4 skipped; stale idle output caused the E2E to submit a command too early |
+| `pnpm exec vitest run tests/permissions.test.ts tests/pty.test.ts -t 'permissions\|activity indicator'`                         | 4 passed, 1 E2E failed, 4 skipped; stale idle output caused the E2E to submit a command too early                          |
 | After changing the output cursor: `pnpm exec vitest run tests/pty.test.ts -t 'permissions and activity indicator'`              | 1 passed, 4 skipped; picker, animated frames, actual external-file write, loopback network request and saved mode verified |
 | After adding sensitive-read review: `pnpm exec vitest run tests/permissions.test.ts -t 'auto approves known workspace actions'` | 1 passed, 3 skipped; only the affected auto-approval case was rerun                                                        |
 
 Environment: macOS, Node 26.11.1, pnpm 12.11.2. Other passing unit scenarios cover immediate changes in a cached agent, rejecting changes while busy, workspace isolation, invalid saved modes and animation cleanup/pause. No full suite, other E2E or benchmark ran. The earlier critical TUI scenarios remained filtered out; the manual-compaction assertion was updated to the new Compacting label. Live provider accounts and manual terminal review remain pending. `pnpm build` passed and refreshed the `pnpm start` artifacts. Discovered read-only Skill resources retain their existing read allowlist.
+
+## TUI interaction fixes: 2026-10-14
+
+The first three Impeccable priorities were implemented without changing the visual identity:
+
+- Long lists match visible labels, descriptions and IDs, returning original IDs. Session search remains page-local and its empty message says so.
+- Settings/permissions and other fixed short menus omit search. Generic lists of five or fewer items default to direct selection; model/session/provider lists explicitly retain search.
+- Settings retain the selected item after each save, including the error path. Permission selection starts on the current mode.
+- A dedicated permission status line remains visible even when usage is hidden. Full Access is labeled explicitly; the external Pi backend shows Managed by Pi.
+
+Targeted command, run once:
+
+```sh
+pnpm exec vitest run tests/tui-interactions.test.ts tests/pty.test.ts -t 'TUI interaction fixes'
+```
+
+Result: **4 passed, 5 skipped**. Three regression cases cover label/description/ID matching and empty-search recovery, consecutive settings toggles without search, and a mode change with usage hidden. One real CLI/PTY case covers session-title selection, settings focus/persistence and visible permission updates. No real model request, full suite, other E2E or benchmark ran. Environment: macOS, Node 26.11.1, pnpm 12.11.2. `pnpm build` passed. The one Impeccable scan of six changed TUI files returned no findings; native-terminal rule coverage remains unestablished. This is not a visual or accessibility acceptance pass.
+
+The remaining critique priorities, inaccurate Ctrl+S hints and narrow-terminal description/value loss, were deferred from this first pass and completed in the following pass. Production accounts, IME, assistive technology and current live-screen appearance still require manual acceptance.
+
+## Shortcut hints and narrow terminals: 2026-10-14
+
+Ctrl+S now requires an explicit capability for the selected item. Actual model choices and active model-setting values support applying and saving defaults. Provider/authentication steps, navigation choices and default-only settings neither advertise nor activate this shortcut. Enter hints describe the current action, including switching the model-setting scope.
+
+Values and descriptions wrap instead of disappearing in narrow panels. The panel uses the terminal's available height, keeps the selected item visible, limits the number of visible choices and reserves confirmation/exit hints. Search retains a blank row before the choices. A panel with insufficient space shows a Resize message and retains Esc. Oversized selected descriptions explicitly request resizing rather than silently losing their tail.
+
+The preceding `/plan` named this exact command. It ran once:
+
+```sh
+pnpm exec vitest run tests/tui-interactions.test.ts tests/session-settings.test.ts -t 'TUI shortcut capabilities|routes active, default, and Ctrl'
+```
+
+Result: **3 passed, 21 skipped**. Two new functional cases exercise the actual panel through provider/authentication/model choices and active/default settings; the existing settings-routing case verifies separate apply/save actions. No retries, layout tests, E2E, full suite or benchmark ran. Environment: macOS, Node 26.11.1, pnpm 12.11.2.
+
+Manual inspection of rendered layout text at **36 columns × 18 rows**, **60 × 18** and **100 × 24** covered the Startup value, permission descriptions, a selected final model, search spacing and Enter/Esc hints. Inspection found unused room at the end of short lists; one repair batch corrected it, followed by one confirmation pass. This was not a live-terminal screenshot or assistive-technology review. Different content, drafts and errors can leave less room and require resizing.
+
+`pnpm build` passed and refreshed the startup artifacts. One Impeccable scan of seven affected TUI source files reported no findings; native-terminal rule coverage remains unestablished. Real-terminal resize, IME and accessibility acceptance remain pending.
 
 ## Pending core and Pi acceptance
 
@@ -124,7 +161,7 @@ Follow the six stages in TODO. Required checks include:
 - Real-project login, file read/write/edit/search, shell/test/Git, permission and failure recovery; explicit queue, steering, cancel and exit behavior.
 - Production-account OAuth, refresh, rate limits and model/account thinking/speed capabilities. Unknown models retain default speed only; offline request capture does not establish account support.
 - Complete context budgeting, automatic compaction, goal/constraint/path preservation and draft crash recovery.
-- Actual file/image attachment loading, readable tool/code/diff output, session-title filtering, cross-page/full-session search and portable attachment export.
+- Actual file/image attachment loading, readable tool/code/diff output, cross-page/full-session search and portable attachment export.
 - Real-project MCP/Skills invocation, failure recovery and plugin resource cleanup.
 - Both Pi directions under real accounts, long sessions, cancellation, permissions, recovery and failures; default-entry install/upgrade; version matrix, capability detection and visible degradation. Failures must not silently switch execution agents.
 - Manual IME, wide characters, emoji, paste, resize, exit restoration and assistive-technology review. Existing PTY checks cannot replace real input-method testing.

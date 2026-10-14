@@ -36,11 +36,15 @@ Native TUI permissions default to **Ask for approval**: workspace file edits and
 
 Noninteractive/RPC hosts keep the existing `--trust` and per-operation approval behavior; they do not inherit the TUI's saved mode. Third-party in-process plugins are trusted code. The external Pi backend owns its own permissions; Hikaro's selector cannot change those.
 
+The current permission mode stays visible independently of the usage footer. Short menus use arrow keys without a search field; model, provider and session lists retain search. Settings keep the selected row after each save.
+
+Ctrl+S appears only on actual model choices and active model-setting values. Provider/authentication steps and default-only settings use Enter. Narrow panels wrap values and descriptions, keep the selected choice and reserve Enter/Esc hints. If the available space cannot show the selected content, the panel asks you to resize. Layout text has been inspected at 36×18, 60×18 and 100×24; real-terminal acceptance remains pending.
+
 ## Terminal controls
 
 | Command | Action |
 | --- | --- |
-| `/new`, `/sessions`, `/resume [ID]` | Session picker with page navigation and page-local search; Delete/Ctrl+D opens confirmation; Enter deletes, Esc cancels |
+| `/new`, `/sessions`, `/resume [ID]` | Session picker with page navigation and page-local title/description/ID search; Delete/Ctrl+D opens confirmation; Enter deletes, Esc cancels |
 | `/rename TITLE` | Rename the current session; Ctrl+R renames a selected session in `/sessions` |
 | `/export` | Export all saved text messages as Markdown; hidden thinking stays excluded |
 | `/skill:NAME [TASK]` | Invoke a discovered Skill; Skill and plugin commands appear in completion |

@@ -34,7 +34,13 @@ export async function openSessions(
         ],
         warning,
         `↑↓ select · Enter resume · Delete/Ctrl+D delete${rename ? " · Ctrl+R rename" : ""} · Esc close`,
-        { allowDelete: true, allowRename: !!rename },
+        {
+          allowDelete: true,
+          allowRename: !!rename,
+          search: true,
+          emptyMessage: "No matching sessions on this page",
+          enterAction: "resume",
+        },
       );
       if (picked.value === "__previous") {
         offset -= 50;
@@ -63,7 +69,7 @@ export async function openSessions(
             ],
             "",
             "Enter delete · Esc cancel",
-            { cancelValue: "__cancel" },
+            { cancelValue: "__cancel", enterAction: "delete" },
           );
           if (confirm.value !== "delete") continue;
           warning = (await remove(session.id)) ?? "";

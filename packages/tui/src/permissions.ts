@@ -19,6 +19,7 @@ export async function openPermissions(
       })),
       "",
       "↑↓ select · Enter apply and save · Esc close",
+      { search: false, selectedValue: current, enterAction: "apply" },
     );
     await apply(selected.value as PermissionMode);
   } catch (error) {
