@@ -11,7 +11,6 @@ import {
   type Component,
   type SelectItem,
 } from "@earendil-works/pi-tui";
-const plain = (v: string) => clean(v);
 const accent = (v: string) => `\x1b[38;2;196;85;72m${clean(v)}\x1b[39m`;
 const dim = (v: string) => `\x1b[90m${clean(v)}\x1b[39m`;
 const red = (v: string) => `\x1b[31m${clean(v)}\x1b[39m`;
@@ -20,6 +19,7 @@ export type Selection = {
   makeDefault: boolean;
   action?: "delete" | "rename";
 };
+type ActionCapability = boolean | ((item: SelectItem) => boolean);
 /** The input-adjacent panel owns focus only for its lifetime. Secret input never renders raw bytes. */
 export class ModelPanel implements Component {
   focused = false;
@@ -27,9 +27,9 @@ export class ModelPanel implements Component {
   private message = "";
   private error = "";
   private help?: string;
-  private allowDelete = false;
-  private allowRename = false;
-  private allowDefault: boolean | ((item: SelectItem) => boolean) = false;
+  private allowDelete: ActionCapability = false;
+  private allowRename: ActionCapability = false;
+  private allowDefault: ActionCapability = false;
   private enterAction: string | ((item: SelectItem) => string) = "confirm";
   private cancelValue?: string;
   private input?: Input;
@@ -59,16 +59,17 @@ export class ModelPanel implements Component {
     warning = "",
     help?: string,
     options?: {
-      allowDelete?: boolean;
-      allowRename?: boolean;
+      allowDelete?: ActionCapability;
+      allowRename?: ActionCapability;
       cancelValue?: string;
       search?: boolean;
       selectedValue?: string;
       emptyMessage?: string;
-      allowDefault?: boolean | ((item: SelectItem) => boolean);
+      allowDefault?: ActionCapability;
       enterAction?: string | ((item: SelectItem) => string);
     },
   ): Promise<Selection> {
+    this.signal.throwIfAborted();
     this.title = title;
     this.message = "";
     this.error = warning;
@@ -130,6 +131,7 @@ export class ModelPanel implements Component {
     initial = "",
     options?: { cancelValue?: string },
   ): Promise<string> {
+    this.signal.throwIfAborted();
     this.title = title;
     this.error = "";
     this.message = "";
@@ -193,7 +195,7 @@ export class ModelPanel implements Component {
       this.list.handleInput(data);
     } else if (
       this.list &&
-      this.allowDelete &&
+      this.actionEnabled(this.allowDelete) &&
       (matchesKey(data, "delete") || matchesKey(data, "ctrl+d"))
     ) {
       const item = this.list.getSelectedItem();
@@ -204,7 +206,11 @@ export class ModelPanel implements Component {
           action: "delete",
         });
       }
-    } else if (this.list && this.allowRename && matchesKey(data, "ctrl+r")) {
+    } else if (
+      this.list &&
+      this.actionEnabled(this.allowRename) &&
+      matchesKey(data, "ctrl+r")
+    ) {
       const item = this.list.getSelectedItem();
       if (item) {
         this.resolveSelection({
@@ -215,7 +221,7 @@ export class ModelPanel implements Component {
       }
     } else if (
       this.list &&
-      this.defaultEnabled() &&
+      this.actionEnabled(this.allowDefault) &&
       matchesKey(data, "ctrl+s")
     ) {
       const item = this.list.getSelectedItem();
@@ -230,13 +236,11 @@ export class ModelPanel implements Component {
     }
     this.refresh();
   }
-  private defaultEnabled() {
+  private actionEnabled(capability: ActionCapability) {
     const item = this.list?.getSelectedItem();
     return (
       !!item &&
-      (typeof this.allowDefault === "function"
-        ? this.allowDefault(item)
-        : this.allowDefault)
+      (typeof capability === "function" ? capability(item) : capability)
     );
   }
   private helpLines(width: number, compact: boolean) {
@@ -261,9 +265,11 @@ export class ModelPanel implements Component {
       ? `↑↓ · Enter ${action} · Esc`
       : (this.help ?? `↑↓ select · Enter ${action} · Esc cancel`);
     const extras = [
-      ...(this.defaultEnabled() ? ["Ctrl+S active + default"] : []),
-      ...(compact && this.allowDelete ? ["Del/Ctrl+D delete"] : []),
-      ...(compact && this.allowRename ? ["Ctrl+R rename"] : []),
+      ...(this.actionEnabled(this.allowDefault)
+        ? ["Ctrl+S active + default"]
+        : []),
+      ...(this.actionEnabled(this.allowDelete) ? ["Del/Ctrl+D delete"] : []),
+      ...(this.actionEnabled(this.allowRename) ? ["Ctrl+R rename"] : []),
     ];
     const text = base + (extras.length ? "\n" + extras.join(" · ") : "");
     return new Text(dim(text), 1, compact ? 0 : 1).render(width);

@@ -1,8 +1,5 @@
 import { authenticationUrl, openAuthenticationUrl } from "./auth-browser.ts";
-import type {
-  ProviderCatalog,
-  ModelChoice,
-} from "../../provider-pi/src/catalog.ts";
+import type { ProviderCatalog } from "../../provider-pi/src/catalog.ts";
 import type { AuthPrompt } from "@earendil-works/pi-ai";
 import type { HikaroView } from "./index.ts";
 export async function openModelPicker(

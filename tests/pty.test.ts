@@ -90,6 +90,8 @@ async function withCriticalTui(
     cwd: string;
     baseUrl: string;
     send: (input: string) => number;
+    resize: (columns: number, rows: number) => number;
+    outputSince: (after: number) => string;
     wait: (pattern: string | RegExp, after: number) => Promise<string>;
     nextRequest: () => Promise<FixtureRequest>;
     session: () => Promise<string>;
@@ -288,6 +290,15 @@ async function withCriticalTui(
       cwd,
       baseUrl: `http://127.0.0.1:${port}`,
       send,
+      resize: (columns, rows) => {
+        const after = position;
+        terminal!.resize(columns, rows);
+        return after;
+      },
+      outputSince: (after) =>
+        stripVTControlCharacters(
+          output.slice(Math.max(0, after - (position - output.length))),
+        ),
       wait,
       nextRequest,
       session,
@@ -369,21 +380,45 @@ describe("critical TUI workflows", () => {
     }, true);
   }, 20000);
 
-  it("cancels the active stream and accepts a subsequent prompt", async () => {
+  it("cancels the active stream and accepts a subsequent prompt in narrow terminals", async () => {
     await withCriticalTui(async (tui) => {
       const id = await tui.session();
+      const narrow = tui.resize(36, 18);
+      await tui.wait("Enter send", narrow);
+      await tui.wait("Settings · saved immediately", tui.send("/settings\r"));
+      for (let i = 0; i < 4; i++) tui.send("\x1b[B");
+      await tui.wait("→ Startup", tui.send("\x1b[A\x1b[B"));
+      await tui.wait("New session", tui.send("\r"));
+      await tui.wait("Resume last opened session", tui.send("\r"));
+      await tui.wait("Enter send", tui.send("\x1b"));
+      await tui.wait(
+        "Permissions · this workspace",
+        tui.send("/permissions\r"),
+      );
+      await tui.wait("→ Approve for me", tui.send("\x1b[B"));
+      await tui.wait("Enter send", tui.send("\x1b"));
+      await tui.wait("Sessions · page 1", tui.send("/sessions\r"));
+      await tui.wait("Rename session", tui.send("\x12"));
+      await tui.wait("Sessions · page 1", tui.send("\x1b"));
+      await tui.wait("Enter send", tui.send("\x1b"));
       const after = tui.send("cancel-request\r");
       const request = await tui.nextRequest();
       await tui.wait("Working", after);
       await request.write("cancel-stream-started");
       await tui.wait("cancel-stream-started", after);
+      await tui.wait("Working", tui.resize(60, 18));
+      await tui.wait("draft-中文🙂", tui.send("draft-中文🙂"));
       const cancelled = tui.send("\x03");
       await tui.wait("Stopped", cancelled);
       await tui.wait("Enter send", cancelled);
       await within(request.closed, "cancelled response connection closes");
       expect(request.response.writableEnded).toBe(false);
       expect(tui.alive()).toBe(true);
+      expect(tui.outputSince(after)).toContain("draft-中文🙂");
+      await tui.wait("Enter send", tui.resize(100, 24));
+      tui.send("\x15");
       await tui.prompt("after-cancel");
+      expect(tui.outputSince(cancelled)).not.toMatch(/Error:.*abort/i);
       return (db) => {
         expect(
           savedEvents(db, id)

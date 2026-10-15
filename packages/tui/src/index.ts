@@ -72,9 +72,6 @@ export class MessageComponent implements Component {
     this.text = text;
     this.dirty = true;
   }
-  get size() {
-    return this.text.length;
-  }
   get pages() {
     return Math.max(1, Math.ceil(this.text.length / MESSAGE_PAGE_CHARS));
   }
@@ -195,13 +192,11 @@ export class HikaroView {
   private preferences = { ...defaultTuiPreferences };
   private thinkingDraft?: Text;
   private thinkingText = "";
-  private lastTool = "";
   private backend?: UIBackend;
   private history = { hasOlder: false, hasNewer: false };
   private historyLoading = false;
   private pendingMessages = false;
   private status = new Map<string, string>();
-  private modelLabel = "";
   private info = "";
   private removeScheme?: () => void;
 
@@ -369,11 +364,12 @@ export class HikaroView {
             if (result) this.notice(result);
           })
         : options.onPrompt(text);
-      void work.catch((error) =>
+      void work.catch((error) => {
+        if (error instanceof Error && error.name === "AbortError") return;
         this.setError(
           `Error: ${error instanceof Error ? error.message : String(error)}`,
-        ),
-      );
+        );
+      });
     };
     this.removeInput = tui.addInputListener((data) => {
       if (this.disposed) return undefined;
@@ -444,14 +440,15 @@ export class HikaroView {
     this.tui.requestRender();
     const close = () => {
       if (this.modelPanel !== panel) return;
-      controller.abort();
       this.modelSlot.clear();
       this.modelPanel = undefined;
       this.modelController = undefined;
+      controller.abort();
       this.tui.setFocus(this.editor);
       this.updateFooter();
       this.tui.requestRender();
     };
+    controller.signal.addEventListener("abort", close, { once: true });
     return { panel, signal: controller.signal, close };
   }
   bind(backend: AgentBackend) {
@@ -521,7 +518,6 @@ export class HikaroView {
     this.tui.requestRender();
   }
   setModel(model: string) {
-    this.modelLabel = model;
     this.header.setText(
       `${accent(bold(" H "))} ${bold("hikaro")}  ${muted(sanitize(model))}`,
     );
@@ -736,14 +732,12 @@ export class HikaroView {
         this.thinkingText = "";
       }
     } else if (event.type === "tool.start") {
-      this.lastTool = sanitize(String(event.data.name));
-      this.activity = `Running ${this.lastTool}`;
+      this.activity = `Running ${sanitize(String(event.data.name))}`;
       if (this.detail)
         this.notice(
           `${event.data.name} ${JSON.stringify(event.data.arguments ?? {}).slice(0, 500)}`,
         );
     } else if (event.type === "tool.end") {
-      this.lastTool = "";
       this.activity = "Working";
       const result = event.data.result as
         { text?: string; isError?: boolean } | undefined;
@@ -755,10 +749,12 @@ export class HikaroView {
         );
     } else if (event.type === "run.end") {
       this.busy = false;
-      this.lastTool = "";
       if (event.data.status === "failed")
         this.setError(String(event.data.error));
-      else if (event.data.status === "cancelled") this.notice("Stopped");
+      else if (event.data.status === "cancelled") {
+        this.setError("");
+        this.notice("Stopped");
+      }
       if (event.data.status === "completed" && this.preferences.completionBell)
         this.tui.terminal.write("\x07");
     } else if (event.type === "notice")
@@ -836,6 +832,8 @@ export class HikaroView {
       } else response = { value: text };
     }
     this.closeDialog();
+    this.updateFooter();
+    this.tui.requestRender();
     try {
       await this.backend?.respondToUI?.(dialog.id, response);
     } catch (error) {

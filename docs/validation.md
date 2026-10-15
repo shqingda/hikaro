@@ -2,6 +2,37 @@
 
 Updated: 2026-10-15. Implementation, test coverage, completed verification and pending acceptance are separate states. See [TODO.md](../TODO.md) for delivery order. Documentation and styling edits have no independent tests or benchmarks. Critical TUI workflow verification is recorded below.
 
+## Final cancellation review before push: 2026-10-15
+
+Reviewed cancellation propagation, immediate panel closure, stale panel cleanup, draft/focus restoration and dialog status updates. The review found one remaining boundary: a provider could return a final result after cancellation and incorrectly produce a completed run. Prompt and compaction now check cancellation before committing completion. Catch paths reuse `throwIfAborted()` instead of constructing duplicate cancellation errors. New regression cases cover both late-result paths and confirm that a later prompt can complete.
+
+`pnpm exec vitest run tests/core.test.ts -t 'cancel|manual tool|atomic tool registration|rolls back registrations'` ran once: **7 passed**, 12 excluded by filter. The affected view cases ran once with `pnpm exec vitest run tests/tui-interactions.test.ts -t 'TUI immediate cancellation feedback|keeps the current permission mode'`: **5 passed**, 7 excluded by filter. The view tests now share a complete typed `Terminal` stub, replacing two incomplete assertions. Strict TypeScript checking of explicit core/TUI/MCP source and test paths passed after that fixture correction. No full suite or repeated PTY E2E ran in this review; the earlier PTY evidence remains recorded below.
+
+## Live PTY acceptance: 2026-10-15
+
+Ran the actual CLI in isolated `node-pty` processes at **36×18**, **60×18** and **100×24**, using keyboard bytes and real terminal resize events. A loopback-only SSE fixture held model responses open for streaming and cancellation. No production account or external model service was used. One batched inspection and one confirmation pass produced **21 screen frames**, with no frame exceeding its terminal dimensions. The frames come from `TuiAltScreen.getScreenLines()` after terminal writes; they are not native terminal screenshots.
+
+Verified settings navigation, consecutive saves with stable selection, wrapped Startup values and permission descriptions, model search, session rename cancellation, Enter/Esc hints, Unicode/emoji, draft retention, stream resize and Ctrl+C cancellation. A real `!sleep 30` displayed `Running shell` and stopped on Ctrl+C. The indicator stopped on cancellation. Both manual PTYs exited with code 0 and restored the alternate screen.
+
+Three corrections followed the inspection:
+
+- Cancelled streams previously displayed both `Stopped` and a red `Request was aborted`. The core now reports cancelled operations as `AbortError`; the view keeps cancellation quiet while retaining actual errors.
+- Cancelling a loading panel now closes it and restores editor focus immediately. A held catalog lookup confirmed that typing resumes before the lookup finishes. Its later cleanup cannot close a newer panel.
+- Dismissing an extension input dialog now refreshes status before awaiting its backend response. A targeted regression case covers the delayed response.
+
+Each verification command ran once, with no failure or repair retry:
+
+```sh
+pnpm exec vitest run tests/tui-interactions.test.ts tests/core.test.ts -t 'TUI |records cancellation|normalizes provider cancellation'
+pnpm exec vitest run tests/pty.test.ts -t 'cancels the active stream and accepts a subsequent prompt'
+```
+
+Results: **14 targeted cases passed** (15 excluded by filter), plus **1 PTY E2E passed** (5 excluded by filter). The E2E covers narrow-menu keyboard flows, rename cancellation, streaming resize, draft retention, cancellation and a subsequent prompt. `node scripts/build.mjs` passed and refreshed the startup artifacts. No full suite, other E2E, benchmark or production-account check ran. Environment: macOS arm64, Node **26.11.1**, pnpm **12.11.2**.
+
+Local evidence is saved under ignored `artifacts/terminal-acceptance-2026-10-15/`: `manifest.json`, frame JSON/text files, and raw before/after ANSI streams. The manifest records dimensions and fullscreen restoration. The PTY E2E asserts workflow output; the separate saved-frame inspection checks row counts and cell widths.
+
+Native macOS Terminal control was unavailable under the computer-use policy. Native font rendering, color appearance, IME composition, physical keyboard modifier handling and assistive technology remain unverified. Programmatic Unicode input does not establish IME support.
+
 ## TUI simplification verification: 2026-10-15
 
 Shared selection completion in `ModelPanel` and terminal text sanitization across the message view and picker. The existing `sanitize` export remains available from the TUI entry point. Control-character filtering, selection result fields and pending-state clearing order are preserved.

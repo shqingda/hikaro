@@ -33,13 +33,20 @@ export async function openSessions(
             : []),
         ],
         warning,
-        `↑↓ select · Enter resume · Delete/Ctrl+D delete${rename ? " · Ctrl+R rename" : ""} · Esc close`,
+        undefined,
         {
-          allowDelete: true,
-          allowRename: !!rename,
+          allowDelete: (item) =>
+            sessions.some((session) => session.id === item.value),
+          allowRename: (item) =>
+            !!rename && sessions.some((session) => session.id === item.value),
           search: true,
           emptyMessage: "No matching sessions on this page",
-          enterAction: "resume",
+          enterAction: (item) =>
+            item.value === "__previous"
+              ? "previous page"
+              : item.value === "__next"
+                ? "next page"
+                : "resume",
         },
       );
       if (picked.value === "__previous") {
