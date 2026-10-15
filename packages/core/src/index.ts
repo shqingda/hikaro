@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { summarizeHistory } from "./context.ts";
-import { fitContext } from "./context.ts";
+import { fitContext, summarizeHistory } from "./context.ts";
 import type {
   AgentBackend,
   AgentEvent,
@@ -22,8 +21,16 @@ export * from "./types.ts";
 export class ToolRegistry {
   private tools = new Map<string, Tool>();
   register(tool: Tool) {
-    if (this.tools.has(tool.name)) throw Error(`Duplicate tool: ${tool.name}`);
-    this.tools.set(tool.name, tool);
+    this.registerAll([tool]);
+  }
+  registerAll(tools: Tool[]) {
+    const names = new Set<string>();
+    for (const tool of tools) {
+      if (this.tools.has(tool.name) || names.has(tool.name))
+        throw Error(`Duplicate tool: ${tool.name}`);
+      names.add(tool.name);
+    }
+    for (const tool of tools) this.tools.set(tool.name, tool);
   }
   get(name: string) {
     return this.tools.get(name);
@@ -94,6 +101,7 @@ export class PluginHost {
           this.views.set(id, render);
         },
         registerTool: (t) => this.tools.register(t),
+        registerTools: (tools) => this.tools.registerAll(tools),
         registerCommand: (n, r) => {
           if (this.commands.has(n)) throw Error(`Duplicate command: ${n}`);
           this.commands.set(n, r);
@@ -237,7 +245,7 @@ export class Agent implements AgentBackend {
   cancel() {
     this.controller?.abort();
     for (const item of this.queue.splice(0))
-      item.reject(new Error("Cancelled"));
+      item.reject(new DOMException("Cancelled", "AbortError"));
     this.steering = [];
   }
   private async drain() {
@@ -326,6 +334,7 @@ export class Agent implements AgentBackend {
         status: controller.signal.aborted ? "cancelled" : "failed",
         error: String(error),
       });
+      controller.signal.throwIfAborted();
       throw error;
     } finally {
       if (lease) clearInterval(lease);
@@ -333,6 +342,7 @@ export class Agent implements AgentBackend {
         await this.options.store.release(this.options.session.id, owner);
       this.controller = undefined;
       this.draining = false;
+      void this.drain();
     }
   }
   async compact() {
@@ -399,6 +409,7 @@ export class Agent implements AgentBackend {
           ).items,
         controller.signal,
       );
+      controller.signal.throwIfAborted();
       await this.emit("run.end", {
         runId,
         status: "completed",
@@ -414,6 +425,7 @@ export class Agent implements AgentBackend {
         error: String(error),
         usage: this.usage,
       });
+      controller.signal.throwIfAborted();
       throw error;
     } finally {
       clearInterval(lease);
@@ -431,7 +443,7 @@ export class Agent implements AgentBackend {
     nesting = 0,
     parentCallId?: string,
   ): Promise<ToolResult> {
-    if (signal.aborted) throw Error("Cancelled");
+    signal.throwIfAborted();
     if (nesting > 8) throw Error("Tool nesting limit exceeded");
     const tool = this.options.tools.get(name);
     if (!tool) return { text: `Unknown tool: ${name}`, isError: true };
@@ -625,9 +637,11 @@ export class Agent implements AgentBackend {
         }
         if (delta) await this.emit("text.delta", { text: delta });
         if (thinking) await this.emit("thinking.delta", { text: thinking });
+        signal.throwIfAborted();
         if (!final) throw Error("Provider ended without a final message");
         await this.message(final);
         if (!final.toolCalls?.length) {
+          signal.throwIfAborted();
           if (this.steering.length) continue;
           await this.emit("run.end", {
             runId,
@@ -666,6 +680,7 @@ export class Agent implements AgentBackend {
         error: e instanceof Error ? e.message : String(e),
         usage: this.usage,
       });
+      signal.throwIfAborted();
       throw e;
     } finally {
       clearInterval(lease);

@@ -152,10 +152,6 @@ export interface AgentBackend {
   steer(text: string): void;
   subscribe(fn: (event: AgentEvent) => void): () => void;
 }
-export interface Transport {
-  send(message: unknown): void;
-  close(): void;
-}
 export interface Plugin {
   id: string;
   apiVersion: 1;
@@ -168,5 +164,6 @@ export interface PluginHost {
   onEvent(listener: (event: AgentEvent) => void): void;
   registerView(id: string, render: () => Promise<string>): void;
   registerTool(tool: Tool): void;
+  registerTools(tools: Tool[]): void;
   registerCommand(name: string, run: (args: string) => Promise<string>): void;
 }

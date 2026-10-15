@@ -3,7 +3,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { Ajv } from "ajv";
-import type { Plugin } from "../../core/src/types.ts";
+import type { Plugin, Tool } from "../../core/src/types.ts";
 const Server = z.union([
   z.object({
     command: z.string(),
@@ -52,16 +52,17 @@ export function mcpPlugin(servers: z.infer<typeof MCPConfig>): Plugin {
             await client.connect(transport);
             const ajv = new Ajv({ strict: false });
             let cursor: string | undefined;
-            let count = 0;
+            const tools: Tool[] = [];
             do {
               const response = await client.listTools(
                 cursor ? { cursor } : undefined,
                 { signal: ctx.signal, timeout: 15000 },
               );
               for (const remote of response.tools) {
-                if (++count > 200) throw Error("MCP server exceeds 200 tools");
+                if (tools.length >= 200)
+                  throw Error("MCP server exceeds 200 tools");
                 const validate = ajv.compile(remote.inputSchema);
-                host.registerTool({
+                tools.push({
                   name: `mcp_${server}_${remote.name}`,
                   deferred: true,
                   description: remote.description ?? remote.name,
@@ -104,9 +105,10 @@ export function mcpPlugin(servers: z.infer<typeof MCPConfig>): Plugin {
               }
               cursor = response.nextCursor;
             } while (cursor);
+            host.registerTools(tools);
             clients.set(server, client);
             return {
-              text: `Connected ${server}; ${count} tools available; use tool_search to discover their schemas`,
+              text: `Connected ${server}; ${tools.length} tools available; use tool_search to discover their schemas`,
             };
           } catch (e) {
             await client.close();

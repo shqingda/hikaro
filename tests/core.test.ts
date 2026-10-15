@@ -51,6 +51,141 @@ const simple: ProviderAdapter = {
   },
 };
 describe("independent agent loop", () => {
+  it.each(["prompt", "compact"] as const)(
+    "keeps a cancelled %s cancelled when the provider returns a final result",
+    async (operation) => {
+      let cancel!: () => void;
+      let cancelNext = true;
+      const { agent, store, session } = await fixture({
+        ...simple,
+        async *stream() {
+          yield {
+            type: "done",
+            message: { role: "assistant", text: "Late result", timestamp: 1 },
+            usage: { input: 1, output: 1, cost: 0 },
+          };
+          if (cancelNext) {
+            cancelNext = false;
+            cancel();
+          }
+        },
+      });
+      cancel = () => agent.cancel();
+      await store.append(session.id, "message", {
+        message: { role: "user", text: "Keep this goal", timestamp: 1 },
+      });
+      const work =
+        operation === "prompt" ? agent.prompt("Task") : agent.compact();
+      await expect(work).rejects.toMatchObject({ name: "AbortError" });
+      expect(
+        (await store.events(session.id))
+          .filter((event) => event.type === "run.end")
+          .map((event) => event.data.status),
+      ).toEqual(["cancelled"]);
+      expect(
+        (await store.messages(session.id)).some(
+          (message) => message.role === "assistant",
+        ),
+      ).toBe(false);
+      await agent.prompt("Recovered");
+      expect((await store.events(session.id)).at(-1)?.data.status).toBe(
+        "completed",
+      );
+    },
+  );
+
+  it("normalizes provider cancellation errors and rejects cancelled queued prompts", async () => {
+    let started!: () => void;
+    const streaming = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const { agent, store, session } = await fixture({
+      ...simple,
+      async *stream({ signal }) {
+        started();
+        await new Promise<never>((_, reject) => {
+          signal.addEventListener(
+            "abort",
+            () => reject(Error("Request was aborted")),
+            { once: true },
+          );
+        });
+      },
+    });
+    const active = agent.prompt("Active");
+    await streaming;
+    const queued = agent.prompt("Queued");
+    const activeCancelled = expect(active).rejects.toMatchObject({
+      name: "AbortError",
+    });
+    const queuedCancelled = expect(queued).rejects.toMatchObject({
+      name: "AbortError",
+    });
+    agent.cancel();
+    await Promise.all([activeCancelled, queuedCancelled]);
+    expect((await store.events(session.id)).at(-1)?.data.status).toBe(
+      "cancelled",
+    );
+  });
+
+  it("resumes prompts queued during a manual tool operation", async () => {
+    const { agent, tools, store, session } = await fixture(simple);
+    let signalStarted!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => {
+      signalStarted = resolve;
+    });
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    tools.register({
+      name: "manual",
+      description: "Blocked manual operation",
+      schema: z.object({}),
+      async execute() {
+        signalStarted();
+        await blocked;
+        return { text: "finished" };
+      },
+    });
+    const manual = agent.executeTool("manual", {}, "!manual");
+    await started;
+    const queued = agent.prompt("Continue after the command");
+    release();
+    await manual;
+    await queued;
+    expect((await store.messages(session.id)).map((m) => m.text)).toEqual([
+      "!manual",
+      "",
+      "finished",
+      "Continue after the command",
+      "Hello",
+    ]);
+  });
+
+  it("keeps atomic tool registration unchanged on any name conflict", () => {
+    const tools = new ToolRegistry();
+    const tool = (name: string) => ({
+      name,
+      description: name,
+      schema: z.object({}),
+      execute: async () => ({ text: name }),
+    });
+    const existing = tool("existing");
+    tools.register(existing);
+    expect(() => tools.registerAll([tool("new"), tool("existing")])).toThrow(
+      "Duplicate tool",
+    );
+    expect(tools.names()).toEqual(new Set(["existing"]));
+    expect(tools.get("existing")).toBe(existing);
+    expect(() => tools.registerAll([tool("new"), tool("new")])).toThrow(
+      "Duplicate tool",
+    );
+    expect(tools.names()).toEqual(new Set(["existing"]));
+    tools.registerAll([tool("first"), tool("second")]);
+    expect(tools.names()).toEqual(new Set(["existing", "first", "second"]));
+  });
+
   it("persists ordered events and messages", async () => {
     const { agent, store, session } = await fixture(simple);
     await agent.prompt("Hi");
@@ -162,7 +297,9 @@ describe("independent agent loop", () => {
         return { text: "" };
       },
     });
-    await expect(agent.prompt("go")).rejects.toThrow();
+    await expect(agent.prompt("go")).rejects.toMatchObject({
+      name: "AbortError",
+    });
     expect(ran).toBe(false);
     expect((await store.events(session.id)).at(-1)?.data.status).toBe(
       "cancelled",

@@ -1,10 +1,63 @@
-import { it, expect } from "vitest";
+import { it, expect, vi } from "vitest";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mcpPlugin } from "../packages/tools/src/mcp.ts";
 import { Agent, PluginHost, ToolRegistry } from "../packages/core/src/index.ts";
 import { SQLiteStore } from "../packages/storage/src/index.ts";
+
+it("leaves no MCP tools after failed discovery and permits a clean retry", async () => {
+  const echo = { name: "echo", inputSchema: { type: "object" as const } };
+  vi.spyOn(Client.prototype, "connect").mockResolvedValue(undefined);
+  vi.spyOn(Client.prototype, "listTools")
+    .mockResolvedValueOnce({ tools: [echo], nextCursor: "next" })
+    .mockRejectedValueOnce(Error("Discovery failed"))
+    .mockResolvedValueOnce({ tools: [echo] });
+  const close = vi
+    .spyOn(Client.prototype, "close")
+    .mockResolvedValue(undefined);
+  const store = await SQLiteStore.open(":memory:");
+  const tools = new ToolRegistry();
+  const host = new PluginHost(tools);
+  try {
+    await host.load(mcpPlugin({ fixture: { url: "http://localhost/mcp" } }));
+    const agent = new Agent({
+      session: await store.createSession("/tmp"),
+      store,
+      tools,
+      approve: async () => true,
+      provider: {
+        id: "unused",
+        model: "unused",
+        contextWindow: 8000,
+        async *stream() {
+          throw Error("No model calls expected");
+        },
+      },
+    });
+    const failed = await agent.invoke(
+      "mcp_connect",
+      { server: "fixture" },
+      new AbortController().signal,
+    );
+    expect(failed.isError).toBe(true);
+    expect(tools.names()).toEqual(new Set(["mcp_connect"]));
+    expect(close).toHaveBeenCalledOnce();
+    const retried = await agent.invoke(
+      "mcp_connect",
+      { server: "fixture" },
+      new AbortController().signal,
+    );
+    expect(retried.isError).not.toBe(true);
+    expect(tools.names()).toEqual(new Set(["mcp_connect", "mcp_fixture_echo"]));
+  } finally {
+    await host.close();
+    await store.close();
+    vi.restoreAllMocks();
+  }
+});
+
 it("discovers MCP tools lazily and preserves structured content", async () => {
   const dir = await mkdtemp(join(tmpdir(), "hikaro-mcp-"));
   const server = join(dir, "server.mjs");
