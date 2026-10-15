@@ -7,7 +7,7 @@ import {
   type Component,
   type TuiMouseEvent,
 } from "@earendil-works/pi-tui";
-import { sanitize } from "../../tui/src/index.ts";
+import { sanitize } from "../../tui/src/text.ts";
 import type { PiTransport } from "./index.ts";
 
 const plain = (text: string) => text;

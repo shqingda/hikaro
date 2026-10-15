@@ -1,5 +1,4 @@
 import WebSocket from "ws";
-import { readFile, writeFile, mkdir, rename } from "node:fs/promises";
 import { existsSync, watchFile, unwatchFile } from "node:fs";
 import { createHash } from "node:crypto";
 import { createInterface } from "node:readline/promises";
@@ -12,9 +11,6 @@ import {
   randomToken,
   isToken,
   isRecord,
-  validateIdentity,
-  publicKeyBytes,
-  type Identity,
 } from "../../crypto/src/index.ts";
 import { ProcessClient } from "../../protocol/src/client.ts";
 import { Command } from "../../protocol/src/index.ts";

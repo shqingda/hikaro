@@ -330,12 +330,8 @@ export class Runtime {
     if (this.options.demo)
       return { provider: "demo", model: "offline", settings: {} };
     return {
-      provider: this.options.demo
-        ? "demo"
-        : (this.options.provider ?? "anthropic"),
-      model: this.options.demo
-        ? "offline"
-        : (this.options.model ?? "claude-sonnet-4-6"),
+      provider: this.options.provider ?? "anthropic",
+      model: this.options.model ?? "claude-sonnet-4-6",
       settings: {
         ...this.options.settings,
         ...(this.options.reasoning && !this.options.settings?.reasoning

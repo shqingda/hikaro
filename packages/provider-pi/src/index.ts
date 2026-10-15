@@ -3,7 +3,6 @@ import type {
   ProviderAdapter,
   Message,
   ProviderEvent,
-  ToolDefinition,
 } from "../../core/src/types.ts";
 import type {
   Model,
