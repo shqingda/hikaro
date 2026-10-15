@@ -16,7 +16,8 @@ import {
 import { ModelPanel } from "./model-panel.ts";
 import { ActivityEditor } from "./activity-editor.ts";
 import { defaultTuiPreferences, type TuiPreferences } from "./preferences.ts";
-import { stripVTControlCharacters } from "node:util";
+import { sanitize } from "./text.ts";
+export { sanitize } from "./text.ts";
 import type {
   AgentBackend,
   AgentEvent,
@@ -29,12 +30,6 @@ const accent = (text: string) => `\x1b[38;2;196;85;72m${text}\x1b[39m`;
 const muted = (text: string) => `\x1b[90m${text}\x1b[39m`;
 const bold = (text: string) => `\x1b[1m${text}\x1b[22m`;
 const identity = (text: string) => text;
-export function sanitize(text: string) {
-  return stripVTControlCharacters(text).replace(
-    /[\x00-\x08\x0b-\x1f\x7f-\x9f]/g,
-    "",
-  );
-}
 const theme: MarkdownTheme = {
   heading: bold,
   link: accent,

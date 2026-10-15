@@ -1,6 +1,22 @@
 # Validation status
 
-Updated: 2026-10-14. Implementation, test coverage, completed verification and pending acceptance are separate states. See [TODO.md](../TODO.md) for delivery order. Documentation and styling edits have no independent tests or benchmarks. Critical TUI workflow verification is recorded below.
+Updated: 2026-10-15. Implementation, test coverage, completed verification and pending acceptance are separate states. See [TODO.md](../TODO.md) for delivery order. Documentation and styling edits have no independent tests or benchmarks. Critical TUI workflow verification is recorded below.
+
+## TUI simplification verification: 2026-10-15
+
+Shared selection completion in `ModelPanel` and terminal text sanitization across the message view and picker. The existing `sanitize` export remains available from the TUI entry point. Control-character filtering, selection result fields and pending-state clearing order are preserved.
+
+Workspace: `/Users/shqingda/Projects/hikaro`, macOS, Node **26.11.1**, installed local Vitest. Each command below ran once for its corresponding code increment.
+
+| Command / filter                                                                                                                                                                                                                                     | Result                                                             |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `vitest run tests/tui-interactions.test.ts`                                                                                                                                                                                                          | 5 passed after selection completion extraction                     |
+| `vitest run tests/tui-text.test.ts tests/tui-interactions.test.ts tests/model-settings.test.ts -t 'sanitizes terminal text\|cleans picker labels\|TUI shortcut capabilities\|TUI interaction fixes\|uses a full-width brand-tinted user background'` | 12 passed, 4 excluded by filter after text sanitization extraction |
+| `vitest run tests/pty.test.ts -t 'searches session titles and preserves settings focus with a persistent permission mode'`                                                                                                                           | 1 E2E passed, 5 excluded by filter                                 |
+
+The E2E used an isolated profile and a real PTY. It verified session title search, selection, consecutive settings toggles, hidden usage, permission display and persisted settings. Other E2E scenarios were reviewed and retained: message isolation during session switching, stream cancellation, compaction, tool permissions/activity, terminal lifecycle/Unicode and provider authentication navigation cover distinct integration risks.
+
+Targeted formatting and diff whitespace checks passed. No full suite, build, benchmark or Pi smoke test ran for this refactor. These results do not establish that every E2E passes.
 
 ## Current delivery scope
 

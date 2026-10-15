@@ -1,4 +1,4 @@
-import { stripVTControlCharacters } from "node:util";
+import { sanitize as clean } from "./text.ts";
 import {
   Input,
   SelectList,
@@ -11,8 +11,6 @@ import {
   type Component,
   type SelectItem,
 } from "@earendil-works/pi-tui";
-const clean = (v: string) =>
-  stripVTControlCharacters(v).replace(/[\x00-\x08\x0b-\x1f\x7f-\x9f]/g, "");
 const plain = (v: string) => clean(v);
 const accent = (v: string) => `\x1b[38;2;196;85;72m${clean(v)}\x1b[39m`;
 const dim = (v: string) => `\x1b[90m${clean(v)}\x1b[39m`;
@@ -118,10 +116,13 @@ export class ModelPanel implements Component {
       if (index >= 0) this.list.setSelectedIndex(index);
     }
     this.list.onSelect = (item) => {
-      const p = this.pending;
-      this.pending = undefined;
-      p?.resolve({ value: item.value, makeDefault: false });
+      this.resolveSelection({ value: item.value, makeDefault: false });
     };
+  }
+  private resolveSelection(selection: Selection) {
+    const pending = this.pending;
+    this.pending = undefined;
+    pending?.resolve(selection);
   }
   prompt(
     title: string,
@@ -197,16 +198,16 @@ export class ModelPanel implements Component {
     ) {
       const item = this.list.getSelectedItem();
       if (item) {
-        const p = this.pending;
-        this.pending = undefined;
-        p?.resolve({ value: item.value, makeDefault: false, action: "delete" });
+        this.resolveSelection({
+          value: item.value,
+          makeDefault: false,
+          action: "delete",
+        });
       }
     } else if (this.list && this.allowRename && matchesKey(data, "ctrl+r")) {
       const item = this.list.getSelectedItem();
       if (item) {
-        const pending = this.pending;
-        this.pending = undefined;
-        pending?.resolve({
+        this.resolveSelection({
           value: item.value,
           makeDefault: false,
           action: "rename",
@@ -219,9 +220,7 @@ export class ModelPanel implements Component {
     ) {
       const item = this.list.getSelectedItem();
       if (item) {
-        const p = this.pending;
-        this.pending = undefined;
-        p?.resolve({ value: item.value, makeDefault: true });
+        this.resolveSelection({ value: item.value, makeDefault: true });
       }
     } else {
       const previous = this.input?.getValue();
