@@ -1,6 +1,31 @@
-import { it, expect } from "vitest";
+import { it, expect, vi } from "vitest";
 import { createServer } from "node:http";
 import { createPiProvider } from "../packages/provider-pi/src/index.ts";
+import { builtinModels } from "@earendil-works/pi-ai/providers/all";
+
+it("maps reasoning off to the simple adapter's disabled value", async () => {
+  const collection = builtinModels();
+  const model = collection.getModels().find((model) => !model.reasoning)!;
+  const stream = vi.spyOn(collection, "streamSimple").mockImplementation(() => {
+    throw Error("Stopped before network access");
+  });
+  const provider = await createPiProvider({
+    provider: model.provider,
+    model: model.id,
+    collection,
+    settings: { reasoning: "off" },
+  });
+  const events = provider.stream({
+    system: "test",
+    messages: [],
+    tools: [],
+    signal: new AbortController().signal,
+  });
+  await expect(events[Symbol.asyncIterator]().next()).rejects.toThrow(
+    "Stopped before network access",
+  );
+  expect(stream.mock.calls[0]![2]?.reasoning).toBeUndefined();
+});
 it("streams through the real Pi OpenAI-compatible adapter without an agent loop dependency", async () => {
   let request: any;
   const server = createServer(async (req, res) => {

@@ -197,11 +197,25 @@ describe("permissions", () => {
 
 it("activity indicator animates runs, pauses for approval, and stops on cancellation and disposal", async () => {
   vi.useFakeTimers();
-  const tui = new TuiAltScreen({
+  const terminal: Terminal = {
     rows: 24,
     columns: 80,
-    write: () => {},
-  } as Terminal);
+    kittyProtocolActive: false,
+    start() {},
+    stop() {},
+    async drainInput() {},
+    write() {},
+    moveBy() {},
+    hideCursor() {},
+    showCursor() {},
+    clearLine() {},
+    clearFromCursor() {},
+    clearScreen() {},
+    setTitle() {},
+    setProgress() {},
+    setProgramStatus() {},
+  };
+  const tui = new TuiAltScreen(terminal);
   const render = vi.spyOn(tui, "requestRender").mockImplementation(() => {});
   const view = new HikaroView(tui, {
     cwd: "/tmp",

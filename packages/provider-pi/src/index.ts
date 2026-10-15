@@ -143,7 +143,8 @@ export async function createPiProvider(options: {
       const settings = {
         signal: input.signal,
         apiKey: options.apiKey,
-        reasoning: preferences.reasoning,
+        reasoning:
+          preferences.reasoning === "off" ? undefined : preferences.reasoning,
         sessionId: input.sessionId,
         maxTokens: Math.min(
           selected.maxTokens,
