@@ -1,4 +1,4 @@
-import { it, expect } from "vitest";
+import { it, expect, vi } from "vitest";
 import { ModelPanel } from "../packages/tui/src/model-panel.ts";
 import { ProviderCatalog } from "../packages/provider-pi/src/catalog.ts";
 import { InMemoryCredentialStore } from "@earendil-works/pi-ai";
@@ -6,6 +6,41 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { spawn } from "node-pty";
+it("browses models and providers without reading secrets, then reads only the used provider", async () => {
+  const home = await mkdtemp(join(tmpdir(), "hikaro-catalog-"));
+  const credentials = new InMemoryCredentialStore();
+  await credentials.modify("xai", async () => ({
+    type: "api_key",
+    key: "test-key",
+  }));
+  const read = vi
+    .spyOn(credentials, "read")
+    .mockRejectedValue(Error("Keychain denied"));
+  try {
+    const catalog = new ProviderCatalog(home, credentials);
+    const choices = await catalog.available();
+    expect(choices.some((m) => m.provider === "xai")).toBe(true);
+    expect(choices.some((m) => m.provider === "openai")).toBe(true);
+    const providers = await catalog.providers();
+    expect(providers.find((p) => p.id === "xai")).toMatchObject({
+      stored: true,
+      configured: true,
+    });
+    await catalog.capabilities(choices[0]!.provider, choices[0]!.id);
+    expect(read).not.toHaveBeenCalled();
+    await expect((await catalog.collection()).getAuth("xai")).rejects.toThrow(
+      "Credential store read failed for xai",
+    );
+    expect(read.mock.calls.map(([id]) => id)).toEqual(["xai"]);
+    read.mockRestore();
+    expect(await (await catalog.collection()).getAuth("xai")).toMatchObject({
+      auth: { apiKey: "test-key" },
+    });
+  } finally {
+    read.mockRestore();
+    await rm(home, { recursive: true, force: true });
+  }
+});
 it("renders picker errors below options and never displays secret input", async () => {
   const abort = new AbortController();
   const panel = new ModelPanel(abort.signal, () => {});

@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { modelCapabilities, type ModelSettings } from "./settings.ts";
 import type { ModelSelection } from "../../core/src/types.ts";
 import { z } from "zod";
+import { createModels, InMemoryCredentialStore } from "@earendil-works/pi-ai";
 const selectionSchema = z.object({
   provider: z.string().min(1),
   model: z.string().min(1),
@@ -71,6 +72,7 @@ class CatalogCache implements ModelsStore {
 }
 export class ProviderCatalog {
   private models?: MutableModels;
+  private browsing?: MutableModels;
   constructor(
     private home: string,
     readonly credentials: CredentialStore,
@@ -79,11 +81,21 @@ export class ProviderCatalog {
     if (!this.models) {
       const { builtinModels } =
         await import("@earendil-works/pi-ai/providers/all");
-      this.models = builtinModels({
+      const browsing = builtinModels({
+        credentials: new InMemoryCredentialStore(),
+        modelsStore: new CatalogCache(this.home),
+      });
+      // Pi's offline refresh still reads credentials. Restore cached models with
+      // an empty store, then share the providers with the authenticated runtime.
+      await browsing.refresh({ allowNetwork: false });
+      const models = createModels({
         credentials: this.credentials,
         modelsStore: new CatalogCache(this.home),
       });
-      await this.models.refresh({ allowNetwork: false });
+      for (const provider of browsing.getProviders())
+        models.setProvider(provider);
+      this.browsing = browsing;
+      this.models = models;
     }
     return this.models;
   }
@@ -94,9 +106,9 @@ export class ProviderCatalog {
     );
     const choices = await Promise.all(
       models.getProviders().map(async (p) => {
-        let configured = false;
+        let configured = stored.has(p.id);
         try {
-          configured = !!(await models.checkAuth(p.id));
+          configured ||= !!(await this.browsing!.checkAuth(p.id));
         } catch {}
         return {
           id: p.id,
@@ -126,9 +138,9 @@ export class ProviderCatalog {
     );
   }
   async available(provider?: string): Promise<ModelChoice[]> {
-    return (await (await this.collection()).getAvailable(provider)).map(
-      (m) => ({ provider: m.provider, id: m.id, name: m.name }),
-    );
+    return (await this.collection())
+      .getModels(provider)
+      .map((m) => ({ provider: m.provider, id: m.id, name: m.name }));
   }
   async refresh(provider: string, signal: AbortSignal) {
     const result = await (
