@@ -535,9 +535,8 @@ export class Agent implements AgentBackend {
     }, 10000);
     lease.unref();
     try {
-      const prior = await this.options.store.messages(
+      const { messages: prior } = await this.options.store.contextHistory(
         this.options.session.id,
-        1000,
       );
       const unresolved = new Map<string, { name: string }>();
       for (const m of prior) {
@@ -569,25 +568,25 @@ export class Agent implements AgentBackend {
           throw Error("Shared model-call budget exhausted");
         for (const text of this.steering.splice(0))
           await this.message({ role: "user", text, timestamp: Date.now() });
-        const history = await this.options.store.messages(
+        const history = await this.options.store.contextHistory(
           this.options.session.id,
-          1000,
         );
         const context = fitContext(
-          history,
+          history.messages,
           this.options.provider.contextWindow,
         );
         let messages = context.messages;
-        if (context.removed.length) {
+        const omitted = history.omitted + context.removed.length;
+        if (omitted) {
           await this.emit("context.windowed", {
-            omitted: context.removed.length,
+            omitted,
             reason:
               "Older turns remain in the event store; use /compact to create a continuation summary.",
           });
           messages = [
             {
               role: "user",
-              text: `Earlier conversation omitted to fit the context window (${context.removed.length} messages). Do not assume its contents. Ask for missing constraints when necessary.`,
+              text: `Earlier conversation omitted to fit the context window (${omitted} messages). Do not assume its contents. Ask for missing constraints when necessary.`,
               timestamp: Date.now(),
             },
             ...messages,

@@ -141,6 +141,10 @@ export interface EventStore {
     limit?: number,
   ): Promise<AgentEvent[]>;
   messages(sessionId: string, limit?: number): Promise<Message[]>;
+  /** Bounded model history, starting at a user turn when older messages are omitted. */
+  contextHistory(
+    sessionId: string,
+  ): Promise<{ messages: Message[]; omitted: number }>;
   acquire(sessionId: string, owner: string): Promise<boolean>;
   release(sessionId: string, owner: string): Promise<void>;
   claim(commandId: string, sessionId: string): Promise<boolean>;

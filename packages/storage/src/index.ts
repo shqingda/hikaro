@@ -123,6 +123,12 @@ export class SQLiteStore implements EventStore {
   messages(sessionId: string, limit = 200) {
     return this.request<Message[]>("messages", { sessionId, limit });
   }
+  contextHistory(sessionId: string) {
+    return this.request<{ messages: Message[]; omitted: number }>(
+      "contextHistory",
+      { sessionId },
+    );
+  }
   indexReplace(workspace: string, path: string, chunks: Chunk[]) {
     return this.request<void>("indexReplace", { workspace, path, chunks });
   }

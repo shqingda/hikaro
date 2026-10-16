@@ -293,6 +293,39 @@ const handlers = {
     }
     return result.reverse();
   },
+  contextHistory({ sessionId }) {
+    const rows = db
+      .prepare(
+        "SELECT data FROM events WHERE sessionId=? AND type='message' ORDER BY seq DESC",
+      )
+      .iterate(sessionId);
+    const messages = [];
+    let bytes = 0,
+      truncated = false;
+    for (const row of rows) {
+      const size = Buffer.byteLength(row.data);
+      if (bytes + size > 8 * 1024 * 1024) {
+        truncated = true;
+        break;
+      }
+      messages.push(JSON.parse(row.data).message);
+      bytes += size;
+    }
+    messages.reverse();
+    if (!truncated) return { messages, omitted: 0 };
+    const firstUser = messages.findIndex((message) => message.role === "user");
+    if (firstUser < 0)
+      throw Error(
+        "Current turn exceeds the history capacity. Start a branch or compact the session.",
+      );
+    messages.splice(0, firstUser);
+    const total = db
+      .prepare(
+        "SELECT COUNT(*) AS count FROM events WHERE sessionId=? AND type='message'",
+      )
+      .get(sessionId).count;
+    return { messages, omitted: total - messages.length };
+  },
   indexReplace({ workspace, path, chunks }) {
     db.exec("BEGIN IMMEDIATE");
     try {

@@ -64,6 +64,47 @@ async function allowedPath(
   }
   return resolved.path;
 }
+// Shared across plugin instances so subagents and codemode use the same queue.
+const fileUpdates = new Map<string, Promise<void>>();
+async function fileVersion(path: string) {
+  try {
+    const info = await stat(path, { bigint: true });
+    return `${info.dev}:${info.ino}:${info.size}:${info.mtimeNs}:${info.ctimeNs}`;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw error;
+  }
+}
+async function updateTextFile(
+  path: string,
+  signal: AbortSignal,
+  replace: (current: string | undefined) => string,
+) {
+  const previous = fileUpdates.get(path);
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  fileUpdates.set(path, pending);
+  try {
+    await previous;
+    signal.throwIfAborted();
+    const version = await fileVersion(path);
+    const current =
+      version === undefined ? undefined : await readFile(path, "utf8");
+    const content = replace(current);
+    await mkdir(dirname(path), { recursive: true });
+    if ((await fileVersion(path)) !== version)
+      throw Error("File changed during editing. Read it before retrying.");
+    signal.throwIfAborted();
+    await writeFile(path, content, {
+      flag: version === undefined ? "wx" : "w",
+    });
+  } finally {
+    release();
+    if (fileUpdates.get(path) === pending) fileUpdates.delete(path);
+  }
+}
 export async function runProcess(
   command: string,
   args: string[],
@@ -233,19 +274,12 @@ export function codingPlugin(options: {
         }),
         async execute({ path, content, expected }, ctx) {
           const p = await allowedPath(ctx, path, true, trusted());
-          let current: string | undefined;
-          try {
-            current = await readFile(p, "utf8");
-          } catch (e) {
-            if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-          }
-          if (current !== undefined && expected !== current)
-            throw Error(
-              "File changed or expected content missing. Read it before replacing.",
-            );
-          await mkdir(dirname(p), { recursive: true });
-          await writeFile(p, content, {
-            flag: current === undefined ? "wx" : "w",
+          await updateTextFile(p, ctx.signal, (current) => {
+            if (current !== undefined && expected !== current)
+              throw Error(
+                "File changed or expected content missing. Read it before replacing.",
+              );
+            return content;
           });
           return {
             text: `Wrote ${relative(ctx.cwd, p)} (${Buffer.byteLength(content)} bytes)`,
@@ -262,14 +296,15 @@ export function codingPlugin(options: {
         }),
         async execute({ path, oldText, newText }, ctx) {
           const p = await allowedPath(ctx, path, true, trusted());
-          const old = await readFile(p, "utf8");
-          const index = old.indexOf(oldText);
-          if (index < 0 || old.indexOf(oldText, index + oldText.length) !== -1)
-            throw Error("Expected exactly one match");
-          await writeFile(
-            p,
-            old.slice(0, index) + newText + old.slice(index + oldText.length),
-          );
+          await updateTextFile(p, ctx.signal, (old) => {
+            if (old === undefined) throw Error("File does not exist");
+            const index = old.indexOf(oldText);
+            if (index < 0 || old.indexOf(oldText, index + 1) !== -1)
+              throw Error("Expected exactly one match");
+            return (
+              old.slice(0, index) + newText + old.slice(index + oldText.length)
+            );
+          });
           return { text: `Updated ${relative(ctx.cwd, p)}` };
         },
       });

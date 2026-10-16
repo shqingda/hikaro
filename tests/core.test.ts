@@ -1,10 +1,13 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
+import * as fs from "node:fs/promises";
+vi.mock("node:fs/promises", { spy: true });
 import { z } from "zod";
 import {
   Agent,
   ToolRegistry,
   PluginHost,
   type ProviderAdapter,
+  type Message,
 } from "../packages/core/src/index.ts";
 import { SQLiteStore } from "../packages/storage/src/index.ts";
 import { JsonLines } from "../packages/protocol/src/index.ts";
@@ -348,6 +351,240 @@ describe("independent agent loop", () => {
     );
     expect(result.isError).toBe(true);
     expect(await readFile(join(cwd, "a"), "utf8")).toBe("same same");
+  });
+  it("rejects overlapping edit matches without changing the file", async () => {
+    const { agent, tools, cwd } = await fixture(simple);
+    await writeFile(join(cwd, "a"), "aaa");
+    await new PluginHost(tools).load(codingPlugin({ trusted: true }));
+    const result = await agent.invoke(
+      "edit_file",
+      { path: "a", oldText: "aa", newText: "X" },
+      new AbortController().signal,
+    );
+    expect(result.isError).toBe(true);
+    expect(await readFile(join(cwd, "a"), "utf8")).toBe("aaa");
+  });
+  it("preserves concurrent edits across plugin instances and symlink aliases", async () => {
+    const { agent, tools, cwd, session, store } = await fixture(simple);
+    const otherTools = new ToolRegistry();
+    const other = new Agent({
+      session,
+      store,
+      provider: simple,
+      tools: otherTools,
+      approve: async () => false,
+    });
+    await new PluginHost(tools).load(codingPlugin({ trusted: true }));
+    await new PluginHost(otherTools).load(codingPlugin({ trusted: true }));
+    const words = Array.from({ length: 12 }, (_, i) => `word_${i};`);
+    await writeFile(join(cwd, "a"), words.join(" "));
+    await symlink(join(cwd, "a"), join(cwd, "alias"));
+    const results = await Promise.all(
+      words.map((word, i) =>
+        (i % 2 ? other : agent).invoke(
+          "edit_file",
+          {
+            path: i % 2 ? "alias" : "a",
+            oldText: word,
+            newText: word.toUpperCase(),
+          },
+          new AbortController().signal,
+        ),
+      ),
+    );
+    expect(results.every((result) => !result.isError)).toBe(true);
+    expect(await readFile(join(cwd, "a"), "utf8")).toBe(
+      words.join(" ").toUpperCase(),
+    );
+  });
+  it("rejects stale concurrent replacements instead of reporting two successful writes", async () => {
+    const { agent, tools, cwd } = await fixture(simple);
+    await new PluginHost(tools).load(codingPlugin({ trusted: true }));
+    await writeFile(join(cwd, "a"), "original");
+    const results = await Promise.all(
+      ["first", "second"].map((content) =>
+        agent.invoke(
+          "write_file",
+          { path: "a", content, expected: "original" },
+          new AbortController().signal,
+        ),
+      ),
+    );
+    expect(results.filter((result) => !result.isError)).toHaveLength(1);
+    expect(results.find((result) => result.isError)?.text).toMatch(/changed/i);
+    expect(["first", "second"]).toContain(
+      await readFile(join(cwd, "a"), "utf8"),
+    );
+  });
+  it("rejects a file version changed by an external writer before saving", async () => {
+    const { agent, tools, cwd } = await fixture(simple);
+    await new PluginHost(tools).load(codingPlugin({ trusted: true }));
+    const path = join(cwd, "a");
+    await writeFile(path, "original");
+    const { stat: originalStat } =
+      await vi.importActual<typeof fs>("node:fs/promises");
+    let changed = false;
+    const spy = vi.spyOn(fs, "stat").mockImplementation(async (...args) => {
+      const info = await originalStat(...args);
+      if (!changed && String(args[0]).endsWith("/a")) {
+        changed = true;
+        await writeFile(path, "external update");
+      }
+      return info;
+    });
+    try {
+      const result = await agent.invoke(
+        "edit_file",
+        { path: "a", oldText: "external", newText: "agent" },
+        new AbortController().signal,
+      );
+      expect(result.isError).toBe(true);
+      expect(result.text).toMatch(/changed during editing/);
+      expect(await readFile(path, "utf8")).toBe("external update");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+  it("releases the file queue after a failed edit", async () => {
+    const { agent, tools, cwd } = await fixture(simple);
+    await new PluginHost(tools).load(codingPlugin({ trusted: true }));
+    await writeFile(join(cwd, "a"), "original");
+    const failed = await agent.invoke(
+      "edit_file",
+      { path: "a", oldText: "missing", newText: "bad" },
+      new AbortController().signal,
+    );
+    expect(failed.isError).toBe(true);
+    const next = await agent.invoke(
+      "edit_file",
+      { path: "a", oldText: "original", newText: "updated" },
+      new AbortController().signal,
+    );
+    expect(next.isError).not.toBe(true);
+    expect(await readFile(join(cwd, "a"), "utf8")).toBe("updated");
+  });
+  it("retains complete model history beyond 1000 messages", async () => {
+    let received: Message[] = [];
+    const { agent, store, session } = await fixture({
+      ...simple,
+      contextWindow: 1_000_000,
+      async *stream(input) {
+        received = input.messages;
+        yield* simple.stream(input);
+      },
+    });
+    await store.append(session.id, "message", {
+      message: {
+        role: "user",
+        text: "Keep the original constraint",
+        timestamp: 1,
+      },
+    });
+    for (let i = 0; i < 501; i++) {
+      await store.append(session.id, "message", {
+        message: {
+          role: "assistant",
+          text: "",
+          toolCalls: [{ id: String(i), name: "inspect", arguments: {} }],
+          timestamp: 1,
+        },
+      });
+      await store.append(session.id, "message", {
+        message: {
+          role: "tool",
+          text: "ok",
+          name: "inspect",
+          callId: String(i),
+          timestamp: 1,
+        },
+      });
+    }
+    await agent.prompt("Continue");
+    expect(received[0]?.text).toBe("Keep the original constraint");
+    expect(received).toHaveLength(1004);
+    expect(received.filter((message) => message.role === "tool")).toHaveLength(
+      501,
+    );
+  });
+  it.each([
+    {
+      contextWindow: 20_000_000,
+      omitted: 3,
+      firstRetained: "Recent whole turn",
+    },
+    { contextWindow: 10000, omitted: 5, firstRetained: "Continue" },
+  ])(
+    "reports history omitted by the storage capacity and keeps whole turns ($contextWindow)",
+    async ({ contextWindow, omitted, firstRetained }) => {
+      let received: Message[] = [];
+      const { agent, store, session } = await fixture({
+        ...simple,
+        contextWindow,
+        async *stream(input) {
+          received = input.messages;
+          yield* simple.stream(input);
+        },
+      });
+      const message = (role: Message["role"], text: string): Message => ({
+        role,
+        text,
+        timestamp: 1,
+      });
+      await store.append(session.id, "message", {
+        message: message("user", "Old constraint"),
+      });
+      await store.append(session.id, "message", {
+        message: {
+          ...message("assistant", "x".repeat(5 * 1024 * 1024)),
+          toolCalls: [{ id: "old", name: "inspect", arguments: {} }],
+        },
+      });
+      await store.append(session.id, "message", {
+        message: {
+          ...message("tool", "Older tool result"),
+          callId: "old",
+          name: "inspect",
+        },
+      });
+      await store.append(session.id, "message", {
+        message: message("user", "Recent whole turn"),
+      });
+      await store.append(session.id, "message", {
+        message: message("assistant", "y".repeat(5 * 1024 * 1024)),
+      });
+      const windowed: Record<string, unknown>[] = [];
+      agent.subscribe((event) => {
+        if (event.type === "context.windowed") windowed.push(event.data);
+      });
+      await agent.prompt("Continue");
+      expect(windowed).toEqual([expect.objectContaining({ omitted })]);
+      expect(received[0]?.text).toMatch(/Earlier conversation omitted/);
+      expect(received[1]?.text).toBe(firstRetained);
+      expect(received.at(-1)?.text).toBe("Continue");
+      expect(received.some((message) => message.role === "tool")).toBe(false);
+    },
+  );
+  it("rejects an oversized current turn instead of sending partial tool history", async () => {
+    let called = false;
+    const { agent, store, session } = await fixture({
+      ...simple,
+      async *stream(input) {
+        called = true;
+        yield* simple.stream(input);
+      },
+    });
+    await store.append(session.id, "message", {
+      message: { role: "user", text: "Original goal", timestamp: 1 },
+    });
+    await store.append(session.id, "message", {
+      message: {
+        role: "assistant",
+        text: "x".repeat(8 * 1024 * 1024),
+        timestamp: 1,
+      },
+    });
+    await expect(agent.prompt("Continue")).rejects.toThrow(/history capacity/);
+    expect(called).toBe(false);
   });
   it("isolates codemode and routes calls through the tool broker", async () => {
     const { agent, tools } = await fixture(simple);

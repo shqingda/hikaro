@@ -201,6 +201,20 @@ Manual inspection of rendered layout text at **36 columns × 18 rows**, **60 × 
 
 `pnpm build` passed and refreshed the startup artifacts. One Impeccable scan of seven affected TUI source files reported no findings; native-terminal rule coverage remains unestablished. Real-terminal resize, IME and accessibility acceptance remain pending.
 
+## File edits and model history regressions: 2026-10-16
+
+File writes and edits now share a queue by canonical path across plugin instances in the host process. Each update reads inside the queue and rechecks the file version before saving. Stale replacements fail, and overlapping text matches are rejected. The queue is not a cross-process atomic file lock; external writers can still race after the final version check.
+
+Model history has a separate bounded reader without the 1,000-message limit. Its 8 MiB capacity trims at user-turn boundaries and reports omitted messages together with subsequent context-budget trimming. An oversized current turn fails visibly rather than sending partial history. Persisted messages remain unchanged. This does not implement automatic compaction or complete token accounting.
+
+Five initial regression cases failed on the original implementation. After the fixes, the final focused command passed **14 cases, with 14 unrelated cases filtered out**:
+
+```sh
+pnpm exec vitest run tests/core.test.ts -t 'overlapping edit|concurrent edits|concurrent replacements|file version changed|releases the file queue|complete model history|storage capacity|oversized current turn|prevents edits when expected text is ambiguous|denies external symlink reads|executes tool calls and returns|records cancellation and does not execute remaining tools|persists ordered events'
+```
+
+The nine new cases cover overlapping matches, concurrent edits across plugin instances and symlink aliases, stale concurrent replacements, external version changes, queue recovery after failure, more than 1,000 messages, storage-only and combined context omissions, and oversized current turns. The external-writer test needed two mock repairs for ESM export spying and recursive mock calls before it passed. Type checking passed with a temporary configuration extending the repository settings and including only the changed TypeScript files and `tests/core.test.ts`. Environment: macOS, Node 26.12.0, pnpm 12.11.2. No full suite, build, E2E, real model request or benchmark ran.
+
 ## Pending core and Pi acceptance
 
 Follow the six stages in TODO. Required checks include:
