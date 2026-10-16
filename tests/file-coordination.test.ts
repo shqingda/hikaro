@@ -1,13 +1,22 @@
 import { expect, it } from "vitest";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  realpath,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { updateTextFile } from "../packages/tools/src/workspace.ts";
 
 it("rejects a simultaneous update from another process and releases its lock afterward", async () => {
-  const root = await mkdtemp(join(tmpdir(), "hikaro-file-lock-"));
+  const root = await realpath(
+    await mkdtemp(join(tmpdir(), "hikaro-file-lock-")),
+  );
   const path = join(root, "source.txt");
   const release = join(root, "release");
   await writeFile(path, "V1", { mode: 0o640 });
@@ -67,7 +76,9 @@ it("rejects a simultaneous update from another process and releases its lock aft
 }, 15000);
 
 it("preserves the file and releases the lock when replacement fails or is cancelled", async () => {
-  const root = await mkdtemp(join(tmpdir(), "hikaro-file-failure-"));
+  const root = await realpath(
+    await mkdtemp(join(tmpdir(), "hikaro-file-failure-")),
+  );
   const path = join(root, "source.txt");
   await writeFile(path, "original");
   try {

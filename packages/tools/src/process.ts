@@ -34,7 +34,12 @@ export async function runProcess(
   command: string,
   args: string[],
   ctx: Pick<ToolContext, "cwd" | "signal" | "outputDirectory" | "checkpoint">,
-  options: { timeout?: number; limit?: number; env?: NodeJS.ProcessEnv } = {},
+  options: {
+    timeout?: number;
+    limit?: number;
+    env?: NodeJS.ProcessEnv;
+    input?: string | Buffer;
+  } = {},
 ): Promise<ToolResult> {
   await ctx.checkpoint?.();
   ctx.signal.throwIfAborted();
@@ -42,9 +47,11 @@ export async function runProcess(
     const child = spawn(command, args, {
       cwd: ctx.cwd,
       env: options.env ?? process.env,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe"],
       detached: process.platform !== "win32",
     });
+    child.stdin.on("error", () => {});
+    child.stdin.end(options.input);
     let text = "",
       truncated = false,
       timedOut = false,

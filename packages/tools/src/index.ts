@@ -1,9 +1,10 @@
-import { readFile, realpath, stat, readdir } from "node:fs/promises";
+import { realpath, readdir } from "node:fs/promises";
 import { relative, isAbsolute, join } from "node:path";
 import { homedir } from "node:os";
 import { z } from "zod";
 import type { Plugin } from "../../core/src/types.ts";
 import { resolvePath, allowedPath, updateTextFile } from "./workspace.ts";
+import { readFileBytes, readTextFile } from "./secure-files.ts";
 import { runProcess, runWorkspaceCommand, cleanProcessEnv } from "./process.ts";
 export { resolvePath } from "./workspace.ts";
 export { runProcess } from "./process.ts";
@@ -35,11 +36,7 @@ export function codingPlugin(options: {
             trusted(),
             options.reviewReads?.(),
           );
-          if ((await stat(p)).size > 2_000_000)
-            throw Error(
-              "File exceeds 2 MB. Use shell tools to inspect a bounded region.",
-            );
-          const lines = (await readFile(p, "utf8")).split("\n");
+          const lines = (await readTextFile(p, ctx.signal)).split("\n");
           return {
             text: lines
               .slice(offset - 1, offset - 1 + limit)
@@ -152,28 +149,48 @@ export function codingPlugin(options: {
               ),
             );
           let text = "";
-          for (let offset = 0; offset < paths.length; offset += 128) {
-            const result = await runProcess(
-              "rg",
-              [
-                "--no-config",
-                "-n",
-                "--with-filename",
-                "--max-count",
-                "30",
-                "--",
-                pattern,
-                ...paths.slice(offset, offset + 128),
-              ],
-              ctx,
-              { limit: 48000 - text.length, env: cleanProcessEnv() },
+          for (let offset = 0; offset < paths.length; offset += 8) {
+            const results = await Promise.all(
+              paths.slice(offset, offset + 8).map(async (path) => {
+                await ctx.checkpoint?.();
+                const input = await readFileBytes(
+                  path,
+                  ctx.signal,
+                  16 * 1024 * 1024,
+                );
+                const result = await runProcess(
+                  "rg",
+                  [
+                    "--no-config",
+                    "-n",
+                    "--no-filename",
+                    "--max-count",
+                    "30",
+                    "--",
+                    pattern,
+                    "-",
+                  ],
+                  ctx,
+                  { limit: 48000, env: cleanProcessEnv(), input },
+                );
+                if (!result.isError)
+                  result.text =
+                    result.text
+                      .split("\n")
+                      .filter(Boolean)
+                      .map((line) => `${path}:${line}`)
+                      .join("\n") + (result.text.endsWith("\n") ? "\n" : "");
+                return result;
+              }),
             );
-            if (
-              result.isError &&
-              (result.data as { exitCode?: number })?.exitCode !== 1
-            )
-              return result;
-            text += result.text;
+            for (const result of results) {
+              if (
+                result.isError &&
+                (result.data as { exitCode?: number })?.exitCode !== 1
+              )
+                return result;
+              text += result.text.slice(0, Math.max(0, 48000 - text.length));
+            }
             if (text.length >= 48000) break;
           }
           return { text, isError: false };
@@ -256,7 +273,13 @@ export async function loadInstructions(
     try {
       const target = await resolvePath(cwd, file);
       if (!target.inside) continue;
-      const text = (await readFile(target.path, "utf8")).slice(0, budget);
+      const text = (
+        await readTextFile(
+          target.path,
+          AbortSignal.timeout(10000),
+          16 * 1024 * 1024,
+        )
+      ).slice(0, budget);
       sections.push(`Workspace instructions (${file}):\n${text}`);
       resources.instructions.push(target.path);
       budget -= text.length;
@@ -282,16 +305,9 @@ export async function loadInstructions(
               const path = await realpath(join(root, entry.name, "SKILL.md"));
               const rel = relative(root, path);
               if (rel.startsWith("..") || isAbsolute(rel)) return undefined;
-              const { open } = await import("node:fs/promises");
-              const file = await open(path, "r");
-              let text = "";
-              try {
-                const buffer = Buffer.alloc(4096);
-                const { bytesRead } = await file.read(buffer, 0, 4096, 0);
-                text = buffer.subarray(0, bytesRead).toString("utf8");
-              } finally {
-                await file.close();
-              }
+              const text = (
+                await readTextFile(path, AbortSignal.timeout(10000))
+              ).slice(0, 4096);
               return {
                 name: entry.name,
                 description:

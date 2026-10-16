@@ -1,6 +1,5 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, expect, it } from "vitest";
 import * as fs from "node:fs/promises";
-vi.mock("node:fs/promises", { spy: true });
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -225,18 +224,17 @@ it("does not commit a file update that waits until after lease takeover", async 
   const paused = new Promise<void>((resolve) => {
     resume = resolve;
   });
-  const { stat: originalStat } =
-    await vi.importActual<typeof fs>("node:fs/promises");
-  let delayed = false;
-  const spy = vi.spyOn(fs, "stat").mockImplementation(async (...args) => {
-    const info = await originalStat(...args);
-    if (!delayed && String(args[0]) === path) {
-      delayed = true;
-      entered();
-      await paused;
-    }
-    return info;
-  });
+  const tool = tools.get("write_file")!;
+  const execute = tool.execute;
+  tool.execute = (args, ctx) =>
+    execute(args, {
+      ...ctx,
+      checkpoint: async () => {
+        entered();
+        await paused;
+        await ctx.checkpoint?.();
+      },
+    });
   const work = agent.executeTool(
     "write_file",
     { path, expected: "original", content: "stale owner update" },
@@ -257,7 +255,6 @@ it("does not commit a file update that waits until after lease takeover", async 
   } finally {
     resume();
     await work.catch(() => {});
-    spy.mockRestore();
   }
 });
 

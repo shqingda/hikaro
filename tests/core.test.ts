@@ -1,6 +1,4 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
-import * as fs from "node:fs/promises";
-vi.mock("node:fs/promises", { spy: true });
+import { describe, it, expect, afterEach } from "vitest";
 import { z } from "zod";
 import {
   Agent,
@@ -421,29 +419,24 @@ describe("independent agent loop", () => {
     await new PluginHost(tools).load(codingPlugin({ trusted: true }));
     const path = join(cwd, "a");
     await writeFile(path, "original");
-    const { stat: originalStat } =
-      await vi.importActual<typeof fs>("node:fs/promises");
-    let changed = false;
-    const spy = vi.spyOn(fs, "stat").mockImplementation(async (...args) => {
-      const info = await originalStat(...args);
-      if (!changed && String(args[0]).endsWith("/a")) {
-        changed = true;
-        await writeFile(path, "external update");
-      }
-      return info;
-    });
-    try {
-      const result = await agent.invoke(
-        "edit_file",
-        { path: "a", oldText: "external", newText: "agent" },
-        new AbortController().signal,
-      );
-      expect(result.isError).toBe(true);
-      expect(result.text).toMatch(/changed during editing/);
-      expect(await readFile(path, "utf8")).toBe("external update");
-    } finally {
-      spy.mockRestore();
-    }
+    const edit = tools.get("edit_file")!;
+    const execute = edit.execute;
+    edit.execute = (args, ctx) =>
+      execute(args, {
+        ...ctx,
+        checkpoint: async () => {
+          await writeFile(path, "external update");
+          await ctx.checkpoint?.();
+        },
+      });
+    const result = await agent.invoke(
+      "edit_file",
+      { path: "a", oldText: "original", newText: "agent" },
+      new AbortController().signal,
+    );
+    expect(result.isError).toBe(true);
+    expect(result.text).toMatch(/changed during editing/);
+    expect(await readFile(path, "utf8")).toBe("external update");
   });
   it("releases the file queue after a failed edit", async () => {
     const { agent, tools, cwd } = await fixture(simple);

@@ -6,6 +6,8 @@ Independent TypeScript coding agent. Current scope: fullscreen TUI and bidirecti
 
 Requires **Node 24.21+**, **pnpm 12.11.2**, and `rg`. macOS is the initial supported host.
 
+Installing or building from source also requires a C11 compiler: Xcode Command Line Tools on macOS, or `build-essential` on Linux. Installation and build compile the small file-operation helper; the built CLI includes that executable. File tools refuse to run if it is unavailable.
+
 ```sh
 pnpm install
 pnpm build
@@ -74,6 +76,8 @@ Data defaults to `~/.hikaro`; override with `--home` or `HIKARO_HOME`. Sessions 
 Custom `--base-url` endpoints use credentials bound to their normalized URL, separately from built-in providers. Save a key from an environment variable with `--base-url https://example.com/v1 --endpoint-key-env MY_ENDPOINT_KEY`; subsequent runs using the same home and endpoint reuse it from Keychain. Without an endpoint key, requests are anonymous. Provider keys are never automatically sent to a custom endpoint. URLs must use HTTP(S), without embedded credentials, query parameters or fragments.
 
 Official file updates serialize by canonical path, acquire an exclusive `<file>.hikaro-lock`, and replace content atomically. A second process receives a conflict instead of silently overwriting an update. A crash can leave a lock containing the writer PID: inspect the writer and file before manually removing it. Editors, shell commands and third-party plugins do not participate in this lock protocol.
+
+File reads and updates use opened directory handles, rejecting symbolic links introduced after path authorization. Updates, locks and temporary-file cleanup stay attached to the authorized directory even if another process renames it. Search and index retrieval use the same protected file reads; search passes the resulting bytes to ripgrep rather than reopening filenames. Direct reads remain limited to 2 MB, index files to 256 kB, and search/update snapshots to 16 MiB.
 
 Usage and model-call/cost budgets belong to the in-memory Agent and its shared child-agent budget, not to persistent session history. Reconstructing an Agent or restarting the host creates a fresh budget; resuming history does not restore usage limits. Model history is bounded separately, trims only at user-turn boundaries, and reports omitted messages. Sessions and events remain persistent.
 

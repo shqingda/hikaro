@@ -1,8 +1,8 @@
 import { z } from "zod";
-import { readFile, stat } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { runProcess, resolvePath } from "./index.ts";
 import { sensitivePath } from "./workspace.ts";
+import { readTextFile, isFileTooLarge } from "./secure-files.ts";
 import { cleanProcessEnv } from "./process.ts";
 import type { Plugin, ToolContext } from "../../core/src/types.ts";
 export type Chunk = {
@@ -125,8 +125,13 @@ export function indexPlugin(
               sensitivePath.test(target.path)
             )
               continue;
-            if ((await stat(target.path)).size > 256000) continue;
-            const text = await readFile(target.path, "utf8");
+            let text: string;
+            try {
+              text = await readTextFile(target.path, ctx.signal, 256000);
+            } catch (error) {
+              if (isFileTooLarge(error)) continue;
+              throw error;
+            }
             if (text.includes("\0")) continue;
             const hash = createHash("sha256").update(text).digest("hex");
             const lines = text.split("\n");
@@ -201,7 +206,7 @@ export function indexPlugin(
                 sensitivePath.test(target.path)
               )
                 continue;
-              const text = await readFile(target.path, "utf8");
+              const text = await readTextFile(target.path, ctx.signal, 256000);
               if (createHash("sha256").update(text).digest("hex") === hit.hash)
                 fresh.push(hit);
             } catch {}
