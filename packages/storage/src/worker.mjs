@@ -16,6 +16,37 @@ CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(id UNINDEXED,text);
 CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,sessionId TEXT NOT NULL,task TEXT NOT NULL,runAt INTEGER NOT NULL,state TEXT NOT NULL,owner TEXT,leaseUntil INTEGER,error TEXT);
 CREATE TABLE IF NOT EXISTS leases(sessionId TEXT PRIMARY KEY,owner TEXT NOT NULL,expires INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS commands(id TEXT PRIMARY KEY,sessionId TEXT NOT NULL,createdAt INTEGER NOT NULL);`);
+// Serialize the migration because two runtime processes can open an older DB together.
+db.exec("BEGIN IMMEDIATE");
+try {
+  if (
+    !db
+      .prepare("PRAGMA table_info(leases)")
+      .all()
+      .some((column) => column.name === "epoch")
+  )
+    db.exec("ALTER TABLE leases ADD COLUMN epoch INTEGER NOT NULL DEFAULT 0");
+  db.exec("COMMIT");
+} catch (error) {
+  db.exec("ROLLBACK");
+  throw error;
+}
+function assertLease(sessionId, lease) {
+  const current = db
+    .prepare("SELECT owner,epoch,expires FROM leases WHERE sessionId=?")
+    .get(sessionId);
+  if (lease) {
+    if (
+      !current ||
+      current.owner !== lease.owner ||
+      current.epoch !== lease.epoch ||
+      current.expires <= Date.now()
+    )
+      throw Error("Session lease lost; execution no longer owns this session");
+  } else if (current && current.expires > Date.now()) {
+    throw Error("Session lease required while execution is active");
+  }
+}
 const decode = (r) => ({ ...r, data: JSON.parse(r.data) });
 const sessionQuery =
   "SELECT s.*, m.data AS modelData FROM sessions s LEFT JOIN session_models m ON m.sessionId=s.id";
@@ -256,18 +287,34 @@ const handlers = {
         .get(sessionId, items.at(-1).seq);
     return { items, hasOlder, hasNewer };
   },
-  append({ sessionId, type, data }) {
-    const timestamp = Date.now();
-    const r = db
-      .prepare(
-        "INSERT INTO events(sessionId,type,data,timestamp) VALUES(?,?,?,?)",
-      )
-      .run(sessionId, type, JSON.stringify(data), timestamp);
-    if (type === "message" && data.message?.role === "user")
-      db.prepare(
-        "UPDATE sessions SET title=? WHERE id=? AND title='New session'",
-      ).run(data.message.text.slice(0, 80), sessionId);
-    return { sessionId, seq: Number(r.lastInsertRowid), type, data, timestamp };
+  append({ sessionId, type, data, lease }) {
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      // Ownership validation and insertion share the writer transaction, so a
+      // successor cannot take over between the check and the event commit.
+      assertLease(sessionId, lease);
+      const timestamp = Date.now();
+      const r = db
+        .prepare(
+          "INSERT INTO events(sessionId,type,data,timestamp) VALUES(?,?,?,?)",
+        )
+        .run(sessionId, type, JSON.stringify(data), timestamp);
+      if (type === "message" && data.message?.role === "user")
+        db.prepare(
+          "UPDATE sessions SET title=? WHERE id=? AND title='New session'",
+        ).run(data.message.text.slice(0, 80), sessionId);
+      db.exec("COMMIT");
+      return {
+        sessionId,
+        seq: Number(r.lastInsertRowid),
+        type,
+        data,
+        timestamp,
+      };
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
   },
   events({ sessionId, after = 0, limit = 200 }) {
     return db
@@ -464,19 +511,64 @@ const handlers = {
     );
   },
   acquire({ sessionId, owner }) {
-    if (!db.prepare("SELECT 1 FROM sessions WHERE id=?").get(sessionId))
-      return false;
-    const now = Date.now();
-    return (
-      db
-        .prepare(
-          "INSERT INTO leases VALUES(?,?,?) ON CONFLICT(sessionId) DO UPDATE SET owner=excluded.owner,expires=excluded.expires WHERE leases.expires<? OR leases.owner=?",
-        )
-        .run(sessionId, owner, now + 30000, now, owner).changes > 0
-    );
+    return !!handlers.acquireLease({ sessionId, owner });
+  },
+  acquireLease({ sessionId, owner }) {
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      let lease;
+      if (db.prepare("SELECT 1 FROM sessions WHERE id=?").get(sessionId)) {
+        const now = Date.now();
+        lease = db
+          .prepare(
+            "INSERT INTO leases(sessionId,owner,expires,epoch) VALUES(?,?,?,1) ON CONFLICT(sessionId) DO UPDATE SET owner=excluded.owner,expires=excluded.expires,epoch=leases.epoch+1 WHERE leases.expires<=? AND leases.owner<>? RETURNING owner,epoch",
+          )
+          .get(sessionId, owner, now + 30000, now, owner);
+        // Repeated acquisition is idempotent while live; renewal is separate.
+        lease ??= db
+          .prepare(
+            "SELECT owner,epoch FROM leases WHERE sessionId=? AND owner=? AND expires>?",
+          )
+          .get(sessionId, owner, now);
+      }
+      db.exec("COMMIT");
+      return lease;
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
+  },
+  renewLease({ sessionId, lease }) {
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      // Read time after waiting for the writer lock; a blocked renewal must not
+      // resurrect a lease that expired while the connection was waiting.
+      const now = Date.now();
+      const renewed =
+        db
+          .prepare(
+            "UPDATE leases SET expires=? WHERE sessionId=? AND owner=? AND epoch=? AND expires>?",
+          )
+          .run(now + 30000, sessionId, lease.owner, lease.epoch, now).changes >
+        0;
+      db.exec("COMMIT");
+      return renewed;
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
+  },
+  assertLease({ sessionId, lease }) {
+    assertLease(sessionId, lease);
+  },
+  releaseLease({ sessionId, lease }) {
+    db.prepare(
+      "UPDATE leases SET expires=0 WHERE sessionId=? AND owner=? AND epoch=?",
+    ).run(sessionId, lease.owner, lease.epoch);
   },
   release({ sessionId, owner }) {
-    db.prepare("DELETE FROM leases WHERE sessionId=? AND owner=?").run(
+    // Retain the epoch even after release, otherwise an old token can become valid.
+    db.prepare("UPDATE leases SET expires=0 WHERE sessionId=? AND owner=?").run(
       sessionId,
       owner,
     );

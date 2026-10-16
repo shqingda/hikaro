@@ -16,6 +16,7 @@ import type {
   ToolResult,
   Usage,
   RunBudget,
+  SessionLease,
 } from "./types.ts";
 export * from "./types.ts";
 export class ToolRegistry {
@@ -143,6 +144,51 @@ export class Agent implements AgentBackend {
   private streamPreview = "";
   private streamTruncated = false;
   private cursor = 0;
+  private activeLease?: SessionLease;
+  private async ownLease(controller: AbortController) {
+    const lease = await this.options.store.acquireLease(
+      this.options.session.id,
+      randomUUID(),
+    );
+    if (!lease) throw Error("Session is running elsewhere");
+    this.activeLease = lease;
+    let renewing = false;
+    const timer = setInterval(() => {
+      if (renewing) return;
+      renewing = true;
+      void this.options.store
+        .renewLease(this.options.session.id, lease)
+        .then(
+          (ok) => {
+            if (!ok) controller.abort(Error("Session lease lost"));
+          },
+          () => controller.abort(Error("Session lease renewal failed")),
+        )
+        .finally(() => {
+          renewing = false;
+        });
+    }, 10000);
+    timer.unref();
+    return async () => {
+      clearInterval(timer);
+      this.activeLease = undefined;
+      this.runActive = false;
+      await this.options.store.releaseLease(this.options.session.id, lease);
+    };
+  }
+  private async checkExecution(signal: AbortSignal) {
+    signal.throwIfAborted();
+    try {
+      await this.options.store.assertLease(
+        this.options.session.id,
+        this.activeLease,
+      );
+    } catch (error) {
+      this.controller?.abort(error);
+      throw error;
+    }
+    signal.throwIfAborted();
+  }
   initializeCursor(cursor: number) {
     this.cursor = cursor;
   }
@@ -192,11 +238,18 @@ export class Agent implements AgentBackend {
     };
   }
   async emit(type: string, data: Record<string, unknown>) {
-    const event = await this.options.store.append(
-      this.options.session.id,
-      type,
-      data,
-    );
+    let event: AgentEvent;
+    try {
+      event = await this.options.store.append(
+        this.options.session.id,
+        type,
+        data,
+        this.activeLease,
+      );
+    } catch (error) {
+      if (this.activeLease) this.controller?.abort(error);
+      throw error;
+    }
     this.cursor = event.seq;
     if (type === "run.start") {
       this.runActive = true;
@@ -279,26 +332,11 @@ export class Agent implements AgentBackend {
     const controller = new AbortController();
     this.controller = controller;
     this.draining = true;
-    const owner = randomUUID(),
-      runId = randomUUID(),
+    const runId = randomUUID(),
       callId = randomUUID();
-    let acquired = false;
-    let lease: ReturnType<typeof setInterval> | undefined;
+    let stopLease: (() => Promise<void>) | undefined;
     try {
-      acquired = await this.options.store.acquire(
-        this.options.session.id,
-        owner,
-      );
-      if (!acquired) throw Error("Session is running elsewhere");
-      lease = setInterval(() => {
-        void this.options.store.acquire(this.options.session.id, owner).then(
-          (ok) => {
-            if (!ok) controller.abort();
-          },
-          () => controller.abort(),
-        );
-      }, 10000);
-      lease.unref();
+      stopLease = await this.ownLease(controller);
       await this.message({ role: "user", text: label, timestamp: Date.now() });
       await this.emit("run.start", { runId, operation: "manual" });
       await this.message({
@@ -329,20 +367,22 @@ export class Agent implements AgentBackend {
       });
       return result;
     } catch (error) {
-      await this.emit("run.end", {
-        runId,
-        status: controller.signal.aborted ? "cancelled" : "failed",
-        error: String(error),
-      });
+      if (stopLease)
+        await this.emit("run.end", {
+          runId,
+          status: controller.signal.aborted ? "cancelled" : "failed",
+          error: String(error),
+        });
       controller.signal.throwIfAborted();
       throw error;
     } finally {
-      if (lease) clearInterval(lease);
-      if (acquired)
-        await this.options.store.release(this.options.session.id, owner);
-      this.controller = undefined;
-      this.draining = false;
-      void this.drain();
+      try {
+        await stopLease?.();
+      } finally {
+        this.controller = undefined;
+        this.draining = false;
+        void this.drain();
+      }
     }
   }
   async compact() {
@@ -351,38 +391,16 @@ export class Agent implements AgentBackend {
     this.controller = controller;
     this.compacting = true;
     this.draining = true;
-    const owner = randomUUID(),
-      runId = randomUUID();
-    if (
-      !(await this.options.store
-        .acquire(this.options.session.id, owner)
-        .catch((error) => {
-          this.compacting = false;
-          this.draining = false;
-          this.controller = undefined;
-          throw error;
-        }))
-    ) {
-      this.compacting = false;
-      this.draining = false;
-      this.controller = undefined;
-      throw Error("Session is running elsewhere");
-    }
-    const lease = setInterval(() => {
-      void this.options.store.acquire(this.options.session.id, owner).then(
-        (ok) => {
-          if (!ok) controller.abort();
-        },
-        () => controller.abort(),
-      );
-    }, 10000);
-    lease.unref();
+    const runId = randomUUID();
+    let stopLease: (() => Promise<void>) | undefined;
     const self = this;
     try {
+      stopLease = await this.ownLease(controller);
       await this.emit("run.start", { runId, operation: "compact" });
       const provider: ProviderAdapter = {
         ...this.options.provider,
         async *stream(input) {
+          await self.checkExecution(input.signal);
           if (
             self.budget.modelCallsLeft-- <= 0 ||
             self.usage.cost >= self.budget.maxCost
@@ -418,21 +436,24 @@ export class Agent implements AgentBackend {
       });
       return summary;
     } catch (error) {
-      await this.emit("run.end", {
-        runId,
-        status: controller.signal.aborted ? "cancelled" : "failed",
-        operation: "compact",
-        error: String(error),
-        usage: this.usage,
-      });
+      if (stopLease)
+        await this.emit("run.end", {
+          runId,
+          status: controller.signal.aborted ? "cancelled" : "failed",
+          operation: "compact",
+          error: String(error),
+          usage: this.usage,
+        });
       controller.signal.throwIfAborted();
       throw error;
     } finally {
-      clearInterval(lease);
-      await this.options.store.release(this.options.session.id, owner);
-      this.controller = undefined;
-      this.compacting = false;
-      this.draining = false;
+      try {
+        await stopLease?.();
+      } finally {
+        this.controller = undefined;
+        this.compacting = false;
+        this.draining = false;
+      }
     }
   }
   async invoke(
@@ -460,6 +481,7 @@ export class Agent implements AgentBackend {
       arguments: args,
     });
     const context: ToolContext = {
+      checkpoint: () => this.checkExecution(signal),
       cwd: this.options.session.cwd,
       outputDirectory: this.options.outputDirectory,
       readonlyResources: this.options.readonlyResources,
@@ -469,8 +491,9 @@ export class Agent implements AgentBackend {
       depth: this.options.depth ?? 0,
       budget: this.budget,
       scope: this.origin?.scope,
-      approve: (reason, capability) =>
-        this.options.approve(
+      approve: async (reason, capability) => {
+        await this.checkExecution(signal);
+        const approved = await this.options.approve(
           {
             id: randomUUID(),
             scope: this.origin?.scope,
@@ -481,7 +504,10 @@ export class Agent implements AgentBackend {
             arguments: args,
           },
           signal,
-        ),
+        );
+        await this.checkExecution(signal);
+        return approved;
+      },
       invoke: (n, a, childSignal) =>
         this.invoke(
           n,
@@ -497,6 +523,7 @@ export class Agent implements AgentBackend {
     };
     let result: ToolResult;
     try {
+      await this.checkExecution(signal);
       result = await tool.execute(parsed.data, context);
     } catch (e) {
       result = {
@@ -505,6 +532,7 @@ export class Agent implements AgentBackend {
       };
     }
     if (JSON.stringify(result).length > 60000) {
+      await this.checkExecution(signal);
       const artifact = await this.options.saveArtifact?.(callId, result);
       result = {
         images: result.images,
@@ -523,19 +551,9 @@ export class Agent implements AgentBackend {
     this.controller = controller;
     const { signal } = controller;
     const runId = randomUUID();
-    const owner = randomUUID();
-    if (!(await this.options.store.acquire(this.options.session.id, owner)))
-      throw Error("Session is already running in another process");
-    const lease = setInterval(() => {
-      void this.options.store.acquire(this.options.session.id, owner).then(
-        (ok) => {
-          if (!ok) controller.abort();
-        },
-        () => controller.abort(),
-      );
-    }, 10000);
-    lease.unref();
+    let stopLease: (() => Promise<void>) | undefined;
     try {
+      stopLease = await this.ownLease(controller);
       const { messages: prior } = await this.options.store.contextHistory(
         this.options.session.id,
       );
@@ -601,6 +619,7 @@ export class Agent implements AgentBackend {
         let delta = "";
         let thinking = "";
         let lastFlush = performance.now();
+        await this.checkExecution(signal);
         for await (const event of this.options.provider.stream({
           system:
             this.options.system ??
@@ -674,18 +693,21 @@ export class Agent implements AgentBackend {
       }
       throw Error("Turn limit reached");
     } catch (e) {
-      await this.emit("run.end", {
-        runId,
-        status: signal.aborted ? "cancelled" : "failed",
-        error: e instanceof Error ? e.message : String(e),
-        usage: this.usage,
-      });
+      if (stopLease)
+        await this.emit("run.end", {
+          runId,
+          status: signal.aborted ? "cancelled" : "failed",
+          error: e instanceof Error ? e.message : String(e),
+          usage: this.usage,
+        });
       signal.throwIfAborted();
       throw e;
     } finally {
-      clearInterval(lease);
-      await this.options.store.release(this.options.session.id, owner);
-      this.controller = undefined;
+      try {
+        await stopLease?.();
+      } finally {
+        this.controller = undefined;
+      }
     }
   }
 }

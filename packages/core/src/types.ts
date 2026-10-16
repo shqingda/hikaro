@@ -122,6 +122,7 @@ export type MessagePage = {
   hasOlder: boolean;
   hasNewer: boolean;
 };
+export type SessionLease = { owner: string; epoch: number };
 export interface EventStore {
   createSession(
     cwd: string,
@@ -140,6 +141,7 @@ export interface EventStore {
     sessionId: string,
     type: string,
     data: Record<string, unknown>,
+    lease?: SessionLease,
   ): Promise<AgentEvent>;
   events(
     sessionId: string,
@@ -152,6 +154,13 @@ export interface EventStore {
     sessionId: string,
   ): Promise<{ messages: Message[]; omitted: number }>;
   acquire(sessionId: string, owner: string): Promise<boolean>;
+  acquireLease(
+    sessionId: string,
+    owner: string,
+  ): Promise<SessionLease | undefined>;
+  renewLease(sessionId: string, lease: SessionLease): Promise<boolean>;
+  assertLease(sessionId: string, lease?: SessionLease): Promise<void>;
+  releaseLease(sessionId: string, lease: SessionLease): Promise<void>;
   release(sessionId: string, owner: string): Promise<void>;
   claim(commandId: string, sessionId: string): Promise<boolean>;
   close(): Promise<void>;
