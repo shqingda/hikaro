@@ -1,6 +1,26 @@
 import { z } from "zod";
 import type { AgentEvent, Message } from "../../core/src/types.ts";
-export const protocolVersion = 1;
+export const protocolVersion = 2;
+export type AcceptedOperation = { accepted: true; operationId: string };
+export type OperationEvent = {
+  scope: string;
+  operationId: string;
+  method: "session.compact";
+} & (
+  | {
+      type: "operation.completed";
+      result: import("../../core/src/types.ts").Session;
+    }
+  | { type: "operation.failed"; error: string }
+);
+export const isControlMethod = (method: string) =>
+  [
+    "cancel",
+    "approval.respond",
+    "client.detach",
+    "session.current",
+    "steer",
+  ].includes(method);
 export const Command = z.object({
   id: z.string().min(1).max(128),
   scope: z.string().min(1).max(80).optional(),
