@@ -1,5 +1,29 @@
 # Validation status
 
+## Directory-replacement race repair: 2026-10-16
+
+Replaced pathname-based content IO with a small POSIX helper that retains opened directory descriptors. Reads reject symlink components introduced after canonical authorization. File snapshots, exclusive locks, staging, version checks, atomic commit and cleanup use the same pinned directory; the TypeScript cancellation/lease checkpoint remains between staging and commit. Search and index content reads also use this service. Source install/build compiles the helper and the CLI bundle includes it.
+
+The original path-only implementation failed six deterministic regressions: replacement, creation, editing, reading, and two commit/cleanup cases. Tests use a separate Node process to rename the checked directory and replace its old name with an outside symlink, paused at actual approval or commit boundaries. The final suite adds ten path-race cases, including search, indexing, cached retrieval and ordinary-file behavior, plus seven helper protocol cases for byte framing, symlinks, FIFO/size limits, cancellation, rejected checkpoints, leaf replacement and caller EOF. Existing conflict/lease regressions now use the commit checkpoint rather than an obsolete host `stat()` interception.
+
+Completed verification: `pnpm check` passed **27 files / 187 tests**, TypeScript checking and build on macOS with Node 26.12.0 / pnpm 12.11.2. Relay type checking passed. Deliberately removing directory `O_NOFOLLOW` flags made four approval-race regressions fail; the original source/binary were restored and all 17 new tests passed afterward. This confirms the tests exercise the directory-resolution boundary. A separate review also exercised directory replacement during commit and repeated cancellation cleanup. The actual bundled CLI completed a `read_file` call against a temporary workspace through a loopback-only model fixture, confirming it loads the helper from `dist`; no production service or credentials were used. GitHub Linux/macOS jobs have been updated for native compilation; hosted CI has not been run from this local branch.
+
+## Referenced code-review fixes: 2026-10-16
+
+Applied the review of `c3ffcb49121427b50a0cc6eb533de6e598474857` on top of `2906efd`, retaining and checking its existing file-queue/context-history fixes. All seven concrete findings now have regression coverage: Git control-file/process boundaries, resource authorization for search/index reads, conflicting file updates, child/job initialization cancellation, child concurrency reservations, responsive RPC control and exact-endpoint authentication. CI now runs on PRs and pushes to main, with Linux checks and a separate full macOS job.
+
+Additional cross-tool and fault-injection review covered Git clean filters reading sensitive files, detached device revocation, remote forwarding of `baseUrl`, old lease epochs, renewal while waiting on a SQLite writer lock, approval-to-execution ownership loss, file-commit ownership loss, terminal initialization cancellation, and descendants surviving a cancelled process leader. RPC compaction now uses the v2 asynchronous operation contract documented in [architecture.md](architecture.md).
+
+Validation completed on macOS with Node 26.12.0 / pnpm 12.11.2:
+
+- `pnpm check`: **25 files, 170 tests passed**, plus full TypeScript checking and build. This includes the real macOS sandbox, independent-process file coordination, real SQLite connections, loopback HTTP authentication, RPC subprocesses and PTY tests.
+- `pnpm check:relay`: passed.
+- Built CLI offline prompt smoke: passed.
+- Changed-source formatting and `git diff --check`: passed.
+- Deliberately removing the exclusive file-lock flag made the independent-process regression fail; the original implementation was restored. Cancellation, initialization, lease and authentication tests were also observed failing before their fixes.
+
+No production API, actual Keychain sign-in, Cloudflare deployment or live handset acceptance ran. GitHub-hosted CI was configured but not dispatched from this local branch. File locks coordinate cooperating file tools and can remain after a crash; already-started process effects are not made transactional by SQLite fencing. The later directory-replacement repair is recorded above. Third-party plugins remain trusted. Runtime initialization/close limits, Agent-lifetime budgets and continuation-persistence boundaries are explicit in [architecture.md](architecture.md).
+
 Updated: 2026-10-15. Implementation, test coverage, completed verification and pending acceptance are separate states. See [TODO.md](../TODO.md) for delivery order. Documentation and styling edits have no independent tests or benchmarks. Critical TUI workflow verification is recorded below.
 
 ## Final cancellation review before push: 2026-10-15

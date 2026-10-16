@@ -52,6 +52,7 @@ export type ToolResult = {
   isError?: boolean;
 };
 export type PermissionRequest = {
+  capability?: { kind: "file"; path: string; write: boolean };
   scope?: string;
   id: string;
   sessionId: string;
@@ -60,6 +61,8 @@ export type PermissionRequest = {
   arguments: Record<string, unknown>;
 };
 export interface ToolContext {
+  /** Recheck cancellation and execution ownership after an asynchronous wait. */
+  checkpoint?(): Promise<void>;
   readonlyResources?: readonly string[];
   outputDirectory?: string;
   cwd: string;
@@ -69,7 +72,10 @@ export interface ToolContext {
   depth: number;
   budget: RunBudget;
   scope?: string;
-  approve(reason: string): Promise<boolean>;
+  approve(
+    reason: string,
+    capability?: PermissionRequest["capability"],
+  ): Promise<boolean>;
   invoke(
     name: string,
     args: Record<string, unknown>,
@@ -116,6 +122,7 @@ export type MessagePage = {
   hasOlder: boolean;
   hasNewer: boolean;
 };
+export type SessionLease = { owner: string; epoch: number };
 export interface EventStore {
   createSession(
     cwd: string,
@@ -134,6 +141,7 @@ export interface EventStore {
     sessionId: string,
     type: string,
     data: Record<string, unknown>,
+    lease?: SessionLease,
   ): Promise<AgentEvent>;
   events(
     sessionId: string,
@@ -146,6 +154,13 @@ export interface EventStore {
     sessionId: string,
   ): Promise<{ messages: Message[]; omitted: number }>;
   acquire(sessionId: string, owner: string): Promise<boolean>;
+  acquireLease(
+    sessionId: string,
+    owner: string,
+  ): Promise<SessionLease | undefined>;
+  renewLease(sessionId: string, lease: SessionLease): Promise<boolean>;
+  assertLease(sessionId: string, lease?: SessionLease): Promise<void>;
+  releaseLease(sessionId: string, lease: SessionLease): Promise<void>;
   release(sessionId: string, owner: string): Promise<void>;
   claim(commandId: string, sessionId: string): Promise<boolean>;
   close(): Promise<void>;

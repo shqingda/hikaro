@@ -13,7 +13,7 @@ import {
   isRecord,
 } from "../../crypto/src/index.ts";
 import { ProcessClient } from "../../protocol/src/client.ts";
-import { Command } from "../../protocol/src/index.ts";
+import { Command, isControlMethod } from "../../protocol/src/index.ts";
 import { validateRelay, type Pairing } from "./client.ts";
 import {
   loadHost as load,
@@ -161,6 +161,7 @@ export async function serveRemote(options: {
   demo?: boolean;
   provider?: string;
   model?: string;
+  baseUrl?: string;
   approveDevice?: (id: string) => Promise<boolean>;
 }) {
   const home = options.home ?? join(homedir(), ".hikaro");
@@ -192,6 +193,7 @@ export async function serveRemote(options: {
       ...(options.demo ? ["--demo"] : []),
       ...(options.provider ? ["--provider", options.provider] : []),
       ...(options.model ? ["--model", options.model] : []),
+      ...(options.baseUrl ? ["--base-url", options.baseUrl] : []),
     ],
     { cwd: options.cwd },
   );
@@ -202,14 +204,19 @@ export async function serveRemote(options: {
     chain: Promise<void>;
     queued: number;
     bytes: number;
+    requests: number;
+    requestBytes: number;
   };
   const peers = new Map<string, Peer>();
+  const activeScopes = new Set<string>();
   const drop = (id: string, cancel = false) => {
     peers.delete(id);
-    if (cancel)
+    if (cancel) {
+      activeScopes.delete(id);
       void rpc
         .request("client.detach", { cancel: true }, false, { scope: id })
         .catch(() => {});
+    }
   };
   const frame = (id: string, peer: Peer, body: string) => {
     if (peers.get(id) !== peer || socket?.readyState !== WebSocket.OPEN) return;
@@ -247,7 +254,8 @@ export async function serveRemote(options: {
   });
   const updateRevocations = async () => {
     const latest = await readConfig(home);
-    for (const id of peers.keys()) if (!latest.devices[id]) drop(id, true);
+    for (const id of new Set([...peers.keys(), ...activeScopes]))
+      if (!latest.devices[id]) drop(id, true);
     config = latest;
   };
   watchFile(configPath(home), { interval: 1000, persistent: false }, () => {
@@ -257,6 +265,7 @@ export async function serveRemote(options: {
     if (peers.get(id) !== peer || message.connectionId !== peer.connectionId)
       return;
     const latest = await readConfig(home);
+    if (peers.get(id) !== peer) return;
     const device = latest.devices[id];
     if (
       !device ||
@@ -293,27 +302,52 @@ export async function serveRemote(options: {
       const command = result.data;
       if (!isRecord(command) || typeof command.id !== "string")
         throw Error("Invalid command");
-      try {
-        let response: unknown;
-        if (command.method === "push.register") {
-          if (
-            !isRecord(command.params) ||
-            typeof command.params.token !== "string" ||
-            !/^(Expo|Exponent)PushToken\[[A-Za-z0-9_-]+\]$/.test(
-              command.params.token,
-            )
-          )
-            throw Error("Invalid push registration");
-          await post(config, "push", secret.token, {
-            deviceId: id,
-            token: command.params.token,
-          });
-          response = { ok: true };
-        } else response = await dispatchRemote(rpc, id, command);
-        send(id, { type: "response", id: command.id, result: response });
-      } catch (error) {
-        send(id, { type: "response", id: command.id, error: String(error) });
+      const bytes = Buffer.byteLength(message.body);
+      if (
+        !isControlMethod(String(command.method)) &&
+        (peer.requests >= 8 || peer.requestBytes + bytes > 2_000_000)
+      ) {
+        send(id, {
+          type: "response",
+          id: command.id,
+          error: "Remote request capacity exceeded",
+        });
+        return;
       }
+      peer.requests++;
+      peer.requestBytes += bytes;
+      // Authenticate/decrypt frames in order, but let the RPC scheduler order
+      // commands. Waiting here would prevent later cancel/approval frames.
+      const execute = async () => {
+        try {
+          let response: unknown;
+          if (command.method === "push.register") {
+            if (
+              !isRecord(command.params) ||
+              typeof command.params.token !== "string" ||
+              !/^(Expo|Exponent)PushToken\[[A-Za-z0-9_-]+\]$/.test(
+                command.params.token,
+              )
+            )
+              throw Error("Invalid push registration");
+            await post(config, "push", secret.token, {
+              deviceId: id,
+              token: command.params.token,
+            });
+            response = { ok: true };
+          } else {
+            activeScopes.add(id);
+            response = await dispatchRemote(rpc, id, command);
+          }
+          send(id, { type: "response", id: command.id, result: response });
+        } catch (error) {
+          send(id, { type: "response", id: command.id, error: String(error) });
+        }
+      };
+      void execute().finally(() => {
+        peer.requests--;
+        peer.requestBytes -= bytes;
+      });
     }
   };
   const connect = () => {
@@ -385,6 +419,8 @@ export async function serveRemote(options: {
                 chain: Promise.resolve(),
                 queued: 0,
                 bytes: 0,
+                requests: 0,
+                requestBytes: 0,
               };
               peers.set(id, peer);
               frame(id, peer, peer.channel.hello());
@@ -438,11 +474,14 @@ export async function serveRemote(options: {
     clearTimeout(retryTimer);
     clearInterval(heartbeat);
     unwatchFile(configPath(home));
+    process.off("SIGINT", onSignal);
+    process.off("SIGTERM", onSignal);
     socket?.close();
     await rpc.close();
   }
   connect();
-  process.once("SIGINT", () => void shutdown());
-  process.once("SIGTERM", () => void shutdown());
+  const onSignal = () => void shutdown();
+  process.once("SIGINT", onSignal);
+  process.once("SIGTERM", onSignal);
   return { close: shutdown };
 }

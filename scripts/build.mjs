@@ -1,5 +1,7 @@
 import { build } from "esbuild";
 import { mkdir, copyFile, chmod, readdir, unlink } from "node:fs/promises";
+import { buildSecureFileHelper } from "./build-native.mjs";
+await buildSecureFileHelper();
 await mkdir("dist", { recursive: true });
 const result = await build({
   entryPoints: { hikaro: "apps/cli/src/index.ts" },
@@ -17,6 +19,11 @@ const result = await build({
   metafile: true,
 });
 await copyFile("packages/storage/src/worker.mjs", "dist/worker.mjs");
+await copyFile(
+  "packages/tools/src/secure-file-helper",
+  "dist/secure-file-helper",
+);
+await chmod("dist/secure-file-helper", 0o755);
 await copyFile(
   "packages/tools/src/sandbox-runner.mjs",
   "dist/sandbox-runner.mjs",

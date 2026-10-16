@@ -1,9 +1,28 @@
-name: manual TUI checks
-on: workflow_dispatch
+name: checks
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  core:
+  fast:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.11.2
+      - run: sudo apt-get update && sudo apt-get install -y build-essential ripgrep zsh
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm exec vitest run --exclude tests/sandbox.test.ts --exclude tests/pty.test.ts
+      - run: pnpm build
+  macos:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
@@ -13,5 +32,6 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           version: 12.11.2
+      - run: command -v rg || brew install ripgrep
       - run: pnpm install --frozen-lockfile
       - run: pnpm check

@@ -1,7 +1,9 @@
 import { z } from "zod";
-import { readFile, stat } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { runProcess, resolvePath } from "./index.ts";
+import { sensitivePath } from "./workspace.ts";
+import { readTextFile, isFileTooLarge } from "./secure-files.ts";
+import { cleanProcessEnv } from "./process.ts";
 import type { Plugin, ToolContext } from "../../core/src/types.ts";
 export type Chunk = {
   id: string;
@@ -87,6 +89,7 @@ export function indexPlugin(
           const files = await runProcess(
             "rg",
             [
+              "--no-config",
               "--files",
               "-g",
               "!.env*",
@@ -100,7 +103,7 @@ export function indexPlugin(
               "!package-lock.json",
             ],
             ctx,
-            { limit: 200000 },
+            { limit: 200000, env: cleanProcessEnv() },
           );
           if (files.isError) throw Error(files.text);
           const paths = files.text.split("\n").filter(Boolean);
@@ -116,9 +119,19 @@ export function indexPlugin(
           for (const path of paths) {
             ctx.signal.throwIfAborted();
             const target = await resolvePath(ctx.cwd, path);
-            if (!target.inside) continue;
-            if ((await stat(target.path)).size > 256000) continue;
-            const text = await readFile(target.path, "utf8");
+            if (
+              !target.inside ||
+              sensitivePath.test(path) ||
+              sensitivePath.test(target.path)
+            )
+              continue;
+            let text: string;
+            try {
+              text = await readTextFile(target.path, ctx.signal, 256000);
+            } catch (error) {
+              if (isFileTooLarge(error)) continue;
+              throw error;
+            }
             if (text.includes("\0")) continue;
             const hash = createHash("sha256").update(text).digest("hex");
             const lines = text.split("\n");
@@ -187,8 +200,13 @@ export function indexPlugin(
           for (const hit of matches) {
             try {
               const target = await resolvePath(ctx.cwd, hit.path);
-              if (!target.inside) continue;
-              const text = await readFile(target.path, "utf8");
+              if (
+                !target.inside ||
+                sensitivePath.test(hit.path) ||
+                sensitivePath.test(target.path)
+              )
+                continue;
+              const text = await readTextFile(target.path, ctx.signal, 256000);
               if (createHash("sha256").update(text).digest("hex") === hit.hash)
                 fresh.push(hit);
             } catch {}

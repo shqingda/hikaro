@@ -10,6 +10,7 @@ import type {
   Message,
   MessagePage,
   ModelSelection,
+  SessionLease,
 } from "../../core/src/types.ts";
 export class SQLiteStore implements EventStore {
   private pending = new Map<
@@ -114,8 +115,13 @@ export class SQLiteStore implements EventStore {
   latestSeq(sessionId: string) {
     return this.request<number>("latestSeq", { sessionId });
   }
-  append(sessionId: string, type: string, data: Record<string, unknown>) {
-    return this.request<AgentEvent>("append", { sessionId, type, data });
+  append(
+    sessionId: string,
+    type: string,
+    data: Record<string, unknown>,
+    lease?: SessionLease,
+  ) {
+    return this.request<AgentEvent>("append", { sessionId, type, data, lease });
   }
   events(sessionId: string, after = 0, limit = 200) {
     return this.request<AgentEvent[]>("events", { sessionId, after, limit });
@@ -170,6 +176,21 @@ export class SQLiteStore implements EventStore {
   }
   acquire(sessionId: string, owner: string) {
     return this.request<boolean>("acquire", { sessionId, owner });
+  }
+  acquireLease(sessionId: string, owner: string) {
+    return this.request<SessionLease | undefined>("acquireLease", {
+      sessionId,
+      owner,
+    });
+  }
+  renewLease(sessionId: string, lease: SessionLease) {
+    return this.request<boolean>("renewLease", { sessionId, lease });
+  }
+  assertLease(sessionId: string, lease?: SessionLease) {
+    return this.request<void>("assertLease", { sessionId, lease });
+  }
+  releaseLease(sessionId: string, lease: SessionLease) {
+    return this.request<void>("releaseLease", { sessionId, lease });
   }
   release(sessionId: string, owner: string) {
     return this.request<void>("release", { sessionId, owner });

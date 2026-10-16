@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { randomUUID } from "node:crypto";
+import type { Readable, Writable } from "node:stream";
 import {
   Runtime,
   type RuntimeOptions,
@@ -8,6 +10,7 @@ import {
   JsonLines,
   protocolVersion,
   publicEvent,
+  isControlMethod,
 } from "../../../packages/protocol/src/index.ts";
 import type {
   Session,
@@ -25,12 +28,28 @@ const integer = (
     .min(0)
     .max(max)
     .parse(value ?? fallback);
+type ScopeWork = {
+  activeAgents: Map<Agent, number>;
+  operations: Set<AbortController>;
+};
 type ScopeState = {
   session?: Session;
   agent?: Agent;
   unsubscribe?: () => void;
+  chain: Promise<void>;
+  queued: number;
+  bytes: number;
+  generation: number;
+  work: ScopeWork;
 };
-export async function serveRpc(options: Omit<RuntimeOptions, "approve">) {
+export async function serveRpc(
+  options: Omit<RuntimeOptions, "approve">,
+  transport: { input: Readable; output: Writable; error: Writable } = {
+    input: process.stdin,
+    output: process.stdout,
+    error: process.stderr,
+  },
+) {
   const approvals = new Map<
     string,
     {
@@ -40,7 +59,11 @@ export async function serveRpc(options: Omit<RuntimeOptions, "approve">) {
     }
   >();
   const scopes = new Map<string, ScopeState>();
+  // Detaching a view may leave work running; revocation must still find it.
+  const ownedWork = new Map<string, ScopeWork>();
   const owners = new Map<string, string>();
+  let queued = 0;
+  let queuedBytes = 0;
   let closed = false;
   let shuttingDown = false;
   const send = (message: unknown) => {
@@ -48,15 +71,15 @@ export async function serveRpc(options: Omit<RuntimeOptions, "approve">) {
     const line = JSON.stringify(message) + "\n";
     if (
       Buffer.byteLength(line) > 1_048_576 ||
-      process.stdout.writableLength > 2_000_000
+      transport.output.writableLength > 2_000_000
     ) {
-      process.stderr.write(
+      transport.error.write(
         "RPC output capacity exceeded; inspect persisted session state before retrying.\n",
       );
       void shutdown();
       return;
     }
-    process.stdout.write(line);
+    transport.output.write(line);
   };
   const runtime = await Runtime.open({
     ...options,
@@ -81,11 +104,26 @@ export async function serveRpc(options: Omit<RuntimeOptions, "approve">) {
       }),
   });
   runtime.startJobs();
-  const bind = async (scope: string, state: ScopeState, next: Session) => {
+  const requireLive = (scope: string, state: ScopeState) => {
+    if (shuttingDown || scopes.get(scope) !== state)
+      throw Error("Client scope detached");
+  };
+  const bind = async (
+    scope: string,
+    state: ScopeState,
+    next: Session,
+    expected?: { sessionId: string; signal: AbortSignal },
+  ) => {
+    requireLive(scope, state);
+    expected?.signal.throwIfAborted();
     if (state.session?.id === next.id && state.agent) return next;
+    const agent = await runtime.agent(next);
+    requireLive(scope, state);
+    expected?.signal.throwIfAborted();
+    if (expected && state.session?.id !== expected.sessionId) return next;
     state.unsubscribe?.();
     state.session = next;
-    state.agent = await runtime.agent(next);
+    state.agent = agent;
     state.unsubscribe = state.agent.subscribe((event) =>
       send({ type: "event", scope, event: publicEvent(event) }),
     );
@@ -95,22 +133,59 @@ export async function serveRpc(options: Omit<RuntimeOptions, "approve">) {
     let state = scopes.get(scope);
     if (!state) {
       if (scopes.size >= 32) throw Error("Client scope limit reached");
-      state = {};
+      let work = ownedWork.get(scope);
+      if (!work) {
+        if (ownedWork.size >= 32) throw Error("Client scope limit reached");
+        work = { activeAgents: new Map(), operations: new Set() };
+        ownedWork.set(scope, work);
+      }
+      state = {
+        chain: Promise.resolve(),
+        queued: 0,
+        bytes: 0,
+        generation: 0,
+        work,
+      };
       scopes.set(scope, state);
     }
     return state;
   };
-  let chain = Promise.resolve();
-  const handle = async (raw: unknown) => {
-    let id: unknown;
-    let scope = "default";
+  const cancel = (state: ScopeState, includeSelected = true) => {
+    state.generation++;
+    for (const operation of state.work.operations) operation.abort();
+    for (const agent of state.work.activeAgents.keys()) agent.cancel();
+    if (includeSelected) state.agent?.cancel();
+  };
+  const releaseWork = (scope: string, work: ScopeWork, agent?: Agent) => {
+    if (agent) {
+      const remaining = (work.activeAgents.get(agent) ?? 1) - 1;
+      if (remaining) work.activeAgents.set(agent, remaining);
+      else work.activeAgents.delete(agent);
+    }
+    if (
+      !work.activeAgents.size &&
+      !work.operations.size &&
+      scopes.get(scope)?.work !== work
+    )
+      ownedWork.delete(scope);
+  };
+  const ownAgent = (work: ScopeWork, agent: Agent) => {
+    work.activeAgents.set(agent, (work.activeAgents.get(agent) ?? 0) + 1);
+  };
+  const handle = async (
+    command: Command,
+    state: ScopeState,
+    generation = state.generation,
+  ) => {
+    const { id } = command;
+    const scope = command.scope ?? "default";
     try {
-      if (raw && typeof raw === "object" && "id" in raw) id = (raw as any).id;
-      const command = Command.parse(raw);
-      id = command.id;
-      scope = command.scope ?? "default";
+      requireLive(scope, state);
+      const requireUncancelled = () => {
+        requireLive(scope, state);
+        if (state.generation !== generation) throw Error("Request cancelled");
+      };
       const p = command.params;
-      const state = getScope(scope);
       let result: unknown;
       const selected = async () => {
         const id = p.sessionId ?? state.session?.id;
@@ -154,7 +229,51 @@ export async function serveRpc(options: Omit<RuntimeOptions, "approve">) {
         }
         case "session.compact": {
           const session = await selected();
-          result = await bind(scope, state, await runtime.compact(session));
+          const agent = await runtime.agent(session);
+          requireUncancelled();
+          if (state.work.operations.size >= 8)
+            throw Error("Client operation capacity exceeded");
+          const operationId = randomUUID();
+          const controller = new AbortController();
+          state.work.operations.add(controller);
+          ownAgent(state.work, agent);
+          void runtime
+            .compact(session, controller.signal)
+            .then(async (next) => {
+              controller.signal.throwIfAborted();
+              // A completed summary must not change a newer selection.
+              if (
+                scopes.get(scope) === state &&
+                state.session?.id === session.id
+              )
+                await bind(scope, state, next, {
+                  sessionId: session.id,
+                  signal: controller.signal,
+                });
+              if (scopes.get(scope) === state)
+                send({
+                  type: "operation.completed",
+                  scope,
+                  operationId,
+                  method: command.method,
+                  result: next,
+                });
+            })
+            .catch((error) => {
+              if (scopes.get(scope) === state)
+                send({
+                  type: "operation.failed",
+                  scope,
+                  operationId,
+                  method: command.method,
+                  error: error instanceof Error ? error.message : String(error),
+                });
+            })
+            .finally(() => {
+              state.work.operations.delete(controller);
+              releaseWork(scope, state.work, agent);
+            });
+          result = { accepted: true, operationId };
           break;
         }
         case "messages.read": {
@@ -199,12 +318,15 @@ export async function serveRpc(options: Omit<RuntimeOptions, "approve">) {
             .optional()
             .parse(p.images);
           if (!text.trim() && !images?.length) throw Error("Prompt is empty");
-          if (!(await runtime.store.claim(command.id, state.session.id))) {
+          const { agent, session } = state;
+          if (!(await runtime.store.claim(command.id, session.id))) {
             result = { duplicate: true };
             break;
           }
-          owners.set(state.session.id, scope);
-          void state.agent
+          requireUncancelled();
+          owners.set(session.id, scope);
+          ownAgent(state.work, agent);
+          void agent
             .prompt(text, images, { scope, commandId: command.id })
             .catch((error) => {
               send({
@@ -213,7 +335,8 @@ export async function serveRpc(options: Omit<RuntimeOptions, "approve">) {
                 error: String(error),
                 commandId: command.id,
               });
-            });
+            })
+            .finally(() => releaseWork(scope, state.work, agent));
           result = { accepted: true };
           break;
         }
@@ -223,7 +346,7 @@ export async function serveRpc(options: Omit<RuntimeOptions, "approve">) {
           result = {};
           break;
         case "cancel":
-          state.agent?.cancel();
+          cancel(state);
           result = {};
           break;
         case "approval.respond": {
@@ -235,9 +358,10 @@ export async function serveRpc(options: Omit<RuntimeOptions, "approve">) {
           break;
         }
         case "client.detach": {
-          if (p.cancel === true) state.agent?.cancel();
+          if (p.cancel === true) cancel(state, false);
           state.unsubscribe?.();
           scopes.delete(scope);
+          releaseWork(scope, state.work);
           for (const approval of approvals.values())
             if (approval.scope === scope) approval.finish(false);
           result = {};
@@ -255,9 +379,50 @@ export async function serveRpc(options: Omit<RuntimeOptions, "approve">) {
     }
   };
   const parser = new JsonLines((raw) => {
-    chain = chain.then(() => handle(raw));
+    if (shuttingDown) return;
+    let command: Command;
+    try {
+      command = Command.parse(raw);
+      const scope = command.scope ?? "default";
+      const state = getScope(scope);
+      if (isControlMethod(command.method)) {
+        void handle(command, state);
+        return;
+      }
+      const bytes = Buffer.byteLength(JSON.stringify(raw));
+      if (
+        queued >= 128 ||
+        queuedBytes + bytes > 2_000_000 ||
+        state.queued >= 32 ||
+        state.bytes + bytes > 1_048_576
+      )
+        throw Error("RPC request queue capacity exceeded");
+      queued++;
+      queuedBytes += bytes;
+      state.queued++;
+      state.bytes += bytes;
+      const generation = state.generation;
+      state.chain = state.chain
+        .then(() => handle(command, state, generation))
+        .finally(() => {
+          queued--;
+          queuedBytes -= bytes;
+          state.queued--;
+          state.bytes -= bytes;
+        });
+    } catch (error) {
+      const rawCommand =
+        raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+      send({
+        id: rawCommand.id,
+        type: "response",
+        scope:
+          typeof rawCommand.scope === "string" ? rawCommand.scope : "default",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   });
-  process.stdin.on("data", (chunk) => {
+  transport.input.on("data", (chunk) => {
     try {
       parser.push(chunk);
     } catch (error) {
@@ -269,13 +434,22 @@ export async function serveRpc(options: Omit<RuntimeOptions, "approve">) {
     if (shuttingDown) return;
     shuttingDown = true;
     for (const a of approvals.values()) a.finish(false);
-    for (const state of scopes.values()) state.unsubscribe?.();
+    for (const state of scopes.values()) {
+      cancel(state);
+      state.unsubscribe?.();
+    }
+    for (const work of ownedWork.values())
+      for (const operation of work.operations) operation.abort();
     await runtime.close();
     closed = true;
-    process.stdin.destroy();
+    transport.input.destroy();
+    process.off("SIGTERM", onSignal);
+    process.off("SIGINT", onSignal);
   }
-  process.stdin.on("end", () => void shutdown());
-  process.on("SIGTERM", () => void shutdown());
-  process.on("SIGINT", () => void shutdown());
+  const onSignal = () => void shutdown();
+  transport.input.on("end", onSignal);
+  process.on("SIGTERM", onSignal);
+  process.on("SIGINT", onSignal);
   send({ type: "ready", protocolVersion });
+  return { close: shutdown };
 }
