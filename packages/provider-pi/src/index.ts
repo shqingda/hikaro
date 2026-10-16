@@ -1,4 +1,8 @@
 import { validateModelSettings, type ModelSettings } from "./settings.ts";
+import {
+  compatibleEndpointProvider,
+  normalizeEndpointUrl,
+} from "./endpoint.ts";
 import type {
   ProviderAdapter,
   Message,
@@ -108,13 +112,21 @@ export async function createPiProvider(options: {
       name: options.model,
       api: "openai-completions",
       provider: options.provider,
-      baseUrl: options.baseUrl,
+      baseUrl: normalizeEndpointUrl(options.baseUrl),
       reasoning: false,
       input: ["text"],
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
       contextWindow: options.contextWindow ?? 32768,
       maxTokens: 8192,
     };
+    // Keep endpoint auth isolated from the shared built-in provider collection.
+    models = createModels();
+    models.setProvider(
+      await compatibleEndpointProvider(
+        model as Model<"openai-completions">,
+        options.credentials,
+      ),
+    );
   }
   if (!model)
     throw Error(
@@ -133,8 +145,6 @@ export async function createPiProvider(options: {
     model: options.model,
     contextWindow: preferences.contextWindow ?? selected.contextWindow,
     async *stream(input): AsyncGenerator<ProviderEvent> {
-      const { normalizeContext } =
-        await import("@earendil-works/pi-ai/utils/transcript");
       const context = {
         systemPrompt: input.system,
         messages: input.messages.map((m) => toPi(m, selected)),
@@ -157,15 +167,8 @@ export async function createPiProvider(options: {
           ),
         ),
       };
-      const stream = options.baseUrl
-        ? (
-            await import("@earendil-works/pi-ai/api/openai-completions")
-          ).streamSimple(
-            selected as Model<"openai-completions">,
-            normalizeContext(context),
-            { ...settings, apiKey: options.apiKey ?? "local" },
-          )
-        : preferences.speed && preferences.speed !== "default"
+      const stream =
+        preferences.speed && preferences.speed !== "default"
           ? models.stream(selected, context, {
               ...settings,
               serviceTier: preferences.speed,
