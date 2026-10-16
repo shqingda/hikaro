@@ -469,7 +469,7 @@ export class Agent implements AgentBackend {
       depth: this.options.depth ?? 0,
       budget: this.budget,
       scope: this.origin?.scope,
-      approve: (reason) =>
+      approve: (reason, capability) =>
         this.options.approve(
           {
             id: randomUUID(),
@@ -477,6 +477,7 @@ export class Agent implements AgentBackend {
             sessionId: this.options.session.id,
             tool: name,
             reason,
+            capability,
             arguments: args,
           },
           signal,

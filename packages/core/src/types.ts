@@ -52,6 +52,7 @@ export type ToolResult = {
   isError?: boolean;
 };
 export type PermissionRequest = {
+  capability?: { kind: "file"; path: string; write: boolean };
   scope?: string;
   id: string;
   sessionId: string;
@@ -60,6 +61,8 @@ export type PermissionRequest = {
   arguments: Record<string, unknown>;
 };
 export interface ToolContext {
+  /** Recheck cancellation and execution ownership after an asynchronous wait. */
+  checkpoint?(): Promise<void>;
   readonlyResources?: readonly string[];
   outputDirectory?: string;
   cwd: string;
@@ -69,7 +72,10 @@ export interface ToolContext {
   depth: number;
   budget: RunBudget;
   scope?: string;
-  approve(reason: string): Promise<boolean>;
+  approve(
+    reason: string,
+    capability?: PermissionRequest["capability"],
+  ): Promise<boolean>;
   invoke(
     name: string,
     args: Record<string, unknown>,

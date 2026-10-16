@@ -56,6 +56,8 @@ export function terminalPlugin(
               throw Error("Permission denied");
           ctx.signal.throwIfAborted();
           const { spawn } = await import("node-pty");
+          await ctx.checkpoint?.();
+          ctx.signal.throwIfAborted();
           const env = Object.fromEntries(
             ["PATH", "HOME", "TMPDIR", "LANG", "TERM"].flatMap((k) =>
               process.env[k] ? [[k, process.env[k]!]] : [],

@@ -1,225 +1,12 @@
-import {
-  readFile,
-  writeFile,
-  mkdir,
-  realpath,
-  stat,
-  readdir,
-} from "node:fs/promises";
-import { resolve, relative, isAbsolute, dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { spawn } from "node:child_process";
-import { createWriteStream, type WriteStream } from "node:fs";
-import { randomUUID } from "node:crypto";
+import { readFile, realpath, stat, readdir } from "node:fs/promises";
+import { relative, isAbsolute, join } from "node:path";
 import { homedir } from "node:os";
 import { z } from "zod";
-import type { Plugin, ToolContext, ToolResult } from "../../core/src/types.ts";
-export async function resolvePath(cwd: string, input: string) {
-  const root = await realpath(cwd);
-  const target = resolve(root, input);
-  let ancestor = target;
-  const tails: string[] = [];
-  for (;;) {
-    try {
-      const actual = await realpath(ancestor);
-      const path = resolve(actual, ...tails.reverse());
-      const rel = relative(root, path);
-      return {
-        path,
-        inside:
-          rel === "" ||
-          (!rel.startsWith(".." + "/") && rel !== ".." && !isAbsolute(rel)),
-      };
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-      const parent = dirname(ancestor);
-      if (parent === ancestor) throw e;
-      tails.push(
-        ancestor.slice(parent.length + (parent.endsWith("/") ? 0 : 1)),
-      );
-      ancestor = parent;
-    }
-  }
-}
-async function allowedPath(
-  ctx: ToolContext,
-  path: string,
-  write: boolean,
-  trusted: boolean,
-  reviewRead = false,
-) {
-  const resolved = await resolvePath(ctx.cwd, path);
-  if (
-    (!resolved.inside &&
-      !(!write && ctx.readonlyResources?.includes(resolved.path))) ||
-    (write && !trusted) ||
-    (reviewRead && resolved.inside)
-  ) {
-    if (
-      !(await ctx.approve(
-        `${write ? "Write" : "Read"} ${resolved.path}${resolved.inside ? "" : " outside the workspace"}`,
-      ))
-    )
-      throw Error("Permission denied");
-  }
-  return resolved.path;
-}
-// Shared across plugin instances so subagents and codemode use the same queue.
-const fileUpdates = new Map<string, Promise<void>>();
-async function fileVersion(path: string) {
-  try {
-    const info = await stat(path, { bigint: true });
-    return `${info.dev}:${info.ino}:${info.size}:${info.mtimeNs}:${info.ctimeNs}`;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-    throw error;
-  }
-}
-async function updateTextFile(
-  path: string,
-  signal: AbortSignal,
-  replace: (current: string | undefined) => string,
-) {
-  const previous = fileUpdates.get(path);
-  let release!: () => void;
-  const pending = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  fileUpdates.set(path, pending);
-  try {
-    await previous;
-    signal.throwIfAborted();
-    const version = await fileVersion(path);
-    const current =
-      version === undefined ? undefined : await readFile(path, "utf8");
-    const content = replace(current);
-    await mkdir(dirname(path), { recursive: true });
-    if ((await fileVersion(path)) !== version)
-      throw Error("File changed during editing. Read it before retrying.");
-    signal.throwIfAborted();
-    await writeFile(path, content, {
-      flag: version === undefined ? "wx" : "w",
-    });
-  } finally {
-    release();
-    if (fileUpdates.get(path) === pending) fileUpdates.delete(path);
-  }
-}
-export async function runProcess(
-  command: string,
-  args: string[],
-  ctx: Pick<ToolContext, "cwd" | "signal" | "outputDirectory">,
-  options: { timeout?: number; limit?: number; env?: NodeJS.ProcessEnv } = {},
-): Promise<ToolResult> {
-  ctx.signal.throwIfAborted();
-  return new Promise((resolveResult, reject) => {
-    const child = spawn(command, args, {
-      cwd: ctx.cwd,
-      env: options.env ?? process.env,
-      stdio: ["ignore", "pipe", "pipe"],
-      detached: process.platform !== "win32",
-    });
-    let text = "",
-      truncated = false,
-      timedOut = false,
-      killing = false;
-    let force: ReturnType<typeof setTimeout> | undefined;
-    let writer: WriteStream | undefined,
-      artifact: string | undefined,
-      archiveError: string | undefined;
-    let archived = 0,
-      archiveTruncated = false;
-    const kill = () => {
-      if (killing) return;
-      killing = true;
-      const signal = (name: NodeJS.Signals) => {
-        try {
-          if (child.pid && process.platform !== "win32")
-            process.kill(-child.pid, name);
-          else child.kill(name);
-        } catch {}
-      };
-      signal("SIGTERM");
-      force = setTimeout(() => signal("SIGKILL"), 1000);
-      force.unref();
-    };
-    const timer = setTimeout(() => {
-      timedOut = true;
-      kill();
-    }, options.timeout ?? 60000);
-    ctx.signal.addEventListener("abort", kill, { once: true });
-    const archive = (value: string) => {
-      if (!writer || archiveError) return;
-      const bytes = Buffer.from(value);
-      const part = bytes.subarray(0, Math.max(0, 50 * 1024 * 1024 - archived));
-      archived += part.length;
-      archiveTruncated ||= part.length < bytes.length;
-      if (part.length && !writer.write(part)) {
-        child.stdout.pause();
-        child.stderr.pause();
-        writer.once("drain", () => {
-          child.stdout.resume();
-          child.stderr.resume();
-        });
-      }
-    };
-    const append = (value: string) => {
-      const room = (options.limit ?? 48000) - text.length;
-      if (value.length > room && !writer && ctx.outputDirectory) {
-        artifact = join(ctx.outputDirectory, randomUUID() + ".log");
-        writer = createWriteStream(artifact, { flags: "wx", mode: 0o600 });
-        writer.on("error", (error) => {
-          archiveError = error.message;
-          child.stdout.resume();
-          child.stderr.resume();
-        });
-        archive(text);
-      }
-      if (writer) archive(value);
-      if (room > 0) text += value.slice(0, room);
-      if (value.length > room) truncated = true;
-    };
-    child.stdout.setEncoding("utf8");
-    child.stderr.setEncoding("utf8");
-    child.stdout.on("data", append);
-    child.stderr.on("data", append);
-    const cleanup = () => {
-      clearTimeout(timer);
-      if (force) clearTimeout(force);
-      ctx.signal.removeEventListener("abort", kill);
-    };
-    child.on("error", (error) => {
-      cleanup();
-      writer?.destroy();
-      reject(error);
-    });
-    child.on("close", async (code) => {
-      cleanup();
-      if (writer && !archiveError)
-        await new Promise<void>((resolve) => {
-          writer!.once("error", () => resolve());
-          writer!.end(() => resolve());
-        });
-      resolveResult({
-        text:
-          text +
-          (truncated
-            ? `\n[Output truncated${artifact && !archiveError ? `; log: ${artifact}` : ""}]`
-            : "") +
-          (archiveTruncated ? "\n[Log limited to 50 MiB]" : "") +
-          (archiveError ? `\n[Log unavailable: ${archiveError}]` : "") +
-          (timedOut ? "\n[Timed out]" : "") +
-          (ctx.signal.aborted ? "\n[Cancelled]" : ""),
-        data: {
-          exitCode: code,
-          artifact: archiveError ? undefined : artifact,
-          archiveTruncated,
-        },
-        isError: code !== 0 || timedOut || ctx.signal.aborted,
-      });
-    });
-  });
-}
+import type { Plugin } from "../../core/src/types.ts";
+import { resolvePath, allowedPath, updateTextFile } from "./workspace.ts";
+import { runProcess, runWorkspaceCommand, cleanProcessEnv } from "./process.ts";
+export { resolvePath } from "./workspace.ts";
+export { runProcess } from "./process.ts";
 export function codingPlugin(options: {
   trusted: boolean | (() => boolean);
   fullAccess?: () => boolean;
@@ -274,13 +61,18 @@ export function codingPlugin(options: {
         }),
         async execute({ path, content, expected }, ctx) {
           const p = await allowedPath(ctx, path, true, trusted());
-          await updateTextFile(p, ctx.signal, (current) => {
-            if (current !== undefined && expected !== current)
-              throw Error(
-                "File changed or expected content missing. Read it before replacing.",
-              );
-            return content;
-          });
+          await updateTextFile(
+            p,
+            ctx.signal,
+            (current) => {
+              if (current !== undefined && expected !== current)
+                throw Error(
+                  "File changed or expected content missing. Read it before replacing.",
+                );
+              return content;
+            },
+            ctx.checkpoint,
+          );
           return {
             text: `Wrote ${relative(ctx.cwd, p)} (${Buffer.byteLength(content)} bytes)`,
           };
@@ -296,15 +88,22 @@ export function codingPlugin(options: {
         }),
         async execute({ path, oldText, newText }, ctx) {
           const p = await allowedPath(ctx, path, true, trusted());
-          await updateTextFile(p, ctx.signal, (old) => {
-            if (old === undefined) throw Error("File does not exist");
-            const index = old.indexOf(oldText);
-            if (index < 0 || old.indexOf(oldText, index + 1) !== -1)
-              throw Error("Expected exactly one match");
-            return (
-              old.slice(0, index) + newText + old.slice(index + oldText.length)
-            );
-          });
+          await updateTextFile(
+            p,
+            ctx.signal,
+            (old) => {
+              if (old === undefined) throw Error("File does not exist");
+              const index = old.indexOf(oldText);
+              if (index < 0 || old.indexOf(oldText, index + 1) !== -1)
+                throw Error("Expected exactly one match");
+              return (
+                old.slice(0, index) +
+                newText +
+                old.slice(index + oldText.length)
+              );
+            },
+            ctx.checkpoint,
+          );
           return { text: `Updated ${relative(ctx.cwd, p)}` };
         },
       });
@@ -315,8 +114,9 @@ export function codingPlugin(options: {
         async execute({ glob }, ctx) {
           return runProcess(
             "rg",
-            ["--files", ...(glob ? ["-g", glob] : [])],
+            ["--no-config", "--files", ...(glob ? ["-g", glob] : [])],
             ctx,
+            { env: cleanProcessEnv() },
           );
         },
       });
@@ -325,21 +125,58 @@ export function codingPlugin(options: {
         description: "Search project text with ripgrep; respects ignore files.",
         schema: z.object({ pattern: z.string(), glob: z.string().optional() }),
         async execute({ pattern, glob }, ctx) {
-          const result = await runProcess(
+          // Enumerate names only, authorize each resource, then scan content.
+          // A user glob must never override the file-reading permission policy.
+          const files = await runProcess(
             "rg",
-            [
-              "-n",
-              "--max-count",
-              "30",
-              ...(glob ? ["-g", glob] : []),
-              "--",
-              pattern,
-              ".",
-            ],
+            ["--no-config", "--files", "-0", ...(glob ? ["-g", glob] : [])],
             ctx,
+            { limit: 1_000_000, env: cleanProcessEnv() },
           );
-          if ((result.data as any)?.exitCode === 1) result.isError = false;
-          return result;
+          if (
+            files.isError &&
+            (files.data as { exitCode?: number })?.exitCode !== 1
+          )
+            return files;
+          if (files.text.includes("[Output truncated"))
+            throw Error("Search file list exceeds capacity; narrow the glob.");
+          const paths: string[] = [];
+          for (const path of files.text.split("\0").filter(Boolean))
+            paths.push(
+              await allowedPath(
+                ctx,
+                path,
+                false,
+                trusted(),
+                options.reviewReads?.(),
+              ),
+            );
+          let text = "";
+          for (let offset = 0; offset < paths.length; offset += 128) {
+            const result = await runProcess(
+              "rg",
+              [
+                "--no-config",
+                "-n",
+                "--with-filename",
+                "--max-count",
+                "30",
+                "--",
+                pattern,
+                ...paths.slice(offset, offset + 128),
+              ],
+              ctx,
+              { limit: 48000 - text.length, env: cleanProcessEnv() },
+            );
+            if (
+              result.isError &&
+              (result.data as { exitCode?: number })?.exitCode !== 1
+            )
+              return result;
+            text += result.text;
+            if (text.length >= 48000) break;
+          }
+          return { text, isError: false };
         },
       });
       host.registerTool({
@@ -361,26 +198,10 @@ export function codingPlugin(options: {
             )
               throw Error("Permission denied");
           }
-          const env = Object.fromEntries(
-            ["PATH", "HOME", "TMPDIR", "LANG", "TERM"].flatMap((k) =>
-              process.env[k] ? [[k, process.env[k]]] : [],
-            ),
-          );
-          return unrestricted
-            ? runProcess("/bin/zsh", ["-f", "-c", command], ctx, {
-                timeout: timeoutMs,
-              })
-            : runProcess(
-                process.execPath,
-                [
-                  fileURLToPath(
-                    new URL("./sandbox-runner.mjs", import.meta.url),
-                  ),
-                  command,
-                ],
-                ctx,
-                { timeout: timeoutMs, env },
-              );
+          return runWorkspaceCommand(command, ctx, {
+            unrestricted,
+            timeout: timeoutMs,
+          });
         },
       });
       host.registerTool({
@@ -388,11 +209,16 @@ export function codingPlugin(options: {
         description: "Read Git status and diff summary.",
         schema: z.object({}),
         async execute(_, ctx) {
-          return runProcess(
-            "git",
-            ["--no-optional-locks", "status", "--short", "--branch"],
+          if (
+            options.reviewReads?.() &&
+            !(await ctx.approve(
+              "Read Git status, which may run repository filters and read sensitive workspace files",
+            ))
+          )
+            throw Error("Permission denied");
+          return runWorkspaceCommand(
+            "GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_ATTR_NOSYSTEM=1 git -c core.excludesFile=/dev/null -c core.attributesFile=/dev/null --no-optional-locks -c core.fsmonitor=false -c core.hooksPath=/dev/null status --short --branch --ignore-submodules=all",
             ctx,
-            { env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" } },
           );
         },
       });
@@ -401,15 +227,15 @@ export function codingPlugin(options: {
         description: "Read Git diff without external diff helpers.",
         schema: z.object({ staged: z.boolean().default(false) }),
         async execute({ staged }, ctx) {
-          return runProcess(
-            "git",
-            [
-              "--no-pager",
-              "diff",
-              "--no-ext-diff",
-              "--no-textconv",
-              ...(staged ? ["--cached"] : []),
-            ],
+          if (
+            options.reviewReads?.() &&
+            !(await ctx.approve(
+              "Read Git diff, which may include sensitive workspace files",
+            ))
+          )
+            throw Error("Permission denied");
+          return runWorkspaceCommand(
+            `GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_ATTR_NOSYSTEM=1 git -c core.excludesFile=/dev/null -c core.attributesFile=/dev/null --no-pager --no-optional-locks -c core.fsmonitor=false -c core.hooksPath=/dev/null diff --no-ext-diff --no-textconv --ignore-submodules=all${staged ? " --cached" : ""}`,
             ctx,
           );
         },

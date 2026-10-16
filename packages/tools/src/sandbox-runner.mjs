@@ -1,8 +1,8 @@
 import { SandboxManager } from "@anthropic-ai/sandbox-runtime";
-import { spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
 import { realpathSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 const cwd = realpathSync(process.cwd());
 const temporary = realpathSync(mkdtempSync(join(tmpdir(), "hikaro-exec-")));
 process.env.TMPDIR = temporary;
@@ -13,6 +13,20 @@ try {
     throw Error(
       "Workspace sandbox currently requires macOS. Use an explicitly approved unrestricted command.",
     );
+  // Apple's /usr/bin/git shim needs the selected toolchain. Resolve that
+  // system setting before isolation, without granting access to /var broadly.
+  let developerDirectory;
+  try {
+    developerDirectory = realpathSync(
+      execFileSync("/usr/bin/xcode-select", ["-p"], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim(),
+    );
+    process.env.DEVELOPER_DIR = developerDirectory;
+    process.env.PATH =
+      join(developerDirectory, "usr/bin") + ":" + process.env.PATH;
+  } catch {}
   await SandboxManager.initialize({
     network: {
       allowedDomains: [],
@@ -29,13 +43,15 @@ try {
         "/bin",
         "/sbin",
         "/Library/Apple",
+        "/Library/Developer",
+        ...(developerDirectory ? [dirname(developerDirectory)] : []),
         "/opt/homebrew",
         temporary,
         "/private/var/db",
         "/dev",
       ],
       allowWrite: [cwd, temporary],
-      denyWrite: [`${cwd}/.git/hooks`, `${cwd}/.git/config`],
+      denyWrite: [`${cwd}/.git`],
     },
     allowPty: process.argv.includes("--pty"),
     enableWeakerNetworkIsolation: false,

@@ -11,12 +11,11 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { PermissionRequest } from "../../core/src/types.ts";
 import { resolvePath } from "../../tools/src/index.ts";
+import { sensitivePath } from "../../tools/src/workspace.ts";
 
 export const permissionModeSchema = z.enum(["ask", "auto", "full"]);
 export type PermissionMode = z.infer<typeof permissionModeSchema>;
 const savedSchema = z.record(z.string(), permissionModeSchema);
-const sensitivePath =
-  /(?:^|\/)(?:\.git|\.ssh|\.aws|\.hikaro|\.env(?:\.[^/]*)?|\.npmrc|[^/]*(?:secret|credential|token|password)[^/]*|[^/]*\.(?:pem|key))(?:\/|$)/i;
 export const permissionOptions: Array<{
   value: PermissionMode;
   label: string;
@@ -91,23 +90,10 @@ function lowRiskCommand(command: unknown) {
   if (name === "pwd") return words.length === 0;
   const flags: Record<string, Set<string>> = {
     ls: new Set(["-l", "-a", "-la", "-al", "-h", "-lah", "--"]),
-    cat: new Set(["-n", "-b", "--"]),
-    head: new Set(["-n", "-c", "--"]),
-    tail: new Set(["-n", "-c", "--"]),
-    wc: new Set(["-l", "-w", "-c", "-m", "--"]),
-    rg: new Set([
-      "--files",
-      "-n",
-      "-l",
-      "-i",
-      "-F",
-      "--hidden",
-      "--glob",
-      "-g",
-      "--",
-    ]),
   };
   const allowed = name ? flags[name] : undefined;
+  // Content-reading shell commands cannot authorize individual paths or aliases.
+  // Use the file tools for automatic per-resource approval instead.
   return (
     !!allowed &&
     words.every((word) => !word.startsWith("-") || allowed.has(word))
@@ -115,6 +101,10 @@ function lowRiskCommand(command: unknown) {
 }
 
 export async function canAutoApprove(request: PermissionRequest, cwd: string) {
+  if (request.capability?.kind === "file") {
+    const resolved = await resolvePath(cwd, request.capability.path);
+    return resolved.inside && !sensitivePath.test(resolved.path);
+  }
   if (["read_file", "write_file", "edit_file"].includes(request.tool)) {
     const path = request.arguments.path;
     if (typeof path !== "string") return false;
