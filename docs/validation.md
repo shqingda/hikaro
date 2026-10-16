@@ -1,5 +1,21 @@
 # Validation status
 
+## Referenced code-review fixes: 2026-10-16
+
+Applied the review of `c3ffcb49121427b50a0cc6eb533de6e598474857` on top of `2906efd`, retaining and checking its existing file-queue/context-history fixes. All seven concrete findings now have regression coverage: Git control-file/process boundaries, resource authorization for search/index reads, conflicting file updates, child/job initialization cancellation, child concurrency reservations, responsive RPC control and exact-endpoint authentication. CI now runs on PRs and pushes to main, with Linux checks and a separate full macOS job.
+
+Additional cross-tool and fault-injection review covered Git clean filters reading sensitive files, detached device revocation, remote forwarding of `baseUrl`, old lease epochs, renewal while waiting on a SQLite writer lock, approval-to-execution ownership loss, file-commit ownership loss, terminal initialization cancellation, and descendants surviving a cancelled process leader. RPC compaction now uses the v2 asynchronous operation contract documented in [architecture.md](architecture.md).
+
+Validation completed on macOS with Node 26.12.0 / pnpm 12.11.2:
+
+- `pnpm check`: **25 files, 170 tests passed**, plus full TypeScript checking and build. This includes the real macOS sandbox, independent-process file coordination, real SQLite connections, loopback HTTP authentication, RPC subprocesses and PTY tests.
+- `pnpm check:relay`: passed.
+- Built CLI offline prompt smoke: passed.
+- Changed-source formatting and `git diff --check`: passed.
+- Deliberately removing the exclusive file-lock flag made the independent-process regression fail; the original implementation was restored. Cancellation, initialization, lease and authentication tests were also observed failing before their fixes.
+
+No production API, actual Keychain sign-in, Cloudflare deployment or live handset acceptance ran. GitHub-hosted CI was configured but not dispatched from this local branch. File locks coordinate cooperating file tools and can remain after a crash; external namespace races and already-started process effects are not made transactional by SQLite fencing. Third-party plugins remain trusted. Runtime initialization/close limits, Agent-lifetime budgets and continuation-persistence boundaries are explicit in [architecture.md](architecture.md).
+
 Updated: 2026-10-15. Implementation, test coverage, completed verification and pending acceptance are separate states. See [TODO.md](../TODO.md) for delivery order. Documentation and styling edits have no independent tests or benchmarks. Critical TUI workflow verification is recorded below.
 
 ## Final cancellation review before push: 2026-10-15
