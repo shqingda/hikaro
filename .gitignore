@@ -7,4 +7,6 @@ coverage/
 .env.*
 !.env.example
 *.tsbuildinfo
+packages/tools/src/secure-file-helper
+packages/tools/src/secure-file-helper.*
 artifacts/

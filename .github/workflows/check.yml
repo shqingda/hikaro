@@ -17,7 +17,7 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           version: 12.11.2
-      - run: sudo apt-get update && sudo apt-get install -y ripgrep zsh
+      - run: sudo apt-get update && sudo apt-get install -y build-essential ripgrep zsh
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm exec vitest run --exclude tests/sandbox.test.ts --exclude tests/pty.test.ts
