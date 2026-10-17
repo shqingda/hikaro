@@ -1,5 +1,23 @@
 # Validation status
 
+## Context, session recovery and performance: 2026-10-18
+
+Implemented complete-request context accounting, conservative token estimation, whole-turn trimming, output reserves aligned with the Pi adapter, and source-aware bounded manual summaries. Oversized requests fail before consuming a model call. A synchronized regression caught and fixed concurrent child agents spending the same final shared call. Automatic compaction, exact tokenizer accounting and cross-restart budgets remain pending.
+
+The session picker now searches all current-workspace titles and IDs with bounded pages, Unicode case folding and stale-result suppression. Draft edits schedule a coalesced save after 300 ms without indefinitely postponing continuous input; writes and submission clears are serialized. Expanded paste text is retained; transient dialog answers are excluded. Independent review found and fixed an empty-flush microtask race and same-session model/settings rebind overwriting newer typing. Completed saves survive process termination; pending input/write windows and in-memory prompt queues do not gain transactional recovery.
+
+Verification on macOS arm64, Node 26.12.0 / pnpm 12.11.2:
+
+- Context/core/model-settings/provider/session-settings/runtime-lifecycle: **6 files, 80 tests passed** after context changes. Fifteen new context tests cover complete overhead, default built-in tools with skill metadata, quota contention, provenance and multilingual/escaped summary chunking. Deliberately inverting the overflow comparison through a temporary test transform caused 13 failures; restoring the normal transform returned all 15 to green.
+- `tests/session-search.test.ts`: **4 passed**, including a target beyond page one, paging filtered results, literal wildcard characters, workspace isolation, Unicode case folding and superseded queries. The initial implementation failed the new behavior tests as expected; one existing pagination shortcut test was updated to navigate to the page action with arrow keys because typing now searches session data.
+- Final draft-recovery/session-settings/real draft-recovery PTY selection: **26 passed**. Six draft unit/integration cases plus one actual CLI scenario cover SIGKILL, reconnecting to the saved demo session, restored input and clearing after submission. This count overlaps session-settings in the 80-test selection above; it is not an additional independent total.
+- Final TUI interaction/performance-harness/performance-startup selection: **3 files, 19 passed**. Includes expanded paste, transient dialogs, search/menu compatibility, benchmark parameter/measurement/cleanup guards and lazy SDK loading.
+- Final `pnpm typecheck`, `pnpm build` and `git diff --check`: passed. `pnpm start` build artifacts updated. No full suite, production model, hosted CI or native desktop/mobile acceptance was claimed.
+
+Performance: lazy provider SDK loading reduced the 30-run offline startup p50 **291.64 → 229.37 ms**, p95 **405.24 → 324.81 ms**, and ready RSS p95 **96.70 → 81.39 MiB**. Input echo p95 was **3.26 ms**. The **200 ms startup target remains unmet**; the benchmark preserves it and reports failure. Fixed 10k storage/core workload budgets passed, including lossless live and persisted text checks. See [harness-performance.md](harness-performance.md) for raw report locations, workload details, retained/rejected experiments and remaining measurements. Real provider startup and 30-minute stability were not measured.
+
+The [desktop/mobile reboot proposal](client-reboot.md) and [interactive draft](design/client-reboot/index.html) are design artifacts, not released clients. The draft was exercised in Chrome at five viewport widths, with keyboard navigation, approvals, disconnection and reduced motion; browser errors were zero. Screenshots and [inspection evidence](design/client-reboot/README.md) are retained. The brand candidate is separate from `brand/identity` and still requires final small-size optical work.
+
 ## Approval panel: 2026-10-17
 
 Native TUI approvals now use a fixed panel above the editor instead of requiring typed `allow`. The panel shows the tool, file target or shell command, and request reason. Arrow keys choose Allow once / Deny; Enter confirms; Esc or Ctrl+C denies. PgUp/PgDn scroll long details. The editor retains its text and cursor while the panel owns focus. Aborting, rebinding or disposing resolves the pending decision once. Initial Enter is ignored for 500 ms unless the user has navigated the choices; insufficient space prevents approval and asks for a resize. Permission policy and RPC/Pi protocols are unchanged; session grants are not implemented.

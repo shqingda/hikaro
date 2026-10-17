@@ -1,6 +1,6 @@
 # hikaro
 
-Independent TypeScript coding agent. Current scope: fullscreen TUI and bidirectional Pi integration. See [TODO.md](TODO.md) for implementation and acceptance status. Desktop and mobile experiments and their dedicated tests have been removed. Cloud configuration remains optional.
+Independent TypeScript coding agent. Current executable clients: fullscreen TUI and bidirectional Pi integration. See [TODO.md](TODO.md) for implementation and acceptance status. The earlier desktop/mobile experiments were removed; their restart is specified in the [client reboot plan](docs/client-reboot.md), with a [local interactive design draft](docs/design/client-reboot/index.html). Those drafts are not native clients. Cloud configuration remains optional.
 
 ## Run
 
@@ -48,7 +48,7 @@ Ctrl+S appears only on actual model choices and active model-setting values. Pro
 
 | Command | Action |
 | --- | --- |
-| `/new`, `/sessions`, `/resume [ID]` | Session picker with page navigation and page-local title/description/ID search; Delete/Ctrl+D opens confirmation; Enter deletes, Esc cancels |
+| `/new`, `/sessions [QUERY]`, `/resume [ID]` | Session picker searches titles and IDs across the current workspace, with bounded result pages; Delete/Ctrl+D opens confirmation; Enter deletes, Esc cancels |
 | `/rename TITLE` | Rename the current session; Ctrl+R renames a selected session in `/sessions` |
 | `/export` | Export all saved text messages as Markdown; hidden thinking stays excluded |
 | `/skill:NAME [TASK]` | Invoke a discovered Skill; Skill and plugin commands appear in completion |
@@ -69,7 +69,7 @@ Ctrl+S appears only on actual model choices and active model-setting values. Pro
 | `Shift+Enter` | New line |
 | `Ctrl+Shift+F` | Search the visible terminal document |
 
-Drafts are saved on session switches and orderly exit. They are not crash recovery or per-keystroke autosave. The last session can be deleted; deleting the current session opens a fresh blank session.
+Draft edits are coalesced and scheduled for saving after 300 ms, including during continuous typing. Saves are serialized per TUI instance, flushed on submission/session switches/orderly exit, and restored after a process crash. The last interval plus any pending storage write can still be lost; this is not recovery of in-memory queued prompts or an interrupted model run. Expanded pasted text is saved, while transient extension-dialog answers are excluded. Storage failures appear near the editor. The existing 100,000-character draft limit remains. The last session can be deleted; deleting the current session opens a fresh blank session.
 
 The editor's top border shows an animated **Working**, **Thinking**, **Running TOOL**, or **Compacting** indicator. It pauses while waiting for approval/input and stops on completion, cancellation, session binding and exit. Thinking status is independent of whether reasoning text is displayed.
 
@@ -81,7 +81,7 @@ Official file updates serialize by canonical path, acquire an exclusive `<file>.
 
 File reads and updates use opened directory handles, rejecting symbolic links introduced after path authorization. Updates, locks and temporary-file cleanup stay attached to the authorized directory even if another process renames it. Search and index retrieval use the same protected file reads; search passes the resulting bytes to ripgrep rather than reopening filenames. Direct reads remain limited to 2 MB, index files to 256 kB, and search/update snapshots to 16 MiB.
 
-Usage and model-call/cost budgets belong to the in-memory Agent and its shared child-agent budget, not to persistent session history. Reconstructing an Agent or restarting the host creates a fresh budget; resuming history does not restore usage limits. Model history is bounded separately, trims only at user-turn boundaries, and reports omitted messages. Sessions and events remain persistent.
+Usage and model-call/cost budgets belong to the in-memory Agent and its shared child-agent budget, not to persistent session history. Reconstructing an Agent or restarting the host creates a fresh budget; resuming history does not restore usage limits. Context fitting accounts for system instructions, tool definitions, message payloads, image allowances, output reserve and a safety margin. Its conservative token estimate is not a model tokenizer. Model history trims only at user-turn boundaries and reports omitted messages; an oversized current turn fails before calling the provider. Manual `/compact` includes tool arguments and source sequence references in the summary transcript. Automatic compaction is not implemented. Sessions and events remain persistent.
 
 ## Pi integration
 
@@ -122,7 +122,7 @@ See [Cloudflare setup](docs/remote.md). The relay carries encrypted frames; tool
 
 ## Validation
 
-Use the affected test path or filter once, for example `pnpm exec vitest run tests/session-settings.test.ts -t 'session picker'`. Skip tests for documentation and pure styling. Full suites and benchmarks run only when explicitly needed; CI is manual.
+Use the affected test path or filter once, for example `pnpm exec vitest run tests/session-search.test.ts`. Skip tests for documentation and pure styling. Full suites and benchmarks run only when explicitly needed. Correctness CI runs on pull requests and pushes to main; performance measurement is an explicit local command. See the [harness and performance guide](docs/harness-performance.md) for workloads, budgets and evidence limitations.
 
 Optional cloud configuration can be checked with `pnpm check:relay` and `pnpm --filter @hikaro/relay build` (local dry-run, no deployment).
 
