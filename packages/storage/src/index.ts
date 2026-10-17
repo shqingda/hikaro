@@ -79,8 +79,8 @@ export class SQLiteStore implements EventStore {
       modelSelection,
     });
   }
-  sessions(offset = 0, limit = 100, cwd?: string) {
-    return this.request<Session[]>("sessions", { offset, limit, cwd });
+  sessions(offset = 0, limit = 100, cwd?: string, query?: string) {
+    return this.request<Session[]>("sessions", { offset, limit, cwd, query });
   }
   forkSession(id: string) {
     return this.request<Session>("forkSession", { id });

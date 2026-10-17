@@ -70,6 +70,7 @@ function shortcutFixture() {
 
 function interactionView(
   onPrompt: (text: string) => Promise<void> = async () => {},
+  onDraftChange?: (text: string) => void,
 ) {
   const tui = new TuiAltScreen({ ...terminalStub });
   vi.spyOn(tui, "requestRender").mockImplementation(() => {});
@@ -83,6 +84,7 @@ function interactionView(
     cwd: "/tmp",
     model: "fixture",
     onPrompt,
+    onDraftChange,
     onCommand: async () => {},
     onExit: () => {},
   });
@@ -96,6 +98,30 @@ function interactionView(
     } satisfies AgentEvent);
   return { view, input: (data: string) => input(data), focus, event };
 }
+
+it("autosaves expanded paste text but excludes transient dialog answers", () => {
+  const saved = vi.fn();
+  const { view, event } = interactionView(async () => {}, saved);
+  try {
+    const draft = "line of pasted content\n".repeat(30);
+    view.editor.handleInput("\x1b[200~" + draft + "\x1b[201~");
+    expect(saved).toHaveBeenLastCalledWith(draft);
+    event("ui.request", {
+      id: "private",
+      method: "input",
+      title: "Input",
+      prefill: "private-prefill",
+    });
+    view.editor.handleInput("private-answer");
+    expect(saved.mock.calls.every(([text]) => !text.includes("private"))).toBe(
+      true,
+    );
+    event("ui.closed", { id: "private" });
+    expect(view.editor.getExpandedText()).toBe(draft);
+  } finally {
+    view.dispose();
+  }
+});
 
 describe("TUI immediate cancellation feedback", () => {
   it.each(["\x1b", "\x03"])(
@@ -367,7 +393,8 @@ describe("TUI interaction fixes", () => {
     );
     try {
       await fixture.waitFor(/Sessions · page 1/);
-      fixture.panel.handleInput("Next page");
+      for (let index = 0; index < 50; index++)
+        fixture.panel.handleInput("\x1b[B");
       expect(fixture.screen()).toContain("Enter next page");
       expect(fixture.screen()).not.toMatch(/delete|rename/);
       fixture.panel.handleInput("\x04");

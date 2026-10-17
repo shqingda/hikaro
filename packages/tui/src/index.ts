@@ -212,6 +212,7 @@ export class HikaroView {
       onExit: () => void;
       onHistory?: (direction: HistoryDirection) => Promise<HistoryPage>;
       onPreferences?: (patch: Partial<TuiPreferences>) => Promise<void>;
+      onDraftChange?: (text: string) => void;
       commands?: Array<{ name: string; description: string }>;
     },
   ) {
@@ -234,6 +235,10 @@ export class HikaroView {
       },
       { paddingX: 1 },
     );
+    this.editor.onChange = () => {
+      if (!this.dialog && !this.disposed)
+        options.onDraftChange?.(this.editor.getExpandedText());
+    };
     this.editor.setAutocompleteProvider(
       new CombinedAutocompleteProvider(
         [
@@ -795,7 +800,7 @@ export class HikaroView {
   private nextDialog() {
     if (this.dialog || this.approval || !this.dialogs.length) return;
     this.dialog = this.dialogs.shift()!;
-    this.dialogSavedText = this.editor.getText();
+    this.dialogSavedText = this.editor.getExpandedText();
     this.editor.setText(this.dialog.prefill ?? "");
     this.notice(
       `${this.dialog.title ?? "Pi extension"}${this.dialog.message ? "\n" + this.dialog.message : ""}` +

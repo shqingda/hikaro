@@ -132,7 +132,12 @@ export interface EventStore {
     parentId?: string,
     modelSelection?: ModelSelection,
   ): Promise<Session>;
-  sessions(offset?: number, limit?: number, cwd?: string): Promise<Session[]>;
+  sessions(
+    offset?: number,
+    limit?: number,
+    cwd?: string,
+    query?: string,
+  ): Promise<Session[]>;
   session(id: string): Promise<Session | undefined>;
   messagePage(
     sessionId: string,

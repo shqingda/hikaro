@@ -224,14 +224,21 @@ async function main() {
     await runtime.close();
     throw error;
   }
+  const { DraftSaver } = await import("../../../packages/tui/src/drafts.ts");
+  let draftSessionId = session.id;
+  const drafts = new DraftSaver(
+    (id, text) => runtime.store.saveDraft(id, text),
+    (error) => view.setError(`Draft autosave failed: ${String(error)}`),
+  );
   const exit = () => {
     if (exiting) return;
     exiting = true;
     view.dispose();
     tui.stop({ preserveScreen: true });
     console.log(`\nContinue: pnpm start · New session: pnpm start --new`);
-    void runtime.store
-      .saveDraft(session.id, view.editor.getText())
+    drafts.update(draftSessionId, view.editor.getExpandedText());
+    void drafts
+      .flush()
       .finally(() => runtime.close())
       .then(
         () => {
@@ -284,8 +291,9 @@ async function main() {
   };
   const bind = async (next: typeof session) => {
     if (agent.busy) throw Error("Cancel the active run first");
-    if (await runtime.store.session(session.id))
-      await runtime.store.saveDraft(session.id, view.editor.getText());
+    if (await runtime.store.session(draftSessionId))
+      drafts.update(draftSessionId, view.editor.getExpandedText());
+    await drafts.flush();
     session = next;
     await runtime.store.rememberSession(next.id);
     agent = await runtime.agent(next);
@@ -300,7 +308,13 @@ async function main() {
     updateStatus();
     const page = await history("latest");
     view.showMessages(page.messages, page);
-    view.editor.setText(await runtime.store.draft(next.id));
+    const savedDraft = await drafts.restore(draftSessionId, next.id, (id) =>
+      runtime.store.draft(id),
+    );
+    if (savedDraft !== undefined) {
+      draftSessionId = next.id;
+      view.editor.setText(savedDraft);
+    }
   };
   const applyPreferences = async (next: typeof preferences) => {
     preferences = await saveTuiPreferences(runtime.options.home!, next);
@@ -323,6 +337,7 @@ async function main() {
     cwd: options.cwd,
     model: `${agent.options.provider.id}/${agent.options.provider.model}`,
     onPreferences: (patch) => applyPreferences({ ...preferences, ...patch }),
+    onDraftChange: (text) => drafts.update(draftSessionId, text),
     commands: [
       ...runtime.resources.skills.map((skill) => ({
         name: "skill:" + skill.name,
@@ -334,7 +349,8 @@ async function main() {
       })),
     ],
     onPrompt: async (text) => {
-      await runtime.store.saveDraft(session.id, "");
+      drafts.update(session.id, "");
+      await drafts.flush();
       if (text.startsWith("!")) {
         await agent.executeTool(
           "shell",
@@ -496,12 +512,13 @@ async function main() {
           await openSessions(
             view,
             () => session.id,
-            (offset, limit) =>
-              runtime.store.sessions(offset, limit, runtime.options.cwd),
+            (offset, limit, query) =>
+              runtime.store.sessions(offset, limit, runtime.options.cwd, query),
             async (id) => {
               await bind(await runtime.session(id));
             },
             async (id) => {
+              await drafts.flush();
               const result = await runtime.deleteSession(id);
               if (id === session.id) await bind(await runtime.session());
               return result.cleanupError;
@@ -510,6 +527,7 @@ async function main() {
               const next = await runtime.renameSession(id, title);
               if (id === session.id) session = next;
             },
+            command === "sessions" ? arg : "",
           );
           return;
         }

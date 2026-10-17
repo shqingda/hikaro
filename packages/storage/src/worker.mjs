@@ -3,6 +3,10 @@ import { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "node:crypto";
 import { chmodSync } from "node:fs";
 const db = new DatabaseSync(workerData.path);
+// SQLite's built-in lower() only folds ASCII. Match the TUI's Unicode search.
+db.function("hikaro_lower", { deterministic: true }, (text) =>
+  text.toLowerCase(),
+);
 if (workerData.path !== ":memory:") chmodSync(workerData.path, 0o600);
 db.exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000;
 CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY,title TEXT NOT NULL,cwd TEXT NOT NULL,createdAt INTEGER NOT NULL,parentId TEXT);
@@ -196,22 +200,37 @@ const handlers = {
       throw error;
     }
   },
-  sessions({ offset = 0, limit = 100, cwd } = {}) {
-    return cwd
-      ? db
-          .prepare(
-            sessionQuery +
-              " WHERE s.cwd=? ORDER BY s.createdAt DESC, s.rowid DESC LIMIT ? OFFSET ?",
-          )
-          .all(cwd, Math.min(limit, 100), offset)
-          .map(decodeSession)
-      : db
-          .prepare(
-            sessionQuery +
-              " ORDER BY s.createdAt DESC, s.rowid DESC LIMIT ? OFFSET ?",
-          )
-          .all(Math.min(limit, 100), offset)
-          .map(decodeSession);
+  sessions({ offset = 0, limit = 100, cwd, query = "" } = {}) {
+    if (
+      !Number.isSafeInteger(offset) ||
+      offset < 0 ||
+      !Number.isSafeInteger(limit) ||
+      limit < 1
+    )
+      throw Error("Invalid session pagination");
+    if (typeof query !== "string" || query.length > 512)
+      throw Error("Session search must be at most 512 characters");
+    const where = [],
+      args = [];
+    if (cwd !== undefined) {
+      where.push("s.cwd=?");
+      args.push(cwd);
+    }
+    const text = query.trim().toLowerCase();
+    if (text) {
+      where.push(
+        "(instr(hikaro_lower(s.title),?)>0 OR instr(lower(s.id),?)>0)",
+      );
+      args.push(text, text);
+    }
+    return db
+      .prepare(
+        sessionQuery +
+          (where.length ? " WHERE " + where.join(" AND ") : "") +
+          " ORDER BY s.createdAt DESC, s.rowid DESC LIMIT ? OFFSET ?",
+      )
+      .all(...args, Math.min(limit, 100), offset)
+      .map(decodeSession);
   },
   forkSession({ id }) {
     db.exec("BEGIN IMMEDIATE");

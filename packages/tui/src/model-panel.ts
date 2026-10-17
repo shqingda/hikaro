@@ -18,6 +18,7 @@ export type Selection = {
   value: string;
   makeDefault: boolean;
   action?: "delete" | "rename";
+  query?: string;
 };
 type ActionCapability = boolean | ((item: SelectItem) => boolean);
 /** The input-adjacent panel owns focus only for its lifetime. Secret input never renders raw bytes. */
@@ -38,6 +39,15 @@ export class ModelPanel implements Component {
   private matches: SelectItem[] = [];
   private emptyMessage = "No matching options";
   private secret = false;
+  private loadItems?: (query: string) => Promise<SelectItem[]>;
+  private searchRevision = 0;
+  private searching = false;
+  get searchQuery() {
+    return this.input?.getValue() ?? "";
+  }
+  setTitle(title: string) {
+    this.title = title;
+  }
   private pending?: { resolve: (v: any) => void; reject: (e: Error) => void };
   constructor(
     readonly signal: AbortSignal,
@@ -67,9 +77,14 @@ export class ModelPanel implements Component {
       emptyMessage?: string;
       allowDefault?: ActionCapability;
       enterAction?: string | ((item: SelectItem) => string);
+      loadItems?: (query: string) => Promise<SelectItem[]>;
+      searchQuery?: string;
     },
   ): Promise<Selection> {
     this.signal.throwIfAborted();
+    this.searchRevision++;
+    this.loadItems = options?.loadItems;
+    this.searching = false;
     this.title = title;
     this.message = "";
     this.error = warning;
@@ -90,6 +105,7 @@ export class ModelPanel implements Component {
         placeholderStyle: dim,
       });
       this.input.focused = true;
+      this.input.setValue(options?.searchQuery ?? "");
     }
     this.updateList(options?.selectedValue);
     this.refresh();
@@ -99,18 +115,21 @@ export class ModelPanel implements Component {
   }
   private updateList(selectedValue?: string) {
     const query = (this.input?.getValue() ?? "").trim().toLowerCase();
-    const matches = this.items.filter((item) =>
-      [item.label, item.description ?? "", item.value].some((text) =>
-        clean(text).toLowerCase().includes(query),
-      ),
-    );
+    const matches = this.loadItems
+      ? this.items
+      : this.items.filter((item) =>
+          [item.label, item.description ?? "", item.value].some((text) =>
+            clean(text).toLowerCase().includes(query),
+          ),
+        );
     this.matches = matches;
     this.list = new SelectList(matches, 8, {
       selectedPrefix: accent,
       selectedText: accent,
       description: dim,
       scrollInfo: dim,
-      noMatch: () => dim(`  ${this.emptyMessage}`),
+      noMatch: () =>
+        dim(`  ${this.searching ? "Searching…" : this.emptyMessage}`),
     });
     if (selectedValue !== undefined) {
       const index = matches.findIndex((item) => item.value === selectedValue);
@@ -121,6 +140,9 @@ export class ModelPanel implements Component {
     };
   }
   private resolveSelection(selection: Selection) {
+    if (this.searching) return;
+    if (this.loadItems) selection.query = this.searchQuery;
+    this.searchRevision++;
     const pending = this.pending;
     this.pending = undefined;
     pending?.resolve(selection);
@@ -132,6 +154,9 @@ export class ModelPanel implements Component {
     options?: { cancelValue?: string },
   ): Promise<string> {
     this.signal.throwIfAborted();
+    this.searchRevision++;
+    this.loadItems = undefined;
+    this.searching = false;
     this.title = title;
     this.error = "";
     this.message = "";
@@ -154,6 +179,7 @@ export class ModelPanel implements Component {
     });
   }
   cancelPrompt() {
+    this.searchRevision++;
     this.pending?.reject(new DOMException("Cancelled", "AbortError"));
     this.pending = undefined;
     this.input?.setValue("");
@@ -163,6 +189,7 @@ export class ModelPanel implements Component {
   }
   cancelStep() {
     if (!this.pending || this.cancelValue === undefined) return false;
+    this.searchRevision++;
     this.pending.resolve(
       this.list
         ? { value: this.cancelValue, makeDefault: false }
@@ -231,10 +258,48 @@ export class ModelPanel implements Component {
     } else {
       const previous = this.input?.getValue();
       this.input?.handleInput(data);
-      if (this.list && previous !== this.input?.getValue())
-        this.updateList(this.list.getSelectedItem()?.value);
+      if (this.list && previous !== this.input?.getValue()) {
+        if (this.loadItems) {
+          if (!this.searching) void this.searchItems();
+        } else this.updateList(this.list.getSelectedItem()?.value);
+      }
     }
     this.refresh();
+  }
+  private async searchItems() {
+    const revision = ++this.searchRevision;
+    const load = this.loadItems!;
+    this.searching = true;
+    this.items = [];
+    this.updateList();
+    for (;;) {
+      const query = this.searchQuery;
+      try {
+        const items = await load(query);
+        if (
+          this.signal.aborted ||
+          revision !== this.searchRevision ||
+          !this.pending
+        )
+          return;
+        if (query !== this.searchQuery) continue;
+        this.items = items;
+        this.error = "";
+      } catch (error) {
+        if (
+          this.signal.aborted ||
+          revision !== this.searchRevision ||
+          !this.pending
+        )
+          return;
+        if (query !== this.searchQuery) continue;
+        this.error = error instanceof Error ? error.message : String(error);
+      }
+      this.searching = false;
+      this.updateList();
+      this.refresh();
+      return;
+    }
   }
   private actionEnabled(capability: ActionCapability) {
     const item = this.list?.getSelectedItem();
