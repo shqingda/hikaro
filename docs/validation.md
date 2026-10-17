@@ -279,8 +279,8 @@ Follow the six stages in TODO. Required checks include:
 
 - Real-project login, file read/write/edit/search, shell/test/Git, permission and failure recovery; explicit queue, steering, cancel and exit behavior.
 - Production-account OAuth, refresh, rate limits and model/account thinking/speed capabilities. Unknown models retain default speed only; offline request capture does not establish account support.
-- Complete context budgeting, automatic compaction, goal/constraint/path preservation and draft crash recovery.
-- Actual file/image attachment loading, readable tool/code/diff output, cross-page/full-session search and portable attachment export.
+- Production-model goal/constraint/path preservation after automatic compaction; deterministic checkpoint and draft recovery are covered below.
+- Readable tool/code/diff output, message-body full-text search, OS clipboard image capture and portable attachment export. Native file/image references are covered below.
 - Real-project MCP/Skills invocation, failure recovery and plugin resource cleanup.
 - Both Pi directions under real accounts, long sessions, cancellation, permissions, recovery and failures; default-entry install/upgrade; version matrix, capability detection and visible degradation. Failures must not silently switch execution agents.
 - Manual IME, wide characters, emoji, paste, resize, exit restoration and assistive-technology review. Existing PTY checks cannot replace real input-method testing.
@@ -304,3 +304,23 @@ Remote protocol and third-party plugin security review remains outstanding and b
 - Documentation, minor configuration, comments and pure UI styling run no tests. Syntax-only checks use a local linter against changed files only.
 - After the initial failure, allow at most two code-change/targeted-test repair cycles. If still failing, stop all commands, report state and errors, propose the next `/plan` and wait for human input.
 - Report unrelated pre-existing failures; do not repair them as part of another change.
+
+## Automatic compaction, attachments and client C0: 2026-10-18
+
+This continuation implements same-session automatic context checkpoints, native CLI/TUI file and image references, and the first real shared client state/protocol slice. It also optimizes the production startup graph and SQLite schema initialization. The 200 ms startup gate, FULL SQLite durability, original messages, current tool pairs, cancellation, leases and shared model budgets remain enforced.
+
+Focused verification only (macOS arm64, Node 26.12.0, pnpm 12.11.2):
+
+- Automatic compaction: 17 new cases; 105 affected core/context/storage/lifecycle cases passed across seven files. Real SQLite coverage includes restart, incremental checkpoints, tool pairs, failed/empty summaries, transaction rollback, stale source/CAS, lease expiry, queued cancellation and budget exhaustion. Known text-only image input is rejected before persistence.
+- Attachments: 13 focused cases passed, including canonical paths, sensitive aliases, external symlinks, UTF-8/format/base64/byte limits, cancellation and replay after source removal. Sixteen provider-endpoint cases passed, including actual image content in the HTTP request. The final extra parser/capacity checks ran with filters after their changes.
+- TUI: two new preparation failure/cancellation cases passed. The affected TUI/permission run passed 18 cases initially; one legacy error-feedback case exposed an extra Promise hop and passed after preserving its direct call path. Automatic compaction status feedback passed in that run.
+- One affected real PTY script passed: `tests/prompt-attachments-pty.test.ts` proves missing-file draft retention, zero accidental model calls, then successful text and image transmission to a local SSE fixture and persisted image bytes. No other E2E script ran in this continuation.
+- Client C0: 11 portable-state cases and four initial real RPC cases passed. Three follow-up filtered cases passed for SQLite `parentId:null` resume, pending approval detachment, and later approval from surviving work. Portable ES2023 type checking excludes Node/DOM types. Global event IDs are not treated as contiguous per-session IDs; scoped revisions detect delivery gaps.
+- Startup packaging: 11 focused cases passed, including external plugin Zod metadata/validation, TUI Unicode/native-helper resolution, startup failure cleanup and disabled/unwritable compile caches. Atomic schema initialization adds one rollback case; it and the existing two-connection lease migration case passed after a demonstrated RED.
+- Type checking and production build passed. Performance samples and exact gate results are recorded in [harness-performance.md](harness-performance.md); a failed startup budget stays a failure. No full suite or hosted CI ran.
+
+Review caught and repaired sensitive attachment aliases, longer Markdown closing fences, client global-sequence assumptions, nullable restored parent IDs, and detached approval revisions. No additional layout-only tests were added.
+
+Limits: compaction uses a conservative token heuristic and generated text, not a proven lossless semantic summary; original history remains authoritative. A pre-existing single stored user turn over 8 MiB can still block startup repair of interrupted tool pairs. New local attachments are bounded before submission. Budget usage and queued prompts are not recovered across host restarts. Native desktop/mobile apps, durable command receipts, OS clipboard-image capture and portable image export remain subsequent work. The non-letter logo candidate is an independent unverified draft.
+
+最终启动构建：冷 V8 缓存 3 次预热 + 30 次测量，p95 181.00 ms／输入 p95 1.37 ms／RSS p95 72.67 MiB，原三项门槛均通过。末轮压缩构建的两项插件与启动兼容测试通过；各个失败中间报告完整保留。

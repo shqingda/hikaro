@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>hikaro · 向光，非字母标志探索</title>
+<style>
+:root{color-scheme:light;--ink:#12120f;--paper:#f7f7f6;--beam:#f2b500}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;font-size:15px;line-height:1.7}main{max-width:1240px;margin:auto;padding:56px 48px}header{display:flex;justify-content:space-between;align-items:start;gap:24px;border-bottom:1px solid #d8d8d1;padding-bottom:30px}.eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase}h1{font-weight:500;font-size:38px;letter-spacing:-.04em;line-height:1.2;margin:12px 0 16px}p{margin:0;max-width:48em;color:#62625a}.wordmark{width:168px;height:auto;margin-top:12px}.board{display:grid;grid-template-columns:1.2fr 1fr;gap:20px;margin-top:32px}.panel{min-height:410px;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative}.light{background:#eeeee8}.dark{background:var(--ink);color:var(--paper)}.mark{width:min(72%,310px);height:auto}.label{position:absolute;bottom:24px;left:28px;font-size:11px;letter-spacing:.09em}.support{display:grid;grid-template-columns:1.2fr 1fr;gap:20px;padding:30px 0;border-bottom:1px solid #d8d8d1}.sizes{display:flex;align-items:end;gap:25px;min-height:94px}.size{display:flex;flex-direction:column;align-items:center;gap:9px;color:#62625a;font-size:11px}.sizes img{display:block}.icon{width:108px}.icon-wrap{display:flex;align-items:center;gap:22px}.icon-wrap strong{display:block;font-weight:500}.notes{display:grid;grid-template-columns:1.2fr 1fr;gap:48px;margin-top:28px}.notes h2{font-size:14px;font-weight:500;margin:0 0 8px}.notes p{font-size:13px}.status{display:inline-flex;align-items:center;gap:8px;font-size:11px;margin-top:30px;color:#62625a}.status::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--beam)}a{color:inherit;text-underline-offset:4px}:focus-visible{outline:2px solid var(--ink);outline-offset:5px}@media(max-width:700px){main{padding:30px 22px}header{display:block}h1{font-size:31px}.wordmark{width:144px;margin-top:24px}.board,.support,.notes{grid-template-columns:1fr}.panel{min-height:320px}.notes{gap:22px}.support{gap:25px}.mark{width:240px}.sizes{gap:22px}}
+</style>
+<main>
+  <header><div><div class="eyebrow">Hikaro · Identity exploration 02</div><h1>向光，一道打开的地平线。</h1><p>不借字母造型。让一个安静的弧面，托住右上方的太阳。</p></div><img class="wordmark" src="../../identity/assets/wordmark.svg" alt="hikaro 原有字标"></header>
+  <section class="board" aria-label="标志浅色和深色展示">
+    <div class="panel light"><img class="mark" src="mark.svg" alt="黑色拱形地平线，上方一颗黄色太阳"><span class="label">01 / PAPER · INK · BEAM</span></div>
+    <div class="panel dark"><img class="mark" src="mark-on-ink.svg" alt="深底白色拱形地平线和黄色太阳"><span class="label">02 / AFTER DARK</span></div>
+  </section>
+  <section class="support" aria-label="小尺寸与图标候选">
+    <div class="sizes"><div class="size"><img src="compact.svg" width="16" height="16" alt="16像素简化标志"><span>16</span></div><div class="size"><img src="compact.svg" width="24" height="24" alt="24像素简化标志"><span>24</span></div><div class="size"><img src="mark.svg" width="32" height="32" alt="32像素标志"><span>32</span></div><div class="size"><img src="mark.svg" width="48" height="48" alt="48像素标志"><span>48</span></div><div class="size"><img src="mark.svg" width="64" height="64" alt="64像素标志"><span>64</span></div><div class="size"><img src="mark.svg" width="88" height="88" alt="88像素标志"><span>88</span></div></div>
+    <div class="icon-wrap"><img class="icon" src="app-icon.svg" alt="深色应用图标候选"><div><strong>hikaro</strong><p>留白与圆角属于应用容器。<br>图案自身不再加外框。</p></div></div>
+  </section>
+  <section class="notes"><div><h2>从字母，退回图形。</h2><p>宽而低的拱面没有竖直字干，太阳仍是完整的圆。直线收住重心；右上方的圆点保留原方案的方向感。弧面、地平线、圆点各承担一个角色。</p></div><div><h2>保留熟悉的声音。</h2><p>Beam #F2B500、Ink #12120F、Paper #F7F7F6；字标继续使用原有 Literata 轮廓。16 / 24 px 另做去掉底线的简化稿，仍需真实 Dock 与多屏密度评审。</p></div></section>
+  <div class="status">独立探索稿 · 尚未替换产品资产 · <a href="README.md">设计说明</a></div>
+</main>
+</html>
