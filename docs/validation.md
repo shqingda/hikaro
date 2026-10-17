@@ -1,5 +1,21 @@
 # Validation status
 
+## Approval panel: 2026-10-17
+
+Native TUI approvals now use a fixed panel above the editor instead of requiring typed `allow`. The panel shows the tool, file target or shell command, and request reason. Arrow keys choose Allow once / Deny; Enter confirms; Esc or Ctrl+C denies. PgUp/PgDn scroll long details. The editor retains its text and cursor while the panel owns focus. Aborting, rebinding or disposing resolves the pending decision once. Initial Enter is ignored for 500 ms unless the user has navigated the choices; insufficient space prevents approval and asks for a resize. Permission policy and RPC/Pi protocols are unchanged; session grants are not implemented.
+
+Completed checks on macOS, Node 26.12.0 / pnpm 12.11.2:
+
+- Before implementation, the new panel tests failed against the typed-allow UI; the ordinary workspace README read assertion already passed.
+- `pnpm exec vitest run tests/approval-panel.test.ts tests/permissions.test.ts tests/tui-interactions.test.ts -t 'TUI approval panel|permissions|activity indicator animates|TUI immediate cancellation feedback'`: **16 passed**, 8 excluded by filter. Covers selection, Enter guard, cancellation, draft/focus restoration, scrolling, resize behavior and existing permission policy. The auto-mode case explicitly reads workspace `README.md` with no manual approval call.
+- `pnpm exec vitest run tests/pty.test.ts -t 'TUI approval panel'`: **1 passed**, 6 excluded by filter. Actual CLI, isolated workspace/home, no production account: denied shell operation leaves no file; allowed operation writes the expected file. Controls remain visible through 36×18, 60×18 and 100×24 resize events. No typed `allow` is sent.
+- Focused strict TypeScript checking of the changed TUI source and panel test passed. The initial standalone check omitted the project's Node types and found a readonly test-fixture annotation; rerunning with explicit `--types node` after correcting that fixture passed. Only the affected panel tests were rerun: **8 passed**.
+- `pnpm build`: passed; `pnpm start` output updated. A batched full-layout render at 36×18, 60×18 and 100×24 confirmed the panel, editor draft and permission status fit together.
+
+No full suite or performance benchmark ran. The user restarted in their Codex sidebar terminal and confirmed the prior conversation and Approve for me mode were preserved. Their manual check confirmed the command/reason and Allow once / Deny were visible; Allow once closed the panel, produced the expected output and restored input; Esc produced Permission denied with no execution output and restored input. Native Terminal and IME acceptance remain pending.
+
+Pre-merge verification on 2026-10-17: `pnpm typecheck`, the same focused test filter across the four files above (**18 passed**, 13 excluded), and `pnpm build` passed. One review of the implementation, tests and documentation found no blocking correctness, security, architecture or performance issues. No full suite or benchmark was added to this verification.
+
 ## Directory-replacement race repair: 2026-10-16
 
 Replaced pathname-based content IO with a small POSIX helper that retains opened directory descriptors. Reads reject symlink components introduced after canonical authorization. File snapshots, exclusive locks, staging, version checks, atomic commit and cleanup use the same pinned directory; the TypeScript cancellation/lease checkpoint remains between staging and commit. Search and index content reads also use this service. Source install/build compiles the helper and the CLI bundle includes it.

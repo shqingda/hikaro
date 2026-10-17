@@ -15,6 +15,7 @@ import {
 } from "@earendil-works/pi-tui";
 import { ModelPanel } from "./model-panel.ts";
 import { ActivityEditor } from "./activity-editor.ts";
+import { ApprovalPanel } from "./approval-panel.ts";
 import { defaultTuiPreferences, type TuiPreferences } from "./preferences.ts";
 import { sanitize } from "./text.ts";
 export { sanitize } from "./text.ts";
@@ -165,6 +166,7 @@ export class HikaroView {
   readonly permissionStatus = new Text("", 1, 0);
   readonly inputError = new Text("", 1, 0);
   readonly modelSlot = new Container();
+  readonly approvalSlot = new Container();
   private modelController?: AbortController;
   private modelPanel?: ModelPanel;
   readonly historyHint = new Text("", 1, 0);
@@ -180,7 +182,7 @@ export class HikaroView {
   private approval?: {
     resolve: (value: boolean) => void;
     cleanup: () => void;
-    savedText: string;
+    panel: ApprovalPanel;
   };
   private dialog?: Dialog;
   private dialogs: Dialog[] = [];
@@ -301,6 +303,13 @@ export class HikaroView {
         shrink: 0,
         visible: () => !!this.modelPanel,
       },
+      {
+        component: this.approvalSlot,
+        basis: "auto",
+        maxSize: 12,
+        shrink: 0,
+        visible: () => !!this.approval,
+      },
       { component: this.editor, basis: "auto", maxSize: 10 },
       this.inputError,
       this.permissionStatus,
@@ -309,10 +318,7 @@ export class HikaroView {
     this.updateFooter();
     this.editor.onSubmit = (text) => {
       if (this.disposed) return;
-      if (this.approval) {
-        this.answer(text.trim().toLowerCase() === "allow");
-        return;
-      }
+      if (this.approval) return;
       if (this.dialog) {
         void this.answerDialog(text);
         return;
@@ -374,6 +380,10 @@ export class HikaroView {
     this.removeInput = tui.addInputListener((data) => {
       if (this.disposed) return undefined;
       if (isKeyRelease(data)) return { consume: true };
+      if (this.approval) {
+        this.approval.panel.handleInput(data);
+        return { consume: true };
+      }
       if (this.modelPanel) {
         if (matchesKey(data, "escape") && this.modelPanel.cancelStep())
           return { consume: true };
@@ -384,15 +394,13 @@ export class HikaroView {
         return undefined;
       }
       if (matchesKey(data, "ctrl+c")) {
-        if (this.approval) this.answer(false);
-        else if (this.dialog) void this.answerDialog(undefined);
+        if (this.dialog) void this.answerDialog(undefined);
         else if (this.busy) this.backend?.cancel();
         else options.onExit();
         return { consume: true };
       }
-      if (matchesKey(data, "escape") && (this.approval || this.dialog)) {
-        if (this.approval) this.answer(false);
-        else void this.answerDialog(undefined);
+      if (matchesKey(data, "escape") && this.dialog) {
+        void this.answerDialog(undefined);
         return { consume: true };
       }
       if (matchesKey(data, "ctrl+d") && !this.editor.getText()) {
@@ -854,40 +862,62 @@ export class HikaroView {
         : "",
       !this.approval && !this.dialog && !this.modelPanel,
     );
-    if (this.modelPanel) {
+    if (this.modelPanel || this.approval) {
       this.footer.setText("");
       return;
     }
     this.footer.setText(
       muted(
         (this.info && this.preferences.showUsage ? this.info + "\n" : "") +
-          (this.approval
-            ? "Type allow to approve · Esc denies"
-            : this.dialog
-              ? this.dialog.method === "confirm"
-                ? "Type yes to confirm · Esc cancels"
-                : "Enter submits · Esc cancels"
-              : this.busy
-                ? "Ctrl+C stops · new prompts queue"
-                : `Enter send · Shift+Enter newline · /help${this.status.size ? " · " + [...this.status.values()].join(" · ") : ""}`),
+          (this.dialog
+            ? this.dialog.method === "confirm"
+              ? "Type yes to confirm · Esc cancels"
+              : "Enter submits · Esc cancels"
+            : this.busy
+              ? "Ctrl+C stops · new prompts queue"
+              : `Enter send · Shift+Enter newline · /help${this.status.size ? " · " + [...this.status.values()].join(" · ") : ""}`),
       ),
     );
   }
   approve(request: PermissionRequest, signal: AbortSignal): Promise<boolean> {
-    if (this.approval || this.dialog || signal.aborted || this.disposed)
+    if (
+      this.approval ||
+      this.dialog ||
+      this.modelPanel ||
+      signal.aborted ||
+      this.disposed
+    )
       return Promise.resolve(false);
     return new Promise((resolve) => {
       const abort = () => this.answer(false);
       signal.addEventListener("abort", abort, { once: true });
+      const panel = new ApprovalPanel(
+        request,
+        this.options.cwd,
+        (value) => this.answer(value),
+        () => this.tui.requestRender(),
+        (width) =>
+          Math.min(
+            12,
+            Math.max(
+              0,
+              this.tui.terminal.rows -
+                this.header.render(width).length -
+                this.historyHint.render(width).length -
+                Math.min(10, this.editor.render(width).length) -
+                this.inputError.render(width).length -
+                this.permissionStatus.render(width).length -
+                1,
+            ),
+          ),
+      );
       this.approval = {
         resolve,
         cleanup: () => signal.removeEventListener("abort", abort),
-        savedText: this.editor.getText(),
+        panel,
       };
-      this.editor.setText("");
-      this.notice(
-        `Permission requested\n${request.reason}\n\nType allow to approve this operation, or press Esc to deny.`,
-      );
+      this.approvalSlot.addChild(panel);
+      this.tui.setFocus(panel);
       this.updateFooter();
       this.tui.requestRender();
     });
@@ -896,7 +926,8 @@ export class HikaroView {
     const approval = this.approval;
     this.approval = undefined;
     if (approval) {
-      this.editor.setText(approval.savedText);
+      this.approvalSlot.clear();
+      if (!this.disposed) this.tui.setFocus(this.editor);
       approval.cleanup();
       approval.resolve(value);
     }

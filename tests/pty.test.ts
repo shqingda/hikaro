@@ -6,7 +6,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { readFileSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { stripVTControlCharacters } from "node:util";
 import type { AgentEvent, Message } from "../packages/core/src/types.ts";
 import { SQLiteStore } from "../packages/storage/src/index.ts";
@@ -467,6 +467,44 @@ describe("critical TUI workflows", () => {
         });
         expect(savedMessages(db, child)[0]?.text).toBe(
           `Continuation summary from session ${source}:\n${summary}`,
+        );
+      };
+    });
+  }, 20000);
+});
+
+describe("TUI approval panel", () => {
+  it("selects allow or deny without typing and remains usable after resizing", async () => {
+    await withCriticalTui(async (tui) => {
+      await tui.wait(
+        "Permissions: Approve for me",
+        tui.send("/permissions auto\r"),
+      );
+      const denied = tui.send("!printf denied > denied-proof.txt\r");
+      await tui.wait("Permission required", denied);
+      await tui.wait("→ Deny", tui.send("\x1b[B"));
+      const rejected = tui.send("\r");
+      await tui.wait("Permission denied", rejected);
+      await tui.wait("Enter send", rejected);
+      const allowed = tui.send("!printf approved > approval-proof.txt\r");
+      await tui.wait("Permission required", allowed);
+      for (const [columns, rows] of [
+        [36, 18],
+        [60, 18],
+        [100, 24],
+      ] as const) {
+        const resized = tui.resize(columns, rows);
+        await tui.wait("Allow once", resized);
+        await tui.wait("Esc deny", resized);
+      }
+      await tui.wait("→ Deny", tui.send("\x1b[B"));
+      await tui.wait("→ Allow once", tui.send("\x1b[A"));
+      await tui.wait("Enter send", tui.send("\r"));
+      expect(tui.outputSince(denied)).not.toContain("Type allow");
+      return () => {
+        expect(existsSync(join(tui.cwd, "denied-proof.txt"))).toBe(false);
+        expect(readFileSync(join(tui.cwd, "approval-proof.txt"), "utf8")).toBe(
+          "approved",
         );
       };
     });

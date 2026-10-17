@@ -122,6 +122,15 @@ describe("permissions", () => {
     runtimes.push(runtime);
     const agent = await runtime.agent(await runtime.session());
     const signal = new AbortController().signal;
+    await writeFile(join(cwd, "README.md"), "# Workspace readme");
+    const readme = await agent.invoke(
+      "read_file",
+      { path: "README.md" },
+      signal,
+    );
+    expect(readme.isError).not.toBe(true);
+    expect(readme.text).toContain("# Workspace readme");
+    expect(approve).not.toHaveBeenCalled();
     expect(
       (
         await agent.invoke(
