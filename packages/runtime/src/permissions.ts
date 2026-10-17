@@ -8,7 +8,7 @@ import {
 } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { z } from "zod";
+import * as z from "zod";
 import type { PermissionRequest } from "../../core/src/types.ts";
 import { resolvePath } from "../../tools/src/index.ts";
 import { sensitivePath } from "../../tools/src/workspace.ts";

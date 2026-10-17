@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { modelCapabilities, type ModelSettings } from "./settings.ts";
 import type { ModelSelection } from "../../core/src/types.ts";
-import { z } from "zod";
+import * as z from "zod";
 const selectionSchema = z.object({
   provider: z.string().min(1),
   model: z.string().min(1),

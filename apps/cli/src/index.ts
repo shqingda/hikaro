@@ -197,16 +197,10 @@ async function main() {
   );
   const { createTerminal, HikaroView } = ui;
   const tui = createTerminal();
-  const [
-    { loadTuiPreferences, saveTuiPreferences },
-    { selectInitialSession },
-    { DraftSaver },
-  ] = await Promise.all([
-    import("../../../packages/tui/src/preferences.ts"),
-    import("./startup.ts"),
-    import("../../../packages/tui/src/drafts.ts"),
-  ]);
+  const { loadTuiPreferences, saveTuiPreferences } =
+    await import("../../../packages/tui/src/preferences.ts");
   let preferences = await loadTuiPreferences(runtime.options.home!);
+  const { selectInitialSession } = await import("./startup.ts");
   let session: Awaited<ReturnType<typeof runtime.session>>;
   try {
     session = await selectInitialSession(
@@ -234,6 +228,7 @@ async function main() {
     await runtime.close();
     throw error;
   }
+  const { DraftSaver } = await import("../../../packages/tui/src/drafts.ts");
   let draftSessionId = session.id;
   const drafts = new DraftSaver(
     (id, text) => runtime.store.saveDraft(id, text),

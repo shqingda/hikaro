@@ -1,6 +1,14 @@
 import { execFileSync } from "node:child_process";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
-import { arch, cpus, platform, release, tmpdir } from "node:os";
+import {
+  arch,
+  cpus,
+  freemem,
+  loadavg,
+  platform,
+  release,
+  tmpdir,
+} from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -77,6 +85,8 @@ export function environment() {
     osRelease: release(),
     cpu: cpus()[0]?.model ?? null,
     logicalCpus: cpus().length,
+    loadAverage: loadavg(),
+    freeMemoryMiB: freemem() / 1024 / 1024,
     revision,
     dirty,
   };

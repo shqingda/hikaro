@@ -1,7 +1,7 @@
 import { readFile, writeFile, rename } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { z } from "zod";
+import * as z from "zod";
 const schema = z.object({
   version: z.literal(2).default(2),
   showToolDetails: z.boolean().default(false),

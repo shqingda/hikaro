@@ -1,7 +1,7 @@
 import { realpath, readdir } from "node:fs/promises";
 import { relative, isAbsolute, join } from "node:path";
 import { homedir } from "node:os";
-import { z } from "zod";
+import * as z from "zod";
 import type { Plugin } from "../../core/src/types.ts";
 import { resolvePath, allowedPath, updateTextFile } from "./workspace.ts";
 import { readFileBytes, readTextFile } from "./secure-files.ts";
@@ -271,7 +271,9 @@ export async function loadInstructions(
   let budget = 32000;
   for (const file of ["AGENTS.md", ".hikaro/AGENTS.md"]) {
     try {
-      const target = await resolvePath(cwd, file);
+      // Avoid starting a secure reader for absent optional instruction files.
+      // Existing files still pass canonical-root checks and descriptor-safe reads.
+      const target = await resolvePath(cwd, await realpath(join(cwd, file)));
       if (!target.inside) continue;
       const text = (
         await readTextFile(

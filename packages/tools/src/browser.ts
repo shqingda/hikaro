@@ -1,4 +1,4 @@
-import { z } from "zod";
+import * as z from "zod";
 import type { Plugin } from "../../core/src/types.ts";
 export function browserPlugin(): Plugin {
   return {

@@ -1,5 +1,5 @@
 import { Worker } from "node:worker_threads";
-import { z } from "zod";
+import * as z from "zod";
 import type { Plugin, ToolResult } from "../../core/src/types.ts";
 export function codemodePlugin(options: { timeoutMs?: number } = {}): Plugin {
   return {

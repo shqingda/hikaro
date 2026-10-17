@@ -1,7 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
-import { z } from "zod";
+import * as z from "zod";
 import { resolvePath } from "./index.ts";
 import type { Plugin } from "../../core/src/types.ts";
 export const LspServers = z.record(

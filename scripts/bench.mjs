@@ -1,8 +1,8 @@
 import { spawn } from "node-pty";
 import { execFileSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { stripVTControlCharacters } from "node:util";
 import {
   environment,
@@ -22,23 +22,23 @@ export const STARTUP_BUDGETS = {
   rssP95MiB: 100,
 };
 
-export async function startupSample({ live = false, inputSamples = 20 } = {}) {
+export async function startupSample({
+  live = false,
+  inputSamples = 20,
+  entryPath = resolve("dist/hikaro.mjs"),
+  env = process.env,
+} = {}) {
   integerSetting("inputSamples", inputSamples, {}, 1000);
   return withBenchmarkHome(async (home) => {
     const start = performance.now();
     return new Promise((resolveRun, reject) => {
       const terminal = spawn(
         process.execPath,
-        [
-          resolve("dist/hikaro.mjs"),
-          ...(live ? [] : ["--demo"]),
-          "--home",
-          home,
-        ],
+        [entryPath, ...(live ? [] : ["--demo"]), "--home", home],
         {
           cols: 100,
           rows: 30,
-          env: { ...process.env, TERM: "xterm-256color" },
+          env: { ...env, TERM: "xterm-256color" },
         },
       );
       let startupMs;
@@ -98,7 +98,11 @@ export async function startupSample({ live = false, inputSamples = 20 } = {}) {
           inputMs.length !== inputSamples ||
           exitCode !== 0
         )
-          reject(Error(`TUI benchmark exited before completion (${exitCode})`));
+          reject(
+            Error(
+              `TUI benchmark exited before completion (${exitCode}):\n${stripVTControlCharacters(output).slice(-2000)}`,
+            ),
+          );
         else resolveRun({ startupMs, rssMiB, inputMs });
       });
     });
@@ -117,13 +121,42 @@ export async function main() {
   const check = process.argv.includes("--check");
   if (check && (count < 30 || warmups < 3))
     throw Error("--check requires at least 30 measured launches and 3 warmups");
-  const entry = resolve("dist/hikaro.mjs");
+  const cacheMode = process.env.HIKARO_BENCH_CACHE ?? "cold";
+  if (!["cold", "warm", "disabled"].includes(cacheMode))
+    throw Error("HIKARO_BENCH_CACHE must be cold, warm, or disabled");
+  const initialEnvironment = environment();
+  const bundleFiles = {};
+  for (const file of (await readdir("dist")).sort()) {
+    if (!file.endsWith(".mjs") && file !== "secure-file-helper") continue;
+    bundleFiles[file] = createHash("sha256")
+      .update(await readFile(join("dist", file)))
+      .digest("hex");
+  }
   const bundleSha256 = createHash("sha256")
-    .update(await readFile(entry))
+    .update(JSON.stringify(bundleFiles))
     .digest("hex");
-  for (let i = 0; i < warmups; i++) await startupSample({ live });
-  const samples = [];
-  for (let i = 0; i < count; i++) samples.push(await startupSample({ live }));
+  const { samples, firstLaunch } = await withBenchmarkHome(
+    async (cacheRoot) => {
+      const sample = async () => {
+        const run = (cache) => {
+          const env = { ...process.env, NODE_COMPILE_CACHE: cache };
+          if (cacheMode === "disabled") env.NODE_DISABLE_COMPILE_CACHE = "1";
+          else delete env.NODE_DISABLE_COMPILE_CACHE;
+          return startupSample({ live, env });
+        };
+        // OS caches are warmed in every mode; cold means V8's cache starts empty
+        // for every child, including measured runs. Never remove a user's cache.
+        return cacheMode === "cold"
+          ? withBenchmarkHome((cache) => run(cache), cacheRoot)
+          : run(cacheRoot);
+      };
+      const firstLaunch = await sample();
+      for (let i = 0; i < warmups; i++) await sample();
+      const samples = [];
+      for (let i = 0; i < count; i++) samples.push(await sample());
+      return { samples, firstLaunch };
+    },
+  );
   const metrics = {
     startupP50Ms: percentile(
       samples.map((s) => s.startupMs),
@@ -148,13 +181,17 @@ export async function main() {
   };
   const budget = evaluateBudgets(metrics, STARTUP_BUDGETS);
   const result = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     measuredAt: new Date().toISOString(),
     mode: live
       ? "default Anthropic catalog loaded, no request sent"
       : "offline demo, no provider request",
-    environment: environment(),
+    environment: initialEnvironment,
+    endingEnvironment: environment(),
     bundleSha256,
+    bundleFiles,
+    cacheMode,
+    firstLaunch,
     runs: count,
     warmups,
     inputSamplesPerRun: 20,
@@ -163,6 +200,7 @@ export async function main() {
     samples,
     limitations: [
       "Warm OS caches; fresh Hikaro data home per launch. Current workspace and user skill discovery remain enabled.",
+      "Compile cache state is explicit: cold uses an empty temporary cache per launch; warm shares one isolated cache; disabled turns V8 caching off. firstLaunch precedes warmups and is not a percentile or a cold-disk measurement.",
       "Startup measures PTY spawn to the first ready /help frame. Input measures PTY write to echoed editor content, not physical display pixels.",
       "RSS is sampled at readiness, includes the SQLite worker and excludes external tools. The benchmark driver is a separate process.",
       "No live request, streaming-to-terminal latency, 10k history rendering, or 30-minute stability measurement. Run bench:harness separately for storage/core bursts.",

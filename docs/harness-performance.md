@@ -9,11 +9,15 @@ pnpm install
 pnpm build
 pnpm bench                  # 3 次预热 + 30 次独立进程启动，各测 20 次输入回显
 pnpm bench:check            # 相同工作负载；任何性能门槛失败则返回非零
+HIKARO_BENCH_CACHE=warm pnpm bench:check # 单独测共享编译缓存；不可替代默认冷缓存门槛
+HIKARO_BENCH_CACHE=disabled pnpm bench # 单独测 Node 缓存关闭时的启动
 pnpm bench:harness          # 1 次预热 + 3 次 SQLite/core 工作负载
 pnpm bench:harness:check    # 固定工作负载与最小采样数，不允许缩小数据量绕过门槛
 ```
 
-默认输出 `artifacts/benchmark.json` 和 `artifacts/benchmark-harness.json`，包括原始样本、环境、Git revision/dirty、门槛结果和测量限制。启动报告还记录入口 bundle SHA-256。输出目录默认被 Git 忽略；可用 `HIKARO_BENCH_OUTPUT`／`HIKARO_HARNESS_OUTPUT` 保存对照报告。
+默认输出 `artifacts/benchmark.json` 和 `artifacts/benchmark-harness.json`，包括原始样本、环境、Git revision/dirty、门槛结果和测量限制。启动报告记录全部运行时 bundle／worker／安全 helper 的 SHA-256 和汇总指纹，避免小 launcher 不变却实际代码不同的对照。输出目录默认被 Git 忽略；可用 `HIKARO_BENCH_OUTPUT`／`HIKARO_HARNESS_OUTPUT` 保存对照报告。
+
+默认 `HIKARO_BENCH_CACHE=cold`：每个独立进程获得新的空 V8 编译缓存目录，仍先做 3 次 OS／文件缓存预热，再测 30 次。`warm` 使用一个隔离缓存目录，`disabled` 显式禁用编译缓存。每种模式还保留一次预热前的 `firstLaunch`，作为空缓存首次运行样本；单一样本不构成 p95，也不声称冷磁盘／重启系统后首次运行。临时缓存不复用或删除用户的 Node 缓存。
 
 临时 home 和数据库在成功或失败后清理；采样数无效、RSS 采样失败、没有就绪画面或流数据不完整都算失败。基准不读取生产凭据、不发真实模型请求。启动仍保留当前工作区和用户 Skill 发现，因此复测应保持相同目录、Skill 配置、Node、硬件和后台负载。
 
@@ -33,9 +37,9 @@ pnpm bench:harness:check    # 固定工作负载与最小采样数，不允许�
 
 后六项是新工作负载的回归上限，并非启动／空闲内存目标的替代。RSS 每 10 ms 及阶段边界采样，不是精确峰值；3 次测量的 p95 实际接近最大值，只适合粗粒度回归信号。20 次输入回显不是物理键盘到屏幕像素延迟，core 流式耗时也不是终端显示延迟。
 
-## 本轮测量与优化
+## 测量与优化记录
 
-环境：macOS arm64，Node 26.12.0，pnpm 12.11.2，同一工作区。完整原始报告和后续优化结果由本轮验收记录列出。
+环境：macOS arm64，Node 26.12.0，pnpm 12.11.2，同一工作区。以下先保留上一轮基线，完整原始报告和后续优化结果由本轮验收记录列出。
 
 | 改动                 | 改前 → 改后                                              | 结论                                                         |
 | -------------------- | -------------------------------------------------------- | ------------------------------------------------------------ |
@@ -47,9 +51,36 @@ pnpm bench:harness:check    # 固定工作负载与最小采样数，不允许�
 
 严格同源码图、仅切换 eager/lazy 的 8 次交替新进程实验，配置读取 p50 89.66 → 25.19 ms、p95 93.51 → 27.71 ms；该微基准不能替代完整启动耗时。并行 Runtime/TUI import 约 71 → 71 ms，没有收益，未引入改动。
 
+后续对真实进程启动继续剖析：8 次交替的空 Node 进程，pipes wall p50 92.00 ms、PTY wall p50 95.55 ms，而子进程打印时 uptime p50 约 8–9 ms。wall 包含退出，差值只用于定位本机 OS／启动器开销，绝不从产品 spawn-to-ready 门槛扣除。原始报告为 `artifacts/benchmark-spawn-floor.json`。
+
+保留的启动改动：
+
+- 将测到的启动纯 JavaScript 图（Zod、pi-tui 及其 marked／Unicode 宽度依赖）纳入生产 bundle，减少 Node 对大量小模块的查找和解析。可选模型 SDK 和 native addon 继续沿原路径解析。
+- 将 15 处 Zod 的嵌套 namespace 导入改为顶层 namespace 导入，保持 API／校验行为；esbuild 可以删除未引用导出，Zod 共享 chunk 从约 740 KiB 降到 200 KiB。外部插件仍可以使用独立安装的 Zod。
+- 在独立 launcher 中启用 [Node 原生编译缓存](https://nodejs.org/api/module.html#module-compile-cache)，由 Node 处理版本、失效、禁用和不可写情况。首次运行仍真实编译；应用代码不维护自己的缓存格式。
+- Runtime 初始化与 TUI 模块加载并发，等待两者成功后才创建并绑定终端。加载失败会关闭已打开的 Runtime；会话恢复、权限配置、工具、草稿及 UI 初始化仍在首个 ready 帧之前完成。
+- SQLite 的初始建表与旧 lease 迁移放入同一个事务，保持 WAL、`synchronous=FULL` 和逐项约束，避免每条 DDL 独立提交；真实失败回滚与旧库双连接迁移均有回归测试。
+
+打包的插件兼容性由 `tests/performance-build.test.ts` 验证：外部 Zod 创建的 schema 在打包后的 ToolRegistry 中保留 metadata、JSON schema、输入校验；TUI Unicode 宽度、Markdown 依赖与 native helper 安装路径有效；编译缓存被禁用或不可写仍能正常启动。`tests/performance-interactive-startup.test.ts` 覆盖并发初始化的 ready 与清理边界。
+
+最后补充的启动优化：缺失的可选 AGENTS.md 先由 realpath 判定，避免为不存在的文件启动安全 reader；已有文件继续走工作区边界检查与 descriptor-safe 读取。会话、权限、历史和草稿准备完成后立即绘制首帧，Git 分支／状态作为原本异步的辅助信息在下一轮事件循环更新。生产 bundle 启用语法和空白压缩，保留标识符与 sourcemap；原插件／Unicode／native lookup 两项定向测试再次通过。三个小模块并行 import 的独立试验无稳定收益，已撤回。
+
+最终生产构建：每次使用空 V8 缓存，保留原工作区和全部用户 Skill 发现，3 次预热 + 30 次独立进程，每次 20 次输入。OS 文件缓存已预热，不等于冷磁盘／开机测量。
+
+| 指标 | 最终值 | 原门槛结果 |
+| --- | --- | --- |
+| 启动 p50／p95 | 175.96／181.00 ms | **通过 p95 ≤ 200 ms，命令退出 0** |
+| 预热前首次空缓存启动 | 181.92 ms | 单一样本，不替代 p95 |
+| 输入 p95 | 1.37 ms | 通过 16 ms |
+| 就绪 RSS p95 | 72.67 MiB | 通过 100 MiB |
+
+最终原始报告为 `artifacts/benchmark-startup-minified-final.json`，已同步到 `artifacts/benchmark.json`；bundle graph SHA-256 为 `65dc9f43e5c05e6c36a2dde9068b2ff9e50599261efcd633a004d949bf0c6905`。完整失败候选保留：早期两组 p95 229.64／550.52 ms，DDL 阶段 219.54 ms，可选说明文件预检查阶段 203.88 ms，首次立即绘制阶段 200.63 ms，独立 import 试验 209.68 ms。200.63 ms 仍被判失败，没有取整放行；最终通过来自后续构建改动，未删除样本或放宽门槛。后台负载会影响尾部，一次固定设备验收不代表所有机器或真实 provider 都达到相同数值。
+
+10k harness（`artifacts/benchmark-harness-final.json`）全部通过：写入 p95 621.07 ms、重放 21.56 ms、分页 0.151 ms、上下文读取 2.542 ms、流输出 5.328 ms、事件循环 delay 10.732 ms、RSS 采样最大 92.39 MiB。最后的改动仅涉及客户端启动读取与打包，核心／SQLite harness 源码未再修改，未重复跑未受影响的测试。真实大历史渲染与 30 分钟稳定性仍另行验收。
+
 上下文 fit 采用固定 16K 窗口、20 次预热、40 次交替测量：10K 消息中位数 23.296 → 14.173 ms，p95 23.936 → 14.605 ms。1K 基本持平，4K 约增加 1.2 ms；保留线性遍历，并明确更完整计量的代价。
 
-最终 10k harness 测量：持久写入 p95 607.34 ms、完整重放 20.34 ms、消息分页 p95 0.158 ms、上下文读取 2.387 ms、10k chunk 流输出 5.203 ms、事件循环 delay p95 10.60 ms、RSS 采样最大值 101.82 MiB；上述独立工作负载门槛全部通过。流文本与持久事件逐项核对，不以丢失内容换取速度。
+上一轮 10k harness 测量：持久写入 p95 607.34 ms、完整重放 20.34 ms、消息分页 p95 0.158 ms、上下文读取 2.387 ms、10k chunk 流输出 5.203 ms、事件循环 delay p95 10.60 ms、RSS 采样最大值 101.82 MiB；上述独立工作负载门槛全部通过。流文本与持久事件逐项核对，不以丢失内容换取速度。
 
 原始报告：`artifacts/benchmark-startup-before.json`、`artifacts/benchmark-startup-after.json`、`artifacts/benchmark-catalog-import.json`、`artifacts/benchmark-harness.json`。demo 就绪内存达标不代表真实 provider 与可选组件全部加载后的内存验收；30 分钟稳定性尚未测量。
 
@@ -63,6 +94,6 @@ pnpm bench:harness:check    # 固定工作负载与最小采样数，不允许�
 - `tests/draft-recovery-pty.test.ts`：真实 CLI 输入 → 自动保存 → SIGKILL → 重启恢复 → 发送清空；一个独立 E2E 场景。
 - `tests/performance-harness.test.ts`：采样参数、百分位、缺测失败、清理和缩小后的真实工作负载正确性。
 
-尚待完成：provider tokenizer／图像精确预算、事务性自动压缩、跨重启预算与待发队列恢复；大历史真实渲染、生成中滚动、100／1,000 chunk 不同突发模式、30 分钟有负载稳定性；真实 provider 限流、断网和恢复。恢复草稿不代表自动重放未确定是否执行的命令。
+本轮续做已完成事务性自动压缩、文件/图片输入和客户端 C0 首切片，验证记录见 [本轮验收](validation.md#automatic-compaction-attachments-and-client-c0-2026-10-18)。尚待完成：provider tokenizer／图像精确预算、跨重启预算与待发队列恢复；大历史真实渲染、生成中滚动、100／1,000 chunk 不同突发模式、30 分钟有负载稳定性；真实 provider 限流、断网和恢复。恢复草稿不代表自动重放未确定是否执行的命令。
 
-执行顺序：先补附件／文件引用和持久化状态边界，再补统一客户端协议与 headless 状态层；最后将同一故障夹具接入桌面和移动端。双端各自的内存、首屏和触控门槛见 [重启方案](client-reboot.md)。主机相关预算在固定设备复测稳定后再接入 CI 性能 job，当前 PR CI 仍负责正确性回归。
+下一阶段：继续补齐 C0 的持久命令回执和主机生命周期，再将同一故障夹具接入桌面和移动端。双端各自的内存、首屏和触控门槛见 [重启方案](client-reboot.md)。主机相关预算在固定设备复测稳定后再接入 CI 性能 job，当前 PR CI 仍负责正确性回归。
