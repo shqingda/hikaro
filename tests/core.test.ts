@@ -8,6 +8,7 @@ import {
   type Message,
 } from "../packages/core/src/index.ts";
 import { SQLiteStore } from "../packages/storage/src/index.ts";
+import { fitContext } from "../packages/core/src/context.ts";
 import { JsonLines } from "../packages/protocol/src/index.ts";
 import { codingPlugin, resolvePath } from "../packages/tools/src/index.ts";
 import { codemodePlugin } from "../packages/tools/src/codemode.ts";
@@ -507,17 +508,9 @@ describe("independent agent loop", () => {
     },
     { contextWindow: 10000, omitted: 5, firstRetained: "Continue" },
   ])(
-    "reports history omitted by the storage capacity and keeps whole turns ($contextWindow)",
+    "reports storage and request capacity omissions without splitting turns ($contextWindow)",
     async ({ contextWindow, omitted, firstRetained }) => {
-      let received: Message[] = [];
-      const { agent, store, session } = await fixture({
-        ...simple,
-        contextWindow,
-        async *stream(input) {
-          received = input.messages;
-          yield* simple.stream(input);
-        },
-      });
+      const { store, session } = await fixture(simple);
       const message = (role: Message["role"], text: string): Message => ({
         role,
         text,
@@ -545,12 +538,16 @@ describe("independent agent loop", () => {
       await store.append(session.id, "message", {
         message: message("assistant", "y".repeat(5 * 1024 * 1024)),
       });
-      const windowed: Record<string, unknown>[] = [];
-      agent.subscribe((event) => {
-        if (event.type === "context.windowed") windowed.push(event.data);
+      await store.append(session.id, "message", {
+        message: message("user", "Continue"),
       });
-      await agent.prompt("Continue");
-      expect(windowed).toEqual([expect.objectContaining({ omitted })]);
+      const history = await store.contextHistory(session.id);
+      expect(history.omitted).toBe(3);
+      const context = fitContext(history.messages, contextWindow, {
+        omitted: history.omitted,
+      });
+      expect(context.omitted).toBe(omitted);
+      const received = context.messages;
       expect(received[0]?.text).toMatch(/Earlier conversation omitted/);
       expect(received[1]?.text).toBe(firstRetained);
       expect(received.at(-1)?.text).toBe("Continue");

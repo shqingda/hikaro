@@ -11,6 +11,9 @@ import type {
   MessagePage,
   ModelSelection,
   SessionLease,
+  ContextCheckpoint,
+  ContextCheckpointInput,
+  ContextHistory,
 } from "../../core/src/types.ts";
 export class SQLiteStore implements EventStore {
   private pending = new Map<
@@ -129,11 +132,50 @@ export class SQLiteStore implements EventStore {
   messages(sessionId: string, limit = 200) {
     return this.request<Message[]>("messages", { sessionId, limit });
   }
-  contextHistory(sessionId: string) {
-    return this.request<{ messages: Message[]; omitted: number }>(
-      "contextHistory",
-      { sessionId },
+  contextHistory(sessionId: string, options: { after?: number } = {}) {
+    return this.request<ContextHistory>("contextHistory", {
+      sessionId,
+      ...options,
+    });
+  }
+  contextSourcePage(
+    sessionId: string,
+    options: { after: number; through: number; limit?: number },
+  ) {
+    return this.request<Array<{ seq: number; message: Message }>>(
+      "contextSourcePage",
+      { sessionId, ...options },
     );
+  }
+  async commitContextCheckpoint(
+    sessionId: string,
+    checkpoint: ContextCheckpointInput,
+    lease: SessionLease,
+    signal?: AbortSignal,
+  ) {
+    signal?.throwIfAborted();
+    // The worker may be blocked on SQLite's writer lock. A shared flag lets
+    // cancellation win without waiting for the worker's message queue.
+    const cancellation = signal
+      ? new Int32Array(new SharedArrayBuffer(4))
+      : undefined;
+    const abort = () => {
+      if (cancellation) Atomics.compareExchange(cancellation, 0, 0, 1);
+    };
+    signal?.addEventListener("abort", abort, { once: true });
+    try {
+      return await this.request<ContextCheckpoint>("commitContextCheckpoint", {
+        sessionId,
+        ...checkpoint,
+        lease,
+        cancellation: cancellation?.buffer,
+      });
+    } catch (error) {
+      signal?.throwIfAborted();
+      throw error;
+    } finally {
+      signal?.removeEventListener("abort", abort);
+    }
   }
   indexReplace(workspace: string, path: string, chunks: Chunk[]) {
     return this.request<void>("indexReplace", { workspace, path, chunks });

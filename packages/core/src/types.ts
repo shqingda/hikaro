@@ -34,6 +34,8 @@ export interface ProviderAdapter {
   contextWindow: number;
   /** Maximum completion tokens actually requested by this adapter. */
   maxOutputTokens?: number;
+  /** Undefined means a custom provider cannot determine image support locally. */
+  supportsImages?: boolean;
   stream(input: {
     system: string;
     messages: Message[];
@@ -125,6 +127,24 @@ export type MessagePage = {
   hasNewer: boolean;
 };
 export type SessionLease = { owner: string; epoch: number };
+export type ContextCheckpoint = {
+  seq: number;
+  throughSeq: number;
+  summary: string;
+  timestamp: number;
+};
+export type ContextCheckpointInput = {
+  throughSeq: number;
+  summary: string;
+  expectedCheckpointSeq: number;
+  expectedLastMessageSeq: number;
+};
+export type ContextHistory = {
+  messages: Message[];
+  omitted: number;
+  lastMessageSeq: number;
+  checkpoint?: ContextCheckpoint;
+};
 export interface EventStore {
   createSession(
     cwd: string,
@@ -159,7 +179,18 @@ export interface EventStore {
   /** Bounded model history, starting at a user turn when older messages are omitted. */
   contextHistory(
     sessionId: string,
-  ): Promise<{ messages: Message[]; omitted: number }>;
+    options?: { after?: number },
+  ): Promise<ContextHistory>;
+  contextSourcePage(
+    sessionId: string,
+    options: { after: number; through: number; limit?: number },
+  ): Promise<Array<{ seq: number; message: Message }>>;
+  commitContextCheckpoint(
+    sessionId: string,
+    checkpoint: ContextCheckpointInput,
+    lease: SessionLease,
+    signal?: AbortSignal,
+  ): Promise<ContextCheckpoint>;
   acquire(sessionId: string, owner: string): Promise<boolean>;
   acquireLease(
     sessionId: string,

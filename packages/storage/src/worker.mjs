@@ -8,11 +8,19 @@ db.function("hikaro_lower", { deterministic: true }, (text) =>
   text.toLowerCase(),
 );
 if (workerData.path !== ":memory:") chmodSync(workerData.path, 0o600);
-db.exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000;
+db.exec(
+  "PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000;",
+);
+// Serialize schema creation and migration with one durable commit. FULL remains
+// enabled; fresh stores avoid a separate filesystem sync for each DDL statement.
+db.exec("BEGIN IMMEDIATE");
+try {
+  db.exec(`
 CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY,title TEXT NOT NULL,cwd TEXT NOT NULL,createdAt INTEGER NOT NULL,parentId TEXT);
 CREATE TABLE IF NOT EXISTS session_models(sessionId TEXT PRIMARY KEY,data TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS workspace_state(cwd TEXT PRIMARY KEY,sessionId TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS session_drafts(sessionId TEXT PRIMARY KEY,text TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS context_checkpoints(sessionId TEXT PRIMARY KEY,seq INTEGER NOT NULL,throughSeq INTEGER NOT NULL,summary TEXT NOT NULL,timestamp INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS events(seq INTEGER PRIMARY KEY AUTOINCREMENT,sessionId TEXT NOT NULL,type TEXT NOT NULL,data TEXT NOT NULL,timestamp INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS session_events ON events(sessionId,seq);
 CREATE TABLE IF NOT EXISTS chunks(id TEXT PRIMARY KEY,workspace TEXT,path TEXT,line INTEGER,text TEXT,hash TEXT,vector TEXT,model TEXT);
@@ -20,9 +28,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(id UNINDEXED,text);
 CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,sessionId TEXT NOT NULL,task TEXT NOT NULL,runAt INTEGER NOT NULL,state TEXT NOT NULL,owner TEXT,leaseUntil INTEGER,error TEXT);
 CREATE TABLE IF NOT EXISTS leases(sessionId TEXT PRIMARY KEY,owner TEXT NOT NULL,expires INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS commands(id TEXT PRIMARY KEY,sessionId TEXT NOT NULL,createdAt INTEGER NOT NULL);`);
-// Serialize the migration because two runtime processes can open an older DB together.
-db.exec("BEGIN IMMEDIATE");
-try {
   if (
     !db
       .prepare("PRAGMA table_info(leases)")
@@ -157,6 +162,7 @@ const handlers = {
         "commands",
         "leases",
         "jobs",
+        "context_checkpoints",
       ])
         db.prepare(`DELETE FROM ${table} WHERE sessionId=?`).run(id);
       db.prepare("UPDATE sessions SET parentId=NULL WHERE parentId=?").run(id);
@@ -359,16 +365,147 @@ const handlers = {
     }
     return result.reverse();
   },
-  contextHistory({ sessionId }) {
+  contextSourcePage({ sessionId, after, through, limit = 40 }) {
+    if (
+      !Number.isSafeInteger(after) ||
+      after < 0 ||
+      !Number.isSafeInteger(through) ||
+      through < after ||
+      !Number.isSafeInteger(limit) ||
+      limit < 1
+    )
+      throw Error("Invalid context source range");
     const rows = db
       .prepare(
-        "SELECT data FROM events WHERE sessionId=? AND type='message' ORDER BY seq DESC",
+        "SELECT seq,data FROM events WHERE sessionId=? AND type='message' AND seq>? AND seq<=? ORDER BY seq LIMIT ?",
       )
-      .iterate(sessionId);
+      .iterate(sessionId, after, through, Math.min(limit, 100));
+    const items = [];
+    let bytes = 0;
+    for (const row of rows) {
+      const { providerData, images, ...content } = JSON.parse(row.data).message;
+      const message = {
+        ...content,
+        ...(images?.length
+          ? {
+              images: images.map((image) => ({
+                mimeType: image.mimeType,
+                data: "",
+              })),
+            }
+          : {}),
+      };
+      const size = Buffer.byteLength(JSON.stringify(message));
+      if (items.length && bytes + size > 450000) break;
+      items.push({ seq: row.seq, message });
+      bytes += size;
+    }
+    return items;
+  },
+  commitContextCheckpoint({
+    sessionId,
+    throughSeq,
+    summary,
+    expectedCheckpointSeq,
+    expectedLastMessageSeq,
+    lease,
+    cancellation,
+  }) {
+    if (
+      !lease ||
+      typeof summary !== "string" ||
+      !summary.trim() ||
+      Buffer.byteLength(summary) > 65536 ||
+      ![throughSeq, expectedCheckpointSeq, expectedLastMessageSeq].every(
+        (n) => Number.isSafeInteger(n) && n >= 0,
+      )
+    )
+      throw Error("Invalid context checkpoint");
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      const cancelled = cancellation ? new Int32Array(cancellation) : undefined;
+      if (cancelled && Atomics.load(cancelled, 0) === 1)
+        throw Error("Context checkpoint cancelled");
+      assertLease(sessionId, lease);
+      const previous = db
+        .prepare(
+          "SELECT seq,throughSeq FROM context_checkpoints WHERE sessionId=?",
+        )
+        .get(sessionId);
+      const latest = db
+        .prepare(
+          "SELECT COALESCE(MAX(seq),0) AS seq FROM events WHERE sessionId=? AND type='message'",
+        )
+        .get(sessionId).seq;
+      if (
+        (previous?.seq ?? 0) !== expectedCheckpointSeq ||
+        latest !== expectedLastMessageSeq
+      )
+        throw Error("Context source or checkpoint changed before commit");
+      if (
+        throughSeq <= (previous?.throughSeq ?? 0) ||
+        throughSeq >= latest ||
+        !db
+          .prepare(
+            "SELECT 1 FROM events WHERE sessionId=? AND type='message' AND seq>? AND seq<=? LIMIT 1",
+          )
+          .get(sessionId, previous?.throughSeq ?? 0, throughSeq)
+      )
+        throw Error("Checkpoint must advance over completed source messages");
+      const next = db
+        .prepare(
+          "SELECT data FROM events WHERE sessionId=? AND type='message' AND seq>? ORDER BY seq LIMIT 1",
+        )
+        .get(sessionId, throughSeq);
+      if (!next || JSON.parse(next.data).message.role !== "user")
+        throw Error("Checkpoint must end at a user-turn boundary");
+      const timestamp = Date.now();
+      const data = {
+        source: sessionId,
+        throughSeq,
+        previousCheckpointSeq: expectedCheckpointSeq,
+        summary,
+      };
+      const event = db
+        .prepare(
+          "INSERT INTO events(sessionId,type,data,timestamp) VALUES(?,?,?,?)",
+        )
+        .run(sessionId, "context.checkpoint", JSON.stringify(data), timestamp);
+      const seq = Number(event.lastInsertRowid);
+      db.prepare(
+        "INSERT INTO context_checkpoints VALUES(?,?,?,?,?) ON CONFLICT(sessionId) DO UPDATE SET seq=excluded.seq,throughSeq=excluded.throughSeq,summary=excluded.summary,timestamp=excluded.timestamp",
+      ).run(sessionId, seq, throughSeq, summary, timestamp);
+      // Atomically choose commit or cancellation. Cancellation after this point
+      // cannot revoke a valid checkpoint; source messages remain untouched.
+      if (cancelled && Atomics.compareExchange(cancelled, 0, 0, 2) === 1)
+        throw Error("Context checkpoint cancelled");
+      db.exec("COMMIT");
+      return { seq, throughSeq, summary, timestamp };
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
+  },
+  contextHistory({ sessionId, after = 0 }) {
+    if (!Number.isSafeInteger(after) || after < 0)
+      throw Error("Invalid context cursor");
+    const checkpoint = db
+      .prepare(
+        "SELECT seq,throughSeq,summary,timestamp FROM context_checkpoints WHERE sessionId=?",
+      )
+      .get(sessionId);
+    const boundary = Math.max(after, checkpoint?.throughSeq ?? 0);
+    const rows = db
+      .prepare(
+        "SELECT seq,data FROM events WHERE sessionId=? AND type='message' AND seq>? ORDER BY seq DESC",
+      )
+      .iterate(sessionId, boundary);
     const messages = [];
     let bytes = 0,
-      truncated = false;
+      truncated = false,
+      lastMessageSeq = checkpoint?.throughSeq ?? 0;
     for (const row of rows) {
+      if (!messages.length) lastMessageSeq = row.seq;
       const size = Buffer.byteLength(row.data);
       if (bytes + size > 8 * 1024 * 1024) {
         truncated = true;
@@ -378,7 +515,7 @@ const handlers = {
       bytes += size;
     }
     messages.reverse();
-    if (!truncated) return { messages, omitted: 0 };
+    if (!truncated) return { messages, omitted: 0, checkpoint, lastMessageSeq };
     const firstUser = messages.findIndex((message) => message.role === "user");
     if (firstUser < 0)
       throw Error(
@@ -387,10 +524,15 @@ const handlers = {
     messages.splice(0, firstUser);
     const total = db
       .prepare(
-        "SELECT COUNT(*) AS count FROM events WHERE sessionId=? AND type='message'",
+        "SELECT COUNT(*) AS count FROM events WHERE sessionId=? AND type='message' AND seq>?",
       )
-      .get(sessionId).count;
-    return { messages, omitted: total - messages.length };
+      .get(sessionId, boundary).count;
+    return {
+      messages,
+      omitted: total - messages.length,
+      checkpoint,
+      lastMessageSeq,
+    };
   },
   indexReplace({ workspace, path, chunks }) {
     db.exec("BEGIN IMMEDIATE");
