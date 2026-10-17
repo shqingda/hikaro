@@ -14,9 +14,22 @@
 
 依据为 [README](../README.md)、[TODO](../TODO.md)、[架构](architecture.md)、[远程连接](remote.md)、`packages/protocol/src/index.ts`、`packages/protocol/src/client.ts`。本方案是本轮检查时的基线；并行完成的核心功能以 TODO 和本轮验收记录为准，不能用本文替代实现账本。
 
-本轮核心已补充：当前工作区全部会话标题/ID 的分页搜索、300ms 合并且串行的草稿自动保存/进程崩溃恢复、包含 system/工具 schema/图片与输出预留的完整请求预算，以及确定性 10k 事件/流式 harness。消息正文全文检索、精确 tokenizer、自动压缩、跨重启预算和待发队列恢复仍未完成。模型目录延迟加载后，30 次启动 p95 从 405.24ms 降至 324.81ms，仍未达到既定 200ms 门槛；RSS p95 为 81.39MiB。这是 TUI 实测，不能外推成未来 GUI 成绩。原始口径见 [harness 与性能记录](harness-performance.md)。
+前一轮核心基线已补充：当前工作区全部会话标题/ID 的分页搜索、300ms 合并且串行的草稿自动保存/进程崩溃恢复、包含 system/工具 schema/图片与输出预留的完整请求预算，以及确定性 10k 事件/流式 harness。消息正文全文检索、精确 tokenizer、自动压缩、跨重启预算和待发队列恢复仍未完成。模型目录延迟加载后，30 次启动 p95 从 405.24ms 降至 324.81ms，仍未达到既定 200ms 门槛；RSS p95 为 81.39MiB。这是 TUI 实测，不能外推成未来 GUI 成绩。原始口径见 [harness 与性能记录](harness-performance.md)。
 
-现有 protocol v2 提供 create/list/current/resume/fork/compact、messages/events 分页、prompt/steer/cancel、approval.respond、client.detach。`ProcessClient` 导入 Node 子进程与 Buffer，不能直接打进 React Native。TUI 有模型选择、重命名、删除、导出等入口，不代表远程协议已暴露这些能力。
+现有 protocol v2 已增量加入 `hello` 能力协商，原有 create/list/current/resume/fork/compact、messages/events 分页、prompt/steer/cancel、approval.respond、client.detach。`ProcessClient` 导入 Node 子进程与 Buffer，不能直接打进 React Native。TUI 有模型选择、重命名、删除、导出等入口，不代表远程协议已暴露这些能力。
+
+## C0 第一切片：已实现，共享协议闭环
+
+`packages/client-core/` 已落地纯 TypeScript 执行状态层，并用独立 ES2023、无 Node/DOM ambient types 的配置验证可移植性；尚未创建 Tauri/Expo 应用，也没有接上生产 relay 客户端。
+
+- `hello` 为兼容新增的 v2 控制方法。返回真实方法集合、快照方法、全库单调事件序号语义、scope revision、1 MiB 帧上限、禁止自动重放与 run ID 仅能从已观察事件获知的限制。旧 ready/method 行为保留。
+- `session.current` 新增通知 revision；event、approval、approval.resolved 帧使用同一 scope 的连续 revision。它与 SQLite 全库自增的事件 seq 是两个概念，不会把并发会话占用的 seq 当作丢包。
+- 状态层处理 scope/session 隔离、事件去重、revision 缺口、连接 epoch、快照期间有界缓冲与水位之后的补齐。远程响应比通知晚到时，已经解决的审批不会被旧快照重新激活。
+- 断线/超时将尚未收到回复的命令标为 unknown；恢复快照不会把它变成成功，也不会自动再次发送。普通响应的 acknowledged 仅表示收到回复，不能声称任务已完成。
+- 缓存上限：64 个事件摘要、100,000 字符输出、64 个审批且总序列化大小不超过 1 MiB、128 个缓冲通知且总计不超过 1 MiB、64 个本地回执。未解决的变更回执不能被容量淘汰；容量不足明确拒绝。
+- `ProcessClient.observe` 提供有序原始帧观察，不改变原有 request/subscription 路由。真实 serveRpc + SQLite + 离线 demo 已和新状态层对接，测试含第二会话占用全库序号、重连与 RPC 图片格式拒绝。
+
+还未完成：持久化 command receipt 查询与 payload digest 冲突检查、host instance ID、快照内 runId、完整历史/附件分页、mobile raw transport adapter、原生客户端生命周期与平台验收。来源及使用边界见 [client-core contract](../packages/client-core/README.md)。核心自动压缩/附件输入的本轮更新继续以 TODO 和 validation 为准，不用本草案的模拟 diff 充当实现证据。
 
 ## 产品范围与主流能力矩阵
 
@@ -82,12 +95,12 @@ iOS 优先，Android 共用 headless 状态层与业务语义，分别验收系�
 
 ## 共享 headless 层与协议补齐
 
-拟议目录，**现在尚不存在**：
+目录规划：本轮已创建 `packages/client-core/`；下面其余新目录仍是提案：
 
 ```text
 apps/desktop/                系统壳、窗口、托盘、更新、受限 IPC
 apps/mobile/                 原生导航、输入、通知、扫码、缓存策略
-packages/client-core/        无 Node/DOM 依赖的 schema、状态归并、分页、命令账本
+packages/client-core/        已有无 Node/DOM 执行状态归并；完整历史分页与持久命令账本仍待补
 packages/client-transport/   接口与纯类型；本地/远程适配按入口隔离
 packages/client-fixtures/    确定性 host 事件与故障脚本，仅测试使用
 ```
@@ -108,11 +121,11 @@ flowchart LR
   H --> K[主机 Keychain]
 ```
 
-协议先写 contract fixtures，再做 UI。已有命令不改含义，新增能力通过版本与能力协商逐项打开；以下是待设计的方法族，**不是当前可调用 API**：
+协议先写 contract fixtures，再做 UI。已有命令不改含义，新增能力通过版本与能力协商逐项打开；以下按方法族记录设计范围；仅 `hello`、带 revision 的 `session.current` 和已有方法可调用，其余尚未交付：
 
 | 方法族/状态 | 必须补齐的语义 |
 | --- | --- |
-| hello/capabilities | 版本、最低兼容版本、可用方法/模型能力；不兼容时只显示可恢复错误 |
+| hello/capabilities | 已实现 v2 协商、当前方法列表、快照/序号/重放语义与帧限制；模型能力与最低兼容范围后续补齐 |
 | host/workspaces | 主机标识与明确授权的项目集合；禁止客户端伪造任意 cwd |
 | session metadata | rename/archive/delete/export、跨页搜索、排序/游标；删除冲突和恢复策略 |
 | model/settings | 当前与默认、provider 连接状态、能力约束；所有凭据操作留在 host |
@@ -124,7 +137,7 @@ flowchart LR
 
 事件状态规范：`idle → submitting → running → awaiting_approval / awaiting_input → running → completed / failed / cancelled`；连接是另一个轴 `connecting / online / offline / revoked / incompatible`，不得用“断线”覆盖掉任务状态。客户端只对自己确知的交互做乐观反馈，完成、授权生效和文件写入以 host 事件为准。
 
-按 sessionId/runId 分区归并；同序号去重，旧版本忽略，发现序号缺口先冻结易误解的动作并补快照。快照包含水位和 pending approvals；拉取水位之后的事件，合并订阅期间缓冲，避免快照与订阅空隙漏事件。历史分页使用稳定游标，prepend 不跳滚动；新输出到来不抢走正在阅读历史的视角。
+按 scope/sessionId 分区归并。持久事件 seq 是全库自增，按 session 过滤后允许跳号，只用于去重；新增 scope revision 才是连续通知水位，发现 revision 缺口先冻结易误解的动作并补快照。runId 快照仍待补齐。快照包含水位和 pending approvals；拉取水位之后的事件，合并订阅期间缓冲，避免快照与订阅空隙漏事件。历史分页使用稳定游标，prepend 不跳滚动；新输出到来不抢走正在阅读历史的视角。
 
 ## 主机归属、配对、重连与权限
 

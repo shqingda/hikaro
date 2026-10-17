@@ -1,6 +1,7 @@
-import { z } from "zod";
+import * as z from "zod";
 import type { AgentEvent, Message } from "../../core/src/types.ts";
-export const protocolVersion = 2;
+import { rpcMethods } from "./contracts.ts";
+export { protocolVersion } from "./contracts.ts";
 export type AcceptedOperation = { accepted: true; operationId: string };
 export type OperationEvent = {
   scope: string;
@@ -15,6 +16,7 @@ export type OperationEvent = {
 );
 export const isControlMethod = (method: string) =>
   [
+    "hello",
     "cancel",
     "approval.respond",
     "client.detach",
@@ -24,21 +26,7 @@ export const isControlMethod = (method: string) =>
 export const Command = z.object({
   id: z.string().min(1).max(128),
   scope: z.string().min(1).max(80).optional(),
-  method: z.enum([
-    "session.create",
-    "session.list",
-    "session.current",
-    "session.resume",
-    "session.fork",
-    "session.compact",
-    "messages.read",
-    "events.read",
-    "prompt",
-    "steer",
-    "cancel",
-    "approval.respond",
-    "client.detach",
-  ]),
+  method: z.enum(rpcMethods),
   params: z.record(z.string(), z.unknown()).default({}),
 });
 export type Command = z.infer<typeof Command>;

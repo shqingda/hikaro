@@ -4,6 +4,7 @@ import { setImmediate } from "node:timers/promises";
 import { Runtime, type RuntimeOptions } from "../packages/runtime/src/index.ts";
 import { serveRpc } from "../apps/cli/src/rpc.ts";
 import type { Session } from "../packages/core/src/index.ts";
+import { ResolvedFrame } from "../packages/protocol/src/contracts.ts";
 
 const deferred = <T = void>() => {
   let resolve!: (value: T) => void;
@@ -296,6 +297,33 @@ it("processes approval replies and detaches while ordinary commands are blocked"
   listing.resolve([]);
 });
 
+it("resolves pending approvals with a valid revision before detaching the scope", async () => {
+  const rpc = await connection();
+  const session = await rpc.request("session.create");
+  const allowed = rpc.approve(
+    {
+      id: "pending-at-detach",
+      scope: "a",
+      sessionId: session.id,
+      tool: "shell",
+      reason: "test",
+      arguments: {},
+    },
+    new AbortController().signal,
+  );
+  const requested = rpc.messages.find((frame) => frame.type === "approval");
+  await rpc.request("client.detach");
+  expect(await allowed).toBe(false);
+  const resolved = rpc.messages.find(
+    (frame) => frame.type === "approval.resolved",
+  );
+  expect(ResolvedFrame.parse(resolved)).toMatchObject({
+    id: "pending-at-detach",
+    allow: false,
+    revision: requested.revision + 1,
+  });
+});
+
 it("revoking a scope that only viewed another scope's session leaves that run active", async () => {
   const rpc = await connection();
   const session = await rpc.request("session.create", "b");
@@ -303,6 +331,32 @@ it("revoking a scope that only viewed another scope's session leaves that run ac
   await rpc.request("session.resume", "a", { sessionId: session.id });
   await rpc.request("client.detach", "a", { cancel: true });
   expect(rpc.agents.get(session.id)?.cancelled).toBe(false);
+});
+
+it("restores approvals raised by surviving work after a view detached", async () => {
+  const rpc = await connection();
+  const session = await rpc.request("session.create");
+  await rpc.request("client.detach");
+  const allowed = rpc.approve(
+    {
+      id: "after-detach",
+      scope: "a",
+      sessionId: session.id,
+      tool: "shell",
+      reason: "test",
+      arguments: {},
+    },
+    new AbortController().signal,
+  );
+  expect(rpc.messages.some((frame) => frame.type === "approval")).toBe(false);
+  const current = await rpc.request("session.current");
+  expect(current.approvals).toMatchObject([{ id: "after-detach" }]);
+  await rpc.request("approval.respond", "a", { id: "after-detach", allow: false });
+  expect(await allowed).toBe(false);
+  const resolved = rpc.messages.find(
+    (frame) => frame.type === "approval.resolved",
+  );
+  expect(ResolvedFrame.parse(resolved)).toMatchObject({ revision: 1 });
 });
 
 it("detaching cancels runs owned by the scope even after selecting another session", async () => {

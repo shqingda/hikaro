@@ -1,4 +1,4 @@
-import { z } from "zod";
+import * as z from "zod";
 import { randomUUID } from "node:crypto";
 import type { Readable, Writable } from "node:stream";
 import {
@@ -17,6 +17,10 @@ import type {
   Agent,
   PermissionRequest,
 } from "../../../packages/core/src/index.ts";
+import {
+  HelloParams,
+  rpcCapabilities,
+} from "../../../packages/protocol/src/contracts.ts";
 const integer = (
   value: unknown,
   fallback: number,
@@ -33,6 +37,7 @@ type ScopeWork = {
   operations: Set<AbortController>;
 };
 type ScopeState = {
+  revision: number;
   session?: Session;
   agent?: Agent;
   unsubscribe?: () => void;
@@ -81,6 +86,17 @@ export async function serveRpc(
     }
     transport.output.write(line);
   };
+  const sendScoped = (message: {
+    type: string;
+    scope: string;
+    [key: string]: unknown;
+  }) => {
+    const state = scopes.get(message.scope);
+    // Detached views have no delivery revision; a later snapshot restores any
+    // still-pending approval when that scope attaches again.
+    if (!state) return;
+    send({ ...message, revision: ++state.revision });
+  };
   const runtime = await Runtime.open({
     ...options,
     approve: (request, signal) =>
@@ -95,12 +111,17 @@ export async function serveRpc(
         const finish = (allow: boolean) => {
           signal.removeEventListener("abort", abort);
           approvals.delete(request.id);
-          send({ type: "approval.resolved", scope, id: request.id, allow });
+          sendScoped({
+            type: "approval.resolved",
+            scope,
+            id: request.id,
+            allow,
+          });
           resolve(allow);
         };
         approvals.set(request.id, { request, scope, finish });
         signal.addEventListener("abort", abort, { once: true });
-        send({ type: "approval", scope, request });
+        sendScoped({ type: "approval", scope, request });
       }),
   });
   runtime.startJobs();
@@ -125,7 +146,7 @@ export async function serveRpc(
     state.session = next;
     state.agent = agent;
     state.unsubscribe = state.agent.subscribe((event) =>
-      send({ type: "event", scope, event: publicEvent(event) }),
+      sendScoped({ type: "event", scope, event: publicEvent(event) }),
     );
     return next;
   };
@@ -140,6 +161,7 @@ export async function serveRpc(
         ownedWork.set(scope, work);
       }
       state = {
+        revision: 0,
         chain: Promise.resolve(),
         queued: 0,
         bytes: 0,
@@ -193,8 +215,18 @@ export async function serveRpc(
         return runtime.session(id);
       };
       switch (command.method) {
+        case "hello": {
+          const { protocolVersions } = HelloParams.parse(p);
+          if (protocolVersions && !protocolVersions.includes(protocolVersion))
+            throw Error(
+              `Unsupported protocol version; host supports ${protocolVersion}`,
+            );
+          result = rpcCapabilities();
+          break;
+        }
         case "session.current":
           result = {
+            revision: state.revision,
             session: state.session ?? null,
             ...(state.agent?.snapshot() ?? {
               busy: false,
@@ -317,6 +349,11 @@ export async function serveRpc(
             .max(4)
             .optional()
             .parse(p.images);
+          if (images?.length) {
+            const { validateImageInputs } =
+              await import("../../../packages/runtime/src/attachments.ts");
+            validateImageInputs(images);
+          }
           if (!text.trim() && !images?.length) throw Error("Prompt is empty");
           const { agent, session } = state;
           if (!(await runtime.store.claim(command.id, session.id))) {
@@ -360,10 +397,10 @@ export async function serveRpc(
         case "client.detach": {
           if (p.cancel === true) cancel(state, false);
           state.unsubscribe?.();
-          scopes.delete(scope);
-          releaseWork(scope, state.work);
           for (const approval of approvals.values())
             if (approval.scope === scope) approval.finish(false);
+          scopes.delete(scope);
+          releaseWork(scope, state.work);
           result = {};
           break;
         }
