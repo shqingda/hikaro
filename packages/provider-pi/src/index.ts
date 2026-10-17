@@ -114,7 +114,9 @@ export async function createPiProvider(options: {
       provider: options.provider,
       baseUrl: normalizeEndpointUrl(options.baseUrl),
       reasoning: false,
-      input: ["text"],
+      // The compatible transport can carry images. Actual model support is
+      // unknown here; let the endpoint reject it instead of dropping content.
+      input: ["text", "image"],
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
       contextWindow: options.contextWindow ?? 32768,
       maxTokens: 8192,
@@ -153,6 +155,7 @@ export async function createPiProvider(options: {
     model: options.model,
     contextWindow: preferences.contextWindow ?? selected.contextWindow,
     maxOutputTokens,
+    supportsImages: options.baseUrl ? undefined : selected.input.includes("image"),
     async *stream(input): AsyncGenerator<ProviderEvent> {
       const context = {
         systemPrompt: input.system,

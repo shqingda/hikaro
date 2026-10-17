@@ -248,6 +248,10 @@ it("activity indicator animates runs, pauses for approval, and stops on cancella
     expect(first).toContain("Working");
     vi.advanceTimersByTime(80);
     expect(view.editor.render(80)[0]).not.toBe(first);
+    event("context.compacting");
+    expect(view.editor.render(80)[0]).toContain("Compacting");
+    event("context.checkpoint");
+    expect(view.editor.render(80)[0]).toContain("Working");
     event("thinking.delta", { text: "hidden reasoning" });
     expect(view.editor.render(80)[0]).toContain("Thinking");
     event("tool.start", { name: "shell" });

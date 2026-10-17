@@ -164,7 +164,8 @@ async function main() {
         if (e.type === "tool.end" && (e.data.result as any)?.isError)
           process.stderr.write(`${(e.data.result as any).text}\n`);
       });
-      await agent.prompt(values.prompt);
+      const prepared = await runtime.preparePrompt(session, values.prompt);
+      await agent.prompt(prepared.text, prepared.images);
       process.stdout.write("\n");
     } finally {
       await runtime.close();
@@ -175,10 +176,7 @@ async function main() {
     throw Error(
       "Interactive mode requires a terminal. Use --prompt TEXT or --rpc.",
     );
-  const { createTerminal, HikaroView } =
-    await import("../../../packages/tui/src/index.ts");
-  const tui = createTerminal();
-  let view: InstanceType<typeof HikaroView>;
+  let view: import("../../../packages/tui/src/index.ts").HikaroView;
   let exiting = false;
   const { loadPermissionMode, permissionOptions } =
     await import("../../../packages/runtime/src/permissions.ts");
@@ -188,15 +186,27 @@ async function main() {
     options.home ?? join(homedir(), ".hikaro"),
     options.cwd,
   );
-  const runtime = await Runtime.open({
-    ...options,
-    permissionMode,
-    approve: (r, s) => view.approve(r, s),
-  });
-  const { loadTuiPreferences, saveTuiPreferences } =
-    await import("../../../packages/tui/src/preferences.ts");
+  const { openInteractive } = await import("./interactive-startup.ts");
+  const { view: ui, runtime } = await openInteractive(
+    import("../../../packages/tui/src/index.ts"),
+    Runtime.open({
+      ...options,
+      permissionMode,
+      approve: (r, s) => view.approve(r, s),
+    }),
+  );
+  const { createTerminal, HikaroView } = ui;
+  const tui = createTerminal();
+  const [
+    { loadTuiPreferences, saveTuiPreferences },
+    { selectInitialSession },
+    { DraftSaver },
+  ] = await Promise.all([
+    import("../../../packages/tui/src/preferences.ts"),
+    import("./startup.ts"),
+    import("../../../packages/tui/src/drafts.ts"),
+  ]);
   let preferences = await loadTuiPreferences(runtime.options.home!);
-  const { selectInitialSession } = await import("./startup.ts");
   let session: Awaited<ReturnType<typeof runtime.session>>;
   try {
     session = await selectInitialSession(
@@ -224,7 +234,6 @@ async function main() {
     await runtime.close();
     throw error;
   }
-  const { DraftSaver } = await import("../../../packages/tui/src/drafts.ts");
   let draftSessionId = session.id;
   const drafts = new DraftSaver(
     (id, text) => runtime.store.saveDraft(id, text),
@@ -348,7 +357,11 @@ async function main() {
         description: "Plugin command",
       })),
     ],
-    onPrompt: async (text) => {
+    preparePrompt: (text, signal) =>
+      text.startsWith("!")
+        ? Promise.resolve({ text })
+        : runtime.preparePrompt(session, text, signal),
+    onPrompt: async (text, images) => {
       drafts.update(session.id, "");
       await drafts.flush();
       if (text.startsWith("!")) {
@@ -359,7 +372,7 @@ async function main() {
         );
         return;
       }
-      await agent.prompt(text);
+      await agent.prompt(text, images);
     },
     onExit: exit,
     onHistory: history,
@@ -490,8 +503,17 @@ async function main() {
         case "quit":
           exit();
           return;
+        case "attach": {
+          if (!arg.trim())
+            return 'Use /attach PATH, then add your question and send. You can also type @file or @"path with spaces" directly.';
+          const { attachmentReference } =
+            await import("../../../packages/runtime/src/attachments.ts");
+          // Accept quoted or shell-escaped paths from terminal drag-and-drop.
+          view.editor.setText(attachmentReference(arg) + " ");
+          return "Attachment added. Add your question and press Enter.";
+        }
         case "help":
-          return "/new  /sessions  /resume [ID]  /rename TITLE  /export\n/fork  /compact  /model provider/model\n/settings  /permissions [ask|auto|full]\n/context [default]  /thinking [default]  /speed [default]\n/status  /resources\n/steer instructions  /tools  /older  /newer  /latest  /quit\n!COMMAND follows the current permission mode. Ctrl+C cancels. Ctrl+D exits. Shift+Enter adds a line.\nNew prompts queue while the agent works.";
+          return '/new  /sessions  /resume [ID]  /rename TITLE  /export\n/fork  /compact  /model provider/model\n/attach PATH · @file or @"path with spaces" attaches text/images\n/settings  /permissions [ask|auto|full]\n/context [default]  /thinking [default]  /speed [default]\n/status  /resources\n/steer instructions  /tools  /older  /newer  /latest  /quit\n!COMMAND follows the current permission mode. Ctrl+C cancels. Ctrl+D exits. Shift+Enter adds a line.\nNew prompts queue while the agent works.';
         case "new":
           await bind(await runtime.session());
           return;
@@ -605,20 +627,24 @@ async function main() {
     if (event.type === "run.end") updateStatus();
   });
   updateStatus();
-  void Promise.all([
-    readGit(["symbolic-ref", "--quiet", "--short", "HEAD"]),
-    readGit([
-      "-c",
-      "core.fsmonitor=false",
-      "--no-optional-locks",
-      "status",
-      "--porcelain",
-      "-uno",
-    ]),
-  ]).then(([branch, dirty]) => {
-    gitBranch = branch + (dirty ? "*" : "");
-    updateStatus();
-  });
+  const refreshGitStatus = () => {
+    if (exiting) return;
+    void Promise.all([
+      readGit(["symbolic-ref", "--quiet", "--short", "HEAD"]),
+      readGit([
+        "-c",
+        "core.fsmonitor=false",
+        "--no-optional-locks",
+        "status",
+        "--porcelain",
+        "-uno",
+      ]),
+    ]).then(([branch, dirty]) => {
+      if (exiting) return;
+      gitBranch = branch + (dirty ? "*" : "");
+      updateStatus();
+    });
+  };
   view.setPreferences(preferences);
   view.bind(agent);
   view.showMessages(
@@ -632,6 +658,10 @@ async function main() {
   tui.setLayoutRoot(view.layout);
   tui.setFocus(view.editor);
   tui.start();
+  // The editor, saved draft, history and permissions are ready. Paint them
+  // immediately; advisory Git metadata can update after this first frame.
+  tui.requestRender(true);
+  setImmediate(refreshGitStatus);
   view.startTheme();
   runtime.startJobs();
   process.once("SIGTERM", exit);

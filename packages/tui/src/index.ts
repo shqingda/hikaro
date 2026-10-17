@@ -23,6 +23,7 @@ import type {
   AgentBackend,
   AgentEvent,
   Message,
+  ImageInput,
   PermissionRequest,
 } from "../../core/src/types.ts";
 import type { PiUIResponse } from "../../pi-bridge/src/index.ts";
@@ -168,6 +169,7 @@ export class HikaroView {
   readonly modelSlot = new Container();
   readonly approvalSlot = new Container();
   private modelController?: AbortController;
+  private preparingPrompt?: AbortController;
   private modelPanel?: ModelPanel;
   readonly historyHint = new Text("", 1, 0);
   readonly header: Text;
@@ -207,7 +209,11 @@ export class HikaroView {
     readonly options: {
       cwd: string;
       model: string;
-      onPrompt: (text: string) => Promise<void>;
+      onPrompt: (text: string, images?: ImageInput[]) => Promise<void>;
+      preparePrompt?: (
+        text: string,
+        signal: AbortSignal,
+      ) => Promise<{ text: string; images?: ImageInput[] }>;
       onCommand: (text: string) => Promise<string | void>;
       onExit: () => void;
       onHistory?: (direction: HistoryDirection) => Promise<HistoryPage>;
@@ -255,6 +261,7 @@ export class HikaroView {
           { name: "sessions", description: "List sessions" },
           { name: "resume", description: "Resume a session" },
           { name: "rename", description: "Rename this session" },
+          { name: "attach", description: "Add a file or image: /attach PATH" },
           {
             name: "export",
             description: "Export the conversation as Markdown",
@@ -374,7 +381,9 @@ export class HikaroView {
         ? options.onCommand(text).then((result) => {
             if (result) this.notice(result);
           })
-        : options.onPrompt(text);
+        : options.preparePrompt
+          ? this.submitPrompt(text)
+          : options.onPrompt(text);
       void work.catch((error) => {
         if (error instanceof Error && error.name === "AbortError") return;
         this.setError(
@@ -387,6 +396,11 @@ export class HikaroView {
       if (isKeyRelease(data)) return { consume: true };
       if (this.approval) {
         this.approval.panel.handleInput(data);
+        return { consume: true };
+      }
+      if (this.preparingPrompt) {
+        if (matchesKey(data, "escape") || matchesKey(data, "ctrl+c"))
+          this.preparingPrompt.abort();
         return { consume: true };
       }
       if (this.modelPanel) {
@@ -661,6 +675,10 @@ export class HikaroView {
       this.draftText = "";
       this.thinkingDraft = undefined;
       this.thinkingText = "";
+    } else if (event.type === "context.compacting") {
+      this.activity = "Compacting";
+    } else if (event.type === "context.checkpoint") {
+      this.activity = "Working";
     } else if (event.type === "text.delta") {
       this.activity = "Working";
       if (this.history.hasNewer) {
@@ -856,14 +874,37 @@ export class HikaroView {
     this.updateFooter();
     this.tui.requestRender();
   }
+  private async submitPrompt(text: string) {
+    if (!this.options.preparePrompt) return this.options.onPrompt(text);
+    const controller = new AbortController();
+    this.preparingPrompt = controller;
+    // Editor.submitValue clears itself first. Restore immediately so both the
+    // display and autosave retain the draft until attachment validation succeeds.
+    this.editor.setText(text);
+    this.editor.disableSubmit = true;
+    this.updateFooter();
+    let prepared: { text: string; images?: ImageInput[] };
+    try {
+      prepared = await this.options.preparePrompt(text, controller.signal);
+      controller.signal.throwIfAborted();
+    } finally {
+      this.preparingPrompt = undefined;
+      this.editor.disableSubmit = false;
+      this.updateFooter();
+    }
+    this.editor.setText("");
+    return this.options.onPrompt(prepared.text, prepared.images);
+  }
   private updateFooter() {
     this.editor.setActivity(
-      this.busy && !this.disposed
+      (this.busy || this.preparingPrompt) && !this.disposed
         ? this.approval
           ? "Approval required"
-          : this.dialog
-            ? "Waiting for input"
-            : this.activity
+          : this.preparingPrompt
+            ? "Loading attachments"
+            : this.dialog
+              ? "Waiting for input"
+              : this.activity
         : "",
       !this.approval && !this.dialog && !this.modelPanel,
     );
@@ -941,6 +982,7 @@ export class HikaroView {
     if (!this.disposed) this.tui.requestRender();
   }
   dispose() {
+    this.preparingPrompt?.abort();
     this.modelController?.abort();
     this.removeScheme?.();
     if (this.disposed) return;

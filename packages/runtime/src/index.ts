@@ -32,7 +32,7 @@ import {
   readModelDefault,
 } from "../../provider-pi/src/catalog.ts";
 import { codemodePlugin } from "../../tools/src/codemode.ts";
-import { z } from "zod";
+import * as z from "zod";
 import { JobScheduler } from "../../core/src/jobs.ts";
 import { randomUUID, createHash } from "node:crypto";
 import {
@@ -97,6 +97,34 @@ export class Runtime {
       if (allowed) return true;
     }
     return this.options.approve(request, signal);
+  }
+  async preparePrompt(session: Session, text: string, signal?: AbortSignal) {
+    const activeSignal = signal
+      ? AbortSignal.any([signal, this.lifecycle.signal])
+      : this.lifecycle.signal;
+    activeSignal.throwIfAborted();
+    const agent = await this.agent(session);
+    const { preparePrompt } = await import("./attachments.ts");
+    return preparePrompt(text, {
+      cwd: session.cwd,
+      signal: activeSignal,
+      supportsImages: agent.options.provider.supportsImages,
+      approve: (file) => {
+        const request: PermissionRequest = {
+        id: randomUUID(),
+        sessionId: session.id,
+        tool: "attach_file",
+        arguments: { path: file.path, reference: file.reference },
+        capability: { kind: "file", path: file.path, write: false },
+        reason: `Attach ${file.path}${file.outside ? " outside the workspace" : ""}${file.sensitive ? " (sensitive path)" : ""}. Its contents will be sent to the selected model.`,
+        };
+        // A harmless canonical target does not erase a sensitive user-facing
+        // alias (for example .env -> config). Auto approval must review it.
+        return file.sensitive && this.permissionMode !== "full"
+          ? this.options.approve(request, activeSignal)
+          : this.approve(request, activeSignal);
+      },
+    });
   }
   async setPermissionMode(mode: PermissionMode) {
     const next = permissionModeSchema.parse(mode);

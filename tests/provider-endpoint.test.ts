@@ -23,10 +23,11 @@ afterEach(async () => {
 });
 async function endpoint() {
   const requests: IncomingHttpHeaders[] = [];
+  const bodies: any[] = [];
   const server = createServer(async (req, res) => {
-    for await (const _chunk of req) {
-      // Drain the actual model request before replying.
-    }
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(Buffer.from(chunk));
+    bodies.push(JSON.parse(Buffer.concat(chunks).toString("utf8")));
     requests.push(req.headers);
     res.writeHead(200, { "Content-Type": "text/event-stream" });
     res.end(
@@ -45,7 +46,7 @@ async function endpoint() {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   if (!address || typeof address === "string") throw Error("Missing port");
-  return { baseUrl: `http://127.0.0.1:${address.port}/v1`, requests };
+  return { baseUrl: `http://127.0.0.1:${address.port}/v1`, requests, bodies };
 }
 async function request(options: Parameters<typeof createPiProvider>[0]) {
   const provider = await createPiProvider(options);
@@ -69,6 +70,47 @@ it("uses the saved API key bound to the exact compatible endpoint", async () => 
   }));
   await request({ provider: "openai", model: "test", ...target, credentials });
   expect(target.requests[0]?.authorization).toBe("Bearer endpoint-test-key");
+});
+
+it("sends image bytes to a compatible endpoint without dropping unknown-model image input", async () => {
+  const target = await endpoint();
+  const provider = await createPiProvider({
+    provider: "local",
+    model: "vision-fixture",
+    ...target,
+  });
+  const image = {
+    mimeType: "image/png",
+    data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aA1sAAAAASUVORK5CYII=",
+  };
+  const events = [];
+  for await (const event of provider.stream({
+    system: "test",
+    tools: [],
+    signal: AbortSignal.timeout(5000),
+    messages: [
+      {
+        role: "user",
+        text: "Describe the attached screenshot",
+        images: [image],
+        timestamp: 1,
+      },
+    ],
+  }))
+    events.push(event);
+  expect(provider.supportsImages).toBeUndefined();
+  expect(events.some((event) => event.type === "done")).toBe(true);
+  expect(
+    target.bodies[0].messages.find(
+      (message: { role: string }) => message.role === "user",
+    ).content,
+  ).toEqual([
+    { type: "text", text: "Describe the attached screenshot" },
+    {
+      type: "image_url",
+      image_url: { url: `data:image/png;base64,${image.data}` },
+    },
+  ]);
 });
 
 it("never forwards provider or other endpoint credentials to a custom URL", async () => {

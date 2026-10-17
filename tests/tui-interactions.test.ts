@@ -71,6 +71,10 @@ function shortcutFixture() {
 function interactionView(
   onPrompt: (text: string) => Promise<void> = async () => {},
   onDraftChange?: (text: string) => void,
+  preparePrompt?: (
+    text: string,
+    signal: AbortSignal,
+  ) => Promise<{ text: string }>,
 ) {
   const tui = new TuiAltScreen({ ...terminalStub });
   vi.spyOn(tui, "requestRender").mockImplementation(() => {});
@@ -85,6 +89,7 @@ function interactionView(
     model: "fixture",
     onPrompt,
     onDraftChange,
+    preparePrompt,
     onCommand: async () => {},
     onExit: () => {},
   });
@@ -98,6 +103,54 @@ function interactionView(
     } satisfies AgentEvent);
   return { view, input: (data: string) => input(data), focus, event };
 }
+
+it("keeps attachment input and draft on preparation failure without dispatching", async () => {
+  const prompt = vi.fn(async () => {});
+  const saved = vi.fn();
+  const { view } = interactionView(prompt, saved, async () => {
+    throw Error("File does not exist");
+  });
+  try {
+    view.editor.setText("Review @missing.ts");
+    view.editor.handleInput("\r");
+    await vi.waitFor(() =>
+      expect(view.inputError.render(100).join("\n")).toContain(
+        "File does not exist",
+      ),
+    );
+    expect(view.editor.getExpandedText()).toBe("Review @missing.ts");
+    expect(saved).toHaveBeenLastCalledWith("Review @missing.ts");
+    expect(prompt).not.toHaveBeenCalled();
+    expect(view.editor.disableSubmit).toBe(false);
+  } finally {
+    view.dispose();
+  }
+});
+
+it("cancels attachment preparation while retaining the input, even if the loader returns late", async () => {
+  const prompt = vi.fn(async () => {});
+  let release!: () => void;
+  const { view, input } = interactionView(prompt, undefined, async () => {
+    await new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return { text: "prepared" };
+  });
+  try {
+    view.editor.setText("Review @large.ts");
+    view.editor.handleInput("\r");
+    expect(view.editor.getExpandedText()).toBe("Review @large.ts");
+    expect(view.editor.disableSubmit).toBe(true);
+    expect(input("x")).toEqual({ consume: true });
+    input("\x03");
+    release();
+    await vi.waitFor(() => expect(view.editor.disableSubmit).toBe(false));
+    expect(prompt).not.toHaveBeenCalled();
+    expect(view.editor.getExpandedText()).toBe("Review @large.ts");
+  } finally {
+    view.dispose();
+  }
+});
 
 it("autosaves expanded paste text but excludes transient dialog answers", () => {
   const saved = vi.fn();
