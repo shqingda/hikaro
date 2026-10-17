@@ -32,6 +32,8 @@ export interface ProviderAdapter {
   id: string;
   model: string;
   contextWindow: number;
+  /** Maximum completion tokens actually requested by this adapter. */
+  maxOutputTokens?: number;
   stream(input: {
     system: string;
     messages: Message[];

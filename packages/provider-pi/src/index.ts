@@ -140,10 +140,19 @@ export async function createPiProvider(options: {
     },
   );
   const selected = model;
+  const maxOutputTokens = Math.min(
+    selected.maxTokens,
+    16384,
+    Math.max(
+      256,
+      Math.floor((preferences.contextWindow ?? selected.contextWindow) * 0.35),
+    ),
+  );
   return {
     id: options.provider,
     model: options.model,
     contextWindow: preferences.contextWindow ?? selected.contextWindow,
+    maxOutputTokens,
     async *stream(input): AsyncGenerator<ProviderEvent> {
       const context = {
         systemPrompt: input.system,
@@ -156,16 +165,7 @@ export async function createPiProvider(options: {
         reasoning:
           preferences.reasoning === "off" ? undefined : preferences.reasoning,
         sessionId: input.sessionId,
-        maxTokens: Math.min(
-          selected.maxTokens,
-          16384,
-          Math.max(
-            256,
-            Math.floor(
-              (preferences.contextWindow ?? selected.contextWindow) * 0.35,
-            ),
-          ),
-        ),
+        maxTokens: maxOutputTokens,
       };
       const stream =
         preferences.speed && preferences.speed !== "default"
