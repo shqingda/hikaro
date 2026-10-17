@@ -44,6 +44,8 @@ The current permission mode stays visible independently of the usage footer. Sho
 
 Ctrl+S appears only on actual model choices and active model-setting values. Provider/authentication steps and default-only settings use Enter. Narrow panels wrap values and descriptions, keep the selected choice and reserve Enter/Esc hints. If the available space cannot show the selected content, the panel asks you to resize. Real PTY acceptance at 36×18, 60×18 and 100×24 covers keyboard navigation, resizing, cancellation, draft retention and status feedback. See [validation evidence](docs/validation.md). macOS Terminal appearance, IME and assistive-technology acceptance remain pending.
 
+File candidates use the required `rg` executable and respect ignore rules. Type `@rdme` for fuzzy matches or `@docs/` to narrow the directory; paths containing spaces are quoted automatically. Search is asynchronous and cancellable, capped at 20,000 file paths / 4 MiB of listing output and 20 displayed candidates; narrow the directory in very large workspaces. File contents and permission checks are handled only when submitting. `pnpm dev` runs source directly; after pulling changes, use `pnpm build` before `pnpm start`.
+
 ## Terminal controls
 
 | Command | Action |
@@ -53,7 +55,7 @@ Ctrl+S appears only on actual model choices and active model-setting values. Pro
 | `/export` | Export all saved text messages as Markdown; hidden thinking stays excluded |
 | `/skill:NAME [TASK]` | Invoke a discovered Skill; Skill and plugin commands appear in completion |
 | `/fork`, `/compact` | Branch history or create a continuation summary |
-| `/attach PATH`, `@file`, `@"path with spaces"` | Attach UTF-8 files or PNG/JPEG/GIF/WebP images to a prompt |
+| `/attach PATH`, `@file`, `@"path with spaces"` | Attach UTF-8 files or PNG/JPEG/GIF/WebP images; `@` opens fuzzy file search, ↑/↓ selects, Tab/Enter completes, Esc closes |
 | `/model`, `/login` | Search models or connect a provider |
 | `/settings` | Tool details, thinking visibility, usage footer, completion bell and startup behavior |
 | `/permissions [ask\|auto\|full]` | Select workspace permissions; Enter applies and saves; Esc closes |

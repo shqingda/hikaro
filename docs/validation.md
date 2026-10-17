@@ -324,3 +324,10 @@ Review caught and repaired sensitive attachment aliases, longer Markdown closing
 Limits: compaction uses a conservative token heuristic and generated text, not a proven lossless semantic summary; original history remains authoritative. A pre-existing single stored user turn over 8 MiB can still block startup repair of interrupted tool pairs. New local attachments are bounded before submission. Budget usage and queued prompts are not recovered across host restarts. Native desktop/mobile apps, durable command receipts, OS clipboard-image capture and portable image export remain subsequent work. The non-letter logo candidate is an independent unverified draft.
 
 最终启动构建：冷 V8 缓存 3 次预热 + 30 次测量，p95 181.00 ms／输入 p95 1.37 ms／RSS p95 72.67 MiB，原三项门槛均通过。末轮压缩构建的两项插件与启动兼容测试通过；各个失败中间报告完整保留。
+
+### File search completion — 2026-10-18
+
+- TUI `@` completion now performs cancellable asynchronous `rg --files` discovery and subsequence fuzzy matching, supports directory-scoped paths, quoted spaces, and existing arrow/Tab/Enter/Esc editor controls. Discovery runs only after user input; ranking yields between batches. No file contents are read by completion.
+- Added one real-filesystem editor regression covering ignored files, candidate display, keyboard completion, fuzzy matching, quoted paths and no accidental prompt dispatch. All 16 tests in `tui-interactions.test.ts` pass; typecheck, build and diff check pass.
+- Final `pnpm bench:check`: 30 launches, 3 warmups, cold V8 cache per launch / warm OS caches; startup p95 177.38 ms, ordinary input p95 2.04 ms, ready RSS p95 72.77 MiB. Original 200 ms / 16 ms / 100 MiB budgets pass. This input metric does not measure large-repository search latency.
+- Harness/core/storage paths and all thresholds unchanged; no redundant storage benchmark rerun. Search uses the documented required `rg` dependency, bounds listings to 4 MiB / 20,000 files and displays 20 matches; narrow the directory for larger workspaces. Empty directories have no file candidates.

@@ -1,3 +1,4 @@
+import { FileAutocompleteProvider } from "./file-autocomplete.ts";
 import {
   TuiAltScreen,
   ProcessTerminal,
@@ -6,7 +7,6 @@ import {
   ScrollView,
   VStack,
   Markdown,
-  CombinedAutocompleteProvider,
   matchesKey,
   isKeyRelease,
   visibleWidth,
@@ -246,7 +246,7 @@ export class HikaroView {
         options.onDraftChange?.(this.editor.getExpandedText());
     };
     this.editor.setAutocompleteProvider(
-      new CombinedAutocompleteProvider(
+      new FileAutocompleteProvider(
         [
           { name: "help", description: "Commands and shortcuts" },
           {

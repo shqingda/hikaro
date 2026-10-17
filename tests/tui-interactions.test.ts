@@ -1,3 +1,6 @@
+import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { stripVTControlCharacters } from "node:util";
 import { TuiAltScreen, type Terminal } from "@earendil-works/pi-tui";
@@ -75,6 +78,7 @@ function interactionView(
     text: string,
     signal: AbortSignal,
   ) => Promise<{ text: string }>,
+  cwd = "/tmp",
 ) {
   const tui = new TuiAltScreen({ ...terminalStub });
   vi.spyOn(tui, "requestRender").mockImplementation(() => {});
@@ -85,7 +89,7 @@ function interactionView(
   });
   const focus = vi.spyOn(tui, "setFocus");
   const view = new HikaroView(tui, {
-    cwd: "/tmp",
+    cwd,
     model: "fixture",
     onPrompt,
     onDraftChange,
@@ -601,4 +605,37 @@ describe("TUI interaction fixes", () => {
       view.dispose();
     }
   });
+});
+
+it("searches @ files fuzzily and accepts keyboard selection without submitting", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "hikaro-complete-"));
+  await mkdir(join(cwd, ".git"));
+  await writeFile(join(cwd, ".gitignore"), "ignored.txt\n");
+  await writeFile(join(cwd, "ignored.txt"), "hidden");
+  await writeFile(join(cwd, "alpha.txt"), "a");
+  await writeFile(join(cwd, "beta.txt"), "b");
+  await mkdir(join(cwd, "docs"));
+  await writeFile(join(cwd, "docs", "read me.md"), "hello");
+  const prompt = vi.fn(async () => {});
+  const { view } = interactionView(prompt, undefined, undefined, cwd);
+  const screen = () =>
+    stripVTControlCharacters(view.editor.render(100).join("\n"));
+  try {
+    view.editor.handleInput("@");
+    await vi.waitFor(() => expect(screen()).toContain("alpha.txt"));
+    expect(screen()).not.toContain("ignored.txt");
+    view.editor.handleInput("\x1b[B");
+    view.editor.handleInput("\t");
+    expect(view.editor.getText()).not.toBe("@");
+    expect(prompt).not.toHaveBeenCalled();
+    view.editor.setText("");
+    view.editor.handleInput("@docs/rdme");
+    await vi.waitFor(() => expect(screen()).toContain("read me.md"));
+    view.editor.handleInput("\r");
+    expect(view.editor.getText()).toBe('@"docs/read me.md" ');
+    expect(prompt).not.toHaveBeenCalled();
+  } finally {
+    view.dispose();
+    await rm(cwd, { recursive: true, force: true });
+  }
 });
