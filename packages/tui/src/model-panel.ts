@@ -261,6 +261,9 @@ export class ModelPanel implements Component {
   }
   progress(text: string) {
     if (!this.pending) {
+      this.document = undefined;
+      this.title = "";
+      this.error = "";
       this.list = undefined;
       this.input = undefined;
     }

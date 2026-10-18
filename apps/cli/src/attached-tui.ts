@@ -1,3 +1,4 @@
+import { AttachedWorkflows } from "./attached-workflows.ts";
 import { randomUUID } from "node:crypto";
 import { SharedHostClient } from "../../../packages/host/src/client.ts";
 import { ClientFiles } from "../../../packages/host/src/client-files.ts";
@@ -50,6 +51,7 @@ export async function attachTui(options: {
   });
   const tui = createTerminal();
   let view: HikaroView;
+  let workflows: AttachedWorkflows | undefined;
   let exiting = false,
     loading = false,
     loadEpoch = 0,
@@ -227,6 +229,7 @@ export async function attachTui(options: {
         : "Host disconnected / synchronizing · draft stays local",
     );
     if (!state.canAct) {
+      workflows?.disconnected();
       for (const c of approvals.values()) c.abort();
       approvals.clear();
     }
@@ -253,6 +256,7 @@ export async function attachTui(options: {
     offConnection();
     offState();
     offRaw();
+    workflows?.close();
     client.close();
     view?.dispose();
     tui.stop({ preserveScreen: true });
@@ -269,6 +273,11 @@ export async function attachTui(options: {
     model: "shared host",
     onExit: leave,
     detachOnCtrlD: true,
+    commands: [
+      { name: "changes", description: "Review and roll back host edits" },
+      { name: "tasks", description: "Manage host execution" },
+      { name: "plan", description: "Read-only planning and plan review" },
+    ],
     onDraftChange: (text) => {
       if (sessionId) drafts.update(sessionId, text);
     },
@@ -296,7 +305,12 @@ export async function attachTui(options: {
     },
     onPrompt: async (text, images) => {
       try {
+        const queued = client.state.busy;
         await backend.prompt(text, images);
+        if (queued)
+          view.notice(
+            "Message queued on host. Use /tasks to manage pending messages.",
+          );
       } catch (e) {
         if (!view.editor.getExpandedText()) view.editor.setText(submittedDraft);
         throw e;
@@ -307,11 +321,16 @@ export async function attachTui(options: {
       const [command, ...parts] = text.trim().split(/\s+/);
       const rest = parts.join(" ");
       switch (command) {
+        case "/changes":
+        case "/tasks":
+        case "/plan":
+          await workflows!.command(command, rest);
+          return;
         case "/quit":
           leave();
           return;
         case "/help":
-          return "Shared host: /sessions [query], /resume ID, /new, /rename title, /compact, /fork, /steer text, /status, /access, /share DEVICE view|control|off, /model PROVIDER/MODEL, /attach PATH. Ctrl+C stops the selected task; Ctrl+D detaches. Local files use the existing @ completion.";
+          return "Shared host: /changes, /tasks, /plan [TASK], /plan cancel · host workflows. /sessions [query], /resume ID, /new, /rename title, /compact, /fork, /steer text, /status, /access, /share DEVICE view|control|off, /model PROVIDER/MODEL, /attach PATH. Ctrl+C stops the selected task; Ctrl+D detaches. Local files use the existing @ completion.";
         case "/status":
           return JSON.stringify(
             {
@@ -390,6 +409,7 @@ export async function attachTui(options: {
       }
     },
   });
+  workflows = new AttachedWorkflows(client, view, transport.endpoint.cwd);
   view.bind(backend);
   view.setPermissionLabel("Host owns task approvals");
   try {

@@ -443,6 +443,9 @@ export class HikaroView {
     );
     this.tui.requestRender();
   }
+  closeModelPanel() {
+    this.modelController?.abort();
+  }
   openModelPanel(options?: {
     yieldToApproval?: boolean;
     interruptYielding?: boolean;
