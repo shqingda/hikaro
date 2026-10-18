@@ -2,6 +2,27 @@
 
 更新：2026-10-18。目标是让 agent 在长任务、取消、权限和恢复边界上可靠，同时用同口径数据约束开销。通过一个合成基准不等于真实模型、终端显示、原生客户端或长期运行全部达标。
 
+## H1 共享 host：2026-10-18 最终复核
+
+最终启动源码基线 `30c4697`，工作区 dirty 仅含文档改动；Node 26.12.0、macOS arm64 / Apple M3 Pro。独立与附着启动报告的完整分发图 SHA-256 均为 `2391942bf01b3f4ed584d35fcb27bfb5f1803c66f1db259e27328a3bf4ac5723`。两项启动门槛顺序运行，没有同时运行构建或测试；以下后续修改只有文档，不改变该构建。
+
+| 口径                                                                                 | 启动 p95  | 输入 p95 | TUI RSS p95                   | host RSS p95 | 合计 RSS p95 |
+| ------------------------------------------------------------------------------------ | --------- | -------- | ----------------------------- | ------------ | ------------ |
+| 独立 TUI，冷 V8 缓存／新数据目录，30 次 + 3 次预热                                   | 164.67 ms | 1.268 ms | 70.80 MiB（含 SQLite worker） | 同进程       | 70.80 MiB    |
+| 已就绪独立 host 的附着 TUI，客户端冷 V8 缓存／每次新 host 数据目录，30 次 + 3 次预热 | 175.03 ms | 1.080 ms | 59.88 MiB                     | 66.25 MiB    | 126.00 MiB   |
+
+原独立 TUI 的 200 ms／16 ms／100 MiB 三项门槛全部通过。附着进程按相同 200 ms／16 ms／100 MiB 预算单独检查；**126.00 MiB 是双进程总开销，超过原单进程 100 MiB，不能用界面进程的通过宣称总内存也满足该门槛**。共享模式保留这项额外成本，后续继续优化；本轮没有提高或替换原基准的预算。
+
+附着计时从 PTY spawn 开始，到 hello、权威快照、初始会话、历史和本地草稿恢复完成后显示 `Attached to shared host.` 为止。host 在计时前就绪，因此不代表冷主机启动。host 内存与 TUI 内存同时在界面就绪处读取，再按每个样本相加计算合计 p95；不会把两个各自 p95 相加冒充合计分位数。所有启动样本仍测 20 次输入。首次 1 次／0 次预热观察报告 `artifacts/benchmark-shared-host-observation.json` 只是采样器排查，host RSS 当时取自主机初始就绪处，不能替代最终的同时取样报告。
+
+最终原始报告：`artifacts/benchmark-shared-host-standalone-delegated-final.json`、`artifacts/benchmark-shared-host-attach-delegated-final.json`。目录按现有规则不入 Git，以上源码版本及命令可用于复现。此前 `0881c95`（`*-final.json`，图 `943409a7…`）和 `c9bc286`（`*-selection-fix.json`，图 `d058beb6…`）的通过报告全部保留；后续控制竞争与委派审批修正改变了分发图，因此最终构建重新测量，不按数值择优。
+
+共享合计 RSS 指 host + TUI，不含可选 `--serve` 桥接、外部工具和其他服务。不能把这项双进程观察外推为完整远程运行的全部内存。
+
+10k core/storage 在源码 `0881c95` 顺序测量，后续两次修正没有改变该基准依赖的 core 执行代码或 storage 实现，因此没有重复运行通过的基准。保持 **10,000 事件 + 10,000 stream chunks**、1 次预热／3 次测量、原正确性断言：append p95 **606.08 ms** ≤1500；replay **19.65 ms** ≤100；message page **0.121 ms** ≤5；context history **2.258 ms** ≤25；stream **4.511 ms** ≤50；event loop **10.052 ms** ≤20；最高 RSS **99.34 MiB** ≤160。全部通过，原始报告 `artifacts/benchmark-shared-host-harness-final.json`。SQLite WAL／FULL 与 native 文件防护未降低。
+
+这些证据不含生产 relay／外部模型、移动真机、耗电或 30 分钟 soak；原生移动性能仍需按路线单独验收。
+
 ## TUI / 移动方向调整后的复核
 
 指标只属于现有 TUI 和 core/storage。2026-10-18 本机 Node 26.12.0、macOS arm64 / M3 Pro，最终构建图 SHA-256 `ce18b7f2c605f17c73fe9f7c50c35837680a5e702ce26654ffa603a9cc1257d0`；报告开始采集时基线为 `94fac7b` + dirty shared-client 改动，该源码随后提交为 `e622d85`。
@@ -21,6 +42,7 @@ pnpm bench                  # 3 次预热 + 30 次独立进程启动，各测 20
 pnpm bench:check            # 相同工作负载；任何性能门槛失败则返回非零
 HIKARO_BENCH_CACHE=warm pnpm bench:check # 单独测共享编译缓存；不可替代默认冷缓存门槛
 HIKARO_BENCH_CACHE=disabled pnpm bench # 单独测 Node 缓存关闭时的启动
+pnpm bench:attach:check     # 30 次附着 warm host；同时报告 TUI、host 与总 RSS
 pnpm bench:harness          # 1 次预热 + 3 次 SQLite/core 工作负载
 pnpm bench:harness:check    # 固定工作负载与最小采样数，不允许缩小数据量绕过门槛
 ```
@@ -77,12 +99,12 @@ pnpm bench:harness:check    # 固定工作负载与最小采样数，不允许�
 
 最终生产构建：每次使用空 V8 缓存，保留原工作区和全部用户 Skill 发现，3 次预热 + 30 次独立进程，每次 20 次输入。OS 文件缓存已预热，不等于冷磁盘／开机测量。
 
-| 指标 | 最终值 | 原门槛结果 |
-| --- | --- | --- |
-| 启动 p50／p95 | 175.96／181.00 ms | **通过 p95 ≤ 200 ms，命令退出 0** |
-| 预热前首次空缓存启动 | 181.92 ms | 单一样本，不替代 p95 |
-| 输入 p95 | 1.37 ms | 通过 16 ms |
-| 就绪 RSS p95 | 72.67 MiB | 通过 100 MiB |
+| 指标                 | 最终值            | 原门槛结果                        |
+| -------------------- | ----------------- | --------------------------------- |
+| 启动 p50／p95        | 175.96／181.00 ms | **通过 p95 ≤ 200 ms，命令退出 0** |
+| 预热前首次空缓存启动 | 181.92 ms         | 单一样本，不替代 p95              |
+| 输入 p95             | 1.37 ms           | 通过 16 ms                        |
+| 就绪 RSS p95         | 72.67 MiB         | 通过 100 MiB                      |
 
 最终原始报告为 `artifacts/benchmark-startup-minified-final.json`，已同步到 `artifacts/benchmark.json`；bundle graph SHA-256 为 `65dc9f43e5c05e6c36a2dde9068b2ff9e50599261efcd633a004d949bf0c6905`。完整失败候选保留：早期两组 p95 229.64／550.52 ms，DDL 阶段 219.54 ms，可选说明文件预检查阶段 203.88 ms，首次立即绘制阶段 200.63 ms，独立 import 试验 209.68 ms。200.63 ms 仍被判失败，没有取整放行；最终通过来自后续构建改动，未删除样本或放宽门槛。后台负载会影响尾部，一次固定设备验收不代表所有机器或真实 provider 都达到相同数值。
 
@@ -120,14 +142,14 @@ Changes retained:
 
 Failed and reverted measurements are retained:
 
-| Attempt | Startup p95 | Decision/evidence |
-| --- | ---: | --- |
-| C0 before scope-race correction | 174.27 ms | Passing interim report, not final code |
-| Final receipt code, shared load | 207.77 ms | Failure retained; never rounded down |
-| Alternating previous commit / candidate, 30 launches each | 208.89 / 201.27 ms | Both fail; demonstrates shared-host variance, not an exemption |
-| Identifier minification | 192.38 ms | One passing batch; later 219.79 ms failure also retained |
-| Start SQLite worker before Runtime module imports | 218.45 ms | Reverted: median changed about 1 ms, inside noise; no additional abstraction retained |
-| Secure batch reads, final code | **165.54 ms** | Retained; full original gate passes |
+| Attempt                                                   |        Startup p95 | Decision/evidence                                                                     |
+| --------------------------------------------------------- | -----------------: | ------------------------------------------------------------------------------------- |
+| C0 before scope-race correction                           |          174.27 ms | Passing interim report, not final code                                                |
+| Final receipt code, shared load                           |          207.77 ms | Failure retained; never rounded down                                                  |
+| Alternating previous commit / candidate, 30 launches each | 208.89 / 201.27 ms | Both fail; demonstrates shared-host variance, not an exemption                        |
+| Identifier minification                                   |          192.38 ms | One passing batch; later 219.79 ms failure also retained                              |
+| Start SQLite worker before Runtime module imports         |          218.45 ms | Reverted: median changed about 1 ms, inside noise; no additional abstraction retained |
+| Secure batch reads, final code                            |      **165.54 ms** | Retained; full original gate passes                                                   |
 
 Raw files use `artifacts/benchmark-client-c0-*.json`. No user application was stopped, no slow samples discarded, no threshold or measurement boundary changed. These are one-device measurements, not a guarantee under arbitrary OS contention or a native-client result.
 

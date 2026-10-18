@@ -1,5 +1,23 @@
 # Validation status
 
+## H1 shared task host and recoverable views: 2026-10-18
+
+Implemented `--host`, `--attach` and a `--serve` bridge to that same Runtime. Canonical workspace/home ownership is elected transactionally; private Unix socket credentials enforce local/device scope injection. Per-session view/control grants and selection are durable. Only authorized control participants viewing the session receive its approvals; the host rechecks the request at decision time. Revocation removes a device's own queued/active work without canceling another owner's run. Replaced view identities stop reconnecting rather than fighting for the socket. See [startup, grants and recovery](shared-host.md).
+
+The attached TUI commits ID/method intent metadata before sending, keeps drafts per view, and restores snapshots/receipts without replay. An injected portable `IntentStore` supports the same contract on future native clients; actual native storage/UI remains M0.
+
+Necessary verification, without a full suite:
+
+- One real two-connection SQLite case covers single-host election, wrong-owner release, workspace/scope access, filtered listing and persisted selection/revocation. Its first-open failure exposed SQLite journal-mode BUSY outside the busy handler; only that initialization has a bounded retry, with WAL/FULL retained.
+- `tests/shared-host.test.ts`: **4 real integration cases**. Unix socket + Runtime + SQLite + encrypted adapter cover denied foreign access, view/control grants, shared run ID, approval races, revoked membership, dropped replies and offline device revocation. A device's queued prompt cannot cancel the local owner's pending run. A recreated view recovers durable intent, and a separately spawned host is SIGKILLed/restarted: its original selection/run ID return as unknown; persisted run.start count proves no replay. Invalid credentials and insecure metadata fail closed. Reusing a view identity fences the older channel. The delegated-task case retains the real child session ID while validating decisions against live root-task authority; arbitrary fork lineage does not receive that delegation mapping.
+- The real PTY case exits with an approval open, reattaches to the same request, receives another view's decision, then restores an unsent multilingual draft after SIGKILL. Its initial timeout exposed Ctrl+D being swallowed by the approval panel; attached views now explicitly detach before panel input handling, with no denial sent to the host.
+- The portable connection case holds an intent commit across a new connection epoch and proves the old mutation is never sent. The affected core/client/RPC/lease/library selection passed **9 files / 61 tests**; subsequent adapter/scope checks passed **5 files / 13 tests**, and the later host/TUI/bridge change passed **2 files / 6 tests**. Final control/Runtime review added a deterministic stalled-receipt/resume race: it first reproduced cancellation of a view-only replacement session, then passed after post-acceptance selection/control fencing. The final host/control/handshake run passed **3 files / 28 tests**, including the real delegated tool approval. Repository and portable typechecks passed after these changes. Counts overlap; they are not a full-suite total.
+- Repository typecheck, no-Node/no-DOM portable typecheck, production build and diff check passed. No deployment, physical mobile device or external provider was used; relay sockets/provider output in the new shared-run case are deterministic fixtures.
+
+Sequential final startup measurements at `30c4697`: original independent TUI **164.67 ms startup p95 / 1.268 ms input / 70.80 MiB RSS**, attached TUI **175.03 ms / 1.080 ms / 59.88 MiB**; 30 measured launches and 3 warmups each. Original thresholds and unchanged 10k core/storage assertions pass (the 10k run is at `0881c95`, with unchanged core/storage execution paths afterward). Shared host RSS is separately **66.25 MiB** and host + TUI combined RSS p95 **126.00 MiB** (excluding relay bridge / external tools), exceeding the old single-process footprint; the new view's RSS pass is not a combined-memory pass. Exact graph fingerprint, raw reports and limits are in [the performance ledger](harness-performance.md).
+
+Native mobile UI, secure storage integration, real network/background/kill/revocation behavior, cold host startup budget, combined-memory optimization and the full independent TUI command surface remain subsequent work. H1 does not change the existing lifetime-only cost budgets or make already executed file effects reversible.
+
 ## TUI/mobile direction and shared client APIs: 2026-10-18
 
 The confirmed product direction is TUI plus a mobile companion for viewing, approval, steering and cancellation. Product scope and dependencies are recorded in the [TUI/mobile plan](tui-mobile-direction.md). Only standalone phone layout references are retained. No native mobile app or service deployment is claimed.
@@ -15,7 +33,7 @@ Verification on macOS arm64 / Node 26.12.0 / pnpm 12.11.2:
 
 Final TUI startup gate: **30 measured launches + 3 warmups**, fresh V8 cache and data home per launch; startup p95 **174.02 ms**, input p95 **1.765 ms**, ready RSS p95 **70.86 MiB**. All original thresholds pass. Raw report: `artifacts/benchmark-tui-mobile-final.json`, graph SHA-256 `ce18b7f2c605f17c73fe9f7c50c35837680a5e702ce26654ffa603a9cc1257d0`. The 10k storage/core gate also passes unchanged (`artifacts/benchmark-harness-tui-mobile-direction.json`). The earlier 178.12 ms startup observation (`artifacts/benchmark-tui-mobile-direction.json`) overlapped briefly with the harness driver and is retained. The final startup run followed formatting of the distributed worker and a rebuild, and ran separately; it is not a selected subset of the first report. No 30-minute soak, native mobile/network acceptance or summary-quality claim follows from these measurements.
 
-Pending: TUI attachment to the same remote host, authenticated local IPC, cross-client approval ownership, durable client-side intent metadata and native device storage/lifecycle verification. Host durable receipts and this encrypted fixture do not by themselves complete those capabilities.
+The attachment/IPC/approval/local-intent gaps recorded at this stage were subsequently implemented in H1 above. Native device storage, UI and lifecycle verification remain pending.
 
 ## Context, session recovery and performance: 2026-10-18
 

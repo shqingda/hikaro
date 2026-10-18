@@ -1,6 +1,6 @@
 # Current scope
 
-TUI and bidirectional Pi integration are active. Portable client state, durable host receipts and an encrypted remote adapter support the confirmed mobile companion direction. The native mobile app, TUI attachment to the same host and device lifecycle acceptance remain pending. See the [TUI/mobile plan](tui-mobile-direction.md). Cloud deployment remains optional. [TODO.md](../TODO.md) is the current implementation ledger.
+TUI and bidirectional Pi integration are active. Portable client state, durable host receipts and an encrypted remote adapter support the confirmed mobile companion direction. An opt-in independent host now owns one canonical workspace/home pair: `--attach` TUI and `--serve` encrypted devices share that Runtime through owner-only authenticated IPC. Session grants, approval authority and reconnect/unknown-outcome recovery are implemented; see the [shared-host guide](shared-host.md). The native mobile app and physical-device lifecycle acceptance remain pending. See the [TUI/mobile plan](tui-mobile-direction.md). Cloud deployment remains optional. [TODO.md](../TODO.md) is the current implementation ledger.
 
 # Implementation and design review
 
