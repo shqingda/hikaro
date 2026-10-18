@@ -132,7 +132,9 @@ export class Agent implements AgentBackend {
   private steering: Array<{ text: string; scope?: string }> = [];
   private compacting = false;
   private origin?: { scope?: string; commandId?: string };
+  private queueHolds = 0;
   private queue: Array<{
+    id: string;
     text: string;
     images?: ImageInput[];
     origin?: { scope?: string; commandId?: string };
@@ -332,9 +334,54 @@ export class Agent implements AgentBackend {
     if (!text.trim() && !images?.length) return;
     if (this.queue.length >= 32) throw Error("Prompt queue is full");
     return new Promise<void>((resolve, reject) => {
-      this.queue.push({ text, images, origin, resolve, reject });
+      this.queue.push({
+        id: randomUUID(),
+        text,
+        images,
+        origin,
+        resolve,
+        reject,
+      });
       void this.drain();
     });
+  }
+  /** Freeze dispatch while the user manages pending work; active work continues. */
+  holdQueue() {
+    this.queueHolds++;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.queueHolds--;
+      void this.drain();
+    };
+  }
+  pendingPrompts() {
+    return this.queue.map(({ id, text, images }) => ({
+      id,
+      text,
+      attachments: images?.length ?? 0,
+    }));
+  }
+  private pendingIndex(id: string) {
+    const index = this.queue.findIndex((item) => item.id === id);
+    if (index < 0)
+      throw Error("Message is no longer queued; refresh the list.");
+    return index;
+  }
+  updatePending(id: string, text: string) {
+    const item = this.queue[this.pendingIndex(id)]!;
+    if (!text.trim() && !item.images?.length)
+      throw Error("Message cannot be empty");
+    item.text = text;
+  }
+  prioritizePending(id: string) {
+    const [item] = this.queue.splice(this.pendingIndex(id), 1);
+    this.queue.unshift(item!);
+  }
+  removePending(id: string) {
+    const [item] = this.queue.splice(this.pendingIndex(id), 1);
+    item!.reject(new DOMException("Removed from queue", "AbortError"));
   }
   steer(text: string, scope?: string) {
     if (this.steering.length >= 16) throw Error("Steering queue is full");
@@ -363,7 +410,7 @@ export class Agent implements AgentBackend {
     if (this.draining) return;
     this.draining = true;
     try {
-      while (this.queue.length) {
+      while (this.queue.length && !this.queueHolds) {
         const item = this.queue.shift()!;
         try {
           this.origin = item.origin;

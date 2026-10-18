@@ -19,6 +19,7 @@ import {
   type RunBudget,
   type ModelSelection,
 } from "../../core/src/index.ts";
+import { TerminalManager } from "../../tools/src/terminal.ts";
 import { ChangeJournal } from "../../tools/src/changes.ts";
 import { SQLiteStore } from "../../storage/src/index.ts";
 import {
@@ -89,6 +90,45 @@ export class Runtime {
     readonly options: RuntimeOptions,
     readonly store: SQLiteStore,
   ) {}
+  readonly terminals = new TerminalManager();
+  private children = new Map<
+    string,
+    {
+      id: string;
+      parent: string;
+      task: string;
+      state: string;
+      output: string;
+      stopping: boolean;
+      child?: Agent;
+    }
+  >();
+  childTasks(parent: string) {
+    return [...this.children.values()]
+      .filter((item) => item.parent === parent)
+      .map((item) => {
+        const snapshot = item.child?.snapshot();
+        return {
+          id: item.id,
+          task: item.task,
+          state:
+            item.stopping && snapshot?.busy
+              ? "stopping"
+              : snapshot?.runStatus === "idle"
+                ? "starting"
+                : (snapshot?.runStatus ?? item.state),
+          output: snapshot?.stream || item.output,
+        };
+      });
+  }
+  stopChild(parent: string, id: string) {
+    const item = this.children.get(id);
+    if (!item || item.parent !== parent)
+      throw Error("Child task not found in this session");
+    if (!item.child?.busy) return;
+    item.stopping = true;
+    item.child.cancel();
+  }
   private changeJournal?: ChangeJournal;
   get changes() {
     return (this.changeJournal ??= new ChangeJournal(this.options.home!));
@@ -240,6 +280,7 @@ export class Runtime {
         terminalPlugin(
           () => runtime.workspaceTrusted(),
           () => runtime.options.permissionMode === "full",
+          runtime.terminals,
         ),
       );
       try {
@@ -328,13 +369,48 @@ export class Runtime {
               ctx.depth + 1,
               ctx.budget,
             );
-            await runtime.withCancellation(child, ctx.signal, () => {
-              const work = child.prompt(task, undefined, { scope: ctx.scope });
-              runtime.pendingSubagents--;
-              pending = false;
-              return work;
-            });
+            const completed = [...runtime.children.values()].filter(
+              (item) => !item.child,
+            );
+            for (const item of completed.slice(
+              0,
+              Math.max(0, completed.length - 99),
+            ))
+              runtime.children.delete(item.id);
+            const record = {
+              id: session.id,
+              parent: ctx.sessionId,
+              task,
+              state: "starting",
+              output: "",
+              stopping: false,
+              child: child as Agent | undefined,
+            };
+            runtime.children.set(session.id, record);
+            try {
+              await runtime.withCancellation(child, ctx.signal, () => {
+                const work = child.prompt(task, undefined, {
+                  scope: ctx.scope,
+                });
+                runtime.pendingSubagents--;
+                pending = false;
+                return work;
+              });
+            } catch (error) {
+              record.output =
+                error instanceof Error ? error.message : String(error);
+              throw error;
+            } finally {
+              record.state = child.snapshot().runStatus;
+              record.output = child.snapshot().stream || record.output;
+              record.child = undefined;
+            }
             const messages = await runtime.store.messages(session.id);
+            record.output =
+              messages
+                .filter((m) => m.role === "assistant")
+                .at(-1)
+                ?.text.slice(-64000) ?? record.output;
             return {
               text:
                 messages.filter((m) => m.role === "assistant").at(-1)?.text ??

@@ -127,14 +127,25 @@ export class ModelPanel implements Component {
       this.pending = { resolve, reject };
     });
   }
-  readDocument(title: string, text: string, canRollback: boolean) {
+  readDocument(
+    title: string,
+    text: string,
+    canRollback: boolean | SelectItem[],
+  ) {
     const pending = this.choose(
       title,
       [
-        { value: "back", label: "Back to changes" },
-        ...(canRollback
-          ? [{ value: "rollback", label: "Roll back this edit…" }]
-          : []),
+        {
+          value: "back",
+          label: Array.isArray(canRollback)
+            ? "Back to list"
+            : "Back to changes",
+        },
+        ...(Array.isArray(canRollback)
+          ? canRollback
+          : canRollback
+            ? [{ value: "rollback", label: "Roll back this edit…" }]
+            : []),
       ],
       "",
       undefined,
@@ -150,6 +161,15 @@ export class ModelPanel implements Component {
     this.documentReady = false;
     this.refresh();
     return pending;
+  }
+  updateDocument(title: string, text: string) {
+    const next = clean(text);
+    if (!this.document || (this.title === title && this.document.text === next))
+      return;
+    this.title = title;
+    this.document.text = next;
+    this.document.width = 0;
+    this.refresh();
   }
   private updateList(selectedValue?: string) {
     const query = (this.input?.getValue() ?? "").trim().toLowerCase();
@@ -195,6 +215,8 @@ export class ModelPanel implements Component {
     this.searchRevision++;
     this.loadItems = undefined;
     this.searching = false;
+    this.document = undefined;
+    this.requireNoticeVisible = false;
     this.title = title;
     this.error = "";
     this.message = "";
@@ -504,7 +526,10 @@ export class ModelPanel implements Component {
         .slice(0, budget);
     if (this.document) {
       const doc = this.document;
-      const actions = this.choiceRows(width, 3);
+      const actions = this.choiceRows(
+        width,
+        Math.min(6, this.matches.length + 1),
+      );
       const help = new Text(
         dim("PgUp/PgDn scroll · ↑↓ action · Enter · Esc back"),
         1,
@@ -571,7 +596,7 @@ export class ModelPanel implements Component {
       message.length + error.length > noticeRoom
     ) {
       return new Text(
-        dim("Resize to read the complete rollback confirmation · Esc cancel"),
+        dim("Resize to read the complete confirmation · Esc cancel"),
         0,
         0,
       )

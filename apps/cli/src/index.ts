@@ -378,6 +378,10 @@ async function main() {
     onDraftChange: (text) => drafts.update(draftSessionId, text),
     commands: [
       {
+        name: "tasks",
+        description: "Manage pending messages, terminals and child agents",
+      },
+      {
         name: "changes",
         description: "Review file edits and safely roll them back",
       },
@@ -405,7 +409,13 @@ async function main() {
         );
         return;
       }
-      await agent.prompt(text, images);
+      const work = agent.prompt(text, images);
+      const pending = agent.pendingPrompts().length;
+      if (pending)
+        view.notice(
+          `Message queued · ${pending} pending. Use /tasks to manage.`,
+        );
+      await work;
     },
     onExit: exit,
     onHistory: history,
@@ -493,6 +503,16 @@ async function main() {
           );
       };
       switch (command) {
+        case "tasks": {
+          const { openExecutionControl } =
+            await import("../../../packages/tui/src/execution-control.ts");
+          await openExecutionControl(view, {
+            agent,
+            runtime,
+            session: session.id,
+          });
+          return;
+        }
         case "changes": {
           if (agent.busy)
             throw Error("Finish or cancel the run before reviewing changes.");
@@ -560,7 +580,7 @@ async function main() {
           return "Attachment added. Add your question and press Enter.";
         }
         case "help":
-          return '/changes · Review and roll back recorded file edits\n/new  /sessions  /resume [ID]  /rename TITLE  /export\n/fork  /compact  /model provider/model\n/attach PATH · @file or @"path with spaces" attaches text/images\n/settings  /permissions [ask|auto|full]\n/context [default]  /thinking [default]  /speed [default]\n/status  /resources\n/steer instructions  /tools  /older  /newer  /latest  /quit\n!COMMAND follows the current permission mode. Ctrl+C cancels. Ctrl+D exits. Shift+Enter adds a line.\nNew prompts queue while the agent works.';
+          return '/tasks · Manage queued messages, background terminals and child agents\n/changes · Review and roll back recorded file edits\n/new  /sessions  /resume [ID]  /rename TITLE  /export\n/fork  /compact  /model provider/model\n/attach PATH · @file or @"path with spaces" attaches text/images\n/settings  /permissions [ask|auto|full]\n/context [default]  /thinking [default]  /speed [default]\n/status  /resources\n/steer instructions  /tools  /older  /newer  /latest  /quit\n!COMMAND follows the current permission mode. Ctrl+C cancels. Ctrl+D exits. Shift+Enter adds a line.\nNew prompts queue while the agent works.';
         case "new":
           await bind(await runtime.session());
           return;
