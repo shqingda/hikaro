@@ -1,5 +1,5 @@
 import * as z from "zod";
-import type { AgentEvent, Message } from "../../core/src/types.ts";
+import type { AgentEvent, Message, Session } from "../../core/src/types.ts";
 import { rpcMethods } from "./contracts.ts";
 export { protocolVersion } from "./contracts.ts";
 export type AcceptedOperation = { accepted: true; operationId: string };
@@ -31,12 +31,45 @@ export const Command = z.object({
   params: z.record(z.string(), z.unknown()).default({}),
 });
 export type Command = z.infer<typeof Command>;
+export function publicSession(session: Session): Session {
+  const selection = session.modelSelection;
+  return {
+    ...session,
+    modelSelection: selection
+      ? {
+          provider: selection.provider,
+          model: selection.model,
+          settings: selection.settings,
+        }
+      : undefined,
+  };
+}
 /** Provider-native signatures and image bytes belong to storage/provider layers, not every UI frame. */
-export function publicMessage(
-  message: Message,
-): Message & { imageCount?: number } {
+export function publicMessage(message: Message): Message & {
+  imageCount?: number;
+  textLength?: number;
+  thinkingLength?: number;
+  toolCallsTruncated?: boolean;
+} {
   const { providerData, images, ...rest } = message;
-  return { ...rest, ...(images?.length ? { imageCount: images.length } : {}) };
+  return {
+    ...rest,
+    text: rest.text.slice(0, 20000),
+    ...(rest.thinking
+      ? {
+          thinking: rest.thinking.slice(0, 4000),
+          thinkingLength: rest.thinking.length,
+        }
+      : {}),
+    textLength: rest.text.length,
+    toolCalls: rest.toolCalls?.slice(0, 32).map((call) => ({
+      id: call.id.slice(0, 128),
+      name: call.name.slice(0, 256),
+      arguments: {},
+    })),
+    ...(rest.toolCalls?.length ? { toolCallsTruncated: true } : {}),
+    ...(images?.length ? { imageCount: images.length } : {}),
+  };
 }
 export function publicEvent(event: AgentEvent): AgentEvent {
   if (event.type === "message")
@@ -66,7 +99,7 @@ export function publicEvent(event: AgentEvent): AgentEvent {
       data: {
         ...event.data,
         result: {
-          text: result.text,
+          text: String(result.text ?? "").slice(0, 48000),
           isError: result.isError,
           data: result.data?.artifact
             ? { artifact: result.data.artifact }

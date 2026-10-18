@@ -44,6 +44,31 @@ function event(
     event: { sessionId, seq, type, data, timestamp: 1 },
   };
 }
+it("retains a metadata invalidation arriving after a snapshot watermark but before its response", () => {
+  const { client, epoch } = ready();
+  client.command("racing-snapshot", "session.current");
+  client.receive(epoch, {
+    type: "session.invalidated",
+    scope: "desktop",
+    revision: 1,
+  });
+  response(client, epoch, "racing-snapshot", snapshot(0));
+  expect(client.state).toMatchObject({
+    revision: 1,
+    syncRequired: true,
+    canAct: false,
+  });
+  client.command("fresh-metadata", "session.current");
+  response(client, epoch, "fresh-metadata", {
+    ...snapshot(0),
+    revision: 1,
+    session: { ...session, title: "Renamed" },
+  });
+  expect(client.state).toMatchObject({
+    session: { title: "Renamed" },
+    canAct: true,
+  });
+});
 it("deduplicates only the selected scope/session and freezes mutations on a sequence gap", () => {
   const { client, epoch } = ready();
   client.receive(epoch, event(1, "run.start", { runId: "run-1" }));

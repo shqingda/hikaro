@@ -93,7 +93,12 @@ async function connection() {
       }
       return agent;
     },
-    compact: vi.fn(() => compact.promise),
+    compact: vi.fn(() =>
+      compact.promise.then((session) => {
+        sessions.set(session.id, session);
+        return session;
+      }),
+    ),
     async close() {
       run.resolve();
       compact.resolve([...sessions.values()][0]!);

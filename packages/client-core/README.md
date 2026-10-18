@@ -1,6 +1,6 @@
 # Client core — C0 contract
 
-This first slice is a portable execution-state reducer, not a GUI or a new execution owner. It imports only the portable Zod wire contracts; no Node, DOM, socket, clock, storage, credential, or model API. Native transports remain outside this package.
+This package contains a portable execution-state reducer and an optional raw-transport controller, not a GUI or a new execution owner. Its import closure uses portable Zod wire contracts with no Node/DOM ambient types. Platforms inject the transport, unique IDs and a cancellable clock. Native transports and credentials remain outside this package.
 
 ## Contract before implementation
 
@@ -21,7 +21,23 @@ Targeted tests only: `tests/client-core.test.ts` for duplicates/gaps/epochs/appr
 
 `ProcessClient.observe` receives raw responses and notifications in wire order even when no `request()` promise owns the ID. Use `send(state.command(...))` once and feed the observer to `state.receive(epoch, frame)`. On transport failure call `state.disconnected(epoch)`; on a new transport call `beginConnection()` and explicitly send `hello`, then `session.current`. Catch validation errors in the observer to show an error state. Calling `request()` and `send()` for the same prepared command would send twice: use one path.
 
-A remote adapter must expose the same raw frame stream and bind `ClientState.scope` to the authenticated device ID; do not replace the server-selected scope with a handset-provided value. This package does not replace the existing crypto handshake or credential storage. The existing remote request wrapper has not yet gained a raw observer, so full mobile transport wiring remains a later slice.
+A remote adapter must expose the same raw frame stream and bind `ClientState.scope` to the authenticated device ID; do not replace the server-selected scope with a handset-provided value. `RemoteClient.observe/send` and `packages/remote/src/connection.ts` now provide that path, retaining the existing authenticated channel and reconnect policy. This is tested with a real CLI/SQLite host and an encrypted in-process socket fixture, not a production relay or native mobile runtime.
+
+## Raw connection controller
+
+`ClientConnection` in `src/connection.ts` handshakes and restores a snapshot when the platform reports a connection. It sends every prepared frame once, bounds pending requests to 32 with recovery slots, applies a 30-second timeout by default, and marks interrupted outcomes unknown. Revision gaps and session invalidation trigger safe snapshot reads. It queries durable receipts after mutation replies; `reconcile()` explicitly checks remaining acknowledged/unknown outcomes. It never resubmits mutations. The platform must fence callbacks from obsolete transports and call `disconnected()` on transport loss.
+
+The controller's intent ledger is currently in memory. Native clients still need durable intent metadata before sending, isolated by host/workspace/device, so app termination does not lose unknown command IDs. This limitation is separate from the host's already durable receipts.
+
+## Client library APIs
+
+Capabilities now enumerate `workspace.current`, session rename/delete/export and title/ID search, draft read/save, model list/read/set/default, message content and restricted artifact reads. Credential management stays on the host; remote model selection cannot supply an endpoint. Session projections omit the stored endpoint. Active and saved default selection remain separate.
+
+`messages.read` returns stable sequence pages bounded to roughly 450 kB, with text previews (20,000 UTF-16 units), thinking previews (4,000), image counts and explicitly truncated tool-call metadata. `messages.content` reads text/thinking/toolCalls JSON or base64 image segments by session + event sequence; offsets are UTF-16 units (ASCII characters for base64), at most 65,536 per response. It never exposes provider-native payloads. `events.read` returns a bounded prefix of a sequence page and reports an unpageable first event explicitly instead of silently dropping it or closing the channel.
+
+`session.export` reads Markdown segments against a stable `through` sequence watermark. Carry `through/after/nextOffset` into the next request; no host path is returned. `artifact.read` accepts only the sequence of a host-authored `tool.end` reference inside that session's artifact/output directory, passes the native no-symlink helper, and returns base64 byte ranges (up to 49,152 bytes) with a SHA-256 digest. Pass the digest on later reads to detect changes. Files above the explicit 16 MiB secure snapshot limit fail visibly; 50 MiB process logs do not gain a new unsafe fallback. These APIs are not arbitrary path or URL readers, nor a portable attachment export format.
+
+`tests/client-transports.test.ts` covers local/encrypted-remote convergence, duplicate/gap notifications, dropped prompt replies, reconnect, receipt reconciliation and more than 60 settled draft writes. `tests/rpc-library.test.ts` covers large multilingual messages, image segments, complete paged text export, provider-data exclusion, artifact ranges/change detection and symlink denial. Only affected tests are required for changes to these paths.
 
 ## Implemented verification
 

@@ -10,7 +10,19 @@ export const rpcMethods = [
   "session.resume",
   "session.fork",
   "session.compact",
+  "workspace.current",
+  "session.rename",
+  "session.delete",
+  "session.export",
+  "draft.read",
+  "draft.save",
+  "models.list",
+  "model.read",
+  "model.set",
+  "model.default",
   "messages.read",
+  "messages.content",
+  "artifact.read",
   "events.read",
   "prompt",
   "steer",
@@ -19,6 +31,21 @@ export const rpcMethods = [
   "client.detach",
 ] as const;
 export type RpcMethod = (typeof rpcMethods)[number];
+export const rpcReadMethods: ReadonlySet<string> = new Set([
+  "hello",
+  "command.receipt",
+  "workspace.current",
+  "session.current",
+  "session.list",
+  "session.export",
+  "draft.read",
+  "models.list",
+  "model.read",
+  "messages.read",
+  "messages.content",
+  "artifact.read",
+  "events.read",
+]);
 export const HelloParams = z.object({
   protocolVersions: z.array(z.number().int().min(1)).min(1).max(16).optional(),
 });
@@ -127,11 +154,18 @@ export const ResponseFrame = z.object({
   result: z.unknown().optional(),
   error: z.string().max(100000).optional(),
 });
+export const InvalidatedFrame = z.object({
+  type: z.literal("session.invalidated"),
+  scope: z.string().min(1).max(80),
+  revision: sequence,
+  hostInstanceId: id.optional(),
+});
 export type CurrentSession = z.infer<typeof CurrentSession>;
 export type Permission = z.infer<typeof Permission>;
 export type ScopedFrame =
   | z.infer<typeof EventFrame>
   | z.infer<typeof ApprovalFrame>
+  | z.infer<typeof InvalidatedFrame>
   | z.infer<typeof ResolvedFrame>;
 
 /** A receipt records command handling, not a guarantee of rolled-back side effects. */

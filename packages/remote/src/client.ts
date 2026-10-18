@@ -105,6 +105,7 @@ export class RemoteClient {
   private socket?: RemoteSocket;
   private channel?: SecureChannel;
   private listeners = new Set<(m: any) => void>();
+  private observers = new Set<(frame: unknown) => void>();
   private pending = new Map<
     string,
     {
@@ -131,6 +132,13 @@ export class RemoteClient {
     this.listeners.add(fn);
     return () => {
       this.listeners.delete(fn);
+    };
+  }
+  /** All decrypted protocol frames, before request routing, in wire order. */
+  observe(fn: (frame: unknown) => void) {
+    this.observers.add(fn);
+    return () => {
+      this.observers.delete(fn);
     };
   }
   private emit(m: any) {
@@ -228,6 +236,13 @@ export class RemoteClient {
           const m = result.data;
           if (!isRecord(m) || typeof m.type !== "string")
             throw Error("Invalid remote message");
+          for (const observer of this.observers) {
+            try {
+              observer(m);
+            } catch {
+              /* A view must not break the authenticated channel. */
+            }
+          }
           if (m.type === "response") {
             if (
               typeof m.id !== "string" ||
@@ -281,6 +296,27 @@ export class RemoteClient {
         Math.min(30000, 1000 * 2 ** Math.min(this.attempt++, 5)) +
           Math.random() * 500,
     );
+  }
+  /** Send an already prepared command exactly once. Scope is authenticated by the host. */
+  send(frame: {
+    id: string;
+    scope: string;
+    method: string;
+    params: Record<string, unknown>;
+  }) {
+    const { socket, channel } = this;
+    if (!this.ready || socket?.readyState !== 1 || !channel)
+      throw Error("Not connected");
+    if (socket.bufferedAmount > 2_000_000)
+      throw Error("Remote transport is congested");
+    if (
+      frame.scope !== this.pairing.deviceId ||
+      !/^[A-Za-z0-9_-]{1,80}$/.test(frame.id) ||
+      frame.method.length > 64 ||
+      !isRecord(frame.params)
+    )
+      throw Error("Invalid remote command or scope");
+    socket.send(channel.send(frame));
   }
   request(
     method: string,

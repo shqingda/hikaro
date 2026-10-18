@@ -6,10 +6,12 @@ import {
   HelloResult,
   ResolvedFrame,
   ResponseFrame,
+  InvalidatedFrame,
   type RpcMethod,
   type ScopedFrame,
   type Permission,
   rpcMethods,
+  rpcReadMethods as reads,
 } from "../../protocol/src/contracts.ts";
 
 const MAX_RECEIPTS = 64;
@@ -23,14 +25,6 @@ function utf8Bytes(value: string): number {
   }
   return bytes;
 }
-const reads = new Set<RpcMethod>([
-  "hello",
-  "session.current",
-  "session.list",
-  "messages.read",
-  "events.read",
-  "command.receipt",
-]);
 export type CommandReceipt = {
   id: string;
   method: RpcMethod;
@@ -95,6 +89,9 @@ export class ClientState {
   }
   get receipts(): CommandReceipt[] {
     return [...this.commands.values()].map(copy);
+  }
+  supports(method: RpcMethod): boolean {
+    return this.methods.has(method);
   }
   receipt(id: string): CommandReceipt | undefined {
     const value = this.commands.get(id);
@@ -248,9 +245,13 @@ export class ClientState {
       return;
     }
     if (
-      !["response", "event", "approval", "approval.resolved"].includes(
-        String(frame.type),
-      )
+      ![
+        "response",
+        "event",
+        "approval",
+        "approval.resolved",
+        "session.invalidated",
+      ].includes(String(frame.type))
     )
       return;
     try {
@@ -265,7 +266,9 @@ export class ClientState {
           ? EventFrame.parse(raw)
           : frame.type === "approval"
             ? ApprovalFrame.parse(raw)
-            : ResolvedFrame.parse(raw);
+            : frame.type === "session.invalidated"
+              ? InvalidatedFrame.parse(raw)
+              : ResolvedFrame.parse(raw);
       if (this.value.syncRequired) {
         if (
           this.buffered.length >= MAX_BUFFER ||
@@ -379,6 +382,9 @@ export class ClientState {
         "session.resume",
         "session.fork",
         "session.compact",
+        "session.rename",
+        "session.delete",
+        "model.set",
         "client.detach",
       ].includes(command.method)
     ) {
@@ -392,6 +398,10 @@ export class ClientState {
       return;
     }
     this.value.revision = frame.revision;
+    if (frame.type === "session.invalidated") {
+      this.invalidate();
+      return;
+    }
     if (frame.type === "approval") {
       const next = this.value.approvals.filter(
         (a) => a.id !== frame.request.id,

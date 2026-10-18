@@ -134,7 +134,7 @@ it("drives the portable state through the real RPC handler and SQLite without a 
   await rpcHost.send(state.command("hello-again", "hello"));
   await rpcHost.send(state.command("restored", "session.current"));
   expect(state.state).toMatchObject({
-    session: before.session,
+    session: { ...before.session, title: "hello" },
     cursor: before.cursor,
     revision: before.revision,
     busy: false,

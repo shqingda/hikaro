@@ -11,6 +11,7 @@ import {
   JsonLines,
   protocolVersion,
   publicEvent,
+  publicSession,
   isControlMethod,
 } from "../../../packages/protocol/src/index.ts";
 import type {
@@ -148,7 +149,10 @@ export async function serveRpc(
   ) => {
     requireLive(scope, state);
     expected?.signal.throwIfAborted();
-    if (state.session?.id === next.id && state.agent) return next;
+    if (state.session?.id === next.id && state.agent) {
+      state.session = next;
+      return next;
+    }
     const agent = await runtime.agent(next);
     requireLive(scope, state);
     expected?.signal.throwIfAborted();
@@ -303,11 +307,17 @@ export async function serveRpc(
             }),
           };
           break;
-        case "session.current":
+        case "session.current": {
+          const selectedId = state.session?.id;
+          if (selectedId) {
+            const saved = await runtime.session(selectedId);
+            requireLive(scope, state);
+            if (state.session?.id === selectedId) state.session = saved;
+          }
           result = {
             hostInstanceId,
             revision: state.revision,
-            session: state.session ?? null,
+            session: state.session ? publicSession(state.session) : null,
             ...(state.agent?.snapshot() ?? {
               busy: false,
               stream: "",
@@ -321,24 +331,68 @@ export async function serveRpc(
               .map((a) => a.request),
           };
           break;
+        }
         case "session.create":
-          result = await bind(scope, state, await runtime.session());
-          break;
-        case "session.list":
-          result = await runtime.store.sessions(
-            integer(p.offset, 0),
-            integer(p.limit, 50, 100),
-            runtime.options.cwd,
+          result = publicSession(
+            await bind(scope, state, await runtime.session()),
           );
           break;
+        case "session.list":
+          result = (
+            await runtime.store.sessions(
+              integer(p.offset, 0),
+              integer(p.limit, 50, 100),
+              runtime.options.cwd,
+              z.string().max(200).optional().parse(p.query),
+            )
+          ).map(publicSession);
+          break;
+        case "session.delete": {
+          const session = await selected();
+          result = await runtime.deleteSession(session.id);
+          for (const [clientScope, view] of scopes) {
+            if (view.session?.id !== session.id) continue;
+            view.unsubscribe?.();
+            view.unsubscribe = undefined;
+            view.session = undefined;
+            view.agent = undefined;
+            sendScoped({ type: "session.invalidated", scope: clientScope });
+          }
+          break;
+        }
+        case "workspace.current":
+        case "session.rename":
+        case "session.export":
+        case "draft.read":
+        case "draft.save":
+        case "models.list":
+        case "model.read":
+        case "model.set":
+        case "model.default":
+        case "messages.content":
+        case "artifact.read": {
+          const { libraryRequest } = await import("./rpc-library.ts");
+          result = await libraryRequest(runtime, command.method, p, selected);
+          if (["session.rename", "model.set"].includes(command.method)) {
+            const updated = await selected();
+            for (const [clientScope, view] of scopes)
+              if (view.session?.id === updated.id) {
+                view.session = updated;
+                sendScoped({ type: "session.invalidated", scope: clientScope });
+              }
+          }
+          break;
+        }
         case "session.resume":
-          result = await bind(scope, state, await selected());
+          result = publicSession(await bind(scope, state, await selected()));
           break;
         case "session.fork": {
           const session = await selected();
           if ((await runtime.agent(session)).busy)
             throw Error("Stop the run before forking");
-          result = await bind(scope, state, await runtime.fork(session));
+          result = publicSession(
+            await bind(scope, state, await runtime.fork(session)),
+          );
           break;
         }
         case "session.compact": {
@@ -384,7 +438,7 @@ export async function serveRpc(
                     scope,
                     operationId,
                     method: command.method,
-                    result: next,
+                    result: publicSession(next),
                   });
               })
               .catch(async (error) => {
@@ -425,18 +479,34 @@ export async function serveRpc(
             before: p.before === undefined ? undefined : integer(p.before, 0),
             after: p.after === undefined ? undefined : integer(p.after, 0),
             limit: Math.max(1, integer(p.limit, 20, 100)),
+            bounded: true,
           });
           break;
         }
         case "events.read": {
           const session = await selected();
-          result = (
+          const events = (
             await runtime.store.events(
               session.id,
               integer(p.after, 0),
               Math.max(1, integer(p.limit, 200, 1000)),
             )
           ).map(publicEvent);
+          const page = [];
+          let bytes = 2;
+          for (const event of events) {
+            const size = Buffer.byteLength(JSON.stringify(event)) + 1;
+            if (bytes + size > 500000) {
+              if (!page.length)
+                throw Error(
+                  "Event exceeds page capacity; use bounded message/artifact content APIs",
+                );
+              break;
+            }
+            page.push(event);
+            bytes += size;
+          }
+          result = page;
           break;
         }
         case "prompt": {

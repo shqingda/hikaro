@@ -271,7 +271,7 @@ const handlers = {
       )
       .get(sessionId).seq;
   },
-  messagePage({ sessionId, before, after, limit = 20 }) {
+  messagePage({ sessionId, before, after, limit = 20, bounded = false }) {
     const ascending = after !== undefined;
     const rows = db
       .prepare(
@@ -285,7 +285,34 @@ const handlers = {
     const items = [];
     let bytes = 0;
     for (const r of rows) {
-      const { providerData, images, ...message } = JSON.parse(r.data).message;
+      const { providerData, images, ...original } = JSON.parse(r.data).message;
+      const message = bounded
+        ? {
+            role: original.role,
+            timestamp: original.timestamp,
+            text: original.text.slice(0, 20000),
+            textLength: original.text.length,
+            ...(original.thinking
+              ? {
+                  thinking: original.thinking.slice(0, 4000),
+                  thinkingLength: original.thinking.length,
+                }
+              : {}),
+            ...(original.name ? { name: original.name.slice(0, 256) } : {}),
+            ...(original.callId ? { callId: original.callId } : {}),
+            ...(original.isError ? { isError: true } : {}),
+            ...(original.toolCalls?.length
+              ? {
+                  toolCalls: original.toolCalls.slice(0, 32).map((call) => ({
+                    id: call.id.slice(0, 128),
+                    name: call.name.slice(0, 256),
+                    arguments: {},
+                  })),
+                  toolCallsTruncated: true,
+                }
+              : {}),
+          }
+        : original;
       const size = Buffer.byteLength(JSON.stringify(message));
       if (items.length && bytes + size > 450000) break;
       items.push({
@@ -313,6 +340,44 @@ const handlers = {
         )
         .get(sessionId, items.at(-1).seq);
     return { items, hasOlder, hasNewer };
+  },
+  messageContent({ sessionId, seq, field, offset, limit, image }) {
+    const row = db
+      .prepare("SELECT type,data FROM events WHERE sessionId=? AND seq=?")
+      .get(sessionId, seq);
+    if (!row) throw Error("Content not found in this session");
+    const event = JSON.parse(row.data);
+    if (field === "artifact") {
+      if (row.type !== "tool.end") throw Error("Not a tool result");
+      return {
+        data:
+          event.result?.data?.artifact ??
+          event.result?.data?.process?.artifact ??
+          "",
+        encoding: "host-artifact-reference",
+        total: 0,
+        nextOffset: null,
+      };
+    }
+    if (row.type !== "message") throw Error("Not a message");
+    const message = event.message;
+    const value =
+      field === "image"
+        ? message.images?.[image]?.data
+        : field === "toolCalls"
+          ? JSON.stringify(message.toolCalls ?? [])
+          : message[field];
+    if (typeof value !== "string") throw Error("Message content not found");
+    const end = Math.min(value.length, offset + limit);
+    return {
+      data: value.slice(offset, end),
+      total: value.length,
+      nextOffset: end < value.length ? end : null,
+      encoding: field === "image" ? "base64" : "utf16",
+      ...(field === "image"
+        ? { mimeType: message.images[image].mimeType }
+        : {}),
+    };
   },
   append({ sessionId, type, data, lease }) {
     db.exec("BEGIN IMMEDIATE");

@@ -115,9 +115,30 @@ export class SQLiteStore implements EventStore {
   }
   messagePage(
     sessionId: string,
-    options: { before?: number; after?: number; limit?: number } = {},
+    options: {
+      before?: number;
+      after?: number;
+      limit?: number;
+      bounded?: boolean;
+    } = {},
   ) {
     return this.request<MessagePage>("messagePage", { sessionId, ...options });
+  }
+  messageContent(
+    sessionId: string,
+    seq: number,
+    field: "text" | "thinking" | "image" | "artifact" | "toolCalls",
+    offset: number,
+    limit: number,
+    image = 0,
+  ) {
+    return this.request<{
+      data: string;
+      total: number;
+      nextOffset: number | null;
+      encoding: string;
+      mimeType?: string;
+    }>("messageContent", { sessionId, seq, field, offset, limit, image });
   }
   latestSeq(sessionId: string) {
     return this.request<number>("latestSeq", { sessionId });

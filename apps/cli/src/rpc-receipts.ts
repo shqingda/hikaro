@@ -1,15 +1,8 @@
 import { createHash } from "node:crypto";
 import type { Command } from "../../../packages/protocol/src/index.ts";
+import { rpcReadMethods } from "../../../packages/protocol/src/contracts.ts";
 
-const reads = new Set([
-  "hello",
-  "command.receipt",
-  "session.current",
-  "session.list",
-  "messages.read",
-  "events.read",
-]);
-export const isMutation = (method: string) => !reads.has(method);
+export const isMutation = (method: string) => !rpcReadMethods.has(method);
 
 /** Object key order is irrelevant; array order and all JSON values are significant. */
 export function commandDigest(command: Command): string {
