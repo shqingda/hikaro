@@ -27,14 +27,18 @@ export async function startupSample({
   inputSamples = 20,
   entryPath = resolve("dist/hikaro.mjs"),
   env = process.env,
+  homePath,
+  extraArgs = [],
+  readyText = "/help",
+  onReady,
 } = {}) {
   integerSetting("inputSamples", inputSamples, {}, 1000);
-  return withBenchmarkHome(async (home) => {
+  const run = async (home) => {
     const start = performance.now();
     return new Promise((resolveRun, reject) => {
       const terminal = spawn(
         process.execPath,
-        [entryPath, ...(live ? [] : ["--demo"]), "--home", home],
+        [entryPath, ...(live ? [] : ["--demo"]), "--home", home, ...extraArgs],
         {
           cols: 100,
           rows: 30,
@@ -64,7 +68,7 @@ export async function startupSample({
         output = (output + chunk).slice(-20000);
         if (failure) return;
         try {
-          if (startupMs === undefined && output.includes("/help")) {
+          if (startupMs === undefined && output.includes(readyText)) {
             startupMs = performance.now() - start;
             rssMiB =
               Number(
@@ -75,6 +79,7 @@ export async function startupSample({
               ) / 1024;
             if (!Number.isFinite(rssMiB) || rssMiB <= 0)
               throw Error("Could not measure TUI RSS");
+            onReady?.();
             nextInput();
           } else if (
             marker &&
@@ -106,7 +111,8 @@ export async function startupSample({
         else resolveRun({ startupMs, rssMiB, inputMs });
       });
     });
-  });
+  };
+  return homePath ? run(homePath) : withBenchmarkHome(run);
 }
 
 export async function main() {

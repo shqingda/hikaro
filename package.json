@@ -16,6 +16,7 @@
     "check": "pnpm typecheck && pnpm test && pnpm build",
     "bench": "node scripts/bench.mjs",
     "bench:check": "node scripts/bench.mjs --check",
+    "bench:attach:check": "node scripts/bench-shared-host.mjs --check",
     "bench:harness": "node --import tsx scripts/bench-harness.mjs",
     "bench:harness:check": "node --import tsx scripts/bench-harness.mjs --check",
     "postinstall": "node scripts/prepare-native.mjs",
