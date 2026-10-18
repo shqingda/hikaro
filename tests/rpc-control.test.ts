@@ -4,6 +4,7 @@ import { setImmediate } from "node:timers/promises";
 import { Runtime, type RuntimeOptions } from "../packages/runtime/src/index.ts";
 import { serveRpc } from "../apps/cli/src/rpc.ts";
 import type { Session } from "../packages/core/src/index.ts";
+import type { SQLiteStore } from "../packages/storage/src/index.ts";
 import { ResolvedFrame } from "../packages/protocol/src/contracts.ts";
 
 const deferred = <T = void>() => {
@@ -37,7 +38,7 @@ async function connection() {
       cancelled: boolean;
       cancel: () => void;
       prompt: () => Promise<void>;
-      snapshot: () => { busy: boolean };
+      snapshot: () => { busy: boolean; runId: null; runStatus: "idle" };
       subscribe: () => () => void;
     }
   >();
@@ -47,7 +48,22 @@ async function connection() {
     options: { cwd: "/workspace" },
     store: {
       sessions: vi.fn(async () => [...sessions.values()]),
-      claim: vi.fn(async () => true),
+      acceptCommand: vi.fn(
+        async (
+          command: Parameters<SQLiteStore["acceptCommand"]>[0],
+        ): ReturnType<SQLiteStore["acceptCommand"]> => ({
+          inserted: true,
+          receipt: {
+            ...command,
+            status: "accepted" as const,
+            createdAt: 0,
+            updatedAt: 0,
+          },
+        }),
+      ),
+      finishCommand: vi.fn(
+        async (_outcome: Parameters<SQLiteStore["finishCommand"]>[0]) => {},
+      ),
     },
     startJobs() {},
     async session(id?: string) {
@@ -70,7 +86,7 @@ async function connection() {
             this.cancelled = true;
           },
           prompt: () => run.promise,
-          snapshot: () => ({ busy: false }),
+          snapshot: () => ({ busy: false, runId: null, runStatus: "idle" }),
           subscribe: () => () => {},
         };
         agents.set(session.id, agent);
@@ -154,6 +170,12 @@ it("delivers compaction completion through scoped operation events", async () =>
   const rpc = await connection();
   const session = await rpc.request("session.create");
   const accepted = await rpc.request("session.compact");
+  const claim = rpc.runtime.store.acceptCommand.mock.calls.find(
+    ([command]) => command.method === "session.compact",
+  )![0];
+  expect(rpc.runtime.store.finishCommand).not.toHaveBeenCalledWith(
+    expect.objectContaining({ id: claim.id }),
+  );
   const continuation = { ...session, id: "continuation" };
   rpc.compact.resolve(continuation);
   await setImmediate();
@@ -163,7 +185,17 @@ it("delivers compaction completion through scoped operation events", async () =>
     operationId: accepted.operationId,
     method: "session.compact",
     result: continuation,
+    hostInstanceId: expect.any(String),
   });
+  expect(rpc.runtime.store.finishCommand).toHaveBeenCalledWith(
+    expect.objectContaining({
+      id: claim.id,
+      scope: "a",
+      status: "completed",
+      sessionId: continuation.id,
+      operationId: accepted.operationId,
+    }),
+  );
   expect((await rpc.request("session.current")).session.id).toBe(
     "continuation",
   );
@@ -173,6 +205,9 @@ it("reports failed compaction without failing later requests", async () => {
   const rpc = await connection();
   await rpc.request("session.create");
   const accepted = await rpc.request("session.compact");
+  const claim = rpc.runtime.store.acceptCommand.mock.calls.find(
+    ([command]) => command.method === "session.compact",
+  )![0];
   rpc.compact.reject(Error("Summary unavailable"));
   await setImmediate();
   expect(rpc.messages).toContainEqual({
@@ -181,7 +216,16 @@ it("reports failed compaction without failing later requests", async () => {
     operationId: accepted.operationId,
     method: "session.compact",
     error: "Summary unavailable",
+    hostInstanceId: expect.any(String),
   });
+  expect(rpc.runtime.store.finishCommand).toHaveBeenCalledWith(
+    expect.objectContaining({
+      id: claim.id,
+      status: "failed",
+      operationId: accepted.operationId,
+      error: expect.stringContaining("Summary unavailable"),
+    }),
+  );
   expect((await rpc.request("session.current")).session).toBeTruthy();
 });
 
@@ -260,15 +304,26 @@ it("does not replace a newer selection while initializing the continuation agent
 it("rejects a prompt cancelled while its persistent claim is pending", async () => {
   const rpc = await connection();
   const session = await rpc.request("session.create");
-  const claim = deferred<boolean>();
-  rpc.runtime.store.claim.mockImplementation(() => claim.promise);
+  const claim = deferred<Awaited<ReturnType<SQLiteStore["acceptCommand"]>>>();
+  const accept = rpc.runtime.store.acceptCommand.getMockImplementation()!;
+  rpc.runtime.store.acceptCommand.mockImplementationOnce(() => claim.promise);
   const prompt = rpc.send("prompt", "a", { text: "first" });
   await setImmediate();
   await rpc.request("cancel");
-  claim.resolve(true);
+  const pendingCommand = rpc.runtime.store.acceptCommand.mock.calls.find(
+    ([command]) => command.id === prompt,
+  )![0];
+  claim.resolve(await accept(pendingCommand));
   await setImmediate();
   expect(rpc.reply(prompt)?.error).toMatch(/cancelled/i);
   expect(rpc.agents.get(session.id)?.cancelled).toBe(true);
+  expect(rpc.runtime.store.finishCommand).toHaveBeenCalledWith(
+    expect.objectContaining({
+      id: prompt,
+      status: "failed",
+      error: expect.stringMatching(/cancelled/i),
+    }),
+  );
 });
 
 it("processes approval replies and detaches while ordinary commands are blocked", async () => {
@@ -351,7 +406,10 @@ it("restores approvals raised by surviving work after a view detached", async ()
   expect(rpc.messages.some((frame) => frame.type === "approval")).toBe(false);
   const current = await rpc.request("session.current");
   expect(current.approvals).toMatchObject([{ id: "after-detach" }]);
-  await rpc.request("approval.respond", "a", { id: "after-detach", allow: false });
+  await rpc.request("approval.respond", "a", {
+    id: "after-detach",
+    allow: false,
+  });
   expect(await allowed).toBe(false);
   const resolved = rpc.messages.find(
     (frame) => frame.type === "approval.resolved",
@@ -389,12 +447,33 @@ it("retains ownership until all queued prompts for an older session settle", asy
     .mockImplementationOnce(() => second.promise);
   await rpc.request("prompt", "a", { text: "first" });
   await rpc.request("prompt", "a", { text: "second" });
+  const promptIds = rpc.runtime.store.acceptCommand.mock.calls
+    .filter(([command]) => command.method === "prompt")
+    .map(([command]) => command.id);
+  expect(rpc.runtime.store.finishCommand).not.toHaveBeenCalledWith(
+    expect.objectContaining({ id: promptIds[0] }),
+  );
   await rpc.request("session.create");
   first.resolve();
   await setImmediate();
+  expect(rpc.runtime.store.finishCommand).toHaveBeenCalledWith(
+    expect.objectContaining({
+      id: promptIds[0],
+      status: "completed",
+      sessionId: session.id,
+    }),
+  );
   await rpc.request("client.detach", "a", { cancel: true });
   expect(rpc.agents.get(session.id)?.cancelled).toBe(true);
   second.resolve();
+  await setImmediate();
+  expect(rpc.runtime.store.finishCommand).toHaveBeenCalledWith(
+    expect.objectContaining({
+      id: promptIds[1],
+      status: "completed",
+      sessionId: session.id,
+    }),
+  );
 });
 
 it("rejects excess queued requests while allowing control and other scopes", async () => {
@@ -429,4 +508,32 @@ it("bounds queued request bytes as well as the request count", async () => {
     commands.some((id) => /capacity/i.test(rpc.reply(id)?.error ?? "")),
   ).toBe(true);
   listing.resolve([]);
+});
+
+it("bounds waiting control intents while reserving cancellation capacity", async () => {
+  const rpc = await connection();
+  const session = await rpc.request("session.create");
+  const waiting = deferred<Awaited<ReturnType<SQLiteStore["acceptCommand"]>>>();
+  const accept = rpc.runtime.store.acceptCommand.getMockImplementation()!;
+  rpc.runtime.store.acceptCommand.mockImplementation((command) =>
+    command.method === "steer" ? waiting.promise : accept(command),
+  );
+  const ids = Array.from({ length: 9 }, () =>
+    rpc.send("steer", "a", { text: "wait" }),
+  );
+  await setImmediate();
+  try {
+    expect(rpc.reply(ids[8]!)?.error).toMatch(/capacity/i);
+    await rpc.request("cancel");
+    expect(rpc.agents.get(session.id)?.cancelled).toBe(true);
+    expect(await rpc.request("hello", "b")).toMatchObject({
+      protocolVersion: 2,
+    });
+  } finally {
+    const first = rpc.runtime.store.acceptCommand.mock.calls.find(
+      ([command]) => command.method === "steer",
+    )![0];
+    waiting.resolve(await accept(first));
+    await setImmediate();
+  }
 });

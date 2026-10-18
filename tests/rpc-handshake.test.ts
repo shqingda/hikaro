@@ -69,6 +69,7 @@ it("negotiates actual protocol capabilities without creating a session", async (
     eventSequence: "global-monotonic-filtered-by-session",
     commandReplay: "never-automatic",
     runIdentity: "events-only",
+    runSnapshotIdentity: true,
   });
   expect(hello.result.methods).toContain("prompt");
   expect(hello.result.methods).toContain("hello");
@@ -138,7 +139,8 @@ it("drives the portable state through the real RPC handler and SQLite without a 
     revision: before.revision,
     busy: false,
     canAct: true,
-    runId: null,
+    runId: before.runId,
+    runStatus: before.runStatus,
   });
 }, 10000);
 it("restores a root session read from SQLite through resume and snapshot", async () => {

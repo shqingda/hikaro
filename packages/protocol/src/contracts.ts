@@ -3,6 +3,7 @@ import * as z from "zod";
 export const protocolVersion = 2;
 export const rpcMethods = [
   "hello",
+  "command.receipt",
   "session.create",
   "session.list",
   "session.current",
@@ -31,7 +32,10 @@ export function rpcCapabilities() {
     scopeRevision: true as const,
     maxFrameBytes: 1_048_576,
     commandReplay: "never-automatic" as const,
+    // Preserve the original v2 marker for strict older clients.
     runIdentity: "events-only" as const,
+    runSnapshotIdentity: true as const,
+    durableCommandReceipts: true as const,
   };
 }
 const id = z.string().min(1).max(128);
@@ -45,7 +49,10 @@ export const HelloResult = z.object({
   scopeRevision: z.literal(true),
   maxFrameBytes: z.number().int().positive().max(1_048_576),
   commandReplay: z.literal("never-automatic"),
-  runIdentity: z.literal("events-only"),
+  runIdentity: z.enum(["events-only", "snapshot-and-events"]),
+  hostInstanceId: id.optional(),
+  durableCommandReceipts: z.boolean().optional(),
+  runSnapshotIdentity: z.boolean().optional(),
 });
 export const Permission = z.object({
   id,
@@ -72,6 +79,11 @@ export const CurrentSession = z.object({
       parentId: id.nullish(),
     })
     .nullable(),
+  hostInstanceId: id.optional(),
+  runId: id.nullable().optional(),
+  runStatus: z
+    .enum(["idle", "running", "completed", "failed", "cancelled", "unknown"])
+    .optional(),
   busy: z.boolean(),
   stream: z.string().max(100000),
   streamTruncated: z.boolean(),
@@ -83,6 +95,7 @@ export const EventFrame = z.object({
   type: z.literal("event"),
   scope: z.string().min(1).max(80),
   revision: sequence,
+  hostInstanceId: id.optional(),
   event: z.object({
     sessionId: id,
     seq: sequence,
@@ -95,17 +108,20 @@ export const ApprovalFrame = z.object({
   type: z.literal("approval"),
   scope: z.string().min(1).max(80),
   revision: sequence,
+  hostInstanceId: id.optional(),
   request: Permission,
 });
 export const ResolvedFrame = z.object({
   type: z.literal("approval.resolved"),
   scope: z.string().min(1).max(80),
   revision: sequence,
+  hostInstanceId: id.optional(),
   id,
   allow: z.boolean(),
 });
 export const ResponseFrame = z.object({
   type: z.literal("response"),
+  hostInstanceId: id.optional(),
   scope: z.string().min(1).max(80).optional(),
   id,
   result: z.unknown().optional(),
@@ -117,3 +133,26 @@ export type ScopedFrame =
   | z.infer<typeof EventFrame>
   | z.infer<typeof ApprovalFrame>
   | z.infer<typeof ResolvedFrame>;
+
+/** A receipt records command handling, not a guarantee of rolled-back side effects. */
+export const DurableCommandReceipt = z.object({
+  id,
+  scope: z.string().min(1).max(80),
+  method: z.enum(rpcMethods),
+  digest: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .nullable(),
+  hostInstanceId: id.nullable(),
+  sessionId: id.nullable(),
+  status: z.enum(["accepted", "completed", "failed", "unknown"]),
+  runId: id.optional(),
+  operationId: id.optional(),
+  error: z.string().max(4096).optional(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+});
+export type DurableCommandReceipt = z.infer<typeof DurableCommandReceipt>;
+export const CommandReceiptResult = z.object({
+  receipt: DurableCommandReceipt.nullable(),
+});

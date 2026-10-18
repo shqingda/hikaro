@@ -9,6 +9,8 @@ const snapshot = (cursor = 0) => ({
   busy: false,
   stream: "",
   streamTruncated: false,
+  runId: null,
+  runStatus: "idle" as const,
   approvals: [],
 });
 function response(
@@ -173,15 +175,22 @@ it("bounds history/stream/receipts and preserves uncertainty under pressure", ()
   expect(client.state.events).toHaveLength(64);
   expect(client.state.stream).toHaveLength(100000);
   expect(client.state.streamTruncated).toBe(true);
-  for (let n = 0; n < 64; n++) {
+  for (let n = 0; n < 60; n++) {
     client.command(`read-${n}`, "prompt", { text: "task" });
-    client.timedOut(`read-${n}`);
+    response(client, epoch, `read-${n}`, { accepted: true });
   }
-  expect(client.receipts).toHaveLength(64);
+  expect(client.receipts).toHaveLength(62);
   expect(() => client.command("overflow", "prompt", { text: "x" })).toThrow(
     /capacity/i,
   );
-  expect(client.receipt("read-0")?.status).toBe("unknown");
+  for (let index = 0; index < 5; index++) {
+    client.command(`query-${index}`, "command.receipt", {
+      commandId: "read-0",
+    });
+    response(client, epoch, `query-${index}`, { receipt: null });
+  }
+  expect(client.receipts).toHaveLength(64);
+  expect(client.receipt("read-0")?.status).toBe("acknowledged");
 });
 it("rejects malformed/oversized trusted-scope frames and incompatible handshake state", () => {
   const { client, epoch } = ready();
@@ -293,4 +302,157 @@ it("negotiates known methods when a compatible host advertises future additions"
     methods: [...rpcCapabilities().methods, "future.additive.method"],
   });
   expect(() => client.command("snapshot", "session.current")).not.toThrow();
+});
+
+it("restores authoritative run identity without inferring outcomes for legacy snapshots", () => {
+  const { client, epoch } = ready();
+  client.command("active", "session.current");
+  response(client, epoch, "active", {
+    ...snapshot(4),
+    busy: true,
+    runId: "active-run",
+    runStatus: "running",
+    stream: "in progress",
+  });
+  expect(client.state).toMatchObject({
+    runId: "active-run",
+    runStatus: "running",
+  });
+  client.command("settled", "session.current");
+  response(client, epoch, "settled", {
+    ...snapshot(8),
+    runId: "active-run",
+    runStatus: "completed",
+  });
+  expect(client.state).toMatchObject({
+    runId: "active-run",
+    runStatus: "completed",
+    busy: false,
+  });
+  client.command("legacy", "session.current");
+  const { runId, runStatus, ...legacy } = snapshot(10);
+  response(client, epoch, "legacy", { ...legacy, busy: true });
+  expect(client.state).toMatchObject({ runId: null, runStatus: "unknown" });
+});
+
+it("fences negotiated host identities and accepts a new host only after a new connection handshake", () => {
+  const client = new ClientState("desktop");
+  const epoch = client.beginConnection();
+  client.command("hello-a", "hello");
+  client.receive(epoch, {
+    type: "response",
+    scope: "desktop",
+    id: "hello-a",
+    hostInstanceId: "host-a",
+    result: { ...rpcCapabilities(), hostInstanceId: "host-a" },
+  });
+  client.command("snapshot-a", "session.current");
+  client.receive(epoch, {
+    type: "response",
+    scope: "desktop",
+    id: "snapshot-a",
+    hostInstanceId: "host-a",
+    result: { ...snapshot(), hostInstanceId: "host-a" },
+  });
+  expect(client.state).toMatchObject({
+    hostInstanceId: "host-a",
+    canAct: true,
+  });
+  expect(() =>
+    client.receive(epoch, { ...event(1), hostInstanceId: "host-b" }),
+  ).toThrow(/host/i);
+  expect(client.state).toMatchObject({
+    hostInstanceId: "host-a",
+    canAct: false,
+    stream: "",
+  });
+  const next = client.beginConnection();
+  client.command("hello-b", "hello");
+  client.receive(next, {
+    type: "response",
+    scope: "desktop",
+    id: "hello-b",
+    hostInstanceId: "host-b",
+    result: { ...rpcCapabilities(), hostInstanceId: "host-b" },
+  });
+  client.command("snapshot-b", "session.current");
+  client.receive(next, {
+    type: "response",
+    scope: "desktop",
+    id: "snapshot-b",
+    hostInstanceId: "host-b",
+    result: { ...snapshot(), hostInstanceId: "host-b" },
+  });
+  client.receive(epoch, { ...event(1), hostInstanceId: "host-a" });
+  client.receive(next, { ...event(1), hostInstanceId: "host-b" });
+  expect(client.state).toMatchObject({
+    hostInstanceId: "host-b",
+    canAct: true,
+    stream: "x",
+  });
+  // Remote wrappers may omit the envelope identity; the negotiated snapshot
+  // still has to belong to this host.
+  client.receive(next, event(2));
+  client.command("mismatched-snapshot", "session.current");
+  expect(() =>
+    client.receive(next, {
+      type: "response",
+      scope: "desktop",
+      id: "mismatched-snapshot",
+      hostInstanceId: "host-b",
+      result: { ...snapshot(2), hostInstanceId: "host-a" },
+    }),
+  ).toThrow(/invalid/i);
+  expect(client.state.canAct).toBe(false);
+});
+
+it("reconciles durable receipts while unsynchronized without replaying uncertain mutations", () => {
+  const { client, epoch } = ready();
+  for (let index = 0; index < 60; index++) {
+    client.command(`intent-${index}`, "prompt", { text: "task" });
+    client.timedOut(`intent-${index}`);
+  }
+  const next = client.beginConnection();
+  client.command("hello-again", "hello");
+  response(client, next, "hello-again", rpcCapabilities());
+  client.command("missing", "command.receipt", { commandId: "intent-0" });
+  response(client, next, "missing", { receipt: null });
+  expect(client.receipt("intent-0")?.status).toBe("unknown");
+  const durable = {
+    id: "intent-0",
+    scope: "desktop",
+    method: "prompt",
+    digest: "a".repeat(64),
+    hostInstanceId: "host-original",
+    sessionId: "s1",
+    runId: "recovered-run",
+    status: "completed",
+    createdAt: 1,
+    updatedAt: 2,
+  };
+  client.command("accepted", "command.receipt", { commandId: "intent-0" });
+  response(client, next, "accepted", {
+    receipt: { ...durable, status: "accepted" },
+  });
+  expect(client.receipt("intent-0")).toMatchObject({
+    status: "acknowledged",
+    durableStatus: "accepted",
+  });
+  client.command("lookup", "command.receipt", { commandId: "intent-0" });
+  response(client, next, "lookup", { receipt: durable });
+  expect(client.receipt("intent-0")).toMatchObject({
+    status: "completed",
+    durableStatus: "completed",
+    runId: "recovered-run",
+  });
+  client.command("unrelated", "command.receipt", { commandId: "intent-1" });
+  expect(() =>
+    response(client, next, "unrelated", { receipt: durable }),
+  ).toThrow(/invalid/i);
+  expect(client.receipt("intent-1")?.status).toBe("unknown");
+  expect(() => client.command("intent-1", "prompt", { text: "again" })).toThrow(
+    /already/i,
+  );
+  response(client, epoch, "intent-1", { accepted: true });
+  expect(client.receipt("intent-1")?.status).toBe("unknown");
 });

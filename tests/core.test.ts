@@ -53,6 +53,54 @@ const simple: ProviderAdapter = {
   },
 };
 describe("independent agent loop", () => {
+  it("snapshots the current run identity and restores persisted outcomes conservatively", async () => {
+    const { agent, session, store, tools } = await fixture(simple);
+    expect(agent.snapshot()).toMatchObject({ runId: null, runStatus: "idle" });
+    let active: ReturnType<Agent["snapshot"]> | undefined;
+    agent.subscribe((event) => {
+      if (event.type === "run.start") active = agent.snapshot();
+    });
+    await agent.prompt("Task");
+    const events = await store.events(session.id);
+    const started = events.find((event) => event.type === "run.start")!;
+    const ended = events.find((event) => event.type === "run.end")!;
+    expect(active).toMatchObject({
+      busy: true,
+      runId: started.data.runId,
+      runStatus: "running",
+    });
+    expect(agent.snapshot()).toMatchObject({
+      busy: false,
+      runId: started.data.runId,
+      runStatus: "completed",
+    });
+    const reopened = new Agent({
+      session,
+      store,
+      tools,
+      provider: simple,
+      approve: async () => false,
+    });
+    reopened.initializeCursor(ended.seq, ended);
+    expect(reopened.snapshot()).toMatchObject({
+      busy: false,
+      runId: started.data.runId,
+      runStatus: "completed",
+    });
+    reopened.initializeCursor(started.seq, started);
+    expect(reopened.snapshot()).toMatchObject({
+      busy: false,
+      runId: started.data.runId,
+      runStatus: "unknown",
+    });
+    reopened.initializeCursor(ended.seq);
+    expect(reopened.snapshot()).toMatchObject({
+      busy: false,
+      runId: null,
+      runStatus: "unknown",
+    });
+  });
+
   it.each(["prompt", "compact"] as const)(
     "keeps a cancelled %s cancelled when the provider returns a final result",
     async (operation) => {
@@ -79,6 +127,10 @@ describe("independent agent loop", () => {
       const work =
         operation === "prompt" ? agent.prompt("Task") : agent.compact();
       await expect(work).rejects.toMatchObject({ name: "AbortError" });
+      expect(agent.snapshot()).toMatchObject({
+        busy: false,
+        runStatus: "cancelled",
+      });
       expect(
         (await store.events(session.id))
           .filter((event) => event.type === "run.end")

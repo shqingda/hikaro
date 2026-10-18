@@ -1,6 +1,7 @@
 import {
   ApprovalFrame,
   CurrentSession,
+  CommandReceiptResult,
   EventFrame,
   HelloResult,
   ResolvedFrame,
@@ -28,17 +29,22 @@ const reads = new Set<RpcMethod>([
   "session.list",
   "messages.read",
   "events.read",
+  "command.receipt",
 ]);
 export type CommandReceipt = {
   id: string;
   method: RpcMethod;
-  status: "pending" | "acknowledged" | "failed" | "unknown";
+  status: "pending" | "acknowledged" | "completed" | "failed" | "unknown";
+  durableStatus?: "accepted" | "completed" | "failed" | "unknown";
+  runId?: string;
+  operationId?: string;
   error?: string;
 };
 export type ExecutionState = {
   connection: "offline" | "connecting" | "connected";
   syncRequired: boolean;
   canAct: boolean;
+  hostInstanceId: string | null;
   session: CurrentSession["session"];
   cursor: number;
   revision: number;
@@ -59,7 +65,9 @@ export class ClientState {
   private helloId?: string;
   private snapshotId?: string;
   private methods = new Set<RpcMethod>();
+  private hostNegotiated = false;
   private commands = new Map<string, CommandReceipt>();
+  private receiptQueries = new Map<string, string>();
   private buffered: ScopedFrame[] = [];
   private bufferChars = 0;
   private overflow = false;
@@ -67,6 +75,7 @@ export class ClientState {
     connection: "offline",
     syncRequired: true,
     canAct: false,
+    hostInstanceId: null,
     session: null,
     cursor: 0,
     revision: 0,
@@ -97,6 +106,7 @@ export class ClientState {
     this.epoch++;
     this.value.connection = "connecting";
     this.methods.clear();
+    this.hostNegotiated = false;
     this.helloId = undefined;
     this.snapshotId = undefined;
     this.buffered = [];
@@ -143,6 +153,7 @@ export class ClientState {
     if (
       method !== "hello" &&
       method !== "session.current" &&
+      method !== "command.receipt" &&
       !this.value.canAct
     )
       throw Error("A current snapshot is required before sending commands");
@@ -158,20 +169,44 @@ export class ClientState {
     const frame = { id, scope: this.scope, method, params: copy(params) };
     if (utf8Bytes(JSON.stringify(frame)) > MAX_FRAME)
       throw Error("Command capacity exceeded");
+    if (
+      !reads.has(method) &&
+      [...this.commands.values()].filter(
+        (command) =>
+          !reads.has(command.method) &&
+          command.status !== "completed" &&
+          command.status !== "failed",
+      ).length >=
+        MAX_RECEIPTS - 4
+    )
+      throw Error(
+        "Command receipt capacity exceeded; synchronization slots reserved",
+      );
+    if (method === "command.receipt") {
+      if (
+        typeof params.commandId !== "string" ||
+        !params.commandId ||
+        params.commandId.length > 128
+      )
+        throw Error("Invalid receipt command ID");
+    }
     if (this.commands.size >= MAX_RECEIPTS) {
       const removable = [...this.commands.values()].find(
         (c) =>
-          c.status === "acknowledged" ||
+          c.status === "completed" ||
           c.status === "failed" ||
-          (c.status === "unknown" && reads.has(c.method)),
+          (c.status !== "pending" && reads.has(c.method)),
       );
       if (!removable)
         throw Error(
           "Command receipt capacity exceeded; unresolved outcomes retained",
         );
       this.commands.delete(removable.id);
+      this.receiptQueries.delete(removable.id);
     }
     this.commands.set(id, { id, method, status: "pending" });
+    if (method === "command.receipt")
+      this.receiptQueries.set(id, params.commandId as string);
     if (method === "hello") {
       this.helloId = id;
       this.snapshotId = undefined;
@@ -192,6 +227,19 @@ export class ClientState {
     if (!raw || typeof raw !== "object") return;
     const frame = raw as Record<string, unknown>;
     if (frame.scope !== undefined && frame.scope !== this.scope) return;
+    if (
+      this.hostNegotiated &&
+      frame.hostInstanceId !== undefined &&
+      frame.hostInstanceId !== this.value.hostInstanceId
+    ) {
+      this.invalidate();
+      throw Error("RPC host instance identity changed; reconnect required");
+    }
+    if (
+      !this.hostNegotiated &&
+      (frame.type !== "response" || frame.id !== this.helloId)
+    )
+      return;
     if (
       frame.type === "operation.completed" &&
       frame.method === "session.compact"
@@ -257,6 +305,16 @@ export class ClientState {
     if (command.method === "hello" && frame.id === this.helloId) {
       const hello = HelloResult.parse(frame.result);
       if (
+        frame.hostInstanceId !== undefined &&
+        frame.hostInstanceId !== hello.hostInstanceId
+      )
+        throw Error("Invalid handshake host identity");
+      if (
+        this.hostNegotiated &&
+        (hello.hostInstanceId ?? null) !== this.value.hostInstanceId
+      )
+        throw Error("Invalid handshake host identity");
+      if (
         !hello.methods.includes("session.current") ||
         !hello.methods.includes("hello")
       )
@@ -265,19 +323,27 @@ export class ClientState {
         rpcMethods.filter((method) => hello.methods.includes(method)),
       );
       this.value.connection = "connected";
+      this.value.hostInstanceId = hello.hostInstanceId ?? null;
+      this.hostNegotiated = true;
     } else if (
       command.method === "session.current" &&
       frame.id === this.snapshotId
     ) {
       const snapshot = CurrentSession.parse(frame.result);
+      if (
+        snapshot.hostInstanceId !== undefined &&
+        snapshot.hostInstanceId !== this.value.hostInstanceId
+      )
+        throw Error("Invalid snapshot host identity");
       const pending = this.buffered;
       const overflow = this.overflow;
       this.buffered = [];
       this.bufferChars = 0;
       this.overflow = false;
       Object.assign(this.value, snapshot, {
-        runId: null,
-        runStatus: snapshot.busy ? "unknown" : "idle",
+        hostInstanceId: this.value.hostInstanceId,
+        runId: snapshot.runId ?? null,
+        runStatus: snapshot.runStatus ?? (snapshot.busy ? "unknown" : "idle"),
         events: [],
         syncRequired: overflow,
         canAct: !overflow,
@@ -288,6 +354,25 @@ export class ClientState {
           this.apply(event);
           if (this.value.syncRequired) break;
         }
+    } else if (command.method === "command.receipt") {
+      const id = this.receiptQueries.get(command.id);
+      const target = id && this.commands.get(id);
+      if (!target || !["unknown", "acknowledged"].includes(target.status))
+        return;
+      const { receipt: durable } = CommandReceiptResult.parse(frame.result);
+      if (!durable) return;
+      if (
+        durable.id !== target.id ||
+        durable.scope !== this.scope ||
+        durable.method !== target.method
+      )
+        throw Error("Durable command receipt identity mismatch");
+      target.durableStatus = durable.status;
+      target.runId = durable.runId;
+      target.operationId = durable.operationId;
+      target.error = durable.error;
+      target.status =
+        durable.status === "accepted" ? "acknowledged" : durable.status;
     } else if (
       [
         "session.create",

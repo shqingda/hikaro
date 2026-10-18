@@ -17,6 +17,7 @@ export type OperationEvent = {
 export const isControlMethod = (method: string) =>
   [
     "hello",
+    "command.receipt",
     "cancel",
     "approval.respond",
     "client.detach",

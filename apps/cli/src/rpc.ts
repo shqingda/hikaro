@@ -1,4 +1,5 @@
 import * as z from "zod";
+import { commandDigest, isMutation } from "./rpc-receipts.ts";
 import { randomUUID } from "node:crypto";
 import type { Readable, Writable } from "node:stream";
 import {
@@ -38,6 +39,8 @@ type ScopeWork = {
 };
 type ScopeState = {
   revision: number;
+  controlQueued: number;
+  controlBytes: number;
   session?: Session;
   agent?: Agent;
   unsubscribe?: () => void;
@@ -55,6 +58,12 @@ export async function serveRpc(
     error: process.stderr,
   },
 ) {
+  const hostInstanceId = randomUUID();
+  const pendingEffects = new Set<Promise<unknown>>();
+  const track = (task: Promise<unknown>) => {
+    pendingEffects.add(task);
+    void task.finally(() => pendingEffects.delete(task)).catch(() => {});
+  };
   const approvals = new Map<
     string,
     {
@@ -67,13 +76,15 @@ export async function serveRpc(
   // Detaching a view may leave work running; revocation must still find it.
   const ownedWork = new Map<string, ScopeWork>();
   const owners = new Map<string, string>();
+  let controlQueued = 0;
+  let controlBytes = 0;
   let queued = 0;
   let queuedBytes = 0;
   let closed = false;
   let shuttingDown = false;
-  const send = (message: unknown) => {
+  const send = (message: Record<string, unknown>) => {
     if (closed) return;
-    const line = JSON.stringify(message) + "\n";
+    const line = JSON.stringify({ ...message, hostInstanceId }) + "\n";
     if (
       Buffer.byteLength(line) > 1_048_576 ||
       transport.output.writableLength > 2_000_000
@@ -162,6 +173,8 @@ export async function serveRpc(
       }
       state = {
         revision: 0,
+        controlQueued: 0,
+        controlBytes: 0,
         chain: Promise.resolve(),
         queued: 0,
         bytes: 0,
@@ -201,6 +214,39 @@ export async function serveRpc(
   ) => {
     const { id } = command;
     const scope = command.scope ?? "default";
+    const receiptKey = {
+      workspace: runtime.options.cwd,
+      scope,
+      id,
+      hostInstanceId,
+    };
+    const operationId =
+      command.method === "session.compact" ? randomUUID() : undefined;
+    let accepted = false;
+    let settled = false;
+    const finish = async (
+      status: "completed" | "failed",
+      fields: { sessionId?: string; runId?: string; error?: string } = {},
+    ) => {
+      await runtime.store.finishCommand({
+        ...receiptKey,
+        status,
+        operationId,
+        ...fields,
+      });
+      settled = true;
+    };
+    const uncertain = (error: unknown) => {
+      transport.error.write(
+        "Could not persist RPC command outcome; query receipt before any new attempt.\n",
+      );
+      send({
+        type: "error",
+        scope,
+        commandId: id,
+        error: `Command outcome unknown: ${String(error).slice(0, 4096)}`,
+      });
+    };
     try {
       requireLive(scope, state);
       const requireUncancelled = () => {
@@ -214,6 +260,31 @@ export async function serveRpc(
         if (typeof id !== "string") throw Error("No session selected");
         return runtime.session(id);
       };
+      if (isMutation(command.method)) {
+        const claim = await runtime.store.acceptCommand({
+          ...receiptKey,
+          method: command.method,
+          digest: commandDigest(command),
+          sessionId:
+            command.method === "session.create"
+              ? null
+              : typeof p.sessionId === "string"
+                ? p.sessionId
+                : (state.session?.id ?? null),
+          operationId,
+        });
+        if (!claim.inserted) {
+          send({
+            id,
+            type: "response",
+            scope,
+            result: { duplicate: true, receipt: claim.receipt },
+          });
+          return;
+        }
+        accepted = true;
+        requireUncancelled();
+      }
       switch (command.method) {
         case "hello": {
           const { protocolVersions } = HelloParams.parse(p);
@@ -221,11 +292,20 @@ export async function serveRpc(
             throw Error(
               `Unsupported protocol version; host supports ${protocolVersion}`,
             );
-          result = rpcCapabilities();
+          result = { ...rpcCapabilities(), hostInstanceId };
           break;
         }
+        case "command.receipt":
+          result = {
+            receipt: await runtime.store.commandReceipt({
+              ...receiptKey,
+              id: z.string().min(1).max(128).parse(p.commandId),
+            }),
+          };
+          break;
         case "session.current":
           result = {
+            hostInstanceId,
             revision: state.revision,
             session: state.session ?? null,
             ...(state.agent?.snapshot() ?? {
@@ -233,6 +313,8 @@ export async function serveRpc(
               stream: "",
               streamTruncated: false,
               cursor: 0,
+              runId: null,
+              runStatus: "idle",
             }),
             approvals: [...approvals.values()]
               .filter((a) => a.scope === scope)
@@ -265,46 +347,73 @@ export async function serveRpc(
           requireUncancelled();
           if (state.work.operations.size >= 8)
             throw Error("Client operation capacity exceeded");
-          const operationId = randomUUID();
           const controller = new AbortController();
+          let runId: string | undefined;
+          const stopRunTracking = agent.subscribe((event) => {
+            if (
+              event.type === "run.start" &&
+              event.data.operation === "compact" &&
+              event.data.commandId === id &&
+              event.data.scope === scope
+            )
+              runId = String(event.data.runId);
+          });
           state.work.operations.add(controller);
           ownAgent(state.work, agent);
-          void runtime
-            .compact(session, controller.signal)
-            .then(async (next) => {
-              controller.signal.throwIfAborted();
-              // A completed summary must not change a newer selection.
-              if (
-                scopes.get(scope) === state &&
-                state.session?.id === session.id
-              )
-                await bind(scope, state, next, {
-                  sessionId: session.id,
-                  signal: controller.signal,
+          track(
+            runtime
+              .compact(session, controller.signal, { scope, commandId: id })
+              .then(async (next) => {
+                controller.signal.throwIfAborted();
+                // A completed summary must not change a newer selection.
+                if (
+                  scopes.get(scope) === state &&
+                  state.session?.id === session.id
+                )
+                  await bind(scope, state, next, {
+                    sessionId: session.id,
+                    signal: controller.signal,
+                  });
+                await finish("completed", {
+                  sessionId: next.id,
+                  runId,
                 });
-              if (scopes.get(scope) === state)
-                send({
-                  type: "operation.completed",
-                  scope,
-                  operationId,
-                  method: command.method,
-                  result: next,
-                });
-            })
-            .catch((error) => {
-              if (scopes.get(scope) === state)
-                send({
-                  type: "operation.failed",
-                  scope,
-                  operationId,
-                  method: command.method,
-                  error: error instanceof Error ? error.message : String(error),
-                });
-            })
-            .finally(() => {
-              state.work.operations.delete(controller);
-              releaseWork(scope, state.work, agent);
-            });
+                if (scopes.get(scope) === state)
+                  send({
+                    type: "operation.completed",
+                    scope,
+                    operationId,
+                    method: command.method,
+                    result: next,
+                  });
+              })
+              .catch(async (error) => {
+                try {
+                  if (!settled)
+                    await finish("failed", {
+                      error: String(error).slice(0, 4096),
+                      runId,
+                    });
+                } catch (storageError) {
+                  uncertain(storageError);
+                  return;
+                }
+                if (scopes.get(scope) === state)
+                  send({
+                    type: "operation.failed",
+                    scope,
+                    operationId,
+                    method: command.method,
+                    error:
+                      error instanceof Error ? error.message : String(error),
+                  });
+              })
+              .finally(() => {
+                stopRunTracking();
+                state.work.operations.delete(controller);
+                releaseWork(scope, state.work, agent);
+              }),
+          );
           result = { accepted: true, operationId };
           break;
         }
@@ -356,24 +465,50 @@ export async function serveRpc(
           }
           if (!text.trim() && !images?.length) throw Error("Prompt is empty");
           const { agent, session } = state;
-          if (!(await runtime.store.claim(command.id, session.id))) {
-            result = { duplicate: true };
-            break;
-          }
           requireUncancelled();
           owners.set(session.id, scope);
+          let runId: string | undefined;
+          const stopRunTracking = agent.subscribe((event) => {
+            if (
+              event.type === "run.start" &&
+              event.data.commandId === id &&
+              event.data.scope === scope
+            )
+              runId = String(event.data.runId);
+          });
           ownAgent(state.work, agent);
-          void agent
-            .prompt(text, images, { scope, commandId: command.id })
-            .catch((error) => {
-              send({
-                type: "error",
-                scope,
-                error: String(error),
-                commandId: command.id,
-              });
-            })
-            .finally(() => releaseWork(scope, state.work, agent));
+          track(
+            agent
+              .prompt(text, images, { scope, commandId: command.id })
+              .then(async () => {
+                await finish("completed", {
+                  sessionId: session.id,
+                  runId,
+                });
+              })
+              .catch(async (error) => {
+                try {
+                  if (!settled)
+                    await finish("failed", {
+                      error: String(error).slice(0, 4096),
+                      runId,
+                    });
+                } catch (storageError) {
+                  uncertain(storageError);
+                  return;
+                }
+                send({
+                  type: "error",
+                  scope,
+                  error: String(error),
+                  commandId: command.id,
+                });
+              })
+              .finally(() => {
+                stopRunTracking();
+                releaseWork(scope, state.work, agent);
+              }),
+          );
           result = { accepted: true };
           break;
         }
@@ -405,8 +540,21 @@ export async function serveRpc(
           break;
         }
       }
+      if (
+        accepted &&
+        command.method !== "prompt" &&
+        command.method !== "session.compact"
+      )
+        await finish("completed", { sessionId: state.session?.id });
       send({ id, type: "response", scope, result });
     } catch (error) {
+      if (accepted && !settled) {
+        try {
+          await finish("failed", { error: String(error).slice(0, 4096) });
+        } catch (storageError) {
+          uncertain(storageError);
+        }
+      }
       send({
         id,
         type: "response",
@@ -422,11 +570,36 @@ export async function serveRpc(
       command = Command.parse(raw);
       const scope = command.scope ?? "default";
       const state = getScope(scope);
+      const bytes = Buffer.byteLength(JSON.stringify(raw));
       if (isControlMethod(command.method)) {
-        void handle(command, state);
+        // Durable controls can wait on SQLite. Bound that waiting work while
+        // reserving space for cancellation, approval and detach replies.
+        const critical = [
+          "cancel",
+          "approval.respond",
+          "client.detach",
+        ].includes(command.method);
+        if (
+          controlQueued >= (critical ? 80 : 64) ||
+          state.controlQueued >= (critical ? 12 : 8) ||
+          controlBytes + bytes > (critical ? 2_000_000 : 1_500_000) ||
+          state.controlBytes + bytes > (critical ? 1_048_576 : 786_432)
+        )
+          throw Error("RPC control capacity exceeded");
+        controlQueued++;
+        controlBytes += bytes;
+        state.controlQueued++;
+        state.controlBytes += bytes;
+        track(
+          handle(command, state).finally(() => {
+            controlQueued--;
+            controlBytes -= bytes;
+            state.controlQueued--;
+            state.controlBytes -= bytes;
+          }),
+        );
         return;
       }
-      const bytes = Buffer.byteLength(JSON.stringify(raw));
       if (
         queued >= 128 ||
         queuedBytes + bytes > 2_000_000 ||
@@ -477,7 +650,19 @@ export async function serveRpc(
     }
     for (const work of ownedWork.values())
       for (const operation of work.operations) operation.abort();
-    await runtime.close();
+    await runtime.close(async () => {
+      let deadline: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([
+        Promise.allSettled([
+          ...pendingEffects,
+          ...[...scopes.values()].map((state) => state.chain),
+        ]),
+        new Promise<void>((done) => {
+          deadline = setTimeout(done, 5000);
+        }),
+      ]);
+      clearTimeout(deadline);
+    });
     closed = true;
     transport.input.destroy();
     process.off("SIGTERM", onSignal);

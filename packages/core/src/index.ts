@@ -141,6 +141,10 @@ export class Agent implements AgentBackend {
   }> = [];
   private draining = false;
   private runActive = false;
+  private runId: string | null = null;
+  private runStatus:
+    "idle" | "running" | "completed" | "failed" | "cancelled" | "unknown" =
+    "idle";
   private streamPreview = "";
   private streamTruncated = false;
   private cursor = 0;
@@ -173,6 +177,7 @@ export class Agent implements AgentBackend {
       clearInterval(timer);
       this.activeLease = undefined;
       this.runActive = false;
+      if (this.runStatus === "running") this.runStatus = "unknown";
       await this.options.store.releaseLease(this.options.session.id, lease);
     };
   }
@@ -189,8 +194,27 @@ export class Agent implements AgentBackend {
     }
     signal.throwIfAborted();
   }
-  initializeCursor(cursor: number) {
+  initializeCursor(cursor: number, lastRunEvent?: AgentEvent) {
     this.cursor = cursor;
+    this.runId = null;
+    this.runStatus = cursor ? "unknown" : "idle";
+    if (
+      lastRunEvent?.sessionId !== this.options.session.id ||
+      lastRunEvent.seq > cursor ||
+      !["run.start", "run.end"].includes(lastRunEvent.type)
+    )
+      return;
+    this.runId =
+      typeof lastRunEvent.data.runId === "string"
+        ? lastRunEvent.data.runId
+        : null;
+    const status = lastRunEvent.data.status;
+    // A persisted start does not prove that any host still owns its execution.
+    if (lastRunEvent.type === "run.end")
+      this.runStatus =
+        status === "completed" || status === "failed" || status === "cancelled"
+          ? status
+          : "unknown";
   }
   snapshot() {
     return {
@@ -199,6 +223,8 @@ export class Agent implements AgentBackend {
       streamTruncated: this.streamTruncated,
       cursor: this.cursor,
       usage: { ...this.usage },
+      runId: this.runId,
+      runStatus: this.runStatus,
     };
   }
   readonly budget: RunBudget;
@@ -257,6 +283,8 @@ export class Agent implements AgentBackend {
     this.cursor = event.seq;
     if (type === "run.start") {
       this.runActive = true;
+      this.runId = typeof data.runId === "string" ? data.runId : null;
+      this.runStatus = "running";
       this.streamPreview = "";
       this.streamTruncated = false;
     }
@@ -269,7 +297,16 @@ export class Agent implements AgentBackend {
       this.streamPreview = "";
       this.streamTruncated = false;
     }
-    if (type === "run.end") this.runActive = false;
+    if (type === "run.end") {
+      this.runActive = false;
+      this.runId = typeof data.runId === "string" ? data.runId : null;
+      this.runStatus =
+        data.status === "completed" ||
+        data.status === "failed" ||
+        data.status === "cancelled"
+          ? data.status
+          : "unknown";
+    }
     for (const fn of this.listeners) {
       try {
         fn(event);
@@ -528,7 +565,7 @@ export class Agent implements AgentBackend {
       }
     }
   }
-  async compact() {
+  async compact(origin?: { scope?: string; commandId?: string }) {
     if (this.busy) throw Error("Stop the active run before compacting");
     const controller = new AbortController();
     this.controller = controller;
@@ -538,7 +575,7 @@ export class Agent implements AgentBackend {
     let stopLease: (() => Promise<void>) | undefined;
     try {
       stopLease = await this.ownLease(controller);
-      await this.emit("run.start", { runId, operation: "compact" });
+      await this.emit("run.start", { runId, operation: "compact", ...origin });
       const provider = this.summaryProvider();
       const through = await this.options.store.latestSeq(
         this.options.session.id,
@@ -707,6 +744,7 @@ export class Agent implements AgentBackend {
       await this.emit("run.start", {
         runId,
         commandId: this.origin?.commandId,
+        scope: this.origin?.scope,
         provider: this.options.provider.id,
         model: this.options.provider.model,
       });

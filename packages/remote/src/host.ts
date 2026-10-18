@@ -129,13 +129,30 @@ export async function dispatchRemote(
   raw: unknown,
 ) {
   const command = Command.parse(raw);
-  const stableId = createHash("sha256")
-    .update(deviceId + "\0" + command.id)
-    .digest("hex");
-  return rpc.request(command.method, command.params, false, {
-    id: stableId,
+  const stableId = (id: string) =>
+    createHash("sha256")
+      .update(deviceId + "\0" + id)
+      .digest("hex");
+  let targetId = command.id;
+  let params = command.params;
+  if (command.method === "command.receipt") {
+    if (
+      typeof params.commandId !== "string" ||
+      !params.commandId ||
+      params.commandId.length > 128
+    )
+      throw Error("Invalid receipt command ID");
+    targetId = params.commandId;
+    params = { ...params, commandId: stableId(targetId) };
+  }
+  const result = await rpc.request(command.method, params, false, {
+    id: stableId(command.id),
     scope: deviceId,
   });
+  // Handsets retain their original IDs; the host-only namespace stays internal.
+  if (result?.receipt && typeof result.receipt === "object")
+    return { ...result, receipt: { ...result.receipt, id: targetId } };
+  return result;
 }
 async function confirmDevice(deviceId: string) {
   if (!process.stdin.isTTY) return false;

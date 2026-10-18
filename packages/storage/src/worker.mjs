@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS chunks(id TEXT PRIMARY KEY,workspace TEXT,path TEXT,l
 CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(id UNINDEXED,text);
 CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,sessionId TEXT NOT NULL,task TEXT NOT NULL,runAt INTEGER NOT NULL,state TEXT NOT NULL,owner TEXT,leaseUntil INTEGER,error TEXT);
 CREATE TABLE IF NOT EXISTS leases(sessionId TEXT PRIMARY KEY,owner TEXT NOT NULL,expires INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS session_run_events ON events(sessionId,seq) WHERE type IN ('run.start','run.end');
+CREATE TABLE IF NOT EXISTS rpc_commands(workspace TEXT NOT NULL,scope TEXT NOT NULL,id TEXT NOT NULL,method TEXT NOT NULL,digest TEXT NOT NULL,hostInstanceId TEXT NOT NULL,sessionId TEXT,status TEXT NOT NULL,runId TEXT,operationId TEXT,error TEXT,createdAt INTEGER NOT NULL,updatedAt INTEGER NOT NULL,PRIMARY KEY(workspace,scope,id)) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS commands(id TEXT PRIMARY KEY,sessionId TEXT NOT NULL,createdAt INTEGER NOT NULL);`);
   if (
     !db
@@ -733,6 +735,142 @@ const handlers = {
       sessionId,
       owner,
     );
+  },
+  latestRunEvent({ sessionId }) {
+    const row = db
+      .prepare(
+        "SELECT * FROM events WHERE sessionId=? AND type IN ('run.start','run.end') ORDER BY seq DESC LIMIT 1",
+      )
+      .get(sessionId);
+    return row && decode(row);
+  },
+  commandReceipt({ workspace, scope, id, hostInstanceId }) {
+    const row = db
+      .prepare(
+        "SELECT * FROM rpc_commands WHERE workspace=? AND scope=? AND id=?",
+      )
+      .get(workspace, scope, id);
+    if (row) {
+      const { workspace: _, ...receipt } = row;
+      if (
+        receipt.status === "accepted" &&
+        receipt.hostInstanceId !== hostInstanceId
+      )
+        receipt.status = "unknown";
+      for (const key of ["runId", "operationId", "error"])
+        if (receipt[key] === null) delete receipt[key];
+      return receipt;
+    }
+    // Legacy IDs were global and had no scope or digest. Suppress execution
+    // without exposing the original scope's session or claiming equivalence.
+    const legacy = db
+      .prepare(
+        "SELECT c.createdAt FROM commands c JOIN sessions s ON s.id=c.sessionId WHERE c.id=? AND s.cwd=?",
+      )
+      .get(id, workspace);
+    return legacy
+      ? {
+          id,
+          scope,
+          method: "prompt",
+          digest: null,
+          hostInstanceId: null,
+          sessionId: null,
+          status: "unknown",
+          createdAt: legacy.createdAt,
+          updatedAt: legacy.createdAt,
+        }
+      : null;
+  },
+  acceptCommand(args) {
+    const {
+      workspace,
+      scope,
+      id,
+      method,
+      digest,
+      hostInstanceId,
+      sessionId,
+      operationId,
+    } = args;
+    if (!/^[a-f0-9]{64}$/.test(digest)) throw Error("Invalid command digest");
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      const receipt = handlers.commandReceipt(args);
+      if (receipt) {
+        if (
+          receipt.digest !== null &&
+          (receipt.digest !== digest || receipt.method !== method)
+        )
+          throw Error("Command ID payload conflict");
+        db.exec("COMMIT");
+        return { inserted: false, receipt };
+      }
+      if (
+        db
+          .prepare("SELECT count(*) AS n FROM rpc_commands WHERE workspace=?")
+          .get(workspace).n >= 100000
+      )
+        throw Error("Command receipt capacity exceeded; existing IDs retained");
+      const now = Date.now();
+      db.prepare(
+        "INSERT INTO rpc_commands(workspace,scope,id,method,digest,hostInstanceId,sessionId,status,operationId,createdAt,updatedAt) VALUES(?,?,?,?,?,?,?,'accepted',?,?,?)",
+      ).run(
+        workspace,
+        scope,
+        id,
+        method,
+        digest,
+        hostInstanceId,
+        sessionId,
+        operationId ?? null,
+        now,
+        now,
+      );
+      const inserted = handlers.commandReceipt(args);
+      db.exec("COMMIT");
+      return { inserted: true, receipt: inserted };
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
+  },
+  finishCommand({
+    workspace,
+    scope,
+    id,
+    hostInstanceId,
+    status,
+    sessionId,
+    runId,
+    operationId,
+    error,
+  }) {
+    if (status !== "completed" && status !== "failed")
+      throw Error("Invalid command completion");
+    if (
+      error !== undefined &&
+      (typeof error !== "string" || error.length > 4096)
+    )
+      throw Error("Command error capacity exceeded");
+    const changed = db
+      .prepare(
+        "UPDATE rpc_commands SET status=?,sessionId=coalesce(?,sessionId),runId=coalesce(?,runId),operationId=coalesce(?,operationId),error=?,updatedAt=? WHERE workspace=? AND scope=? AND id=? AND hostInstanceId=? AND status='accepted'",
+      )
+      .run(
+        status,
+        sessionId ?? null,
+        runId ?? null,
+        operationId ?? null,
+        error ?? null,
+        Date.now(),
+        workspace,
+        scope,
+        id,
+        hostInstanceId,
+      ).changes;
+    if (!changed)
+      throw Error("Command receipt ownership lost or already settled");
   },
   claim({ commandId, sessionId }) {
     return (

@@ -1,3 +1,7 @@
+import type {
+  DurableCommandReceipt,
+  RpcMethod,
+} from "../../protocol/src/contracts.ts";
 import type { Chunk } from "../../tools/src/indexer.ts";
 import type { Job } from "../../core/src/jobs.ts";
 import { Worker } from "node:worker_threads";
@@ -236,6 +240,47 @@ export class SQLiteStore implements EventStore {
   }
   release(sessionId: string, owner: string) {
     return this.request<void>("release", { sessionId, owner });
+  }
+  latestRunEvent(sessionId: string) {
+    return this.request<AgentEvent | undefined>("latestRunEvent", {
+      sessionId,
+    });
+  }
+  acceptCommand(args: {
+    workspace: string;
+    scope: string;
+    id: string;
+    method: RpcMethod;
+    digest: string;
+    hostInstanceId: string;
+    sessionId: string | null;
+    operationId?: string;
+  }) {
+    return this.request<{ inserted: boolean; receipt: DurableCommandReceipt }>(
+      "acceptCommand",
+      args,
+    );
+  }
+  commandReceipt(args: {
+    workspace: string;
+    scope: string;
+    id: string;
+    hostInstanceId: string;
+  }) {
+    return this.request<DurableCommandReceipt | null>("commandReceipt", args);
+  }
+  finishCommand(args: {
+    workspace: string;
+    scope: string;
+    id: string;
+    hostInstanceId: string;
+    status: "completed" | "failed";
+    sessionId?: string;
+    runId?: string;
+    operationId?: string;
+    error?: string;
+  }) {
+    return this.request<void>("finishCommand", args);
   }
   claim(commandId: string, sessionId: string) {
     return this.request<boolean>("claim", { commandId, sessionId });
