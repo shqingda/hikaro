@@ -1,6 +1,6 @@
 # hikaro
 
-Independent TypeScript coding agent. Current executable clients: fullscreen TUI and bidirectional Pi integration. See [TODO.md](TODO.md) for implementation and acceptance status. The earlier desktop/mobile experiments were removed; their restart is specified in the [client reboot plan](docs/client-reboot.md), with a [local interactive design draft](docs/design/client-reboot/index.html). Those drafts are not native clients. Cloud configuration remains optional.
+Independent TypeScript coding agent. Current executable clients: fullscreen TUI and bidirectional Pi integration. See [TODO.md](TODO.md) for implementation and acceptance status. The confirmed direction is [TUI plus a mobile companion](docs/tui-mobile-direction.md): the phone remotely views, approves, supplements and stops work on the computer. A native mobile app is not yet shipped. Cloud configuration remains optional.
 
 ## Run
 
@@ -88,7 +88,7 @@ File reads and updates use opened directory handles, rejecting symbolic links in
 
 Usage and model-call/cost budgets belong to the in-memory Agent and its shared child-agent budget, not to persistent session history. Reconstructing an Agent or restarting the host creates a fresh budget; resuming history does not restore usage limits. Context fitting accounts for system instructions, tool definitions, message payloads, image allowances, output reserve and a safety margin. Its conservative token estimate is not a model tokenizer. At 85% of the available input budget, or before old turns would be omitted, automatic compaction summarizes completed turns into a transactional checkpoint in the same session. Original messages remain available; the current user turn and tool pairs stay exact. Summary requests consume the shared budget, respect cancellation and leases, and must fit before a checkpoint commits. Restart restores the checkpoint. An oversized current turn fails visibly. Manual `/compact` still creates a continuation session. See the [compaction contract](docs/specs/auto-compaction.md).
 
-The client reboot now includes `hello` capability negotiation, a portable `packages/client-core` state layer, run identity snapshots and scoped durable command receipts. `command.receipt` reconciles lost responses; repeated mutation IDs never execute again, and different payloads conflict. Unknown outcomes remain unknown without automatic resend. See the [receipt contract](docs/specs/command-receipts.md) for status and retention boundaries. Remote raw transport wiring and native desktop/mobile applications remain later stages in the [reboot plan](docs/client-reboot.md).
+The client reboot now includes `hello` capability negotiation, a portable `packages/client-core` state layer, run identity snapshots and scoped durable command receipts. `command.receipt` reconciles lost responses; repeated mutation IDs never execute again, and different payloads conflict. Unknown outcomes remain unknown without automatic resend. See the [receipt contract](docs/specs/command-receipts.md) for status and retention boundaries. The shared raw remote adapter and bounded client library APIs are implemented. TUI attachment to the same host, durable client intent metadata and the native mobile app remain staged work in the [TUI/mobile plan](docs/tui-mobile-direction.md).
 
 ## Pi integration
 

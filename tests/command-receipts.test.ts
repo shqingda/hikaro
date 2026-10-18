@@ -34,7 +34,7 @@ it("claims a scoped command once across connections and rejects payload conflict
   const second = await open(path);
   const command = {
     workspace,
-    scope: "desktop",
+    scope: "local",
     id: "send-once",
     method: "prompt" as const,
     digest: "a".repeat(64),
@@ -76,7 +76,7 @@ it("retains accepted intent after reopen without guessing another host's outcome
   const { workspace, path, store, session } = await fixture();
   const command = {
     workspace,
-    scope: "desktop",
+    scope: "local",
     id: "interrupted-intent",
     method: "prompt" as const,
     digest: "c".repeat(64),

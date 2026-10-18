@@ -23,7 +23,7 @@ it("reconciles durable RPC outcomes after restart without replaying or crossing 
       home,
     ]);
   let client = start();
-  const scope = "desktop";
+  const scope = "local";
   const request = (
     method: string,
     params: Record<string, unknown> = {},

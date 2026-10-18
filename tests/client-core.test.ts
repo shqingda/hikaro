@@ -19,10 +19,10 @@ function response(
   id: string,
   result: unknown,
 ) {
-  client.receive(epoch, { type: "response", scope: "desktop", id, result });
+  client.receive(epoch, { type: "response", scope: "local", id, result });
 }
 function ready() {
-  const client = new ClientState("desktop");
+  const client = new ClientState("local");
   const epoch = client.beginConnection();
   client.command("hello", "hello", { protocolVersions: [2] });
   response(client, epoch, "hello", rpcCapabilities());
@@ -35,7 +35,7 @@ function event(
   type = "text.delta",
   data: Record<string, unknown> = { text: "x" },
   sessionId = "s1",
-  scope = "desktop",
+  scope = "local",
 ) {
   return {
     type: "event",
@@ -49,7 +49,7 @@ it("retains a metadata invalidation arriving after a snapshot watermark but befo
   client.command("racing-snapshot", "session.current");
   client.receive(epoch, {
     type: "session.invalidated",
-    scope: "desktop",
+    scope: "local",
     revision: 1,
   });
   response(client, epoch, "racing-snapshot", snapshot(0));
@@ -121,7 +121,7 @@ it("restores approvals at the snapshot barrier and removes resolved requests", (
   client.command("current", "session.current");
   client.receive(epoch, {
     type: "approval",
-    scope: "desktop",
+    scope: "local",
     revision: 1,
     request: approval,
   });
@@ -130,7 +130,7 @@ it("restores approvals at the snapshot barrier and removes resolved requests", (
   expect(client.state.approvals).toEqual([]);
   client.receive(epoch, {
     type: "approval",
-    scope: "desktop",
+    scope: "local",
     revision: 3,
     request: approval,
   });
@@ -145,7 +145,7 @@ it("restores approvals at the snapshot barrier and removes resolved requests", (
   expect(client.state.approvals).toHaveLength(1);
   client.receive(epoch, {
     type: "approval.resolved",
-    scope: "desktop",
+    scope: "local",
     revision: 4,
     id: "approval-1",
     allow: false,
@@ -156,7 +156,7 @@ it("does not reinterpret connection loss as failure or resend unknown commands a
   const { client, epoch } = ready();
   expect(
     client.command("intent-1", "prompt", { text: "change it" }),
-  ).toMatchObject({ id: "intent-1", scope: "desktop", method: "prompt" });
+  ).toMatchObject({ id: "intent-1", scope: "local", method: "prompt" });
   client.disconnected(epoch);
   expect(client.receipt("intent-1")?.status).toBe("unknown");
   expect(client.state.canAct).toBe(false);
@@ -221,7 +221,7 @@ it("rejects malformed/oversized trusted-scope frames and incompatible handshake 
   const { client, epoch } = ready();
   expect(() => client.receive(epoch, event(-1))).toThrow(/invalid/i);
   expect(client.state.canAct).toBe(false);
-  const other = new ClientState("desktop");
+  const other = new ClientState("local");
   const e = other.beginConnection();
   other.command("h", "hello");
   expect(() =>
@@ -265,13 +265,13 @@ it("merges notifications newer than a delayed remote snapshot without resurrecti
   };
   client.receive(epoch, {
     type: "approval",
-    scope: "desktop",
+    scope: "local",
     revision: 1,
     request,
   });
   client.receive(epoch, {
     type: "approval.resolved",
-    scope: "desktop",
+    scope: "local",
     revision: 2,
     id: "approval",
     allow: false,
@@ -319,7 +319,7 @@ it("accepts filtered global event sequence jumps when scope revisions are contig
   });
 });
 it("negotiates known methods when a compatible host advertises future additions", () => {
-  const client = new ClientState("desktop");
+  const client = new ClientState("local");
   const epoch = client.beginConnection();
   client.command("hello", "hello");
   response(client, epoch, "hello", {
@@ -361,12 +361,12 @@ it("restores authoritative run identity without inferring outcomes for legacy sn
 });
 
 it("fences negotiated host identities and accepts a new host only after a new connection handshake", () => {
-  const client = new ClientState("desktop");
+  const client = new ClientState("local");
   const epoch = client.beginConnection();
   client.command("hello-a", "hello");
   client.receive(epoch, {
     type: "response",
-    scope: "desktop",
+    scope: "local",
     id: "hello-a",
     hostInstanceId: "host-a",
     result: { ...rpcCapabilities(), hostInstanceId: "host-a" },
@@ -374,7 +374,7 @@ it("fences negotiated host identities and accepts a new host only after a new co
   client.command("snapshot-a", "session.current");
   client.receive(epoch, {
     type: "response",
-    scope: "desktop",
+    scope: "local",
     id: "snapshot-a",
     hostInstanceId: "host-a",
     result: { ...snapshot(), hostInstanceId: "host-a" },
@@ -395,7 +395,7 @@ it("fences negotiated host identities and accepts a new host only after a new co
   client.command("hello-b", "hello");
   client.receive(next, {
     type: "response",
-    scope: "desktop",
+    scope: "local",
     id: "hello-b",
     hostInstanceId: "host-b",
     result: { ...rpcCapabilities(), hostInstanceId: "host-b" },
@@ -403,7 +403,7 @@ it("fences negotiated host identities and accepts a new host only after a new co
   client.command("snapshot-b", "session.current");
   client.receive(next, {
     type: "response",
-    scope: "desktop",
+    scope: "local",
     id: "snapshot-b",
     hostInstanceId: "host-b",
     result: { ...snapshot(), hostInstanceId: "host-b" },
@@ -422,7 +422,7 @@ it("fences negotiated host identities and accepts a new host only after a new co
   expect(() =>
     client.receive(next, {
       type: "response",
-      scope: "desktop",
+      scope: "local",
       id: "mismatched-snapshot",
       hostInstanceId: "host-b",
       result: { ...snapshot(2), hostInstanceId: "host-a" },
@@ -445,7 +445,7 @@ it("reconciles durable receipts while unsynchronized without replaying uncertain
   expect(client.receipt("intent-0")?.status).toBe("unknown");
   const durable = {
     id: "intent-0",
-    scope: "desktop",
+    scope: "local",
     method: "prompt",
     digest: "a".repeat(64),
     hostInstanceId: "host-original",

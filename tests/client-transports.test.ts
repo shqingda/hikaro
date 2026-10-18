@@ -32,7 +32,7 @@ it("converges local and encrypted remote views on real SQLite, preserving unknow
     "--home",
     home,
   ]);
-  const local = new ClientConnection("desktop", host, clock);
+  const local = new ClientConnection("local", host, clock);
   const identity = createIdentity(),
     device = createIdentity(),
     deviceId = randomToken();

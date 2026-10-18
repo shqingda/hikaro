@@ -2,6 +2,16 @@
 
 更新：2026-10-18。目标是让 agent 在长任务、取消、权限和恢复边界上可靠，同时用同口径数据约束开销。通过一个合成基准不等于真实模型、终端显示、原生客户端或长期运行全部达标。
 
+## TUI / 移动方向调整后的复核
+
+指标只属于现有 TUI 和 core/storage。2026-10-18 本机 Node 26.12.0、macOS arm64 / M3 Pro，最终构建图 SHA-256 `ce18b7f2c605f17c73fe9f7c50c35837680a5e702ce26654ffa603a9cc1257d0`；报告开始采集时基线为 `94fac7b` + dirty shared-client 改动，该源码随后提交为 `e622d85`。
+
+- 最终 TUI 冷 V8 缓存、每次新 data home、当前工作区及用户 Skills 保持开启；30 次测量、3 次预热。启动 p95 **174.02 ms**，输入 p95 **1.765 ms**，就绪 RSS p95 **70.86 MiB**；原 200 ms / 16 ms / 100 MiB 门槛均通过。首个独立启动 180.58 ms。报告：`artifacts/benchmark-tui-mobile-final.json`。
+- 10k core/storage：append p95 **641.24 ms**、replay **20.63 ms**、message page **0.128 ms**、context **2.475 ms**、stream **5.091 ms**、event loop **10.641 ms**、最高 RSS **98.54 MiB**。原断言与预算全部保留并通过；3 次测量、1 次预热。报告：`artifacts/benchmark-harness-tui-mobile-direction.json`。
+- 保留先前观察：`artifacts/benchmark-tui-mobile-direction.json` 启动 p95 178.12 ms、输入 1.320 ms、RSS 70.80 MiB；它与 harness 驱动有短暂并发，不能用于隔离变量的优化收益比较。之后仅因分发 worker 格式化改变文件字节，重新构建并单独运行最终启动门槛；没有筛掉样本或改低预算。仍未覆盖真机移动端、真实网络、真实 provider 或 30 分钟 soak。
+
+方向及下一阶段门槛见 [TUI 与移动端路线](tui-mobile-direction.md)，协议验证见 [validation](validation.md)。
+
 ## 当前可运行的验证
 
 ```sh
@@ -96,7 +106,7 @@ pnpm bench:harness:check    # 固定工作负载与最小采样数，不允许�
 
 本轮续做已完成事务性自动压缩、文件/图片输入和客户端 C0 首切片，验证记录见 [本轮验收](validation.md#automatic-compaction-attachments-and-client-c0-2026-10-18)。尚待完成：provider tokenizer／图像精确预算、跨重启预算与待发队列恢复；大历史真实渲染、生成中滚动、100／1,000 chunk 不同突发模式、30 分钟有负载稳定性；真实 provider 限流、断网和恢复。恢复草稿不代表自动重放未确定是否执行的命令。
 
-下一阶段：继续补齐 C0 的持久命令回执和主机生命周期，再将同一故障夹具接入桌面和移动端。双端各自的内存、首屏和触控门槛见 [重启方案](client-reboot.md)。主机相关预算在固定设备复测稳定后再接入 CI 性能 job，当前 PR CI 仍负责正确性回归。
+下一阶段：将 TUI 与手机附着到同一 host，补齐安全连接、审批归属和客户端恢复。手机的内存、首屏和触控门槛见 [TUI／移动端路线](tui-mobile-direction.md)。主机相关预算在固定设备复测稳定后再接入 CI 性能 job，当前 PR CI 仍负责正确性回归。
 
 ## C0 durable receipts and secure skill batching — 2026-10-18
 

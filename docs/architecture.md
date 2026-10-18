@@ -1,6 +1,6 @@
 # Current scope
 
-TUI and bidirectional Pi integration are active. Desktop and mobile experimental clients, their shared state package, and dedicated tests have been removed. Cloud configuration is an optional direction with scope pending. [TODO.md](../TODO.md) is the current implementation ledger.
+TUI and bidirectional Pi integration are active. Portable client state, durable host receipts and an encrypted remote adapter support the confirmed mobile companion direction. The native mobile app, TUI attachment to the same host and device lifecycle acceptance remain pending. See the [TUI/mobile plan](tui-mobile-direction.md). Cloud deployment remains optional. [TODO.md](../TODO.md) is the current implementation ledger.
 
 # Implementation and design review
 

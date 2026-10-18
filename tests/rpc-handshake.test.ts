@@ -45,7 +45,7 @@ async function rpc() {
   function request(
     method: string,
     params: Record<string, unknown> = {},
-    scope = "desktop",
+    scope = "local",
   ) {
     const id = `request-${sequence++}`;
     const response = new Promise<any>((resolve) => pending.set(id, resolve));
@@ -94,7 +94,7 @@ it("negotiates actual protocol capabilities without creating a session", async (
 
 it("drives the portable state through the real RPC handler and SQLite without a provider network", async () => {
   const rpcHost = await rpc();
-  const state = new ClientState("desktop");
+  const state = new ClientState("local");
   const epoch = state.beginConnection();
   rpcHost.observe((frame) => state.receive(epoch, frame));
   await rpcHost.send(state.command("hello", "hello"));
@@ -167,7 +167,7 @@ it("restores a root session read from SQLite through resume and snapshot", async
 it("observes raw responses in order without changing ProcessClient request routing", async () => {
   const client = new ProcessClient(process.execPath, [
     "-e",
-    `process.stdin.setEncoding('utf8');process.stdin.on('data',data=>{for(const line of data.trim().split('\\n')){const q=JSON.parse(line);process.stdout.write(JSON.stringify({type:'response',id:q.id,result:{ok:true}})+'\\n'+JSON.stringify({type:'event',scope:'desktop',event:{seq:1}})+'\\n')}})`,
+    `process.stdin.setEncoding('utf8');process.stdin.on('data',data=>{for(const line of data.trim().split('\\n')){const q=JSON.parse(line);process.stdout.write(JSON.stringify({type:'response',id:q.id,result:{ok:true}})+'\\n'+JSON.stringify({type:'event',scope:'local',event:{seq:1}})+'\\n')}})`,
   ]);
   cleanup.push(() => client.close());
   const frames: unknown[] = [];

@@ -1,5 +1,22 @@
 # Validation status
 
+## TUI/mobile direction and shared client APIs: 2026-10-18
+
+The confirmed product direction is TUI plus a mobile companion for viewing, approval, steering and cancellation. Product scope and dependencies are recorded in the [TUI/mobile plan](tui-mobile-direction.md). Only standalone phone layout references are retained. No native mobile app or service deployment is claimed.
+
+Shared work retained: ordered remote raw frames and a portable connection controller; session metadata/search, model and draft APIs; bounded message/image/tool-call content, paged Markdown export and restricted native-helper artifact reads. An invalidation arriving after a snapshot's watermark is buffered and forces a new snapshot rather than reopening actions against stale metadata. Model endpoints remain host-configured and are omitted from session projections.
+
+Verification on macOS arm64 / Node 26.12.0 / pnpm 12.11.2:
+
+- Client-state/connection, local+encrypted-remote fixture, library, RPC controls/handshake/scopes/receipts and remote-host controls: **9 files, 50 tests passed**. The fixture uses the real spawned CLI and SQLite, with an in-process encrypted socket instead of a production relay. It covers duplicate/gap notifications, a lost prompt response, reconnect without replay, durable receipt reconciliation and 65 additional settled draft writes without exhausting unresolved-intent capacity.
+- The later compatibility/isolation adjustment passed **2 files, 3 tests**, overlapping the above selection: older hosts without receipt queries still return successful mutations, and a broken state listener does not break the protocol. Typecheck and the no-Node/no-DOM portable import check passed after that adjustment.
+- Large multilingual history, base64 image ranges, complete paged text export, provider-payload exclusion, artifact change detection and symlink denial have focused coverage. An initial artifact read failed on macOS's symlinked temporary-directory ancestor; the fix canonicalizes only the trusted home and retains the helper's no-symlink walk below it.
+- `pnpm build`, install/lockfile cleanup and `git diff --check` passed. No full suite or new mobile platform tests were added.
+
+Final TUI startup gate: **30 measured launches + 3 warmups**, fresh V8 cache and data home per launch; startup p95 **174.02 ms**, input p95 **1.765 ms**, ready RSS p95 **70.86 MiB**. All original thresholds pass. Raw report: `artifacts/benchmark-tui-mobile-final.json`, graph SHA-256 `ce18b7f2c605f17c73fe9f7c50c35837680a5e702ce26654ffa603a9cc1257d0`. The 10k storage/core gate also passes unchanged (`artifacts/benchmark-harness-tui-mobile-direction.json`). The earlier 178.12 ms startup observation (`artifacts/benchmark-tui-mobile-direction.json`) overlapped briefly with the harness driver and is retained. The final startup run followed formatting of the distributed worker and a rebuild, and ran separately; it is not a selected subset of the first report. No 30-minute soak, native mobile/network acceptance or summary-quality claim follows from these measurements.
+
+Pending: TUI attachment to the same remote host, authenticated local IPC, cross-client approval ownership, durable client-side intent metadata and native device storage/lifecycle verification. Host durable receipts and this encrypted fixture do not by themselves complete those capabilities.
+
 ## Context, session recovery and performance: 2026-10-18
 
 Implemented complete-request context accounting, conservative token estimation, whole-turn trimming, output reserves aligned with the Pi adapter, and source-aware bounded manual summaries. Oversized requests fail before consuming a model call. A synchronized regression caught and fixed concurrent child agents spending the same final shared call. Automatic compaction, exact tokenizer accounting and cross-restart budgets remain pending.
@@ -12,11 +29,11 @@ Verification on macOS arm64, Node 26.12.0 / pnpm 12.11.2:
 - `tests/session-search.test.ts`: **4 passed**, including a target beyond page one, paging filtered results, literal wildcard characters, workspace isolation, Unicode case folding and superseded queries. The initial implementation failed the new behavior tests as expected; one existing pagination shortcut test was updated to navigate to the page action with arrow keys because typing now searches session data.
 - Final draft-recovery/session-settings/real draft-recovery PTY selection: **26 passed**. Six draft unit/integration cases plus one actual CLI scenario cover SIGKILL, reconnecting to the saved demo session, restored input and clearing after submission. This count overlaps session-settings in the 80-test selection above; it is not an additional independent total.
 - Final TUI interaction/performance-harness/performance-startup selection: **3 files, 19 passed**. Includes expanded paste, transient dialogs, search/menu compatibility, benchmark parameter/measurement/cleanup guards and lazy SDK loading.
-- Final `pnpm typecheck`, `pnpm build` and `git diff --check`: passed. `pnpm start` build artifacts updated. No full suite, production model, hosted CI or native desktop/mobile acceptance was claimed.
+- Final `pnpm typecheck`, `pnpm build` and `git diff --check`: passed. `pnpm start` build artifacts updated. No full suite, production model, hosted CI or native mobile acceptance was claimed.
 
 Performance: lazy provider SDK loading reduced the 30-run offline startup p50 **291.64 → 229.37 ms**, p95 **405.24 → 324.81 ms**, and ready RSS p95 **96.70 → 81.39 MiB**. Input echo p95 was **3.26 ms**. The **200 ms startup target remains unmet**; the benchmark preserves it and reports failure. Fixed 10k storage/core workload budgets passed, including lossless live and persisted text checks. See [harness-performance.md](harness-performance.md) for raw report locations, workload details, retained/rejected experiments and remaining measurements. Real provider startup and 30-minute stability were not measured.
 
-The [desktop/mobile reboot proposal](client-reboot.md) and [interactive draft](design/client-reboot/index.html) are design artifacts, not released clients. The draft was exercised in Chrome at five viewport widths, with keyboard navigation, approvals, disconnection and reduced motion; browser errors were zero. Screenshots and [inspection evidence](design/client-reboot/README.md) are retained. The brand candidate is separate from `brand/identity` and still requires final small-size optical work.
+[Static mobile layout references](design/mobile-controller/README.md) are design artifacts, not released clients. They do not prove native lifecycle, secure storage, production connectivity or performance. The brand candidate is separate from `brand/identity` and still requires final small-size optical work.
 
 ## Approval panel: 2026-10-17
 
@@ -110,7 +127,7 @@ Targeted formatting and diff whitespace checks passed. No full suite, build, ben
 ## Current delivery scope
 
 - Independent agent core, fullscreen TUI and bidirectional Pi integration. Hikaro does not adopt Pi's agent loop.
-- Electron/Expo clients, shared client-state package and dedicated tests/scripts have been deleted. Their release, notification, store and performance acceptance work is outside delivery.
+- The native mobile app is not shipped. Mobile release, notification, store and performance acceptance have their own stages.
 - Cloud configuration remains optional. Configuration sync is not implemented; sync, distribution and remote connection scope still needs a decision.
 - Native provider PTC, automatic cross-provider fallback, advanced plugin UI, browser/index expansion and generic executable Pi extension adaptation remain optional. They are not core TUI acceptance gates.
 
@@ -294,7 +311,7 @@ Manual compaction folds persisted message pages into a new continuation session 
 
 First choose configuration sync, distribution or remote connection scope. If Cloudflare is used, retain user-managed deployment and separately plan production relay/pairing/reconnection/revocation checks. Credentials and non-sensitive settings need separate designs; private configuration uploaded to the cloud requires end-to-end encryption.
 
-Remote protocol and third-party plugin security review remains outstanding and belongs to that optional scope. Removed desktop/mobile notifications and store releases are not core acceptance gates.
+Remote protocol and third-party plugin security review remains outstanding and belongs to that optional scope. Mobile notifications and store releases are separate from core TUI acceptance gates.
 
 ## Verification constraints
 
@@ -321,7 +338,7 @@ Focused verification only (macOS arm64, Node 26.12.0, pnpm 12.11.2):
 
 Review caught and repaired sensitive attachment aliases, longer Markdown closing fences, client global-sequence assumptions, nullable restored parent IDs, and detached approval revisions. No additional layout-only tests were added.
 
-Limits: compaction uses a conservative token heuristic and generated text, not a proven lossless semantic summary; original history remains authoritative. A pre-existing single stored user turn over 8 MiB can still block startup repair of interrupted tool pairs. New local attachments are bounded before submission. Budget usage and queued prompts are not recovered across host restarts. Native desktop/mobile apps, durable command receipts, OS clipboard-image capture and portable image export remain subsequent work. The non-letter logo candidate is an independent unverified draft.
+Limits: compaction uses a conservative token heuristic and generated text, not a proven lossless semantic summary; original history remains authoritative. A pre-existing single stored user turn over 8 MiB can still block startup repair of interrupted tool pairs. New local attachments are bounded before submission. Budget usage and queued prompts are not recovered across host restarts. Native mobile apps, OS clipboard-image capture and portable image export remain subsequent work; durable host command receipts were added later in this record. The non-letter logo candidate is an independent unverified draft.
 
 最终启动构建：冷 V8 缓存 3 次预热 + 30 次测量，p95 181.00 ms／输入 p95 1.37 ms／RSS p95 72.67 MiB，原三项门槛均通过。末轮压缩构建的两项插件与启动兼容测试通过；各个失败中间报告完整保留。
 
@@ -347,4 +364,4 @@ Necessary verification, without a full-suite run:
 
 Final original startup gate: **165.54 ms p95** (cold V8 cache, 3 warmups / 30 launches, warm OS caches), ordinary input **1.26 ms p95**, ready RSS **70.66 MiB p95**. The 10k harness passes all existing gates. Failed startup attempts, the shared-load baseline/candidate comparison and the reverted early-worker experiment are preserved in [the performance ledger](harness-performance.md). No successful measurement was used to erase a failure or weaken a threshold.
 
-C0 is still not complete as a whole: remote raw transport wiring, remaining client-facing session/history/attachment APIs and host/native lifecycle remain staged work. No desktop/mobile native application, signed package, production relay, external provider or physical-device acceptance is claimed.
+C0 is still not complete as a whole: remote raw transport wiring, remaining client-facing session/history/attachment APIs and host/native lifecycle remain staged work. No native mobile application, signed mobile package, production relay, external provider or physical-device acceptance is claimed.
