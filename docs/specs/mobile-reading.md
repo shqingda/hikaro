@@ -22,5 +22,5 @@
 - `pnpm exec vitest run tests/mobile-controller.test.ts`：5 项通过。已有的真实共享 host / Runtime / SQLite / 加密恢复场景加入超过 20k 的正文读取、后台清理和撤权清理；新加一条关闭详情后迟到响应不复活、切换与后台清理场景。
 - 首轮集成失败来自过大的中文演示输入；改为预算内的长输入，并从电脑取消缓慢的演示回显，保留原有短输出恢复断言。没有调整模型预算、超时、断言或质量阈值。首轮详情页类型错误已按当前 Expo Router / React Native 的 `removed` 事件与 `ScrollViewInstance` 修正。
 - `pnpm mobile:typecheck`：通过。`pnpm --filter @hikaro/mobile export`：iOS、Android Hermes JS 导出通过；这不等同于两端原生签名构建。
-- 当前原有模拟器未配对真实 relay，本轮未做已连接详情页的原生交互与截图验收；需按上述步骤连接后验证翻段、复制、返回及离线禁用。未新建模拟器、安装测试证书或启动 DeviceHub。
+- 本轮提交时原有模拟器尚未配对，未做已连接详情页的原生交互与截图验收；后续于 2026-10-19 在原有设备补验，见 [原生验收记录](../mobile-m0-acceptance.md)。未新建模拟器、安装测试证书或启动 DeviceHub。
 - 未运行全量测试、TUI 性能基准或发布版长期内存测试；既有性能与 harness 门槛保持不变，M0 真机与发布验收仍开放。

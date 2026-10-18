@@ -25,7 +25,8 @@ export default function Task() {
   useEffect(() => {
     if (["unpaired", "revoked", "review"].includes(state.phase))
       router.replace("/");
-  }, [state.phase]);
+    else if (online && !state.session) router.replace("/tasks");
+  }, [state.phase, online, state.session]);
   return (
     <FlatList
       contentInsetAdjustmentBehavior="automatic"
@@ -83,6 +84,11 @@ export default function Task() {
           </Text>
           <Text
             selectable
+            numberOfLines={
+              (item.message.textLength ?? 0) > item.message.text.length
+                ? 12
+                : undefined
+            }
             style={{ color: colors.label, fontSize: 16, lineHeight: 25 }}
           >
             {readable(item.message.text)}
