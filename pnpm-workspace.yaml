@@ -2,6 +2,7 @@ packages:
   - "packages/*"
   - "apps/cli"
   - "apps/relay"
+  - "apps/mobile"
 minimumReleaseAge: 0
 allowBuilds:
   workerd: true
@@ -10,3 +11,9 @@ allowBuilds:
   node-pty: true
   "@google/genai": false
   protobufjs: false
+# serve-sim's inspector needs the TypeScript 5 JS compiler API. Keep the
+# repository's TypeScript 7 checker and satisfy the inspector's existing ^5 peer.
+packageExtensions:
+  "serve-sim@0.1.48":
+    dependencies:
+      typescript: "5.9.3"
