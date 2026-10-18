@@ -23,7 +23,9 @@ import { openLab } from "./mobile-lab-files.mjs";
 
 const directory = process.env.HIKARO_MOBILE_FIXTURE_DIR;
 if (!directory || !process.env.NODE_EXTRA_CA_CERTS)
-  throw Error("Start with pnpm mobile:lab; isolated TLS files are required");
+  throw Error(
+    "Internal relay fixture requires an owned private directory and TLS files; use pnpm dev:sim for the existing simulator",
+  );
 const lab = await openLab(directory);
 const port = Number(process.env.HIKARO_MOBILE_LAB_PORT ?? 8443);
 if (!Number.isInteger(port) || port < 1024 || port > 65535)

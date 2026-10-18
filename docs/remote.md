@@ -1,6 +1,6 @@
 # Remote host and Cloudflare
 
-For one-command iOS simulator pairing, grants and recovery checks, use `pnpm mobile:lab`; see [the local lab guide](mobile-lab.md). It runs this relay locally over TLS in an isolated workspace. The deployment steps below are for a public relay used by physical devices across networks.
+Use `pnpm dev:sim` for the existing iPhone 18 Pro browser preview; it opens localhost:3200 without launching DeviceHub or provisioning another simulator. Pairing and task grants use the relay configured below. The encrypted local relay fixture remains available to headless tests (`pnpm mobile:lab:check`); it does not provision or change simulators.
 
 Cloudflare stores connection/device metadata and hashed bearer tokens. Application commands and events use authenticated NaCl encryption between paired devices. Each connection performs a mutual challenge handshake and checks direction and sequence. Keys are pinned by the pairing code. This protocol does **not** claim forward secrecy.
 

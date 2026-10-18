@@ -2,7 +2,7 @@ import { it, expect, vi } from "vitest";
 import { fileURLToPath } from "node:url";
 import { launchSimulator, DEVICE } from "../scripts/dev-sim.mjs";
 const root = fileURLToPath(new URL("../", import.meta.url)).replace(/\/$/, "");
-function fixture(owner = true, device = DEVICE) {
+function fixture(owner = true, device = DEVICE, available = true) {
   const io = {
     log: vi.fn(),
     pause: async () => {},
@@ -17,7 +17,9 @@ function fixture(owner = true, device = DEVICE) {
       if (text === "simctl list devices --json")
         return JSON.stringify({
           devices: {
-            ios: [{ udid: DEVICE, state: "Booted", isAvailable: true }],
+            ios: available
+              ? [{ udid: DEVICE, state: "Booted", isAvailable: true }]
+              : [],
           },
         });
       if (command === "lsof")
@@ -32,13 +34,21 @@ function fixture(owner = true, device = DEVICE) {
   };
   return io;
 }
-it("reuses the project's Metro and the selected simulator without rebuilding or erasing", async () => {
+it("reuses the original simulator and opens only the browser without creating or changing devices", async () => {
   const io = fixture();
   await launchSimulator(io);
   expect(io.start).not.toHaveBeenCalled();
   expect(
-    io.run.mock.calls.some(
-      ([, args]) => args.includes("erase") || args.includes("repair-input"),
+    io.run.mock.calls.some(([, args]) =>
+      [
+        "create",
+        "clone",
+        "erase",
+        "delete",
+        "keychain",
+        "install",
+        "repair-input",
+      ].some((action) => args.includes(action)),
     ),
   ).toBe(false);
   expect(
@@ -48,6 +58,19 @@ it("reuses the project's Metro and the selected simulator without rebuilding or 
       ),
     ),
   ).toBe(true);
+  expect(io.run.mock.calls.filter(([command]) => command === "open")).toEqual([
+    ["open", ["http://localhost:3200/"]],
+  ]);
+});
+it("refuses a missing selected device without creating a replacement", async () => {
+  const io = fixture(true, DEVICE, false);
+  await expect(launchSimulator(io)).rejects.toThrow(/不存在或不可用/);
+  expect(io.start).not.toHaveBeenCalled();
+  expect(
+    io.run.mock.calls.some(
+      ([, args]) => args.includes("create") || args.includes("clone"),
+    ),
+  ).toBe(false);
 });
 it("refuses another project's Metro before starting or stopping services", async () => {
   const io = fixture(false);
