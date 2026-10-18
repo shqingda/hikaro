@@ -142,6 +142,11 @@ export async function serveRpc(
             resolve(false);
             return;
           }
+          if (shared)
+            request = {
+              ...request,
+              authoritySessionId: runtime.approvalAuthority(request.sessionId),
+            };
           const scope =
             request.scope ?? owners.get(request.sessionId) ?? "default";
           const abort = () => finish(false);
@@ -149,7 +154,7 @@ export async function serveRpc(
             signal.removeEventListener("abort", abort);
             approvals.delete(request.id);
             for (const [recipient] of approvalRecipients(
-              request.sessionId,
+              request.authoritySessionId ?? request.sessionId,
               scope,
             ))
               sendScoped({
@@ -163,7 +168,7 @@ export async function serveRpc(
           approvals.set(request.id, { request, scope, finish });
           signal.addEventListener("abort", abort, { once: true });
           for (const [recipient] of approvalRecipients(
-            request.sessionId,
+            request.authoritySessionId ?? request.sessionId,
             scope,
           ))
             sendScoped({ type: "approval", scope: recipient, request });
@@ -476,7 +481,11 @@ export async function serveRpc(
             approvals: [...approvals.values()]
               .filter((a) =>
                 shared
-                  ? controlsApproval(scope, state, a.request.sessionId)
+                  ? controlsApproval(
+                      scope,
+                      state,
+                      a.request.authoritySessionId ?? a.request.sessionId,
+                    )
                   : a.scope === scope,
               )
               .map((a) => a.request),
@@ -809,14 +818,16 @@ export async function serveRpc(
           if (shared) {
             const role = await runtime.store.sessionRole(
               runtime.options.cwd,
-              approval.request.sessionId,
+              approval.request.authoritySessionId ?? approval.request.sessionId,
               scope,
             );
             if (
               (!shared.localScope(scope) &&
                 role !== "owner" &&
                 role !== "control") ||
-              state.session?.id !== approval.request.sessionId ||
+              state.session?.id !==
+                (approval.request.authoritySessionId ??
+                  approval.request.sessionId) ||
               approvals.get(approval.request.id) !== approval
             )
               throw Error("Approval expired or session control denied");

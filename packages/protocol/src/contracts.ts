@@ -91,6 +91,7 @@ export const HelloResult = z.object({
 export const Permission = z.object({
   id,
   sessionId: id,
+  authoritySessionId: id.optional(),
   tool: z.string().max(256),
   reason: z.string().max(100000),
   arguments: z.record(z.string(), z.unknown()),

@@ -60,6 +60,16 @@ export class Runtime {
   private agents = new Map<string, Agent>();
   private initializingAgents = new Map<string, Promise<Agent>>();
   private pendingSubagents = 0;
+  private delegatedParents = new Map<string, string>();
+  /** Only live runtime delegation inherits its parent's approval authority. */
+  approvalAuthority(sessionId: string): string {
+    for (let depth = 0; depth < 2; depth++) {
+      const parent = this.delegatedParents.get(sessionId);
+      if (!parent) break;
+      sessionId = parent;
+    }
+    return sessionId;
+  }
   private lifecycle = new AbortController();
   private closing?: Promise<void>;
   private instructions = "";
@@ -264,6 +274,7 @@ export class Runtime {
               selection,
             );
             ctx.signal.throwIfAborted();
+            runtime.delegatedParents.set(session.id, ctx.sessionId);
             const child = await runtime.agent(
               session,
               ctx.depth + 1,
@@ -284,7 +295,10 @@ export class Runtime {
             };
           } finally {
             if (pending) runtime.pendingSubagents--;
-            if (session) runtime.agents.delete(session.id);
+            if (session) {
+              runtime.agents.delete(session.id);
+              runtime.delegatedParents.delete(session.id);
+            }
           }
         },
       });

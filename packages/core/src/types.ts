@@ -60,6 +60,8 @@ export type PermissionRequest = {
   scope?: string;
   id: string;
   sessionId: string;
+  /** Host-assigned authority for a live delegated task; never supplied by responders. */
+  authoritySessionId?: string;
   tool: string;
   reason: string;
   arguments: Record<string, unknown>;

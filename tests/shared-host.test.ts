@@ -145,7 +145,7 @@ async function toolProvider(home: string) {
     `export default {id:"shared-fixture",apiVersion:1,setup(host){
     host.registerProvider("fixture",async()=>({id:"fixture",model:"host",contextWindow:32000,
       async *stream({messages,signal}){signal.throwIfAborted();const last=messages.at(-1);
-        const message=last.role==="user"?{role:"assistant",text:"",timestamp:1,toolCalls:[{id:last.text,name:"write_file",arguments:{path:last.text+".txt",content:"approved"}}]}:{role:"assistant",text:"finished once",timestamp:1};
+        const message=last.role==="user"?{role:"assistant",text:"",timestamp:1,toolCalls:[last.text==="delegate"?{id:"delegate",name:"subagent",arguments:{task:"nested-proof"}}:{id:last.text,name:"write_file",arguments:{path:last.text+".txt",content:"approved"}}]}:{role:"assistant",text:"finished once",timestamp:1};
         yield {type:"done",message,usage:{input:0,output:0,cost:0}};
       }
     }));
@@ -239,6 +239,21 @@ it("shares one run and explicitly owned approvals through local IPC and the encr
     expect(race.filter((r) => r.status === "rejected")).toHaveLength(1);
     await vi.waitFor(() => expect(local.state.runStatus).toBe("completed"));
     expect(await readFile(join(options.cwd, "race.txt"), "utf8")).toBe(
+      "approved",
+    );
+    await local.request("prompt", { text: "delegate" });
+    await vi.waitFor(() =>
+      expect(remote.client.state.approvals).toHaveLength(1),
+    );
+    const delegated = remote.client.state.approvals[0]!;
+    expect(delegated.sessionId).not.toBe(session.id);
+    expect(delegated.authoritySessionId).toBe(session.id);
+    await remote.client.request("approval.respond", {
+      id: delegated.id,
+      allow: true,
+    });
+    await vi.waitFor(() => expect(local.state.runStatus).toBe("completed"));
+    expect(await readFile(join(options.cwd, "nested-proof.txt"), "utf8")).toBe(
       "approved",
     );
     await local.request("prompt", { text: "revoke-access" });
@@ -638,7 +653,7 @@ it("does not apply a waiting control to a newly selected view-only session", asy
   const spy = vi
     .spyOn(SQLiteStore.prototype, "acceptCommand")
     .mockImplementation(async function (
-      this: InstanceType<typeof SQLiteStore>,
+      this: import("../packages/storage/src/index.ts").SQLiteStore,
       command,
     ) {
       if (command.method === "cancel" && command.scope === deviceId) {
