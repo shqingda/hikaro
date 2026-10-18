@@ -8,6 +8,9 @@ const { values, positionals } = parseArgs({
   args: cliArgs,
   allowPositionals: true,
   options: {
+    host: { type: "boolean" },
+    attach: { type: "boolean" },
+    "client-id": { type: "string" },
     serve: { type: "boolean" },
     pair: { type: "boolean" },
     relay: { type: "string" },
@@ -34,7 +37,7 @@ const { values, positionals } = parseArgs({
 async function main() {
   if (values.help) {
     console.log(
-      `hikaro — independent coding agent\n\nUsage: hikaro [--demo] [--provider anthropic --model MODEL]\n  --trust             Allow file edits inside this workspace\n  --prompt, -p TEXT   Run once and print the response\n  --rpc               JSONL protocol over stdin/stdout\n  --models            List provider/model identifiers\n  --session ID        Resume a saved session\n  --continue, -c      Resume last opened session (default in TUI)\n  --new               Start a new interactive session\n  --base-url URL      OpenAI-compatible endpoint\n  --endpoint-key-env NAME  Save this environment key for the exact --base-url\n  --cwd PATH          Workspace (defaults to current directory)\n  --home PATH         Data directory (defaults to ~/.hikaro)\n\nAPI keys use provider environment variables. Interactive /permissions controls workspace approval mode.\nUse --demo to try the UI without credentials.`,
+      `hikaro — independent coding agent\n\nUsage: hikaro [--demo] [--provider anthropic --model MODEL]\n  --trust             Allow file edits inside this workspace\n  --prompt, -p TEXT   Run once and print the response\n  --host              Run a persistent shared task host\n  --attach            Attach this TUI to the shared host\n  --serve             Connect the shared host to the encrypted relay\n  --client-id ID      Stable attached TUI identity (default: main)\n  --rpc               JSONL protocol over stdin/stdout\n  --models            List provider/model identifiers\n  --session ID        Resume a saved session\n  --continue, -c      Resume last opened session (default in TUI)\n  --new               Start a new interactive session\n  --base-url URL      OpenAI-compatible endpoint\n  --endpoint-key-env NAME  Save this environment key for the exact --base-url\n  --cwd PATH          Workspace (defaults to current directory)\n  --home PATH         Data directory (defaults to ~/.hikaro)\n\nAPI keys use provider environment variables. Interactive /permissions controls workspace approval mode.\nUse --demo to try the UI without credentials.`,
     );
     return;
   }
@@ -90,6 +93,37 @@ async function main() {
     const { revokeDevice } =
       await import("../../../packages/remote/src/host.ts");
     await revokeDevice(options.home, values.revoke);
+    return;
+  }
+  if (
+    (values.attach || values.serve) &&
+    (values.demo ||
+      values.provider ||
+      values.model ||
+      values["base-url"] ||
+      values.trust)
+  )
+    throw Error(
+      "Configure --demo, provider, model, endpoint and trust on --host; clients attach to its existing configuration",
+    );
+  if (values.host) {
+    if (values.attach || values.serve || values.rpc || values.prompt)
+      throw Error("--host runs independently of client modes");
+    const { serveSharedHost } = await import("./shared-host.ts");
+    const host = await serveSharedHost(options);
+    console.error(`Hikaro shared host ready: ${host.endpoint.cwd}`);
+    return;
+  }
+  if (values.attach) {
+    if (values.serve || values.rpc || values.prompt)
+      throw Error("Choose one client mode");
+    const { attachTui } = await import("./attached-tui.ts");
+    await attachTui({
+      ...options,
+      session: values.session,
+      newSession: values.new,
+      clientId: values["client-id"],
+    });
     return;
   }
   if (values.serve) {

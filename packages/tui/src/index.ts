@@ -216,6 +216,8 @@ export class HikaroView {
       ) => Promise<{ text: string; images?: ImageInput[] }>;
       onCommand: (text: string) => Promise<string | void>;
       onExit: () => void;
+      /** Shared-host views can detach while an approval or unsent draft is open. */
+      detachOnCtrlD?: boolean;
       onHistory?: (direction: HistoryDirection) => Promise<HistoryPage>;
       onPreferences?: (patch: Partial<TuiPreferences>) => Promise<void>;
       onDraftChange?: (text: string) => void;
@@ -394,6 +396,10 @@ export class HikaroView {
     this.removeInput = tui.addInputListener((data) => {
       if (this.disposed) return undefined;
       if (isKeyRelease(data)) return { consume: true };
+      if (options.detachOnCtrlD && matchesKey(data, "ctrl+d")) {
+        options.onExit();
+        return { consume: true };
+      }
       if (this.approval) {
         this.approval.panel.handleInput(data);
         return { consume: true };
@@ -487,6 +493,30 @@ export class HikaroView {
     this.busy = false;
     this.unsubscribe = backend.subscribe((event) => this.event(event));
     this.updateFooter();
+  }
+  /** Restore authoritative execution state without fabricating run events. */
+  restoreExecution(snapshot: {
+    busy: boolean;
+    stream: string;
+    streamTruncated: boolean;
+  }) {
+    this.busy = snapshot.busy;
+    this.activity = "Working";
+    if (snapshot.stream && !this.history.hasNewer) {
+      if (!this.draft) {
+        this.draft = new MessageComponent(
+          this.nextMessage++,
+          "assistant",
+          "",
+          true,
+        );
+        this.append(this.draft);
+      }
+      this.draftText = snapshot.stream.slice(-STREAM_PREVIEW_CHARS);
+      this.draft.setText(this.draftText);
+    }
+    this.updateFooter();
+    this.tui.requestRender();
   }
   startTheme() {
     const apply = (light: boolean) => {
