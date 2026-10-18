@@ -1,10 +1,9 @@
 import WebSocket from "ws";
-import { existsSync, watchFile, unwatchFile } from "node:fs";
+import { watchFile, unwatchFile } from "node:fs";
 import { createHash } from "node:crypto";
 import { createInterface } from "node:readline/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { fileURLToPath } from "node:url";
 import {
   createIdentity,
   SecureChannel,
@@ -12,7 +11,7 @@ import {
   isToken,
   isRecord,
 } from "../../crypto/src/index.ts";
-import { ProcessClient } from "../../protocol/src/client.ts";
+import { SharedHostClient } from "../../host/src/client.ts";
 import { Command, isControlMethod } from "../../protocol/src/index.ts";
 import { validateRelay, type Pairing } from "./client.ts";
 import {
@@ -175,10 +174,6 @@ async function confirmDevice(deviceId: string) {
 export async function serveRemote(options: {
   cwd: string;
   home?: string;
-  demo?: boolean;
-  provider?: string;
-  model?: string;
-  baseUrl?: string;
   approveDevice?: (id: string) => Promise<boolean>;
 }) {
   const home = options.home ?? join(homedir(), ".hikaro");
@@ -190,30 +185,11 @@ export async function serveRemote(options: {
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
   let heartbeat: ReturnType<typeof setInterval> | undefined;
   let configWrites = Promise.resolve();
-  const bundled = fileURLToPath(new URL("./hikaro.mjs", import.meta.url));
-  const args = existsSync(bundled)
-    ? [bundled]
-    : [
-        "--import",
-        "tsx",
-        fileURLToPath(
-          new URL("../../../apps/cli/src/index.ts", import.meta.url),
-        ),
-      ];
-  const rpc = new ProcessClient(
-    process.execPath,
-    [
-      ...args,
-      "--rpc",
-      "--home",
-      home,
-      ...(options.demo ? ["--demo"] : []),
-      ...(options.provider ? ["--provider", options.provider] : []),
-      ...(options.model ? ["--model", options.model] : []),
-      ...(options.baseUrl ? ["--base-url", options.baseUrl] : []),
-    ],
-    { cwd: options.cwd },
-  );
+  const rpc = await SharedHostClient.connect({
+    cwd: options.cwd,
+    home,
+    mode: "bridge",
+  });
   type Peer = {
     channel: SecureChannel;
     ready: boolean;
@@ -256,6 +232,13 @@ export async function serveRemote(options: {
     }
   };
   rpc.subscribe((message) => {
+    if (message.type === "connection.replaced") {
+      console.error(
+        "Another relay bridge attached to this host; this bridge is closing.",
+      );
+      void shutdown();
+      return;
+    }
     if (typeof message.scope === "string") {
       send(message.scope, message);
       if (message.type === "event" && message.event.type === "run.end")
@@ -265,9 +248,12 @@ export async function serveRemote(options: {
         }).catch(() => {});
     }
   });
-  rpc.onExit((error) => {
-    console.error(error.message);
-    void shutdown();
+  rpc.onConnection?.((connected) => {
+    for (const id of peers.keys())
+      send(id, {
+        type: "connection",
+        status: connected ? "connected" : "disconnected",
+      });
   });
   const updateRevocations = async () => {
     const latest = await readConfig(home);

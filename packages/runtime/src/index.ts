@@ -144,7 +144,7 @@ export class Runtime {
     }
     return next;
   }
-  static async open(options: RuntimeOptions) {
+  static async open(options: RuntimeOptions, store?: SQLiteStore) {
     const home = options.home ?? join(homedir(), ".hikaro");
     await mkdir(home, { recursive: true, mode: 0o700 });
     const selected = await readModelDefault(home);
@@ -166,7 +166,7 @@ export class Runtime {
     }
     const runtime = new Runtime(
       { ...options, home, cwd: resolve(options.cwd) },
-      await SQLiteStore.open(join(home, "sessions.sqlite")),
+      store ?? (await SQLiteStore.open(join(home, "sessions.sqlite"))),
     );
     try {
       await runtime.plugins.load(

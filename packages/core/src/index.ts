@@ -129,7 +129,7 @@ export class PluginHost {
 export class Agent implements AgentBackend {
   private listeners = new Set<(e: AgentEvent) => void>();
   private controller?: AbortController;
-  private steering: string[] = [];
+  private steering: Array<{ text: string; scope?: string }> = [];
   private compacting = false;
   private origin?: { scope?: string; commandId?: string };
   private queue: Array<{
@@ -336,9 +336,22 @@ export class Agent implements AgentBackend {
       void this.drain();
     });
   }
-  steer(text: string) {
+  steer(text: string, scope?: string) {
     if (this.steering.length >= 16) throw Error("Steering queue is full");
-    this.steering.push(text);
+    this.steering.push({ text, scope });
+  }
+  /** Revocation removes this participant's work without stopping another owner. */
+  cancelScope(scope: string) {
+    if (this.origin?.scope === scope && !this.compacting)
+      this.controller?.abort();
+    const kept: typeof this.queue = [];
+    for (const item of this.queue) {
+      if (item.origin?.scope === scope)
+        item.reject(new DOMException("Client revoked", "AbortError"));
+      else kept.push(item);
+    }
+    this.queue = kept;
+    this.steering = this.steering.filter((item) => item.scope !== scope);
   }
   cancel() {
     this.controller?.abort();
@@ -754,7 +767,7 @@ export class Agent implements AgentBackend {
           throw Error("Session cost budget reached");
         if (this.budget.modelCallsLeft <= 0)
           throw Error("Shared model-call budget exhausted");
-        for (const text of this.steering.splice(0))
+        for (const { text } of this.steering.splice(0))
           await this.message({ role: "user", text, timestamp: Date.now() });
         const { system, tools, context } = await this.requestContext(
           user.seq,

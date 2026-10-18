@@ -20,6 +20,7 @@ import type {
   PermissionRequest,
 } from "../../../packages/core/src/index.ts";
 import {
+  rpcReadMethods,
   HelloParams,
   rpcCapabilities,
 } from "../../../packages/protocol/src/contracts.ts";
@@ -39,6 +40,7 @@ type ScopeWork = {
   operations: Set<AbortController>;
 };
 type ScopeState = {
+  role?: "owner" | "view" | "control";
   revision: number;
   controlQueued: number;
   controlBytes: number;
@@ -51,6 +53,13 @@ type ScopeState = {
   generation: number;
   work: ScopeWork;
 };
+export type SharedRpcOptions = {
+  instanceId: string;
+  store: import("../../../packages/storage/src/index.ts").SQLiteStore;
+  localScope(scope: string): boolean;
+  pairedDevice(scope: string): Promise<boolean>;
+  beforeClose?(): Promise<void>;
+};
 export async function serveRpc(
   options: Omit<RuntimeOptions, "approve">,
   transport: { input: Readable; output: Writable; error: Writable } = {
@@ -58,8 +67,9 @@ export async function serveRpc(
     output: process.stdout,
     error: process.stderr,
   },
+  shared?: SharedRpcOptions,
 ) {
-  const hostInstanceId = randomUUID();
+  const hostInstanceId = shared?.instanceId ?? randomUUID();
   const pendingEffects = new Set<Promise<unknown>>();
   const track = (task: Promise<unknown>) => {
     pendingEffects.add(task);
@@ -109,33 +119,58 @@ export async function serveRpc(
     if (!state) return;
     send({ ...message, revision: ++state.revision });
   };
-  const runtime = await Runtime.open({
-    ...options,
-    approve: (request, signal) =>
-      new Promise((resolve) => {
-        if (signal.aborted) {
-          resolve(false);
-          return;
-        }
-        const scope =
-          request.scope ?? owners.get(request.sessionId) ?? "default";
-        const abort = () => finish(false);
-        const finish = (allow: boolean) => {
-          signal.removeEventListener("abort", abort);
-          approvals.delete(request.id);
-          sendScoped({
-            type: "approval.resolved",
+  const controlsApproval = (
+    scope: string,
+    state: ScopeState,
+    sessionId: string,
+  ) =>
+    state.session?.id === sessionId &&
+    (!shared ||
+      shared.localScope(scope) ||
+      state.role === "owner" ||
+      state.role === "control");
+  const approvalRecipients = (sessionId: string, origin: string) =>
+    [...scopes].filter(([scope, state]) =>
+      shared ? controlsApproval(scope, state, sessionId) : scope === origin,
+    );
+  const runtime = await Runtime.open(
+    {
+      ...options,
+      approve: (request, signal) =>
+        new Promise((resolve) => {
+          if (signal.aborted) {
+            resolve(false);
+            return;
+          }
+          const scope =
+            request.scope ?? owners.get(request.sessionId) ?? "default";
+          const abort = () => finish(false);
+          const finish = (allow: boolean) => {
+            signal.removeEventListener("abort", abort);
+            approvals.delete(request.id);
+            for (const [recipient] of approvalRecipients(
+              request.sessionId,
+              scope,
+            ))
+              sendScoped({
+                type: "approval.resolved",
+                scope: recipient,
+                id: request.id,
+                allow,
+              });
+            resolve(allow);
+          };
+          approvals.set(request.id, { request, scope, finish });
+          signal.addEventListener("abort", abort, { once: true });
+          for (const [recipient] of approvalRecipients(
+            request.sessionId,
             scope,
-            id: request.id,
-            allow,
-          });
-          resolve(allow);
-        };
-        approvals.set(request.id, { request, scope, finish });
-        signal.addEventListener("abort", abort, { once: true });
-        sendScoped({ type: "approval", scope, request });
-      }),
-  });
+          ))
+            sendScoped({ type: "approval", scope: recipient, request });
+        }),
+    },
+    shared?.store,
+  );
   runtime.startJobs();
   const requireLive = (scope: string, state: ScopeState) => {
     if (shuttingDown || scopes.get(scope) !== state)
@@ -154,11 +189,20 @@ export async function serveRpc(
       return next;
     }
     const agent = await runtime.agent(next);
+    const role = shared
+      ? await runtime.store.attachView(
+          runtime.options.cwd,
+          scope,
+          next.id,
+          shared.localScope(scope),
+        )
+      : null;
     requireLive(scope, state);
     expected?.signal.throwIfAborted();
     if (expected && state.session?.id !== expected.sessionId) return next;
     state.unsubscribe?.();
     state.session = next;
+    state.role = role ?? undefined;
     state.agent = agent;
     state.unsubscribe = state.agent.subscribe((event) =>
       sendScoped({ type: "event", scope, event: publicEvent(event) }),
@@ -189,10 +233,17 @@ export async function serveRpc(
     }
     return state;
   };
-  const cancel = (state: ScopeState, includeSelected = true) => {
+  const cancel = (
+    state: ScopeState,
+    includeSelected = true,
+    revokedScope?: string,
+  ) => {
     state.generation++;
     for (const operation of state.work.operations) operation.abort();
-    for (const agent of state.work.activeAgents.keys()) agent.cancel();
+    for (const agent of state.work.activeAgents.keys()) {
+      if (shared && revokedScope) agent.cancelScope(revokedScope);
+      else agent.cancel();
+    }
     if (includeSelected) state.agent?.cancel();
   };
   const releaseWork = (scope: string, work: ScopeWork, agent?: Agent) => {
@@ -210,6 +261,26 @@ export async function serveRpc(
   };
   const ownAgent = (work: ScopeWork, agent: Agent) => {
     work.activeAgents.set(agent, (work.activeAgents.get(agent) ?? 0) + 1);
+  };
+  const revokeClient = async (scope: string) => {
+    if (!shared || shared.localScope(scope)) return;
+    const state = scopes.get(scope);
+    if (state) {
+      cancel(state, false, scope);
+      state.unsubscribe?.();
+      state.unsubscribe = undefined;
+      state.session = undefined;
+      state.agent = undefined;
+      state.role = undefined;
+      for (const approval of approvals.values())
+        if (approval.scope === scope) approval.finish(false);
+      sendScoped({ type: "session.invalidated", scope });
+    }
+    await runtime.store.revokeScope(runtime.options.cwd, scope);
+    if (state) {
+      scopes.delete(scope);
+      releaseWork(scope, state.work);
+    }
   };
   const handle = async (
     command: Command,
@@ -253,6 +324,15 @@ export async function serveRpc(
     };
     try {
       requireLive(scope, state);
+      if (
+        shared &&
+        !shared.localScope(scope) &&
+        command.method !== "client.detach" &&
+        !(await shared.pairedDevice(scope))
+      ) {
+        await revokeClient(scope);
+        throw Error("Device is not confirmed and paired");
+      }
       const requireUncancelled = () => {
         requireLive(scope, state);
         if (state.generation !== generation) throw Error("Request cancelled");
@@ -262,8 +342,37 @@ export async function serveRpc(
       const selected = async () => {
         const id = p.sessionId ?? state.session?.id;
         if (typeof id !== "string") throw Error("No session selected");
-        return runtime.session(id);
+        const session = await runtime.session(id);
+        if (shared && !shared.localScope(scope)) {
+          const role = await runtime.store.sessionRole(
+            runtime.options.cwd,
+            session.id,
+            scope,
+          );
+          const read =
+            rpcReadMethods.has(command.method) ||
+            command.method === "session.resume";
+          if (!role || (!read && role === "view"))
+            throw Error("Session access denied");
+        }
+        return session;
       };
+      if (shared) {
+        if (
+          ["session.access", "session.access.read", "model.default"].includes(
+            command.method,
+          ) &&
+          !shared.localScope(scope)
+        )
+          throw Error(
+            "Only local owner clients can manage host access or defaults",
+          );
+        if (["prompt", "steer", "cancel"].includes(command.method)) {
+          if (p.sessionId !== undefined && p.sessionId !== state.session?.id)
+            throw Error("Command must target the selected session");
+          await selected();
+        }
+      }
       if (isMutation(command.method)) {
         const claim = await runtime.store.acceptCommand({
           ...receiptKey,
@@ -296,7 +405,7 @@ export async function serveRpc(
             throw Error(
               `Unsupported protocol version; host supports ${protocolVersion}`,
             );
-          result = { ...rpcCapabilities(), hostInstanceId };
+          result = { ...rpcCapabilities(!!shared), hostInstanceId };
           break;
         }
         case "command.receipt":
@@ -308,6 +417,21 @@ export async function serveRpc(
           };
           break;
         case "session.current": {
+          if (shared && !state.session) {
+            const savedId = await runtime.store.clientView(
+              runtime.options.cwd,
+              scope,
+            );
+            if (savedId) {
+              const role = await runtime.store.sessionRole(
+                runtime.options.cwd,
+                savedId,
+                scope,
+              );
+              if (shared.localScope(scope) || role)
+                await bind(scope, state, await runtime.session(savedId));
+            }
+          }
           const selectedId = state.session?.id;
           if (selectedId) {
             const saved = await runtime.session(selectedId);
@@ -316,6 +440,11 @@ export async function serveRpc(
           }
           result = {
             hostInstanceId,
+            sessionRole: state.session
+              ? shared?.localScope(scope)
+                ? "owner"
+                : (state.role ?? "owner")
+              : null,
             revision: state.revision,
             session: state.session ? publicSession(state.session) : null,
             ...(state.agent?.snapshot() ?? {
@@ -327,16 +456,66 @@ export async function serveRpc(
               runStatus: "idle",
             }),
             approvals: [...approvals.values()]
-              .filter((a) => a.scope === scope)
+              .filter((a) =>
+                shared
+                  ? controlsApproval(scope, state, a.request.sessionId)
+                  : a.scope === scope,
+              )
               .map((a) => a.request),
           };
           break;
         }
-        case "session.create":
-          result = publicSession(
-            await bind(scope, state, await runtime.session()),
+        case "session.create": {
+          const session = await runtime.session();
+          if (shared)
+            await runtime.store.setSessionAccess(
+              runtime.options.cwd,
+              session.id,
+              scope,
+              "owner",
+            );
+          result = publicSession(await bind(scope, state, session));
+          break;
+        }
+        case "session.access.read": {
+          if (!shared) throw Error("Shared host required");
+          const session = await selected();
+          result = await runtime.store.sessionAccess(
+            runtime.options.cwd,
+            session.id,
           );
           break;
+        }
+        case "session.access": {
+          if (!shared) throw Error("Shared host required");
+          const session = await selected();
+          const device = z
+            .string()
+            .regex(/^[A-Za-z0-9_-]{43}$/)
+            .parse(p.deviceId);
+          const role = z.enum(["view", "control"]).nullable().parse(p.role);
+          if (role && !(await shared.pairedDevice(device)))
+            throw Error("Device is not confirmed and paired");
+          await runtime.store.setSessionAccess(
+            runtime.options.cwd,
+            session.id,
+            device,
+            role,
+          );
+          const target = scopes.get(device);
+          if (target?.session?.id === session.id) {
+            target.role = role ?? undefined;
+            if (!role) {
+              target.unsubscribe?.();
+              target.unsubscribe = undefined;
+              target.session = undefined;
+              target.agent = undefined;
+            }
+            sendScoped({ type: "session.invalidated", scope: device });
+          }
+          result = {};
+          break;
+        }
         case "session.list":
           result = (
             await runtime.store.sessions(
@@ -344,6 +523,7 @@ export async function serveRpc(
               integer(p.limit, 50, 100),
               runtime.options.cwd,
               z.string().max(200).optional().parse(p.query),
+              shared && !shared.localScope(scope) ? scope : undefined,
             )
           ).map(publicSession);
           break;
@@ -390,9 +570,15 @@ export async function serveRpc(
           const session = await selected();
           if ((await runtime.agent(session)).busy)
             throw Error("Stop the run before forking");
-          result = publicSession(
-            await bind(scope, state, await runtime.fork(session)),
-          );
+          const next = await runtime.fork(session);
+          if (shared)
+            await runtime.store.setSessionAccess(
+              runtime.options.cwd,
+              next.id,
+              scope,
+              "owner",
+            );
+          result = publicSession(await bind(scope, state, next));
           break;
         }
         case "session.compact": {
@@ -419,6 +605,13 @@ export async function serveRpc(
               .compact(session, controller.signal, { scope, commandId: id })
               .then(async (next) => {
                 controller.signal.throwIfAborted();
+                if (shared)
+                  await runtime.store.setSessionAccess(
+                    runtime.options.cwd,
+                    next.id,
+                    scope,
+                    "owner",
+                  );
                 // A completed summary must not change a newer selection.
                 if (
                   scopes.get(scope) === state &&
@@ -584,7 +777,7 @@ export async function serveRpc(
         }
         case "steer":
           if (!state.agent) throw Error("No session selected");
-          state.agent.steer(z.string().min(1).max(100000).parse(p.text));
+          state.agent.steer(z.string().min(1).max(100000).parse(p.text), scope);
           result = {};
           break;
         case "cancel":
@@ -593,17 +786,36 @@ export async function serveRpc(
           break;
         case "approval.respond": {
           const approval = approvals.get(z.string().parse(p.id));
-          if (!approval || approval.scope !== scope)
+          if (!approval)
+            throw Error("Approval expired or belongs to another client");
+          if (shared) {
+            const role = await runtime.store.sessionRole(
+              runtime.options.cwd,
+              approval.request.sessionId,
+              scope,
+            );
+            if (
+              (!shared.localScope(scope) &&
+                role !== "owner" &&
+                role !== "control") ||
+              state.session?.id !== approval.request.sessionId ||
+              approvals.get(approval.request.id) !== approval
+            )
+              throw Error("Approval expired or session control denied");
+          } else if (approval.scope !== scope)
             throw Error("Approval expired or belongs to another client");
           approval.finish(z.boolean().parse(p.allow));
           result = {};
           break;
         }
         case "client.detach": {
-          if (p.cancel === true) cancel(state, false);
+          if (p.cancel === true) cancel(state, false, scope);
           state.unsubscribe?.();
           for (const approval of approvals.values())
-            if (approval.scope === scope) approval.finish(false);
+            if (approval.scope === scope && (!shared || p.cancel === true))
+              approval.finish(false);
+          if (shared && p.cancel === true)
+            await runtime.store.revokeScope(runtime.options.cwd, scope);
           scopes.delete(scope);
           releaseWork(scope, state.work);
           result = {};
@@ -732,6 +944,7 @@ export async function serveRpc(
         }),
       ]);
       clearTimeout(deadline);
+      await shared?.beforeClose?.();
     });
     closed = true;
     transport.input.destroy();
@@ -743,5 +956,10 @@ export async function serveRpc(
   process.on("SIGTERM", onSignal);
   process.on("SIGINT", onSignal);
   send({ type: "ready", protocolVersion });
-  return { close: shutdown };
+  return {
+    close: shutdown,
+    revokeClient,
+    remoteScopes: () =>
+      [...scopes.keys()].filter((scope) => !shared?.localScope(scope)),
+  };
 }
