@@ -2,6 +2,7 @@ import { realpath, readdir } from "node:fs/promises";
 import { relative, isAbsolute, join } from "node:path";
 import { homedir } from "node:os";
 import * as z from "zod";
+import type { ChangeJournal } from "./changes.ts";
 import type { Plugin } from "../../core/src/types.ts";
 import { resolvePath, allowedPath, updateTextFile } from "./workspace.ts";
 import {
@@ -16,6 +17,7 @@ export function codingPlugin(options: {
   trusted: boolean | (() => boolean);
   fullAccess?: () => boolean;
   reviewReads?: () => boolean;
+  changes?: ChangeJournal;
 }): Plugin {
   const trusted = () =>
     typeof options.trusted === "function" ? options.trusted() : options.trusted;
@@ -23,6 +25,20 @@ export function codingPlugin(options: {
     id: "hikaro.coding",
     apiVersion: 1,
     setup(host) {
+      const update = (
+        ctx: import("../../core/src/types.ts").ToolContext,
+        path: string,
+        replace: (current: string | undefined) => string,
+      ) =>
+        options.changes
+          ? options.changes.update(
+              ctx.sessionId,
+              path,
+              ctx.signal,
+              replace,
+              ctx.checkpoint,
+            )
+          : updateTextFile(path, ctx.signal, replace, ctx.checkpoint);
       host.registerTool({
         name: "read_file",
         description:
@@ -62,18 +78,13 @@ export function codingPlugin(options: {
         }),
         async execute({ path, content, expected }, ctx) {
           const p = await allowedPath(ctx, path, true, trusted());
-          await updateTextFile(
-            p,
-            ctx.signal,
-            (current) => {
-              if (current !== undefined && expected !== current)
-                throw Error(
-                  "File changed or expected content missing. Read it before replacing.",
-                );
-              return content;
-            },
-            ctx.checkpoint,
-          );
+          await update(ctx, p, (current) => {
+            if (current !== undefined && expected !== current)
+              throw Error(
+                "File changed or expected content missing. Read it before replacing.",
+              );
+            return content;
+          });
           return {
             text: `Wrote ${relative(ctx.cwd, p)} (${Buffer.byteLength(content)} bytes)`,
           };
@@ -89,22 +100,15 @@ export function codingPlugin(options: {
         }),
         async execute({ path, oldText, newText }, ctx) {
           const p = await allowedPath(ctx, path, true, trusted());
-          await updateTextFile(
-            p,
-            ctx.signal,
-            (old) => {
-              if (old === undefined) throw Error("File does not exist");
-              const index = old.indexOf(oldText);
-              if (index < 0 || old.indexOf(oldText, index + 1) !== -1)
-                throw Error("Expected exactly one match");
-              return (
-                old.slice(0, index) +
-                newText +
-                old.slice(index + oldText.length)
-              );
-            },
-            ctx.checkpoint,
-          );
+          await update(ctx, p, (old) => {
+            if (old === undefined) throw Error("File does not exist");
+            const index = old.indexOf(oldText);
+            if (index < 0 || old.indexOf(oldText, index + 1) !== -1)
+              throw Error("Expected exactly one match");
+            return (
+              old.slice(0, index) + newText + old.slice(index + oldText.length)
+            );
+          });
           return { text: `Updated ${relative(ctx.cwd, p)}` };
         },
       });

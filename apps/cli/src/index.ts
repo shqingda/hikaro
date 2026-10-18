@@ -377,6 +377,10 @@ async function main() {
     onPreferences: (patch) => applyPreferences({ ...preferences, ...patch }),
     onDraftChange: (text) => drafts.update(draftSessionId, text),
     commands: [
+      {
+        name: "changes",
+        description: "Review file edits and safely roll them back",
+      },
       ...runtime.resources.skills.map((skill) => ({
         name: "skill:" + skill.name,
         description: skill.description.slice(0, 120),
@@ -489,6 +493,20 @@ async function main() {
           );
       };
       switch (command) {
+        case "changes": {
+          if (agent.busy)
+            throw Error("Finish or cancel the run before reviewing changes.");
+          const { openChangeReview } =
+            await import("../../../packages/tui/src/change-review.ts");
+          await openChangeReview(view, {
+            cwd: session.cwd,
+            list: () => runtime.changes.list(session.id),
+            detail: (id) => runtime.changes.detail(session.id, id),
+            rollback: (id, signal) =>
+              runtime.rollbackChange(session, id, signal),
+          });
+          return;
+        }
         case "permissions": {
           if (agent.busy)
             throw Error(
@@ -542,7 +560,7 @@ async function main() {
           return "Attachment added. Add your question and press Enter.";
         }
         case "help":
-          return '/new  /sessions  /resume [ID]  /rename TITLE  /export\n/fork  /compact  /model provider/model\n/attach PATH · @file or @"path with spaces" attaches text/images\n/settings  /permissions [ask|auto|full]\n/context [default]  /thinking [default]  /speed [default]\n/status  /resources\n/steer instructions  /tools  /older  /newer  /latest  /quit\n!COMMAND follows the current permission mode. Ctrl+C cancels. Ctrl+D exits. Shift+Enter adds a line.\nNew prompts queue while the agent works.';
+          return '/changes · Review and roll back recorded file edits\n/new  /sessions  /resume [ID]  /rename TITLE  /export\n/fork  /compact  /model provider/model\n/attach PATH · @file or @"path with spaces" attaches text/images\n/settings  /permissions [ask|auto|full]\n/context [default]  /thinking [default]  /speed [default]\n/status  /resources\n/steer instructions  /tools  /older  /newer  /latest  /quit\n!COMMAND follows the current permission mode. Ctrl+C cancels. Ctrl+D exits. Shift+Enter adds a line.\nNew prompts queue while the agent works.';
         case "new":
           await bind(await runtime.session());
           return;

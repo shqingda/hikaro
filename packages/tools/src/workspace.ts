@@ -64,7 +64,7 @@ const fileUpdates = new Map<string, Promise<void>>();
 export async function updateTextFile(
   path: string,
   signal: AbortSignal,
-  replace: (current: string | undefined) => string,
+  replace: (current: string | undefined) => string | undefined,
   beforeCommit?: () => Promise<void>,
 ) {
   const previous = fileUpdates.get(path);

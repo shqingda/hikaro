@@ -25,6 +25,16 @@ type ActionCapability = boolean | ((item: SelectItem) => boolean);
 export class ModelPanel implements Component {
   focused = false;
   private title = "";
+  private document?: {
+    text: string;
+    width: number;
+    lines: string[];
+    offset: number;
+    height: number;
+  };
+  private documentReady = true;
+  private requireNoticeVisible = false;
+  private noticeVisible = true;
   private message = "";
   private error = "";
   private help?: string;
@@ -79,12 +89,16 @@ export class ModelPanel implements Component {
       enterAction?: string | ((item: SelectItem) => string);
       loadItems?: (query: string) => Promise<SelectItem[]>;
       searchQuery?: string;
+      requireNoticeVisible?: boolean;
     },
   ): Promise<Selection> {
     this.signal.throwIfAborted();
     this.searchRevision++;
+    this.requireNoticeVisible = options?.requireNoticeVisible ?? false;
+    this.noticeVisible = !this.requireNoticeVisible;
     this.loadItems = options?.loadItems;
     this.searching = false;
+    this.document = undefined;
     this.title = title;
     this.message = "";
     this.error = warning;
@@ -112,6 +126,30 @@ export class ModelPanel implements Component {
     return new Promise((resolve, reject) => {
       this.pending = { resolve, reject };
     });
+  }
+  readDocument(title: string, text: string, canRollback: boolean) {
+    const pending = this.choose(
+      title,
+      [
+        { value: "back", label: "Back to changes" },
+        ...(canRollback
+          ? [{ value: "rollback", label: "Roll back this edit…" }]
+          : []),
+      ],
+      "",
+      undefined,
+      { search: false, cancelValue: "back" },
+    );
+    this.document = {
+      text: clean(text),
+      width: 0,
+      lines: [],
+      offset: 0,
+      height: 1,
+    };
+    this.documentReady = false;
+    this.refresh();
+    return pending;
   }
   private updateList(selectedValue?: string) {
     const query = (this.input?.getValue() ?? "").trim().toLowerCase();
@@ -213,6 +251,33 @@ export class ModelPanel implements Component {
   }
   handleInput(data: string) {
     if (!this.pending || isKeyRelease(data)) return;
+    if (
+      this.requireNoticeVisible &&
+      !this.noticeVisible &&
+      matchesKey(data, "enter")
+    )
+      return;
+    if (this.document) {
+      const doc = this.document;
+      if (matchesKey(data, "pageUp"))
+        doc.offset = Math.max(0, doc.offset - doc.height);
+      else if (matchesKey(data, "pageDown"))
+        doc.offset = Math.min(
+          Math.max(0, doc.lines.length - doc.height),
+          doc.offset + doc.height,
+        );
+      else if (matchesKey(data, "home")) doc.offset = 0;
+      else if (matchesKey(data, "end"))
+        doc.offset = Math.max(0, doc.lines.length - doc.height);
+      else if (!this.documentReady) return;
+      else {
+        this.list?.handleInput(data);
+        this.refresh();
+        return;
+      }
+      this.refresh();
+      return;
+    }
     if (
       this.list &&
       (matchesKey(data, "up") ||
@@ -431,10 +496,46 @@ export class ModelPanel implements Component {
   }
   render(width: number) {
     const budget = Math.max(0, Math.floor(this.maxRows(width)));
+    this.noticeVisible = false;
+    this.documentReady = false;
     if (budget < 4)
       return new Text(dim("Resize terminal · Esc"), 0, 0)
         .render(width)
         .slice(0, budget);
+    if (this.document) {
+      const doc = this.document;
+      const actions = this.choiceRows(width, 3);
+      const help = new Text(
+        dim("PgUp/PgDn scroll · ↑↓ action · Enter · Esc back"),
+        1,
+        0,
+      ).render(width);
+      const height = budget - actions.length - help.length - 2;
+      this.documentReady = height >= 2;
+      if (!this.documentReady)
+        return new Text(dim("Resize to read diff · Esc back"), 0, 0)
+          .render(width)
+          .slice(0, budget);
+      if (doc.width !== width) {
+        doc.lines = new Text(doc.text, 1, 0).render(width);
+        doc.width = width;
+      }
+      doc.height = height;
+      doc.offset = Math.min(doc.offset, Math.max(0, doc.lines.length - height));
+      return [
+        accent(truncateToWidth(clean(this.title), width, "…")),
+        ...doc.lines.slice(doc.offset, doc.offset + height),
+        dim(
+          truncateToWidth(
+            `Lines ${doc.offset + 1}–${Math.min(doc.offset + height, doc.lines.length)}/${doc.lines.length}`,
+            width,
+            "…",
+          ),
+        ),
+        ...actions,
+        ...help,
+      ];
+    }
     const compact = width < 72 || budget < 16;
     const title = compact
       ? truncateToWidth(clean(this.title), Math.max(1, width - 2), "…")
@@ -465,6 +566,19 @@ export class ModelPanel implements Component {
       0,
       budget - lines.length - help.length - (this.list ? 2 : 0),
     );
+    if (
+      this.requireNoticeVisible &&
+      message.length + error.length > noticeRoom
+    ) {
+      return new Text(
+        dim("Resize to read the complete rollback confirmation · Esc cancel"),
+        0,
+        0,
+      )
+        .render(width)
+        .slice(0, budget);
+    }
+    this.noticeVisible = true;
     const notices = [...message, ...error].slice(0, noticeRoom);
     if (this.list)
       lines.push(

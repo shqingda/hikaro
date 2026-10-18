@@ -19,6 +19,7 @@ import {
   type RunBudget,
   type ModelSelection,
 } from "../../core/src/index.ts";
+import { ChangeJournal } from "../../tools/src/changes.ts";
 import { SQLiteStore } from "../../storage/src/index.ts";
 import {
   codingPlugin,
@@ -88,6 +89,52 @@ export class Runtime {
     readonly options: RuntimeOptions,
     readonly store: SQLiteStore,
   ) {}
+  private changeJournal?: ChangeJournal;
+  get changes() {
+    return (this.changeJournal ??= new ChangeJournal(this.options.home!));
+  }
+  async rollbackChange(session: Session, id: string, signal: AbortSignal) {
+    await this.session(session.id);
+    if ([...this.agents.values()].some((agent) => agent.busy))
+      throw Error("Finish or cancel running tasks before rollback.");
+    const active = AbortSignal.any([
+      signal,
+      this.lifecycle.signal,
+      AbortSignal.timeout(15000),
+    ]);
+    const lease = await this.store.acquireLease(session.id, randomUUID());
+    if (!lease) throw Error("Session is running elsewhere; rollback refused.");
+    const note = (text: string) =>
+      this.store.append(
+        session.id,
+        "message",
+        { message: { role: "user", text, timestamp: Date.now() } },
+        lease,
+      );
+    try {
+      const { entry } = await this.changes.detail(session.id, id);
+      active.throwIfAborted();
+      await note(
+        `The user requested rollback of file change ${id} at ${entry.path}. If no result follows, inspect the file before continuing; the outcome is unknown.`,
+      );
+      try {
+        await this.changes.rollback(session.id, id, active, async () => {
+          active.throwIfAborted();
+          await this.store.assertLease(session.id, lease);
+        });
+        await note(
+          `File rollback completed: ${entry.path}. ${entry.before === null ? "The newly created file was removed." : "The contents before this edit were restored."} Read the file again before further changes.`,
+        );
+      } catch (error) {
+        await note(
+          `File rollback did not complete cleanly: ${String(error)}. Inspect the file and change record before retrying.`,
+        );
+        throw error;
+      }
+    } finally {
+      await this.store.releaseLease(session.id, lease);
+    }
+  }
   get permissionMode(): PermissionMode {
     return this.options.permissionMode ?? "ask";
   }
@@ -181,6 +228,7 @@ export class Runtime {
     try {
       await runtime.plugins.load(
         codingPlugin({
+          changes: runtime.changes,
           trusted: () => runtime.workspaceTrusted(),
           fullAccess: () => runtime.options.permissionMode === "full",
           reviewReads: () => runtime.options.permissionMode === "auto",
