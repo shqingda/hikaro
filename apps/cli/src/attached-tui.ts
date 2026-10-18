@@ -49,9 +49,52 @@ export async function attachTui(options: {
       return () => clearTimeout(timer);
     },
   });
+  const { parseTuiPreferences } =
+    await import("../../../packages/tui/src/preferences.ts");
+  const preferences = await files
+    .preferences()
+    .then((value) => parseTuiPreferences(value ?? {}))
+    .catch(async (error) => {
+      client.close();
+      await transport.close();
+      throw error;
+    });
   const tui = createTerminal();
   let view: HikaroView;
   let workflows: AttachedWorkflows | undefined;
+  let navigation:
+    import("./attached-navigation.ts").AttachedNavigation | undefined;
+  let catalog:
+    | import("../../../packages/provider-pi/src/catalog.ts").ProviderCatalog
+    | undefined;
+  const configure = async (command: string, arg: string) => {
+    if (!navigation) {
+      const { AttachedNavigation } = await import("./attached-navigation.ts");
+      navigation = new AttachedNavigation(
+        client,
+        view,
+        files,
+        preferences,
+        async () => {
+          if (!catalog) {
+            const [{ ProviderCatalog }, { KeychainCredentials }] =
+              await Promise.all([
+                import("../../../packages/provider-pi/src/catalog.ts"),
+                import("../../../packages/provider-pi/src/credentials.ts"),
+              ]);
+            catalog = new ProviderCatalog(
+              transport.endpoint.home,
+              new KeychainCredentials(transport.endpoint.home),
+            );
+          }
+          return catalog;
+        },
+        () => drafts.flush(),
+        () => refresh(),
+      );
+    }
+    await workflows!.withMenu(() => navigation!.command(command, arg));
+  };
   let exiting = false,
     loading = false,
     loadEpoch = 0,
@@ -164,6 +207,8 @@ export async function attachTui(options: {
           view.event(event);
         }
       view.restoreExecution(client.state);
+      const selection = client.state.session?.modelSelection;
+      if (selection) view.setModel(`${selection.provider}/${selection.model}`);
       sessionId = next;
       if (draft !== undefined) view.editor.setText(draft);
       loading = false;
@@ -229,7 +274,10 @@ export async function attachTui(options: {
         : "Host disconnected / synchronizing · draft stays local",
     );
     if (!state.canAct) {
-      workflows?.disconnected();
+      if (state.connection === "offline") {
+        workflows?.disconnected();
+        navigation?.disconnected();
+      }
       for (const c of approvals.values()) c.abort();
       approvals.clear();
     }
@@ -274,6 +322,18 @@ export async function attachTui(options: {
     onExit: leave,
     detachOnCtrlD: true,
     commands: [
+      ...[
+        "sessions",
+        "resume",
+        "login",
+        "model",
+        "settings",
+        "permissions",
+        "context",
+        "thinking",
+        "speed",
+        "resources",
+      ].map((name) => ({ name, description: "Open " + name })),
       { name: "changes", description: "Review and roll back host edits" },
       { name: "tasks", description: "Manage host execution" },
       { name: "plan", description: "Read-only planning and plan review" },
@@ -330,7 +390,7 @@ export async function attachTui(options: {
           leave();
           return;
         case "/help":
-          return "Shared host: /changes, /tasks, /plan [TASK], /plan cancel · host workflows. /sessions [query], /resume ID, /new, /rename title, /compact, /fork, /steer text, /status, /access, /share DEVICE view|control|off, /model PROVIDER/MODEL, /attach PATH. Ctrl+C stops the selected task; Ctrl+D detaches. Local files use the existing @ completion.";
+          return "Shared host: /changes, /tasks, /plan [TASK], /plan cancel · host workflows. /sessions [query], /resume ID, /new, /rename title, /compact, /fork, /steer text, /status, /access, /share DEVICE view|control|off, /model [PROVIDER/MODEL], /login, /settings, /permissions, /context [default], /thinking [default], /speed [default], /resources [query], /attach PATH. Ctrl+C stops the selected task; Ctrl+D detaches. Local files use the existing @ completion.";
         case "/status":
           return JSON.stringify(
             {
@@ -346,14 +406,16 @@ export async function attachTui(options: {
             2,
           );
         case "/sessions":
-          return JSON.stringify(
-            await client.request("session.list", { query: rest, limit: 50 }),
-            null,
-            2,
-          );
         case "/resume":
-          await drafts.flush();
-          await client.request("session.resume", { sessionId: rest });
+        case "/login":
+        case "/model":
+        case "/settings":
+        case "/permissions":
+        case "/context":
+        case "/thinking":
+        case "/speed":
+        case "/resources":
+          await configure(command, rest);
           return;
         case "/new":
           await drafts.flush();
@@ -387,16 +449,6 @@ export async function attachTui(options: {
           });
           return "Session access updated.";
         }
-        case "/model": {
-          const separator = rest.indexOf("/");
-          if (separator < 1)
-            return JSON.stringify(await client.request("model.read"), null, 2);
-          await client.request("model.set", {
-            provider: rest.slice(0, separator),
-            model: rest.slice(separator + 1),
-          });
-          return;
-        }
         case "/attach":
           view.editor.setText(attachmentReference(text.slice(7)));
           return;
@@ -405,19 +457,24 @@ export async function attachTui(options: {
           await client.reconcile();
           return;
         default:
-          return "This attached view supports /help. Host configuration is managed when starting --host.";
+          return "Unknown command. Use /help for attached TUI menus; plugin commands and manual ! tools are not available here.";
       }
     },
   });
   workflows = new AttachedWorkflows(client, view, transport.endpoint.cwd);
+  view.setPreferences(preferences);
   view.bind(backend);
   view.setPermissionLabel("Host owns task approvals");
   try {
     await client.connected();
-    if (options.newSession) await client.request("session.create");
-    else if (options.session)
+    if (options.session)
       await client.request("session.resume", { sessionId: options.session });
-    else if (!client.state.session) await client.request("session.create");
+    else if (
+      options.newSession ||
+      !preferences.resumeOnStart ||
+      !client.state.session
+    )
+      await client.request("session.create");
     await refresh();
     view.notice(
       "Attached to shared host. Ctrl+D detaches; the task continues.",

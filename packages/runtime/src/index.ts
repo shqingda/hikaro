@@ -91,6 +91,10 @@ export class Runtime {
   private scheduler?: JobScheduler;
   private catalog?: ProviderCatalog;
   private credentials?: KeychainCredentials;
+  reloadProviderCatalog() {
+    this.catalog = undefined;
+    this.credentials?.invalidate();
+  }
   providerCatalog() {
     this.credentials ??= new KeychainCredentials(this.options.home!);
     return (this.catalog ??= new ProviderCatalog(
@@ -624,7 +628,12 @@ export class Runtime {
   }
   defaultSelection(): ModelSelection {
     if (this.options.demo)
-      return { provider: "demo", model: "offline", settings: {} };
+      return {
+        provider: "demo",
+        model: "offline",
+        settings:
+          this.options.provider === "demo" ? { ...this.options.settings } : {},
+      };
     return {
       provider: this.options.provider ?? "anthropic",
       model: this.options.model ?? "claude-sonnet-4-6",
@@ -708,6 +717,8 @@ export class Runtime {
       selection.settings,
       selection.baseUrl,
     );
+    this.options.demo =
+      selection.provider === "demo" && selection.model === "offline";
     this.options.provider = selection.provider;
     this.options.model = selection.model;
     this.options.settings = { ...selection.settings };

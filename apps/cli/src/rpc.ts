@@ -371,9 +371,14 @@ export async function serveRpc(
       let requireSameSelection = () => {};
       if (shared) {
         if (
-          ["session.access", "session.access.read", "model.default"].includes(
-            command.method,
-          ) &&
+          [
+            "session.access",
+            "session.access.read",
+            "model.default",
+            "permissions.set",
+            "providers.reload",
+            "resources.list",
+          ].includes(command.method) &&
           !shared.localScope(scope)
         )
           throw Error(
@@ -600,6 +605,15 @@ export async function serveRpc(
             view.agent = undefined;
             sendScoped({ type: "session.invalidated", scope: clientScope });
           }
+          break;
+        }
+        case "model.capabilities":
+        case "providers.reload":
+        case "permissions.set":
+        case "resources.list": {
+          const { configurationRequest } =
+            await import("./rpc-configuration.ts");
+          result = await configurationRequest(runtime, command.method, p);
           break;
         }
         case "workspace.current":

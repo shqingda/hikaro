@@ -2,6 +2,10 @@
 import * as z from "zod/mini";
 export const protocolVersion = 2;
 export const rpcMethods = [
+  "model.capabilities",
+  "providers.reload",
+  "permissions.set",
+  "resources.list",
   "changes.list",
   "changes.detail",
   "changes.rollback",
@@ -47,6 +51,8 @@ export const rpcMethods = [
 ] as const;
 export type RpcMethod = (typeof rpcMethods)[number];
 export const rpcReadMethods: ReadonlySet<string> = new Set([
+  "model.capabilities",
+  "resources.list",
   "changes.list",
   "changes.detail",
   "execution.read",
@@ -139,6 +145,12 @@ export const CurrentSession = z.object({
       cwd: z.string().check(z.maxLength(100000)),
       createdAt: z.number(),
       parentId: z.nullish(id),
+      modelSelection: z.optional(
+        z.object({
+          provider: z.string().check(z.maxLength(128)),
+          model: z.string().check(z.maxLength(256)),
+        }),
+      ),
     }),
   ),
   hostInstanceId: z.optional(id),

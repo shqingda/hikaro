@@ -67,8 +67,18 @@ export class AttachedWorkflows {
     clearInterval(this.timer);
     this.disconnected();
   }
+  async withMenu(action: () => Promise<void>) {
+    if (this.modal) throw Error("Close the current workflow first");
+    this.modal = "menu";
+    try {
+      await action();
+    } finally {
+      if (this.modal === "menu") this.modal = undefined;
+    }
+  }
   private async poll() {
     if (
+      this.modal === "menu" ||
       this.stopped ||
       this.polling ||
       !this.client.state.canAct ||
@@ -83,6 +93,7 @@ export class AttachedWorkflows {
         "questions.read",
         id,
       );
+      if (this.modal === "menu") return;
       if (this.question && this.question.id !== q?.id)
         this.question.abort.abort();
       if (q && !this.question) {

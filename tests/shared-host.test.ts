@@ -233,6 +233,17 @@ it("shares one run and explicitly owned approvals through local IPC and the encr
         remote.client.request(method, { sessionId: session.id, active: true }),
       ).rejects.toThrow(/denied/);
     }
+    for (const method of [
+      "permissions.set",
+      "providers.reload",
+      "resources.list",
+    ] as const) {
+      await expect(
+        remote.client.request(method, { mode: "full" }),
+      ).rejects.toThrow(
+        "Only local owner clients can manage host access or defaults",
+      );
+    }
     await expect(
       remote.client.request("prompt", { text: "unauthorized" }),
     ).rejects.toThrow(/denied/);

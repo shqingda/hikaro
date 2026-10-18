@@ -19,15 +19,10 @@ const integer = (
     .min(0)
     .max(max)
     .parse(value ?? fallback);
-const settingsSchema = z
-  .object({
-    contextWindow: z.number().int().min(1024).max(10000000).optional(),
-    reasoning: z
-      .enum(["off", "minimal", "low", "medium", "high", "xhigh", "max"])
-      .optional(),
-    speed: z.enum(["default", "priority", "flex"]).optional(),
-  })
-  .strict();
+import {
+  modelSettingsSchema as settingsSchema,
+  validateSettings,
+} from "./rpc-configuration.ts";
 const publicSelection = (selection: Session["modelSelection"]) =>
   selection && {
     provider: selection.provider,
@@ -108,32 +103,47 @@ export async function libraryRequest(
         model = z.string().min(1).max(256).parse(p.model);
       const settings =
         p.settings === undefined ? undefined : settingsSchema.parse(p.settings);
-      if (settings) {
-        const cap = await runtime
-          .providerCatalog()
-          .capabilities(provider, model);
-        if (
-          (settings.contextWindow !== undefined &&
-            settings.contextWindow > cap.contextWindow) ||
-          (settings.reasoning !== undefined &&
-            !cap.reasoning.some((value) => value === settings.reasoning)) ||
-          (settings.speed !== undefined &&
-            !cap.speed.some((value) => value === settings.speed))
-        )
-          throw Error(
-            "Model settings exceed the selected model's capabilities",
-          );
-      }
+      if (settings)
+        await validateSettings(runtime, { provider, model, settings });
       return publicSession(
         await runtime.setModel(await selected(), provider, model, settings),
       );
     }
     case "model.default": {
-      // Only save the already validated session selection; no credentials or endpoint input.
       const session = await selected();
-      await runtime.saveDefaultSelection(
-        session.modelSelection ?? runtime.defaultSelection(),
-      );
+      const current = session.modelSelection ?? runtime.defaultSelection();
+      if (p.baseUrl !== undefined)
+        throw Error("Configure endpoints on the host");
+      const provider = z
+        .string()
+        .min(1)
+        .max(128)
+        .parse(p.provider ?? current.provider);
+      const model = z
+        .string()
+        .min(1)
+        .max(256)
+        .parse(p.model ?? current.model);
+      const defaults =
+        (await runtime.providerCatalog().readDefault()) ??
+        runtime.defaultSelection();
+      const base =
+        provider === current.provider && model === current.model
+          ? current
+          : provider === defaults.provider && model === defaults.model
+            ? defaults
+            : undefined;
+      const selection = {
+        provider,
+        model,
+        settings:
+          p.settings === undefined
+            ? (base?.settings ?? {})
+            : settingsSchema.parse(p.settings),
+        ...(base?.baseUrl ? { baseUrl: base.baseUrl } : {}),
+      };
+      if (p.settings !== undefined) await validateSettings(runtime, selection);
+      await runtime.saveDefaultSelection(selection);
       return { saved: true };
     }
     case "messages.content":

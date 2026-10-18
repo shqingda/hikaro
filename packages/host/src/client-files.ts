@@ -76,6 +76,12 @@ export class ClientFiles implements IntentStore {
       await unlink(temp).catch(() => {});
     }
   }
+  preferences() {
+    return this.read("preferences.json");
+  }
+  savePreferences(value: unknown) {
+    return this.write("preferences.json", value);
+  }
   async load(): Promise<Intent[]> {
     const value = await this.read("intents.json");
     if (value === null) return [];

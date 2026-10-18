@@ -538,7 +538,10 @@ it("uses Delete in the session picker and deletes only after confirmation", asyn
     resumed: string[] = [];
   const view = {
     openModelPanel: () => ({
-      panel: { choose: async () => ({ ...steps.shift(), makeDefault: false }) },
+      panel: {
+        progress: () => {},
+        choose: async () => ({ ...steps.shift(), makeDefault: false }),
+      },
       signal: abort.signal,
       close() {},
     }),
@@ -656,6 +659,7 @@ it("paginates sessions and exposes rename in the session picker", async () => {
   const view = {
     openModelPanel: () => ({
       panel: {
+        progress: () => {},
         choose: async () => ({ ...steps.shift(), makeDefault: false }),
         prompt: async () => "New title",
       },
