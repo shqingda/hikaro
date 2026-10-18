@@ -674,3 +674,18 @@ it("yields execution management to a real approval without denying it or losing 
     view.dispose();
   }
 });
+
+it("lets structured questions replace execution management and preserves the editor draft", async () => {
+  const { view } = interactionView();
+  try {
+    view.editor.setText("draft question");
+    const manager = view.openModelPanel({ yieldToApproval: true });
+    const questions = view.openModelPanel({ interruptYielding: true });
+    expect(manager.signal.aborted).toBe(true);
+    expect(questions.signal.aborted).toBe(false);
+    questions.close();
+    expect(view.editor.getText()).toBe("draft question");
+  } finally {
+    view.dispose();
+  }
+});

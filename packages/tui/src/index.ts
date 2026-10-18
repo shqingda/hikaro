@@ -443,9 +443,14 @@ export class HikaroView {
     );
     this.tui.requestRender();
   }
-  openModelPanel(options?: { yieldToApproval?: boolean }) {
-    this.panelYieldsToApproval = options?.yieldToApproval ?? false;
+  openModelPanel(options?: {
+    yieldToApproval?: boolean;
+    interruptYielding?: boolean;
+  }) {
+    if (options?.interruptYielding && this.panelYieldsToApproval)
+      this.modelController?.abort();
     if (this.modelPanel) throw Error("Model picker is already open");
+    this.panelYieldsToApproval = options?.yieldToApproval ?? false;
     this.setError("");
     const controller = new AbortController();
     const panel = new ModelPanel(

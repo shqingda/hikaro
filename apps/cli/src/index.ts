@@ -227,6 +227,11 @@ async function main() {
       ...options,
       permissionMode,
       approve: (r, s) => view.approve(r, s),
+      askUser: async (questions, signal) => {
+        const { askQuestions } =
+          await import("../../../packages/tui/src/planning.ts");
+        return askQuestions(view, questions, signal);
+      },
     }),
   );
   const { createTerminal, HikaroView } = ui;
@@ -319,13 +324,44 @@ async function main() {
     view.setPermissionLabel(
       permissionOptions.find(
         (option) => option.value === runtime.permissionMode,
-      )!.label,
+      )!.label +
+        (runtime.planning.get(session.id).active ? " · Plan read-only" : ""),
     );
     const preferences = agent.options.session.modelSelection?.settings ?? {};
     const usage = agent.usage;
     view.setInfo(
       `${options.cwd.replace(process.env.HOME ?? "", "~")}${gitBranch ? " (" + gitBranch + ")" : ""} · ↑${usage.input} ↓${usage.output} est $${usage.cost.toFixed(3)} · ${Math.round(agent.options.provider.contextWindow / 1000)}k · ${preferences.reasoning ?? "auto"}${preferences.speed && preferences.speed !== "default" ? " · " + preferences.speed : ""}`,
     );
+  };
+  const reviewCurrentPlan = async () => {
+    while (!agent.busy) {
+      await runtime.planning.load(session.id, true);
+      const state = runtime.planning.get(session.id);
+      if (!state.active || !state.plan) return;
+      const { reviewPlan } =
+        await import("../../../packages/tui/src/planning.ts");
+      const result = await reviewPlan(view, state.plan);
+      if (result.action === "keep") {
+        view.notice("Plan kept read-only. Use /plan to review again.");
+        return;
+      }
+      if (result.action === "revise") {
+        await runtime.setPlanning(session, true);
+        await agent.prompt(`Revise the plan: ${result.text}`);
+        continue;
+      }
+      const approved = await runtime.approvePlan(session, result.id);
+      updateStatus();
+      const { planText } =
+        await import("../../../packages/runtime/src/planning.ts");
+      view.notice(
+        "Plan approved. Starting execution under the current permissions.",
+      );
+      await agent.prompt(
+        `The user reviewed and approved plan ${approved.id}. Execute this plan and verify the result:\n${planText(approved)}`,
+      );
+      return;
+    }
   };
   const bind = async (next: typeof session) => {
     if (agent.busy) throw Error("Cancel the active run first");
@@ -378,6 +414,10 @@ async function main() {
     onDraftChange: (text) => drafts.update(draftSessionId, text),
     commands: [
       {
+        name: "plan",
+        description: "Read-only planning, questions and plan review",
+      },
+      {
         name: "tasks",
         description: "Manage pending messages, terminals and child agents",
       },
@@ -416,6 +456,7 @@ async function main() {
           `Message queued · ${pending} pending. Use /tasks to manage.`,
         );
       await work;
+      await reviewCurrentPlan();
     },
     onExit: exit,
     onHistory: history,
@@ -503,6 +544,49 @@ async function main() {
           );
       };
       switch (command) {
+        case "plan": {
+          if (agent.busy)
+            throw Error(
+              "Finish or cancel the current run and queued messages before opening Plan mode",
+            );
+          await runtime.planning.load(session.id, true);
+          if (arg.trim() === "cancel") {
+            const { panel, close } = view.openModelPanel();
+            try {
+              const result = await panel.choose(
+                "Leave Plan mode?",
+                [
+                  { value: "keep", label: "Stay read-only" },
+                  { value: "leave", label: "Leave without executing" },
+                ],
+                "Leaving allows future prompts to edit under the current permissions. No task starts now.",
+                undefined,
+                {
+                  search: false,
+                  requireNoticeVisible: true,
+                  cancelValue: "keep",
+                },
+              );
+              if (result.value === "leave") {
+                await runtime.setPlanning(session, false);
+                updateStatus();
+                view.notice("Plan cancelled; no execution started.");
+              }
+            } finally {
+              close();
+            }
+            return;
+          }
+          if (!runtime.planning.get(session.id).active)
+            await runtime.setPlanning(session, true);
+          updateStatus();
+          view.notice(
+            "Plan mode · read-only. Describe the task; use /plan to review, /plan cancel to leave.",
+          );
+          if (arg.trim()) await agent.prompt(arg);
+          await reviewCurrentPlan();
+          return;
+        }
         case "tasks": {
           const { openExecutionControl } =
             await import("../../../packages/tui/src/execution-control.ts");
@@ -580,7 +664,7 @@ async function main() {
           return "Attachment added. Add your question and press Enter.";
         }
         case "help":
-          return '/tasks · Manage queued messages, background terminals and child agents\n/changes · Review and roll back recorded file edits\n/new  /sessions  /resume [ID]  /rename TITLE  /export\n/fork  /compact  /model provider/model\n/attach PATH · @file or @"path with spaces" attaches text/images\n/settings  /permissions [ask|auto|full]\n/context [default]  /thinking [default]  /speed [default]\n/status  /resources\n/steer instructions  /tools  /older  /newer  /latest  /quit\n!COMMAND follows the current permission mode. Ctrl+C cancels. Ctrl+D exits. Shift+Enter adds a line.\nNew prompts queue while the agent works.';
+          return '/plan [TASK] · Read-only exploration, questions and plan review\n/plan cancel · Leave without executing\n/tasks · Manage queued messages, background terminals and child agents\n/changes · Review and roll back recorded file edits\n/new  /sessions  /resume [ID]  /rename TITLE  /export\n/fork  /compact  /model provider/model\n/attach PATH · @file or @"path with spaces" attaches text/images\n/settings  /permissions [ask|auto|full]\n/context [default]  /thinking [default]  /speed [default]\n/status  /resources\n/steer instructions  /tools  /older  /newer  /latest  /quit\n!COMMAND follows the current permission mode. Ctrl+C cancels. Ctrl+D exits. Shift+Enter adds a line.\nNew prompts queue while the agent works.';
         case "new":
           await bind(await runtime.session());
           return;
@@ -682,6 +766,11 @@ async function main() {
             );
             return;
           }
+          await runtime.planning.load(session.id, true);
+          if (runtime.planning.get(session.id).active)
+            throw Error(
+              "Plugin commands and views are unavailable in read-only Plan mode",
+            );
           if (runtime.plugins.commands.has(command!))
             return runtime.plugins.commands.get(command!)!(arg);
           if (runtime.plugins.views.has(command!))
@@ -695,7 +784,7 @@ async function main() {
   });
   updateStatus();
   const refreshGitStatus = () => {
-    if (exiting) return;
+    if (exiting || runtime.planning.get(session.id).active) return;
     void Promise.all([
       readGit(["symbolic-ref", "--quiet", "--short", "HEAD"]),
       readGit([
