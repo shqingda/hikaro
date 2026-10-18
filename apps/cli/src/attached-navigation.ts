@@ -6,7 +6,11 @@ import type {
   ModelSelection,
   ModelSettings,
 } from "../../../packages/core/src/types.ts";
-import type { RpcMethod } from "../../../packages/protocol/src/contracts.ts";
+import {
+  rpcReadMethods,
+  type DurableCommandReceipt,
+  type RpcMethod,
+} from "../../../packages/protocol/src/contracts.ts";
 import { openSessions } from "../../../packages/tui/src/sessions.ts";
 import { openModelPicker } from "../../../packages/tui/src/model-picker.ts";
 import { openModelControl } from "../../../packages/tui/src/model-settings.ts";
@@ -80,6 +84,67 @@ export class AttachedNavigation {
   }
   async command(command: string, arg = "") {
     const id = this.client.state.session?.id;
+    if (command === "/recovery") {
+      const { panel, signal, close } = this.view.openModelPanel();
+      try {
+        for (;;) {
+          panel.progress("Checking operation receipts…");
+          await this.client.reconcile();
+          signal.throwIfAborted();
+          const receipts = this.client.receipts
+            .filter((r) => !rpcReadMethods.has(r.method))
+            .sort(
+              (a, b) =>
+                Number(["completed", "failed"].includes(a.status)) -
+                Number(["completed", "failed"].includes(b.status)),
+            );
+          const picked = await panel.choose(
+            "Recovery · operation receipts",
+            [
+              ...receipts.map((r) => ({
+                value: r.id,
+                label: `${r.method} · ${r.status}`,
+                description: r.id,
+              })),
+              { value: "refresh", label: "Refresh receipts" },
+            ],
+            "Unknown does not mean safe to retry. No operation is replayed here. Completed means handled; inspect the actual result.",
+            undefined,
+            { search: true },
+          );
+          if (picked.value === "refresh") continue;
+          panel.progress("Reading operation outcome…");
+          const { receipt } = await this.request<{
+            receipt: DurableCommandReceipt | null;
+          }>("command.receipt", { commandId: picked.value });
+          signal.throwIfAborted();
+          const choice = await panel.readDocument(
+            "Operation outcome",
+            receipt
+              ? `Method: ${receipt.method}\nStatus: ${receipt.status}\nCommand: ${receipt.id}\nSession: ${receipt.sessionId ?? "unavailable"}\n${receipt.error ?? ""}\n\nUnknown/failed operations may have side effects. Inspect session history and files before deciding what to do. This panel never retries execution.`
+              : "No durable receipt found. Outcome remains unknown; the request may not have reached this host. Inspect files before any new attempt. This panel never retries execution.",
+            receipt?.sessionId
+              ? [{ value: "session", label: "Open original session" }]
+              : [],
+          );
+          if (choice.value === "session" && receipt?.sessionId) {
+            await this.flush();
+            await this.request("session.resume", {
+              sessionId: receipt.sessionId,
+            });
+            this.view.notice(
+              "Original session opened. Inspect history; no operation was replayed.",
+            );
+            return;
+          }
+        }
+      } catch (error) {
+        if (!signal.aborted) throw error;
+      } finally {
+        close();
+      }
+      return;
+    }
     if (command === "/sessions" || command === "/resume") {
       if (command === "/resume" && arg) {
         await this.flush();
@@ -134,6 +199,70 @@ export class AttachedNavigation {
       return;
     }
     if (!id) throw Error("No session selected");
+    if (command === "/export") {
+      const result = await this.request<{ path: string }>(
+        "session.export.file",
+        { sessionId: id, includeThinking: this.preferences.showThinking },
+      );
+      this.view.notice(`Exported: ${result.path}`);
+      return;
+    }
+    if (command === "/plugins") {
+      const { panel, signal, close } = this.view.openModelPanel();
+      try {
+        panel.progress("Loading host plugins…");
+        const { items } = await this.request<{
+          items: Array<{ name: string; kind: "command" | "view" }>;
+        }>("plugins.list");
+        signal.throwIfAborted();
+        for (;;) {
+          const selected = await panel.choose(
+            "Host plugins",
+            items.map((item, i) => ({
+              value: String(i),
+              label: item.name,
+              description: item.kind,
+            })),
+            "Trusted host plugins. Commands may change files. Plan mode refuses execution.",
+            undefined,
+            { search: true },
+          );
+          const item = items[Number(selected.value)];
+          if (!item) continue;
+          const args =
+            item.kind === "command"
+              ? await panel.prompt("Plugin arguments (optional)")
+              : "";
+          const confirmation = await panel.choose(
+            `Run ${item.name}?`,
+            [
+              { value: "cancel", label: "Cancel" },
+              { value: "run", label: "Run plugin" },
+            ],
+            "Runs trusted code on the host.",
+          );
+          if (confirmation.value !== "run") continue;
+          this.selected(id);
+          panel.progress("Running host plugin…");
+          const result = await this.request<{ text: string }>(
+            "plugins.invoke",
+            { sessionId: id, ...item, args },
+          );
+          signal.throwIfAborted();
+          await this.synchronize();
+          await panel.readDocument(
+            `Plugin result · ${item.name}`,
+            result.text,
+            [],
+          );
+        }
+      } catch (error) {
+        if (!signal.aborted) throw error;
+      } finally {
+        close();
+      }
+      return;
+    }
     this.idle();
     if (command === "/permissions") {
       const state = await this.request<{ permissionMode: PermissionMode }>(
@@ -286,7 +415,7 @@ export class AttachedNavigation {
         const picked = await panel.choose(
           "Host resources · search loaded entries",
           choices(),
-          "Inventory only. Skills are used by the agent; plugin commands/views are listed but cannot be invoked here. Restart host to reload configuration.",
+          "Inventory only. Skills are used by the agent; use /plugins to run plugin commands/views. Restart host to reload configuration.",
           undefined,
           {
             search: true,

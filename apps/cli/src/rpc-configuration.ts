@@ -73,13 +73,13 @@ export async function configurationRequest(
           name,
           kind: "Plugin command",
           description:
-            "Loaded on host. Interactive invocation is not supported in attached TUI.",
+            "Loaded on host. Use /plugins to invoke with confirmation.",
         })),
         ...[...runtime.plugins.views.keys()].map((name) => ({
           name,
           kind: "Plugin view",
           description:
-            "Loaded on host. Rendering is not supported in attached TUI.",
+            "Loaded on host. Use /plugins to read the rendered text.",
         })),
       ];
       const query = z

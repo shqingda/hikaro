@@ -323,6 +323,9 @@ export async function attachTui(options: {
     detachOnCtrlD: true,
     commands: [
       ...[
+        "recovery",
+        "export",
+        "plugins",
         "sessions",
         "resume",
         "login",
@@ -345,6 +348,7 @@ export async function attachTui(options: {
       if (!client.state.canAct || loading)
         throw Error("Host is disconnected or synchronizing; draft stays local");
       submittedDraft = text;
+      if (text.startsWith("!")) return { text };
       return preparePrompt(text, {
         cwd: transport.endpoint.cwd,
         signal,
@@ -366,6 +370,21 @@ export async function attachTui(options: {
     onPrompt: async (text, images) => {
       try {
         const queued = client.state.busy;
+        if (text.startsWith("!")) {
+          const result = await client.request("tool.manual", {
+            sessionId: client.state.session?.id,
+            command: text.slice(1),
+          });
+          await refresh();
+          view.notice(
+            result && typeof result === "object" && "duplicate" in result
+              ? "Command already received; inspect history and receipts."
+              : (result as { isError?: boolean }).isError
+                ? "Manual command failed. Inspect output and status above."
+                : "Manual command finished. Inspect output and status above.",
+          );
+          return;
+        }
         await backend.prompt(text, images);
         if (queued)
           view.notice(
@@ -390,7 +409,7 @@ export async function attachTui(options: {
           leave();
           return;
         case "/help":
-          return "Shared host: /changes, /tasks, /plan [TASK], /plan cancel · host workflows. /sessions [query], /resume ID, /new, /rename title, /compact, /fork, /steer text, /status, /access, /share DEVICE view|control|off, /model [PROVIDER/MODEL], /login, /settings, /permissions, /context [default], /thinking [default], /speed [default], /resources [query], /attach PATH. Ctrl+C stops the selected task; Ctrl+D detaches. Local files use the existing @ completion.";
+          return "Shared host: /recovery, /export, /plugins, !COMMAND (host approvals apply), /changes, /tasks, /plan [TASK], /plan cancel · host workflows. /sessions [query], /resume ID, /new, /rename title, /compact, /fork, /steer text, /status, /access, /share DEVICE view|control|off, /model [PROVIDER/MODEL], /login, /settings, /permissions, /context [default], /thinking [default], /speed [default], /resources [query], /attach PATH. Ctrl+C stops the selected task; Ctrl+D detaches. Local files use the existing @ completion.";
         case "/status":
           return JSON.stringify(
             {
@@ -405,6 +424,9 @@ export async function attachTui(options: {
             null,
             2,
           );
+        case "/recovery":
+        case "/export":
+        case "/plugins":
         case "/sessions":
         case "/resume":
         case "/login":
@@ -456,8 +478,17 @@ export async function attachTui(options: {
           await client.connected();
           await client.reconcile();
           return;
-        default:
-          return "Unknown command. Use /help for attached TUI menus; plugin commands and manual ! tools are not available here.";
+        default: {
+          const result = await client.request("plugins.invoke", {
+            sessionId: client.state.session?.id,
+            name: command!.slice(1),
+            args: rest,
+          });
+          if (result && typeof result === "object" && "duplicate" in result)
+            return "Command already received; inspect receipts before retrying.";
+          await refresh();
+          return (result as { text: string }).text;
+        }
       }
     },
   });

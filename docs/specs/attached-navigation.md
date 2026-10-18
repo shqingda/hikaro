@@ -10,3 +10,7 @@
 - 后台计划/提问轮询让出配置面板；真正断线关闭面板，迟到请求不得跨会话操作。RPC 同 ID 不自动重放，模型/默认操作分别反馈成功与失败。
 
 验证：新增 tests/attached-navigation.test.ts（host 端能力/权限/默认值边界、配置与登录面板）；tests/attached-navigation-pty.test.ts 是本轮唯一 E2E，独立 host＋附着 PTY，覆盖会话搜索/改名/删除、模型与设置持久化、资源详情和登录取消。成功认证使用现有 auth interaction 的隔离 fixture，从面板输入到保存与 host reload 验证，不写真实账号。相关普通选择器单元回归采用名称过滤排除其他 PTY。类型检查、构建；不跑全量或基准。
+
+## 后续范围扩展（2026-10-19）
+
+上述首切片的插件执行/导出排除项已由后续交付接入：`/plugins` 搜索、参数、确认与文本结果；直接 `/插件名 参数`；`!COMMAND` host 审批及取消；`/export` Markdown 文件。`/recovery` 提供本视图回执核对与原会话结果入口，不自动重发。详见 [扩展与恢复验收](../validation/attached-extensions.md)。插件取消协议、队列/未答问题崩溃恢复仍不在已交付范围。

@@ -378,6 +378,10 @@ export async function serveRpc(
             "permissions.set",
             "providers.reload",
             "resources.list",
+            "plugins.list",
+            "plugins.invoke",
+            "tool.manual",
+            "session.export.file",
           ].includes(command.method) &&
           !shared.localScope(scope)
         )
@@ -385,7 +389,13 @@ export async function serveRpc(
             "Only local owner clients can manage host access or defaults",
           );
         if (
-          ["prompt", "steer", "cancel"].includes(command.method) ||
+          [
+            "prompt",
+            "steer",
+            "cancel",
+            "tool.manual",
+            "plugins.invoke",
+          ].includes(command.method) ||
           /^(changes|execution|plan|questions)\./.test(command.method)
         ) {
           const sessionId = state.session?.id,
@@ -437,6 +447,75 @@ export async function serveRpc(
       // yield to a resume or grant change; never act on the replacement view.
       requireSameSelection();
       switch (command.method) {
+        case "session.export.file":
+          result = {
+            path: await runtime.exportSession(
+              (await selected()).id,
+              z.boolean().parse(p.includeThinking ?? false),
+            ),
+          };
+          break;
+        case "plugins.list":
+          result = {
+            items: [...runtime.plugins.commands.keys()]
+              .map((name) => ({ name, kind: "command" }))
+              .concat(
+                [...runtime.plugins.views.keys()].map((name) => ({
+                  name,
+                  kind: "view",
+                })),
+              ),
+          };
+          if (Buffer.byteLength(JSON.stringify(result)) > 256000)
+            throw Error("Plugin catalog exceeds display capacity");
+          break;
+        case "plugins.invoke": {
+          const session = await selected();
+          if (state.session?.id !== session.id) throw Error("Session changed");
+          requireSameSelection();
+          result = {
+            text: await runtime.invokePlugin(
+              session,
+              z.string().min(1).max(256).parse(p.name),
+              z
+                .enum(["command", "view"])
+                .parse(
+                  p.kind ??
+                    (runtime.plugins.commands.has(String(p.name))
+                      ? "command"
+                      : "view"),
+                ),
+              z
+                .string()
+                .max(100000)
+                .parse(p.args ?? ""),
+            ),
+          };
+          break;
+        }
+        case "tool.manual": {
+          const session = await selected();
+          if (state.session?.id !== session.id || !state.agent)
+            throw Error("Session changed");
+          const agent = state.agent;
+          const text = z.string().trim().min(1).max(100000).parse(p.command);
+          requireSameSelection();
+          owners.set(session.id, scope);
+          ownAgent(state.work, agent);
+          try {
+            const outcome = await agent.executeTool(
+              "shell",
+              { command: text },
+              "!" + text,
+              { scope, commandId: id },
+            );
+            result = { isError: outcome.isError ?? false };
+          } finally {
+            releaseWork(scope, state.work, agent);
+          }
+          break;
+        }
+
         case "changes.list":
         case "changes.detail":
         case "changes.rollback":

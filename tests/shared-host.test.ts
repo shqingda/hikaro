@@ -234,6 +234,10 @@ it("shares one run and explicitly owned approvals through local IPC and the encr
       ).rejects.toThrow(/denied/);
     }
     for (const method of [
+      "plugins.list",
+      "plugins.invoke",
+      "tool.manual",
+      "session.export.file",
       "permissions.set",
       "providers.reload",
       "resources.list",

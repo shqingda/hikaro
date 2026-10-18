@@ -579,6 +579,7 @@ export class Agent implements AgentBackend {
     name: string,
     args: Record<string, unknown>,
     label: string,
+    origin?: { scope?: string; commandId?: string },
   ) {
     if (this.busy)
       throw Error("Wait for the active run before running a terminal command");
@@ -591,7 +592,8 @@ export class Agent implements AgentBackend {
     try {
       stopLease = await this.ownLease(controller);
       await this.message({ role: "user", text: label, timestamp: Date.now() });
-      await this.emit("run.start", { runId, operation: "manual" });
+      this.origin = origin;
+      await this.emit("run.start", { runId, operation: "manual", ...origin });
       await this.message({
         role: "assistant",
         text: "",
@@ -634,6 +636,7 @@ export class Agent implements AgentBackend {
       } finally {
         this.controller = undefined;
         this.draining = false;
+        this.origin = undefined;
         void this.drain();
       }
     }

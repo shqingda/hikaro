@@ -2,6 +2,10 @@
 import * as z from "zod/mini";
 export const protocolVersion = 2;
 export const rpcMethods = [
+  "plugins.list",
+  "plugins.invoke",
+  "tool.manual",
+  "session.export.file",
   "model.capabilities",
   "providers.reload",
   "permissions.set",
@@ -51,6 +55,7 @@ export const rpcMethods = [
 ] as const;
 export type RpcMethod = (typeof rpcMethods)[number];
 export const rpcReadMethods: ReadonlySet<string> = new Set([
+  "plugins.list",
   "model.capabilities",
   "resources.list",
   "changes.list",

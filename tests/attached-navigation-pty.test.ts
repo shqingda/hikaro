@@ -1,7 +1,15 @@
 import { spawn as processSpawn } from "node:child_process";
 import { spawn } from "node-pty";
 import { expect, it, vi } from "vitest";
-import { mkdtemp, mkdir, realpath, writeFile, rm } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  realpath,
+  writeFile,
+  readFile,
+  readdir,
+  rm,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { stripVTControlCharacters } from "node:util";
@@ -18,6 +26,14 @@ it("navigates sessions, model/defaults, settings, resources and login from the a
   await writeFile(
     join(cwd, ".agents/skills/navigation-proof/SKILL.md"),
     "---\nname: navigation-proof\ndescription: A resource inspection fixture\n---\nUse only when requested.",
+  );
+  await writeFile(
+    join(home, "plugin.mjs"),
+    `export default {id:'pty-proof',apiVersion:1,setup(api){api.registerCommand('pty-proof',async args=>'PLUGIN-COMMAND:'+args);api.registerView('pty-view',async()=>'PLUGIN-VIEW:ready')}}`,
+  );
+  await writeFile(
+    join(home, "config.json"),
+    JSON.stringify({ plugins: [{ path: "plugin.mjs", trusted: true }] }),
   );
   const seed = await Runtime.open({
     home,
@@ -129,6 +145,43 @@ it("navigates sessions, model/defaults, settings, resources and login from the a
     expect((await probe.request("session.current")).session.title).toBe(
       "Renamed target",
     );
+    await wait("PLUGIN-COMMAND:direct", send("/pty-proof direct\r"));
+    await wait("Host plugins", send("/plugins\r"));
+    await wait("pty-view", send("pty-view"));
+    await wait("Run pty-view?", send("\r"));
+    await wait("Plugin result · pty-view", send("\x1b[B\r"));
+    await wait("PLUGIN-VIEW:ready");
+    await wait("Host plugins", send("\x1b"));
+    await wait("Enter send", send("\x1b"));
+    await wait("Permission required", send("!printf manual-ui-proof\r"));
+    await wait("Manual command finished", send("\x1b[A\r"));
+    await wait("Permission required", send("!touch rejected-ui-proof\r"));
+    await wait("Manual command failed", send("\x1b"));
+    await expect(readFile(join(cwd, "rejected-ui-proof"))).rejects.toThrow();
+    await wait("Permission required", send("!sleep 30\r"));
+    const running = send("\x1b[A\r");
+    await vi.waitFor(async () =>
+      expect((await probe!.request("session.current")).busy).toBe(true),
+    );
+    send("\x03");
+    await vi.waitFor(
+      async () =>
+        expect((await probe!.request("session.current")).busy).toBe(false),
+      { timeout: 8000 },
+    );
+    await wait("Enter send", running);
+    await wait("Exported:", send("/export\r"));
+    const exported = (await readdir(join(home, "exports"))).find((name) =>
+      name.endsWith(".md"),
+    )!;
+    const document = await readFile(join(home, "exports", exported), "utf8");
+    expect(document).toContain("manual-ui-proof");
+    expect(document).toContain("PLUGIN-COMMAND:direct");
+    expect(document).toContain("PLUGIN-VIEW:ready");
+    await wait("Recovery · operation receipts", send("/recovery\r"));
+    await wait("plugins.invoke · completed", send("plugins.invoke"));
+    await wait("Operation outcome", send("\r"));
+    await wait("Original session opened", send("\x1b[B\r"));
     await wait("Select model", send("/model\r"));
     await wait("Offline demo", send("demo/offline"));
     await wait("Active model: demo/offline", send("\r"));
@@ -174,9 +227,19 @@ it("navigates sessions, model/defaults, settings, resources and login from the a
     send("\x04");
     expect(await exited).toBe(0);
     term = undefined;
+    await files.save([{ id: "unresolved-ui-proof", method: "tool.manual" }]);
     const reopened = output.length;
     launch();
     await wait("Attached to shared host", reopened);
+    await wait("Recovery · operation receipts", send("/recovery\r"));
+    await wait("tool.manual · unknown", reopened);
+    await wait("No durable receipt found", send("\r"));
+    await wait("Recovery · operation receipts", send("\x1b"));
+    await wait("Enter send", send("\x1b"));
+    expect(await files.load()).toContainEqual({
+      id: "unresolved-ui-proof",
+      method: "tool.manual",
+    });
     await wait("Sessions · page 1", send("/sessions Renamed target\r"));
     await wait("● Renamed target", reopened);
     await wait("Enter send", send("\x1b"));
