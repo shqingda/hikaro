@@ -20,10 +20,13 @@ const clock = {
     return () => clearTimeout(timer);
   },
 };
-function fixture(hooks?: {
-  request(frame: any): Promise<unknown>;
-  subscribe(fn: (frame: any) => void): () => void;
-}) {
+function fixture(
+  hooks?: {
+    request(frame: any): Promise<unknown>;
+    subscribe(fn: (frame: any) => void): () => void;
+  },
+  content?: (params: any) => Promise<unknown>,
+) {
   const host = createIdentity(),
     device = createIdentity();
   const pairing = {
@@ -81,43 +84,46 @@ function fixture(hooks?: {
         if (result.data) {
           const frame = result.data as any;
           sent.push(frame);
-          const rpcResult = hooks
-            ? hooks.request(frame)
-            : frame.method === "hello"
-              ? rpcCapabilities(true)
-              : frame.method === "session.current"
-                ? {
-                    session: selected,
-                    sessionRole: "view",
-                    busy: false,
-                    stream: "",
-                    streamTruncated: false,
-                    cursor: 2,
-                    revision,
-                    runId: "run1",
-                    runStatus: "completed",
-                    approvals: [],
-                  }
-                : frame.method === "session.list"
-                  ? [session]
-                  : frame.method === "messages.read"
+          const rpcResult =
+            frame.method === "messages.content" && content
+              ? content(frame.params)
+              : hooks
+                ? hooks.request(frame)
+                : frame.method === "hello"
+                  ? rpcCapabilities(true)
+                  : frame.method === "session.current"
                     ? {
-                        items: [
-                          {
-                            seq: 2,
-                            message: {
-                              role: "assistant",
-                              text: "已恢复的结果",
-                              timestamp: 1,
-                            },
-                          },
-                        ],
-                        hasOlder: false,
-                        hasNewer: false,
+                        session: selected,
+                        sessionRole: "view",
+                        busy: false,
+                        stream: "",
+                        streamTruncated: false,
+                        cursor: 2,
+                        revision,
+                        runId: "run1",
+                        runStatus: "completed",
+                        approvals: [],
                       }
-                    : frame.method === "session.resume"
-                      ? (selected = session)
-                      : { receipt: null };
+                    : frame.method === "session.list"
+                      ? [session]
+                      : frame.method === "messages.read"
+                        ? {
+                            items: [
+                              {
+                                seq: 2,
+                                message: {
+                                  role: "assistant",
+                                  text: "已恢复的结果",
+                                  timestamp: 1,
+                                },
+                              },
+                            ],
+                            hasOlder: false,
+                            hasNewer: false,
+                          }
+                        : frame.method === "session.resume"
+                          ? (selected = session)
+                          : { receipt: null };
           void Promise.resolve(rpcResult).then(
             (result) => {
               if (dropResume && frame.method === "session.resume") {
@@ -188,6 +194,55 @@ function fixture(hooks?: {
     },
   };
 }
+it("clears full-message pages on close, selection and background, fencing late responses", async () => {
+  let resolve!: (page: unknown) => void;
+  let delayed = false;
+  const page = {
+    data: "完整正文",
+    total: 4,
+    nextOffset: null,
+    encoding: "utf16",
+  };
+  const f = fixture(undefined, async () =>
+    delayed
+      ? new Promise((done) => {
+          resolve = done;
+        })
+      : page,
+  );
+  const app = new MobileController(f.store, f.options);
+  try {
+    app.review(f.uri());
+    await app.confirm();
+    await vi.waitFor(() => expect(app.state.phase).toBe("connected"));
+    await app.readMessage(2);
+    expect(app.state.content?.page?.data).toBe("完整正文");
+    delayed = true;
+    const pending = app.readMessage(2);
+    await vi.waitFor(() => expect(resolve).toBeTypeOf("function"));
+    app.closeMessage();
+    resolve(page);
+    await pending;
+    expect(app.state.content).toBeNull();
+    delayed = false;
+    await app.readMessage(2);
+    await app.select("s1");
+    expect(app.state.content).toBeNull();
+    await app.readMessage(2);
+    app.suspend();
+    expect(app.state.content).toBeNull();
+    expect(
+      f.sent
+        .filter((frame) => frame.method === "messages.content")
+        .every(
+          (frame) =>
+            frame.params.field === "text" && frame.params.limit === 8192,
+        ),
+    ).toBe(true);
+  } finally {
+    app.dispose();
+  }
+});
 it("requires review, persists credentials, restores a bounded read-only view and locks revoked devices", async () => {
   const f = fixture();
   const app = new MobileController(f.store, f.options);
@@ -340,8 +395,31 @@ it("restores the same granted host task after a lost selection acknowledgement, 
         app.state.messages.some((m) => m.message.role === "assistant"),
       ).toBe(true),
     );
+    // Keep the long input within the demo context budget; cancel its slow echo.
+    const fullText = "read".repeat(6000) + "中文🌅";
+    await local.request("prompt", { text: fullText });
+    await vi.waitFor(() =>
+      expect(
+        app.state.messages.some(
+          (m) => m.message.textLength === fullText.length,
+        ),
+      ).toBe(true),
+    );
+    await local.request("cancel");
+    await vi.waitFor(() => expect(local.state.busy).toBe(false));
+    await app.history("latest");
     const text = app.state.messages.map((m) => m.message.text);
+    const user = app.state.messages.find(
+      (m) =>
+        m.message.role === "user" && m.message.textLength === fullText.length,
+    )!;
+    expect(user.message.textLength).toBeGreaterThan(20000);
+    await app.readMessage(user.seq);
+    expect(fullText.startsWith(app.state.content!.page!.data)).toBe(true);
+    await app.readMessage(user.seq, 8190);
+    expect(app.state.content!.page!.data.length).toBeLessThanOrEqual(8191);
     app.suspend();
+    expect(app.state.content).toBeNull();
     expect(app.state.messages).toEqual([]);
     expect(local.state.session?.id).toBe(session.id);
     app.dispose();
@@ -366,6 +444,7 @@ it("restores the same granted host task after a lost selection acknowledgement, 
     );
     expect(app.state.session?.id).toBe(session.id);
     expect(f.sent.filter((f) => f.method === "session.resume")).toHaveLength(1);
+    await app.readMessage(user.seq);
     await local.request("session.access", {
       deviceId: f.pairing.deviceId,
       role: null,
@@ -373,6 +452,7 @@ it("restores the same granted host task after a lost selection acknowledgement, 
     await vi.waitFor(() => expect(app.state.session).toBeNull());
     await vi.waitFor(() => expect(app.state.sessions).toEqual([]));
     expect(app.state.messages).toEqual([]);
+    expect(app.state.content).toBeNull();
   } finally {
     app.dispose();
     local.close();
