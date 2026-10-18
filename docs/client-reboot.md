@@ -1,6 +1,6 @@
 # Hikaro 桌面与移动端重启方案
 
-2026-10-18 · 产品及工程提案 · 本轮交付为文档、交互草案与品牌候选
+2026-10-18 · 产品及工程提案 · 已包含 C0 共享状态与持久回执实现；原生应用仍待后续阶段
 
 **建议先把核心编程闭环与客户端协议补齐，再启动桌面工作台，最后交付移动控制器。** 一个本地 host 拥有执行权；桌面让人深入工作，手机让人查看进展、确认请求和补充指令。两端共享协议、状态归并与故障语义，不共用一套缩小的页面。
 
@@ -10,11 +10,11 @@
 
 ## 事实边界
 
-当前安装与发布范围仍是 CLI / 全屏 TUI、独立 core、Pi 双向接入和可选 relay。此前 Electron / Expo 实验、共享客户端状态包、专用移动测试已经删除。**本方案没有恢复这两个客户端，没有新增真实 remote UI，也没有部署 relay、创建 EAS 项目或发布应用。** 示例会话、diff、检查结果与模型选择都是模拟，不代表本次代码改动。
+当前安装与发布范围仍是 CLI / 全屏 TUI、独立 core、Pi 双向接入和可选 relay。此前 Electron / Expo 实验及专用移动测试已经删除；新的可移植 client-core 已恢复。**本方案没有恢复这两个客户端，没有新增真实 remote UI，也没有部署 relay、创建 EAS 项目或发布应用。** 示例会话、diff、检查结果与模型选择都是模拟，不代表本次代码改动。
 
 依据为 [README](../README.md)、[TODO](../TODO.md)、[架构](architecture.md)、[远程连接](remote.md)、`packages/protocol/src/index.ts`、`packages/protocol/src/client.ts`。本方案是本轮检查时的基线；并行完成的核心功能以 TODO 和本轮验收记录为准，不能用本文替代实现账本。
 
-前一轮核心基线已补充：当前工作区全部会话标题/ID 的分页搜索、300ms 合并且串行的草稿自动保存/进程崩溃恢复、包含 system/工具 schema/图片与输出预留的完整请求预算，以及确定性 10k 事件/流式 harness。消息正文全文检索、精确 tokenizer、自动压缩、跨重启预算和待发队列恢复仍未完成。模型目录延迟加载后，30 次启动 p95 从 405.24ms 降至 324.81ms，仍未达到既定 200ms 门槛；RSS p95 为 81.39MiB。这是 TUI 实测，不能外推成未来 GUI 成绩。原始口径见 [harness 与性能记录](harness-performance.md)。
+当前核心已补充全工作区标题/ID 会话搜索、草稿自动保存、完整请求预算、自动上下文压缩、文件/图片附件与 `@` 模糊补全，以及确定性 10k 事件/流式 harness。最新启动性能与具体测量限制见 [harness 与性能记录](harness-performance.md) 和 [validation](validation.md)；不能外推成未来 GUI 成绩。消息正文全文检索、精确 tokenizer、跨重启预算和待发队列恢复仍未完成。
 
 现有 protocol v2 已增量加入 `hello` 能力协商，原有 create/list/current/resume/fork/compact、messages/events 分页、prompt/steer/cancel、approval.respond、client.detach。`ProcessClient` 导入 Node 子进程与 Buffer，不能直接打进 React Native。TUI 有模型选择、重命名、删除、导出等入口，不代表远程协议已暴露这些能力。
 
@@ -22,14 +22,22 @@
 
 `packages/client-core/` 已落地纯 TypeScript 执行状态层，并用独立 ES2023、无 Node/DOM ambient types 的配置验证可移植性；尚未创建 Tauri/Expo 应用，也没有接上生产 relay 客户端。
 
-- `hello` 为兼容新增的 v2 控制方法。返回真实方法集合、快照方法、全库单调事件序号语义、scope revision、1 MiB 帧上限、禁止自动重放与 run ID 仅能从已观察事件获知的限制。旧 ready/method 行为保留。
+- `hello` 为兼容新增的 v2 控制方法。返回真实方法集合、快照方法、事件序号、scope revision、1 MiB 帧上限及禁止自动重放。新增能力字段声明持久回执与 run 快照；原 v2 marker 保留以兼容旧客户端。
 - `session.current` 新增通知 revision；event、approval、approval.resolved 帧使用同一 scope 的连续 revision。它与 SQLite 全库自增的事件 seq 是两个概念，不会把并发会话占用的 seq 当作丢包。
 - 状态层处理 scope/session 隔离、事件去重、revision 缺口、连接 epoch、快照期间有界缓冲与水位之后的补齐。远程响应比通知晚到时，已经解决的审批不会被旧快照重新激活。
 - 断线/超时将尚未收到回复的命令标为 unknown；恢复快照不会把它变成成功，也不会自动再次发送。普通响应的 acknowledged 仅表示收到回复，不能声称任务已完成。
-- 缓存上限：64 个事件摘要、100,000 字符输出、64 个审批且总序列化大小不超过 1 MiB、128 个缓冲通知且总计不超过 1 MiB、64 个本地回执。未解决的变更回执不能被容量淘汰；容量不足明确拒绝。
+- 缓存上限：64 个事件摘要、100,000 字符输出、64 个审批且总序列化大小不超过 1 MiB、128 个缓冲通知且总计不超过 1 MiB、64 个本地回执，其中为恢复读取预留 4 个位置。最多 60 个未解决的变更回执不能被容量淘汰；容量不足明确拒绝。
 - `ProcessClient.observe` 提供有序原始帧观察，不改变原有 request/subscription 路由。真实 serveRpc + SQLite + 离线 demo 已和新状态层对接，测试含第二会话占用全库序号、重连与 RPC 图片格式拒绝。
 
-还未完成：持久化 command receipt 查询与 payload digest 冲突检查、host instance ID、快照内 runId、完整历史/附件分页、mobile raw transport adapter、原生客户端生命周期与平台验收。来源及使用边界见 [client-core contract](../packages/client-core/README.md)。核心自动压缩/附件输入的本轮更新继续以 TODO 和 validation 为准，不用本草案的模拟 diff 充当实现证据。
+## C0 第二切片：已实现，持久回执与运行身份
+
+- 所有变更命令在执行前以 workspace/scope/commandId 原子落盘；规范化参数摘要检查冲突。相同请求仅返回已有回执，不重复执行或重新选择会话。
+- `command.receipt` 支持断线后核对；异步 prompt/compact 终态写入原命令记录。其他 host 实例遗留的 accepted 保守显示 unknown，不能推测安全重试。控制命令 completed 仅表示 handler 已应用。
+- hello/envelope/snapshot 提供 host instance ID；快照提供 runId/runStatus。重开后未结束的 run 恢复 unknown，不把 idle 当作完成。客户端保留恢复查询槽位，未决命令再多也不能靠删记录掩盖不确定性。
+- 真实 CLI + SQLite 重启覆盖完成查询、不重复执行与 host 变化；存储并发 claim、冲突、scope 隔离及旧 claim 隐私边界有定向验证。详见 [回执契约](specs/command-receipts.md)。
+- 读取 Skill 改为逐文件校验的 native 批读，保持同样 33 个资源和指令文本。最终 TUI 启动 p95 165.54 ms，原 200 ms 门槛通过；10k harness 门槛全部保留并通过。测量限制和失败尝试见性能记录。
+
+还未完成：完整历史/附件协议能力、mobile raw transport adapter、原生客户端生命周期与平台验收。C0 尚未整体完成，D0/M0 不提前标记通过。来源及边界见 [client-core contract](../packages/client-core/README.md)。
 
 ## 产品范围与主流能力矩阵
 
@@ -43,7 +51,7 @@
 | 输入与草稿 | 多行、补全；300ms 合并自动保存，已保存稿可崩溃恢复 | 自动保存、输入法、附件、文件引用、拖入文件 | 原生输入、图片附件、草稿；离线明确未发送 | P0 草稿；附件协议 P1 |
 | 运行生命周期 | 流式、取消、steer、租约、任务事件 | 新输入排队/补充/停止语义明确；运行归属可见 | 发起、补充、停止与结果确认；不能误触重新运行 | P0，补状态与幂等语义 |
 | 权限 | workspace Ask/Auto/Full；RPC 不继承 TUI 模式 | 显示来源、参数、cwd、网络/文件范围；允许一次/拒绝 | 必须进入完整请求页；不从锁屏直接授权 | P0，host 判定，GUI 不能自行扩大权限 |
-| 上下文 | 完整请求预算、有界历史、分支、手动压缩、来源文件 | 可见预算、自动压缩提示、摘要回看、约束保留 | 简明预算和压缩状态；完整摘要可展开 | P0 精确计量/自动压缩待补，摘要质量需人工评估 |
+| 上下文 | 完整请求预算、有界历史、分支、手动压缩、来源文件 | 可见预算、自动压缩提示、摘要回看、约束保留 | 简明预算和压缩状态；完整摘要可展开 | P0 精确计量待补；自动压缩已实现，摘要质量需人工评估 |
 | 文件与代码 | 读写/编辑/rg、安全 helper、并发检查 | 文件树、引用跳转、语法高亮、变更 diff | 路径与片段、统一 diff、复制；大 diff 延迟加载 | P0 diff；完整编辑器 P2 |
 | Git 工作流 | status/diff 等基础工具 | 分支/worktree 状态、已有改动分离、commit 预览 | 查看改动和检查；危险 Git 操作不默认暴露快捷动作 | P1；merge/push 必须可审查 |
 | 终端与后台进程 | shell/PTY、后台进程、macOS 沙箱 | 可回看输出、清晰终止按钮、进程归属、退出选项 | 只读输出与停止；原生交互终端 P2 | P0 输出/停止；PTY 协议 P1 |
@@ -137,7 +145,7 @@ flowchart LR
 
 事件状态规范：`idle → submitting → running → awaiting_approval / awaiting_input → running → completed / failed / cancelled`；连接是另一个轴 `connecting / online / offline / revoked / incompatible`，不得用“断线”覆盖掉任务状态。客户端只对自己确知的交互做乐观反馈，完成、授权生效和文件写入以 host 事件为准。
 
-按 scope/sessionId 分区归并。持久事件 seq 是全库自增，按 session 过滤后允许跳号，只用于去重；新增 scope revision 才是连续通知水位，发现 revision 缺口先冻结易误解的动作并补快照。runId 快照仍待补齐。快照包含水位和 pending approvals；拉取水位之后的事件，合并订阅期间缓冲，避免快照与订阅空隙漏事件。历史分页使用稳定游标，prepend 不跳滚动；新输出到来不抢走正在阅读历史的视角。
+按 scope/sessionId 分区归并。持久事件 seq 是全库自增，按 session 过滤后允许跳号，只用于去重；新增 scope revision 才是连续通知水位，发现 revision 缺口先冻结易误解的动作并补快照。runId/runStatus 快照已实现；host 重启后的未决运行保守显示 unknown。快照包含水位和 pending approvals；拉取水位之后的事件，合并订阅期间缓冲，避免快照与订阅空隙漏事件。历史分页使用稳定游标，prepend 不跳滚动；新输出到来不抢走正在阅读历史的视角。
 
 ## 主机归属、配对、重连与权限
 

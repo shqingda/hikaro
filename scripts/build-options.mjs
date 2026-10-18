@@ -19,6 +19,7 @@ export function cliBuildOptions() {
     sourcemap: true,
     minifyWhitespace: true,
     minifySyntax: true,
+    minifyIdentifiers: true,
     metafile: true,
     plugins: [
       {

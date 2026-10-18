@@ -97,3 +97,28 @@ pnpm bench:harness:check    # 固定工作负载与最小采样数，不允许�
 本轮续做已完成事务性自动压缩、文件/图片输入和客户端 C0 首切片，验证记录见 [本轮验收](validation.md#automatic-compaction-attachments-and-client-c0-2026-10-18)。尚待完成：provider tokenizer／图像精确预算、跨重启预算与待发队列恢复；大历史真实渲染、生成中滚动、100／1,000 chunk 不同突发模式、30 分钟有负载稳定性；真实 provider 限流、断网和恢复。恢复草稿不代表自动重放未确定是否执行的命令。
 
 下一阶段：继续补齐 C0 的持久命令回执和主机生命周期，再将同一故障夹具接入桌面和移动端。双端各自的内存、首屏和触控门槛见 [重启方案](client-reboot.md)。主机相关预算在固定设备复测稳定后再接入 CI 性能 job，当前 PR CI 仍负责正确性回归。
+
+## C0 durable receipts and secure skill batching — 2026-10-18
+
+The existing budgets, timing boundaries and workload remain unchanged. Final cold-V8-cache measurement (`artifacts/benchmark-client-c0-batch-final.json`, also copied to `artifacts/benchmark.json`): three warmups, 30 launches, 20 input samples each, current workspace and 33 user Skills, warm OS caches. Startup p50 **163.29 ms**, p95 **165.54 ms**; first launch before warmups **160.18 ms**; input p95 **1.26 ms**; ready RSS p95 **70.66 MiB**. All original 200 ms / 16 ms / 100 MiB checks pass. Bundle graph SHA-256: `5c1ece42059155960a424fe01bc8dcf19cd42847a38aca2e0d0d3deec93cab70`.
+
+Changes retained:
+
+- CPU sampling identified module compilation/evaluation and helper spawning as startup costs. An in-memory comparison of the same final sources with only identifier minification toggled reduces the bundled JS from 720,030 to 534,782 bytes (maps and separately copied workers excluded in both); ESM exports and source maps remain, and the two existing production packaging compatibility tests pass. Do not attribute all observed latency movement to this flag.
+- Skill discovery previously launched one descriptor-safe native helper per file. It now reads each folder in one helper, with the same canonical path checks, per-file 2,000,000-byte limit, complete stable-file/EOF checks, error isolation and cancellation. Buffers are consumed one file at a time; only a bounded decoded description prefix survives. The same 33 resources and final instruction text were compared against the previous commit and are semantically identical. No resource discovery or permission initialization was moved past readiness.
+- Batch cancellation exposed an unread-stdout cleanup hang. Closing the pipe before terminating/reaping the helper resolves it; existing read/update security tests remain green. No unsafe filesystem fallback was added.
+
+Failed and reverted measurements are retained:
+
+| Attempt | Startup p95 | Decision/evidence |
+| --- | ---: | --- |
+| C0 before scope-race correction | 174.27 ms | Passing interim report, not final code |
+| Final receipt code, shared load | 207.77 ms | Failure retained; never rounded down |
+| Alternating previous commit / candidate, 30 launches each | 208.89 / 201.27 ms | Both fail; demonstrates shared-host variance, not an exemption |
+| Identifier minification | 192.38 ms | One passing batch; later 219.79 ms failure also retained |
+| Start SQLite worker before Runtime module imports | 218.45 ms | Reverted: median changed about 1 ms, inside noise; no additional abstraction retained |
+| Secure batch reads, final code | **165.54 ms** | Retained; full original gate passes |
+
+Raw files use `artifacts/benchmark-client-c0-*.json`. No user application was stopped, no slow samples discarded, no threshold or measurement boundary changed. These are one-device measurements, not a guarantee under arbitrary OS contention or a native-client result.
+
+The 10k core/storage harness passes with the new receipt schema/run snapshots: append p95 **643.42 ms**, replay **21.53 ms**, page **0.142 ms**, context **2.499 ms**, stream **5.501 ms**, event-loop **10.633 ms**, max RSS **98.68 MiB**. WAL/FULL and every content/order assertion remain. Report: `artifacts/benchmark-harness-c0-before-native.json`, copied to the canonical harness report. Native skill batching does not run in that core/storage fixture, so it was not redundantly repeated afterward. This remains three measured synthetic runs plus one warmup, not a 30-minute soak.
