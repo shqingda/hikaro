@@ -2,6 +2,30 @@
 
 更新：2026-10-18。目标是让 agent 在长任务、取消、权限和恢复边界上可靠，同时用同口径数据约束开销。通过一个合成基准不等于真实模型、终端显示、原生客户端或长期运行全部达标。
 
+## M0 共享内存优化与未通过的启动验收
+
+2026-10-18，同一台 Apple M3 Pro / Node 26.12.0，沿用原采样器、30 次测量 + 3 次预热、每次新数据目录与客户端冷 V8 缓存。先建立 H1 基线，再用当前工作区进行一次新的前后对照。保持 200 ms / 16 ms / 100 MiB 门槛；没有过滤超时样本或替换 RSS 口径。
+
+| 最后对照       | 启动 p95  | 输入 p95 | TUI RSS p95 | host RSS p95 | 合计 RSS p95 | 启动门槛 |
+| -------------- | --------- | -------- | ----------- | ------------ | ------------ | -------- |
+| 优化前附着     | 237.60 ms | 3.449 ms | 60.13 MiB   | 66.31 MiB    | 126.39 MiB   | 未通过   |
+| 优化后附着     | 203.82 ms | 1.165 ms | 58.67 MiB   | 66.25 MiB    | 124.78 MiB   | 未通过   |
+| 优化后独立 TUI | 230.86 ms | 5.394 ms | 70.78 MiB   | 同进程       | 70.78 MiB    | 未通过   |
+
+接受的改动：协议叶模块、命令 envelope 和 TUI 偏好使用可裁剪的 `zod/mini`，保留原字段限制、可选／空值、默认值及未知字段处理；Runtime/工具 schema 继续用原实现。分析定位了附着客户端提前加载的完整 schema 构造器／JSON-schema 设施；去除不使用的设施后，合计 RSS p95 减少 **1.61 MiB（约 1.27%）**，前后样本区间分离。API 形态参考 [Zod Mini 官方文档](https://zod.dev/packages/mini)。不据此宣称手机 footprint 或启动延迟有同等收益；双进程合计仍超过原单进程 100 MiB。
+
+最终图 SHA-256 `62d6331c990f4397580aebd9fc90f401eaef6d4e2e95066f5baba6d09c0d6994`；原始报告 `artifacts/benchmark-m0-memory-ab-after.json`、`artifacts/benchmark-m0-standalone-ab-final.json`。对照报告 `artifacts/benchmark-m0-memory-ab-before.json`，图 `06e447ce3f44850bf1266ddccc8ef70841053a5abec031b98882177f6651bb76`。报告开始时基线 `90b5a0b` + M0 dirty 工作区，最终 CLI 源码随后提交为 `e543e26`；后续 relay 缓存修复与文档不改变该 CLI 图。完整分发图包含当前远程 adapter，但测量不启用网络桥接。
+
+**不能标记启动验收完成。** 同环境的优化前版本也超出 200 ms；运行期间系统负载与空闲内存变化，无法将时延差额全部归因于代码。后续需在稳定环境核验并继续优化，保持原门槛。较早独立 199.23 ms（`benchmark-m0-standalone-final.json`）和附着 199.76 ms（`benchmark-m0-memory-mini-final.json`）的通过观察不替代最后结果，也不以它们挑选“通过”的结论。
+
+尝试记录：
+
+- 初始 H1 基线 `benchmark-m0-memory-baseline.json`：190.97 ms / 126.20 MiB。未配置远程时延迟加载加密模块的尝试仅约 0.5 MiB，收益不足，已撤回。其报告 `benchmark-m0-memory-lazy-remote.json` 与原生预览同时运行，启动 262.43 ms 未通过，不用于隔离收益比较；之前与原生构建重叠的一次采样已中止，未生成接受报告。
+- 初始化重复恢复抑制：真实私有 IPC 观察到首次 `messages.read` 从两次降到一次，但启动中位数只从 191.87 到 191.62 ms，处于波动内；211.17 ms 的启动门槛仍失败，已撤回。报告 `benchmark-m0-attach-init-final.json`；此前 `benchmark-m0-attach-final.json` 的 234.66 ms 失败也保留。
+- 可裁剪协议校验的内存改进在首次与新对照中都可见，保留；没有为追求数字引入缓存、降低持久化或扩大预算。
+
+10k core/storage 的执行代码与采样器均未改变；本轮协议类型在 storage 中是擦除的 type-only import，沿用下方 H1 `0881c95` 的 10,000 事件 + 10,000 chunks、原断言和预算证据，不重复已通过且不受影响的基准。必要协议、权限、真实 host 和移动生命周期测试另见 [validation](validation.md)。原生移动发布性能与长期稳定性仍未验收。
+
 ## H1 共享 host：2026-10-18 最终复核
 
 最终启动源码基线 `30c4697`，工作区 dirty 仅含文档改动；Node 26.12.0、macOS arm64 / Apple M3 Pro。独立与附着启动报告的完整分发图 SHA-256 均为 `2391942bf01b3f4ed584d35fcb27bfb5f1803c66f1db259e27328a3bf4ac5723`。两项启动门槛顺序运行，没有同时运行构建或测试；以下后续修改只有文档，不改变该构建。
