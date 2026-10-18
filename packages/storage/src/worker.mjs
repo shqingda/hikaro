@@ -8,9 +8,19 @@ db.function("hikaro_lower", { deterministic: true }, (text) =>
   text.toLowerCase(),
 );
 if (workerData.path !== ":memory:") chmodSync(workerData.path, 0o600);
-db.exec(
-  "PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000;",
-);
+db.exec("PRAGMA busy_timeout=5000");
+// Changing journal mode can return BUSY without invoking SQLite's busy handler
+// when two first-open connections race. Retry only that bounded initialization.
+const walDeadline = Date.now() + 5000;
+for (;;) {
+  try {
+    db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;");
+    break;
+  } catch (error) {
+    if (error.errcode !== 5 || Date.now() >= walDeadline) throw error;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
 // Serialize schema creation and migration with one durable commit. FULL remains
 // enabled; fresh stores avoid a separate filesystem sync for each DDL statement.
 db.exec("BEGIN IMMEDIATE");
@@ -30,6 +40,9 @@ CREATE TABLE IF NOT EXISTS leases(sessionId TEXT PRIMARY KEY,owner TEXT NOT NULL
 CREATE INDEX IF NOT EXISTS session_run_events ON events(sessionId,seq) WHERE type IN ('run.start','run.end');
 CREATE TABLE IF NOT EXISTS rpc_commands(workspace TEXT NOT NULL,scope TEXT NOT NULL,id TEXT NOT NULL,method TEXT NOT NULL,digest TEXT NOT NULL,hostInstanceId TEXT NOT NULL,sessionId TEXT,status TEXT NOT NULL,runId TEXT,operationId TEXT,error TEXT,createdAt INTEGER NOT NULL,updatedAt INTEGER NOT NULL,PRIMARY KEY(workspace,scope,id)) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS commands(id TEXT PRIMARY KEY,sessionId TEXT NOT NULL,createdAt INTEGER NOT NULL);`);
+  db.exec(`CREATE TABLE IF NOT EXISTS shared_hosts(workspace TEXT PRIMARY KEY,instanceId TEXT NOT NULL,pid INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS session_access(workspace TEXT NOT NULL,sessionId TEXT NOT NULL,scope TEXT NOT NULL,role TEXT NOT NULL,PRIMARY KEY(workspace,sessionId,scope)) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS client_views(workspace TEXT NOT NULL,scope TEXT NOT NULL,sessionId TEXT NOT NULL,PRIMARY KEY(workspace,scope)) WITHOUT ROWID;`);
   if (
     !db
       .prepare("PRAGMA table_info(leases)")
@@ -101,6 +114,116 @@ function insertSession({ cwd, title, parentId, modelSelection }) {
   return { ...session, ...(modelSelection ? { modelSelection } : {}) };
 }
 const handlers = {
+  claimHost({ workspace, instanceId }) {
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      const previous = db
+        .prepare("SELECT * FROM shared_hosts WHERE workspace=?")
+        .get(workspace);
+      if (previous) {
+        let alive = true;
+        try {
+          process.kill(previous.pid, 0);
+        } catch (e) {
+          if (e.code === "ESRCH") alive = false;
+        }
+        if (alive) {
+          db.exec("COMMIT");
+          return (
+            previous.pid === process.pid && previous.instanceId === instanceId
+          );
+        }
+      }
+      db.prepare(
+        "INSERT INTO shared_hosts VALUES(?,?,?) ON CONFLICT(workspace) DO UPDATE SET instanceId=excluded.instanceId,pid=excluded.pid",
+      ).run(workspace, instanceId, process.pid);
+      db.exec("COMMIT");
+      return true;
+    } catch (e) {
+      db.exec("ROLLBACK");
+      throw e;
+    }
+  },
+  releaseHost({ workspace, instanceId }) {
+    db.prepare(
+      "DELETE FROM shared_hosts WHERE workspace=? AND instanceId=? AND pid=?",
+    ).run(workspace, instanceId, process.pid);
+  },
+  setSessionAccess({ workspace, sessionId, scope, role }) {
+    if (
+      !db
+        .prepare("SELECT 1 FROM sessions WHERE id=? AND cwd=?")
+        .get(sessionId, workspace)
+    )
+      throw Error("Session is outside this workspace");
+    if (role === null)
+      db.prepare(
+        "DELETE FROM session_access WHERE workspace=? AND sessionId=? AND scope=?",
+      ).run(workspace, sessionId, scope);
+    else
+      db.prepare(
+        "INSERT INTO session_access VALUES(?,?,?,?) ON CONFLICT(workspace,sessionId,scope) DO UPDATE SET role=excluded.role",
+      ).run(workspace, sessionId, scope, role);
+  },
+  sessionRole({ workspace, sessionId, scope }) {
+    return (
+      db
+        .prepare(
+          "SELECT role FROM session_access WHERE workspace=? AND sessionId=? AND scope=?",
+        )
+        .get(workspace, sessionId, scope)?.role ?? null
+    );
+  },
+  sessionAccess({ workspace, sessionId }) {
+    return db
+      .prepare(
+        "SELECT scope,role FROM session_access WHERE workspace=? AND sessionId=?",
+      )
+      .all(workspace, sessionId);
+  },
+  attachView({ workspace, scope, sessionId, local }) {
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      const role = handlers.sessionRole({ workspace, sessionId, scope });
+      if (!local && !role) throw Error("Session access denied");
+      handlers.saveClientView({ workspace, scope, sessionId });
+      db.exec("COMMIT");
+      return role;
+    } catch (e) {
+      db.exec("ROLLBACK");
+      throw e;
+    }
+  },
+  saveClientView({ workspace, scope, sessionId }) {
+    db.prepare(
+      "INSERT INTO client_views VALUES(?,?,?) ON CONFLICT(workspace,scope) DO UPDATE SET sessionId=excluded.sessionId",
+    ).run(workspace, scope, sessionId);
+  },
+  clientView({ workspace, scope }) {
+    return (
+      db
+        .prepare(
+          "SELECT sessionId FROM client_views WHERE workspace=? AND scope=?",
+        )
+        .get(workspace, scope)?.sessionId ?? null
+    );
+  },
+  revokeScope({ workspace, scope }) {
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      db.prepare(
+        "DELETE FROM session_access WHERE workspace=? AND scope=?",
+      ).run(workspace, scope);
+      db.prepare("DELETE FROM client_views WHERE workspace=? AND scope=?").run(
+        workspace,
+        scope,
+      );
+      db.exec("COMMIT");
+    } catch (e) {
+      db.exec("ROLLBACK");
+      throw e;
+    }
+  },
   rememberSession({ id }) {
     const session = handlers.session({ id });
     if (!session) throw Error("Session not found");
@@ -165,6 +288,8 @@ const handlers = {
         "leases",
         "jobs",
         "context_checkpoints",
+        "session_access",
+        "client_views",
       ])
         db.prepare(`DELETE FROM ${table} WHERE sessionId=?`).run(id);
       db.prepare("UPDATE sessions SET parentId=NULL WHERE parentId=?").run(id);
@@ -208,7 +333,7 @@ const handlers = {
       throw error;
     }
   },
-  sessions({ offset = 0, limit = 100, cwd, query = "" } = {}) {
+  sessions({ offset = 0, limit = 100, cwd, query = "", scope } = {}) {
     if (
       !Number.isSafeInteger(offset) ||
       offset < 0 ||
@@ -225,6 +350,12 @@ const handlers = {
       args.push(cwd);
     }
     const text = query.trim().toLowerCase();
+    if (scope !== undefined) {
+      where.push(
+        "EXISTS(SELECT 1 FROM session_access a WHERE a.workspace=s.cwd AND a.sessionId=s.id AND a.scope=?)",
+      );
+      args.push(scope);
+    }
     if (text) {
       where.push(
         "(instr(hikaro_lower(s.title),?)>0 OR instr(lower(s.id),?)>0)",

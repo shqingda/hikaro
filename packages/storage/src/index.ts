@@ -35,13 +35,14 @@ export class SQLiteStore implements EventStore {
       else p?.resolve(result);
     });
     const fail = (e: Error) => {
-      this.failure = e;
+      this.failure ??= e;
       for (const p of this.pending.values()) p.reject(e);
       this.pending.clear();
     };
     worker.on("error", fail);
     worker.on("exit", (code) => {
-      if (!this.closed) fail(new Error(`Storage worker exited (${code})`));
+      if (!this.closed && !this.failure)
+        fail(new Error(`Storage worker exited (${code})`));
     });
   }
   static async open(path: string) {
@@ -86,8 +87,77 @@ export class SQLiteStore implements EventStore {
       modelSelection,
     });
   }
-  sessions(offset = 0, limit = 100, cwd?: string, query?: string) {
-    return this.request<Session[]>("sessions", { offset, limit, cwd, query });
+  sessions(
+    offset = 0,
+    limit = 100,
+    cwd?: string,
+    query?: string,
+    scope?: string,
+  ) {
+    return this.request<Session[]>("sessions", {
+      offset,
+      limit,
+      cwd,
+      query,
+      scope,
+    });
+  }
+  claimHost(workspace: string, instanceId: string) {
+    return this.request<boolean>("claimHost", { workspace, instanceId });
+  }
+  releaseHost(workspace: string, instanceId: string) {
+    return this.request<void>("releaseHost", { workspace, instanceId });
+  }
+  setSessionAccess(
+    workspace: string,
+    sessionId: string,
+    scope: string,
+    role: "owner" | "view" | "control" | null,
+  ) {
+    return this.request<void>("setSessionAccess", {
+      workspace,
+      sessionId,
+      scope,
+      role,
+    });
+  }
+  sessionRole(workspace: string, sessionId: string, scope: string) {
+    return this.request<"owner" | "view" | "control" | null>("sessionRole", {
+      workspace,
+      sessionId,
+      scope,
+    });
+  }
+  sessionAccess(workspace: string, sessionId: string) {
+    return this.request<
+      Array<{ scope: string; role: "owner" | "view" | "control" }>
+    >("sessionAccess", { workspace, sessionId });
+  }
+  attachView(
+    workspace: string,
+    scope: string,
+    sessionId: string,
+    local: boolean,
+  ) {
+    return this.request<"owner" | "view" | "control" | null>("attachView", {
+      workspace,
+      scope,
+      sessionId,
+      local,
+    });
+  }
+  saveClientView(workspace: string, scope: string, sessionId: string) {
+    return this.request<void>("saveClientView", {
+      workspace,
+      scope,
+      sessionId,
+    });
+  }
+  clientView(workspace: string, scope: string) {
+    return this.request<string | null>("clientView", { workspace, scope });
+  }
+  revokeScope(workspace: string, scope: string) {
+    return this.request<void>("revokeScope", { workspace, scope });
   }
   forkSession(id: string) {
     return this.request<Session>("forkSession", { id });
