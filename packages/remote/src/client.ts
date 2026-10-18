@@ -283,9 +283,19 @@ export class RemoteClient {
       this.rejectPending("Connection lost; command outcome may be unknown.");
       this.emit({ type: "connection", status: "disconnected" });
       // Revocation, identity errors and replacement require explicit user action.
-      if ([4000, 4002, 4003, 4401, 4403].includes(event.code))
+      if ([4000, 4002, 4003, 4401, 4403].includes(event.code)) {
         this.stopped = true;
-      else this.scheduleReconnect();
+        this.emit({
+          type: "connection",
+          status: "blocked",
+          reason:
+            event.code === 4000
+              ? "replaced"
+              : event.code === 4002
+                ? "authentication"
+                : "revoked",
+        });
+      } else this.scheduleReconnect();
     };
   }
   private scheduleReconnect() {

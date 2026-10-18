@@ -60,6 +60,20 @@ it("authenticates the local Cloudflare relay, forwards encrypted frames, and rev
       (await post("enroll", hostToken, { id: deviceId, token: deviceToken }))
         .status,
     ).toBe(200);
+    expect(
+      (
+        await mf.dispatchFetch(url + "/device-status/" + deviceId, {
+          headers: { Authorization: `Bearer ${deviceToken}` },
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await mf.dispatchFetch(url + "/device-status/" + deviceId, {
+          headers: { Authorization: `Bearer ${randomToken()}` },
+        })
+      ).status,
+    ).toBe(401);
     const hres = await mf.dispatchFetch(url + "/host", {
       headers: {
         Upgrade: "websocket",
@@ -74,6 +88,13 @@ it("authenticates the local Cloudflare relay, forwards encrypted frames, and rev
     host.addEventListener("message", (e: any) =>
       hostMessages.push(JSON.parse(e.data)),
     );
+    expect(
+      await (
+        await mf.dispatchFetch(url + "/device-status/" + deviceId, {
+          headers: { Authorization: `Bearer ${deviceToken}` },
+        })
+      ).json(),
+    ).toMatchObject({ hostOnline: true, confirmed: false });
     const dres = await mf.dispatchFetch(url + "/device/" + deviceId, {
       headers: {
         Upgrade: "websocket",
@@ -134,6 +155,13 @@ it("authenticates the local Cloudflare relay, forwards encrypted frames, and rev
       },
     });
     expect(revoked.status).toBe(401);
+    expect(
+      (
+        await mf.dispatchFetch(url + "/device-status/" + deviceId, {
+          headers: { Authorization: `Bearer ${deviceToken}` },
+        })
+      ).status,
+    ).toBe(401);
     host.close();
     device.close();
   } finally {
