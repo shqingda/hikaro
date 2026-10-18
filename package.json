@@ -26,6 +26,8 @@
     "check:relay": "pnpm --filter @hikaro/relay typecheck",
     "dev:mobile": "pnpm --filter @hikaro/mobile start",
     "dev:sim": "node scripts/dev-sim.mjs",
+    "mobile:lab": "node scripts/mobile-lab.mjs",
+    "mobile:lab:check": "vitest run tests/mobile-lab.test.ts tests/mobile-lab-preview.test.ts tests/dev-sim.test.ts",
     "mobile:ios": "pnpm --filter @hikaro/mobile ios",
     "mobile:android": "pnpm --filter @hikaro/mobile android",
     "mobile:typecheck": "pnpm --filter @hikaro/mobile typecheck"

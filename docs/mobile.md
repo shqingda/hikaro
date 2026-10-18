@@ -4,6 +4,8 @@ M0 是 iOS／Android 原生只读客户端：扫码或粘贴配对码、核对�
 
 ## 启动
 
+**本机模拟器配对／授权／恢复联调，直接运行 `pnpm mobile:lab`。** 它准备隔离的本地 TLS relay、演示任务和专用模拟器，无需 DeviceHub 或 Cloudflare 登录；逐步操作与恢复命令见 [一键联调指南](mobile-lab.md)。以下说明日常界面开发和自有公网 relay 的连接方式。
+
 在仓库根目录：
 
 ```sh
