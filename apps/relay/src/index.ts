@@ -40,7 +40,8 @@ const token = (r: Request) => {
       ?.slice(6) ?? ""
   );
 };
-const json = (data: unknown, status = 200) => Response.json(data, { status });
+const json = (data: unknown, status = 200) =>
+  Response.json(data, { status, headers: { "Cache-Control": "no-store" } });
 async function body(request: Request): Promise<Record<string, unknown>> {
   if (!request.body) throw Error("Invalid body");
   const reader = request.body.getReader();

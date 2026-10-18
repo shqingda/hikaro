@@ -60,13 +60,11 @@ it("authenticates the local Cloudflare relay, forwards encrypted frames, and rev
       (await post("enroll", hostToken, { id: deviceId, token: deviceToken }))
         .status,
     ).toBe(200);
-    expect(
-      (
-        await mf.dispatchFetch(url + "/device-status/" + deviceId, {
-          headers: { Authorization: `Bearer ${deviceToken}` },
-        })
-      ).status,
-    ).toBe(200);
+    const status = await mf.dispatchFetch(url + "/device-status/" + deviceId, {
+      headers: { Authorization: `Bearer ${deviceToken}` },
+    });
+    expect(status.status).toBe(200);
+    expect(status.headers.get("Cache-Control")).toBe("no-store");
     expect(
       (
         await mf.dispatchFetch(url + "/device-status/" + deviceId, {
