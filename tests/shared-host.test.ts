@@ -552,7 +552,7 @@ it("attaches the real TUI, restores its draft and pending approval after exit, a
     await vi.waitFor(() => expect(output).toContain("Permission required"), {
       timeout: 8000,
     });
-    // Keep an unsent draft while the panel is visible; quit detaches, never denies.
+    // Quit while the panel is visible; detaching must not submit a denial.
     terminal!.write("\x04");
     expect(await exited).toBe(0);
     terminal = undefined;
@@ -600,3 +600,100 @@ it("attaches the real TUI, restores its draft and pending approval after exit, a
     await rm(options.home, { recursive: true, force: true });
   }
 }, 25000);
+
+it("does not apply a waiting control to a newly selected view-only session", async () => {
+  const { SQLiteStore } = await import("../packages/storage/src/index.ts");
+  const options = await directory();
+  await toolProvider(options.home);
+  const deviceId = randomToken(),
+    identity = createIdentity(),
+    device = createIdentity();
+  await writeFile(
+    join(options.home, "remote.json"),
+    JSON.stringify({
+      relay: "wss://fixture.example",
+      hostId: randomToken(),
+      publicKey: identity.publicKey,
+      devices: { [deviceId]: { publicKey: device.publicKey } },
+    }),
+  );
+  const host = await serveSharedHost({
+    ...options,
+    provider: "fixture",
+    model: "host",
+  });
+  const owner = await SharedHostClient.connect({
+      ...options,
+      clientId: "owner",
+    }),
+    bridge = await SharedHostClient.connect({ ...options, mode: "bridge" });
+  let entered!: () => void, release!: () => void;
+  const waiting = new Promise<void>((done) => {
+      entered = done;
+    }),
+    gate = new Promise<void>((done) => {
+      release = done;
+    });
+  const accept = SQLiteStore.prototype.acceptCommand;
+  const spy = vi
+    .spyOn(SQLiteStore.prototype, "acceptCommand")
+    .mockImplementation(async function (
+      this: InstanceType<typeof SQLiteStore>,
+      command,
+    ) {
+      if (command.method === "cancel" && command.scope === deviceId) {
+        entered();
+        await gate;
+      }
+      return accept.call(this, command);
+    });
+  try {
+    const controllable = await owner.request("session.create");
+    await owner.request("session.access", { deviceId, role: "control" });
+    const protectedSession = await owner.request("session.create");
+    await owner.request("session.access", { deviceId, role: "view" });
+    await owner.request("prompt", { text: "protected" });
+    let pending: any;
+    await vi.waitFor(async () => {
+      pending = await owner.request("session.current");
+      expect(pending.approvals).toHaveLength(1);
+    });
+    await bridge.request(
+      "session.resume",
+      { sessionId: controllable.id },
+      false,
+      { scope: deviceId },
+    );
+    const cancel = bridge.request("cancel", {}, false, { scope: deviceId });
+    const rejected = expect(cancel).rejects.toThrow(/selection changed/i);
+    await waiting;
+    await bridge.request(
+      "session.resume",
+      { sessionId: protectedSession.id },
+      false,
+      { scope: deviceId },
+    );
+    release();
+    await rejected;
+    expect(await owner.request("session.current")).toMatchObject({
+      busy: true,
+      approvals: [{ id: pending.approvals[0].id }],
+    });
+    await owner.request("approval.respond", {
+      id: pending.approvals[0].id,
+      allow: true,
+    });
+    await vi.waitFor(async () =>
+      expect((await owner.request("session.current")).runStatus).toBe(
+        "completed",
+      ),
+    );
+  } finally {
+    release();
+    spy.mockRestore();
+    await bridge.close();
+    await owner.close();
+    await host.close();
+    await rm(options.home, { recursive: true, force: true });
+  }
+}, 10000);

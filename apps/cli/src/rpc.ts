@@ -357,6 +357,7 @@ export async function serveRpc(
         }
         return session;
       };
+      let requireSameSelection = () => {};
       if (shared) {
         if (
           ["session.access", "session.access.read", "model.default"].includes(
@@ -368,6 +369,20 @@ export async function serveRpc(
             "Only local owner clients can manage host access or defaults",
           );
         if (["prompt", "steer", "cancel"].includes(command.method)) {
+          const sessionId = state.session?.id,
+            agent = state.agent;
+          requireSameSelection = () => {
+            if (
+              state.session?.id !== sessionId ||
+              state.agent !== agent ||
+              (!shared.localScope(scope) &&
+                state.role !== "owner" &&
+                state.role !== "control")
+            )
+              throw Error(
+                "Selection changed or session control revoked while command was pending",
+              );
+          };
           if (p.sessionId !== undefined && p.sessionId !== state.session?.id)
             throw Error("Command must target the selected session");
           await selected();
@@ -398,6 +413,9 @@ export async function serveRpc(
         accepted = true;
         requireUncancelled();
       }
+      // Controls bypass the ordinary per-scope queue. Receipt persistence can
+      // yield to a resume or grant change; never act on the replacement view.
+      requireSameSelection();
       switch (command.method) {
         case "hello": {
           const { protocolVersions } = HelloParams.parse(p);
