@@ -182,8 +182,17 @@ export async function serveSharedHost(
     await unlink(endpoint.socket).catch((e) => {
       if (e.code !== "ENOENT") throw e;
     });
+    const { loadSavedPermissionMode } =
+      await import("../../../packages/runtime/src/permissions.ts");
     rpc = await serveRpc(
-      { ...options, home: endpoint.home, cwd: endpoint.cwd },
+      {
+        ...options,
+        permissionMode:
+          options.permissionMode ??
+          (await loadSavedPermissionMode(endpoint.home, endpoint.cwd)),
+        home: endpoint.home,
+        cwd: endpoint.cwd,
+      },
       { input, output, error: process.stderr },
       {
         instanceId,

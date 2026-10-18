@@ -64,6 +64,7 @@ export type RuntimeOptions = {
   askUser?: (
     questions: Questions,
     signal: AbortSignal,
+    sessionId: string,
   ) => Promise<Record<string, string> | undefined>;
   approve: (r: PermissionRequest, signal: AbortSignal) => Promise<boolean>;
 };
@@ -345,8 +346,12 @@ export class Runtime {
         schema: questionsSchema,
         execute: async ({ questions }, ctx) => {
           if (!runtime.options.askUser)
-            throw Error("Structured questions require the standalone TUI");
-          const answers = await runtime.options.askUser(questions, ctx.signal);
+            throw Error("Structured questions require an interactive client");
+          const answers = await runtime.options.askUser(
+            questions,
+            ctx.signal,
+            ctx.sessionId,
+          );
           ctx.signal.throwIfAborted();
           return answers
             ? { text: JSON.stringify(answers), data: { answers } }

@@ -1,4 +1,6 @@
 import * as z from "zod";
+import { RpcWorkflows } from "./rpc-workflows.ts";
+import { planText } from "../../../packages/runtime/src/planning.ts";
 import { commandDigest, isMutation } from "./rpc-receipts.ts";
 import { randomUUID } from "node:crypto";
 import type { Readable, Writable } from "node:stream";
@@ -133,9 +135,12 @@ export async function serveRpc(
     [...scopes].filter(([scope, state]) =>
       shared ? controlsApproval(scope, state, sessionId) : scope === origin,
     );
+  let workflows: RpcWorkflows;
   const runtime = await Runtime.open(
     {
       ...options,
+      askUser: (questions, signal, sessionId) =>
+        workflows.ask(questions, signal, sessionId),
       approve: (request, signal) =>
         new Promise((resolve) => {
           if (signal.aborted) {
@@ -176,6 +181,7 @@ export async function serveRpc(
     },
     shared?.store,
   );
+  workflows = new RpcWorkflows(runtime);
   runtime.startJobs();
   const requireLive = (scope: string, state: ScopeState) => {
     if (shuttingDown || scopes.get(scope) !== state)
@@ -373,7 +379,10 @@ export async function serveRpc(
           throw Error(
             "Only local owner clients can manage host access or defaults",
           );
-        if (["prompt", "steer", "cancel"].includes(command.method)) {
+        if (
+          ["prompt", "steer", "cancel"].includes(command.method) ||
+          /^(changes|execution|plan|questions)\./.test(command.method)
+        ) {
           const sessionId = state.session?.id,
             agent = state.agent;
           requireSameSelection = () => {
@@ -381,6 +390,7 @@ export async function serveRpc(
               state.session?.id !== sessionId ||
               state.agent !== agent ||
               (!shared.localScope(scope) &&
+                !rpcReadMethods.has(command.method) &&
                 state.role !== "owner" &&
                 state.role !== "control")
             )
@@ -422,6 +432,31 @@ export async function serveRpc(
       // yield to a resume or grant change; never act on the replacement view.
       requireSameSelection();
       switch (command.method) {
+        case "changes.list":
+        case "changes.detail":
+        case "changes.rollback":
+        case "execution.hold":
+        case "execution.release":
+        case "execution.read":
+        case "execution.action":
+        case "plan.read":
+        case "plan.set":
+        case "questions.read":
+        case "questions.respond": {
+          const session = await selected();
+          if (state.session?.id !== session.id || !state.agent)
+            throw Error("Command must target the selected session");
+          requireSameSelection();
+          requireUncancelled();
+          result = await workflows.handle(
+            command.method,
+            p,
+            session,
+            state.agent,
+            scope,
+          );
+          break;
+        }
         case "hello": {
           const { protocolVersions } = HelloParams.parse(p);
           if (protocolVersions && !protocolVersions.includes(protocolVersion))
@@ -729,6 +764,18 @@ export async function serveRpc(
           result = page;
           break;
         }
+        case "plan.execute":
+          if (!state.session || !state.agent)
+            throw Error("No session selected");
+          {
+            const approved = await runtime.approvePlan(
+              state.session,
+              z.string().uuid().parse(p.id),
+            );
+            requireSameSelection();
+            requireUncancelled();
+            p.text = `The user reviewed and approved plan ${approved.id}. Execute and verify:\n${planText(approved)}`;
+          }
         case "prompt": {
           if (!state.agent || !state.session)
             throw Error("No session selected");
@@ -854,6 +901,7 @@ export async function serveRpc(
       if (
         accepted &&
         command.method !== "prompt" &&
+        command.method !== "plan.execute" &&
         command.method !== "session.compact"
       )
         await finish("completed", { sessionId: state.session?.id });
@@ -888,6 +936,7 @@ export async function serveRpc(
         const critical = [
           "cancel",
           "approval.respond",
+          "questions.respond",
           "client.detach",
         ].includes(command.method);
         if (
@@ -954,6 +1003,7 @@ export async function serveRpc(
   async function shutdown() {
     if (shuttingDown) return;
     shuttingDown = true;
+    workflows.close();
     for (const a of approvals.values()) a.finish(false);
     for (const state of scopes.values()) {
       cancel(state);

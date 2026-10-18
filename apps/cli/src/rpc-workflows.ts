@@ -1,0 +1,219 @@
+import { randomUUID } from "node:crypto";
+import { z } from "zod";
+import type { Runtime } from "../../../packages/runtime/src/index.ts";
+import type { Agent, Session } from "../../../packages/core/src/index.ts";
+import type { Questions } from "../../../packages/runtime/src/planning.ts";
+import { executionItems } from "../../../packages/runtime/src/execution-items.ts";
+const kindSchema = z.enum(["queue", "terminals", "children"]);
+export class RpcWorkflows {
+  private holds = new Map<
+    string,
+    {
+      session: string;
+      token: string;
+      release: () => void;
+      timer: ReturnType<typeof setTimeout>;
+    }
+  >();
+  private questions = new Map<
+    string,
+    {
+      id: string;
+      sessionId: string;
+      questions: Questions;
+      finish: (answers: Record<string, string> | undefined) => void;
+    }
+  >();
+  constructor(private runtime: Runtime) {}
+  private release(scope: string) {
+    const held = this.holds.get(scope);
+    if (held) {
+      clearTimeout(held.timer);
+      held.release();
+      this.holds.delete(scope);
+    }
+  }
+  private renew(scope: string, session: string, token: unknown) {
+    const held = this.holds.get(scope);
+    if (!held || held.session !== session || held.token !== token)
+      throw Error("Queue hold expired; reopen the execution manager");
+    clearTimeout(held.timer);
+    held.timer = setTimeout(() => this.release(scope), 15000);
+    held.timer.unref();
+  }
+  ask(
+    questions: Questions,
+    signal: AbortSignal,
+    sessionId: string,
+  ): Promise<Record<string, string> | undefined> {
+    signal.throwIfAborted();
+    const id = randomUUID();
+    return new Promise((resolve) => {
+      const abort = () => finish(undefined);
+      const finish = (answers: Record<string, string> | undefined) => {
+        signal.removeEventListener("abort", abort);
+        this.questions.delete(id);
+        resolve(answers);
+      };
+      this.questions.set(id, {
+        id,
+        sessionId: this.runtime.approvalAuthority(sessionId),
+        questions,
+        finish,
+      });
+      signal.addEventListener("abort", abort, { once: true });
+    });
+  }
+  async handle(
+    method: string,
+    p: Record<string, unknown>,
+    session: Session,
+    agent: Agent,
+    scope: string,
+  ): Promise<unknown> {
+    switch (method) {
+      case "changes.list": {
+        const entries = await this.runtime.changes.list(session.id);
+        const offset = z
+          .number()
+          .int()
+          .min(0)
+          .max(10000)
+          .parse(p.offset ?? 0);
+        const items: typeof entries = [];
+        let bytes = 0;
+        for (const entry of entries.slice(offset, offset + 100)) {
+          const size = Buffer.byteLength(JSON.stringify(entry)) + 1;
+          if (bytes + size > 128000) break;
+          items.push(entry);
+          bytes += size;
+        }
+        if (offset < entries.length && !items.length)
+          throw Error("Change record exceeds response limit");
+        return { items, more: offset + items.length < entries.length };
+      }
+      case "changes.detail": {
+        const detail = await this.runtime.changes.detail(
+          session.id,
+          z.string().uuid().parse(p.id),
+        );
+        const field = z.enum(["before", "after"]).parse(p.field ?? "after");
+        const text = detail[field] ?? "";
+        const offset = z
+          .number()
+          .int()
+          .min(0)
+          .max(32 * 1024 * 1024)
+          .parse(p.offset ?? 0);
+        return {
+          entry: detail.entry,
+          text: text.slice(offset, offset + 16000),
+          length: text.length,
+        };
+      }
+      case "changes.rollback":
+        await this.runtime.rollbackChange(
+          session,
+          z.string().uuid().parse(p.id),
+          AbortSignal.timeout(15000),
+        );
+        return { completed: true };
+      case "execution.hold": {
+        this.release(scope);
+        const token = randomUUID();
+        const release = agent.holdQueue();
+        const timer = setTimeout(() => this.release(scope), 15000);
+        timer.unref();
+        this.holds.set(scope, { token, session: session.id, release, timer });
+        return { token };
+      }
+      case "execution.release": {
+        this.renew(scope, session.id, p.token);
+        this.release(scope);
+        return { released: true };
+      }
+      case "execution.read": {
+        if (p.token !== undefined) this.renew(scope, session.id, p.token);
+        const kind = kindSchema.parse(p.kind);
+        const items = executionItems(agent, this.runtime, session.id, kind);
+        if (p.id !== undefined) {
+          const item = items.find((t) => t.id === z.string().parse(p.id));
+          if (!item) throw Error("Item no longer available");
+          return item;
+        }
+        return items.map((t) => ({
+          ...t,
+          title: t.title.slice(0, 240),
+          detail: "",
+          editText: undefined,
+        }));
+      }
+      case "execution.action": {
+        const kind = kindSchema.parse(p.kind),
+          id = z.string().parse(p.id),
+          action = z
+            .enum(["edit", "first", "remove", "send", "stop"])
+            .parse(p.action);
+        if (kind === "queue") {
+          this.renew(scope, session.id, p.token);
+          if (action === "edit")
+            agent.updatePending(id, z.string().max(100000).parse(p.text));
+          else if (action === "first") agent.prioritizePending(id);
+          else if (action === "remove") agent.removePending(id);
+          else throw Error("Invalid queue action");
+        } else if (kind === "terminals") {
+          if (action === "send") {
+            await this.runtime.planning.load(session.id, true);
+            if (this.runtime.planning.get(session.id).active)
+              throw Error("Plan mode is read-only");
+            this.runtime.terminals.send(
+              session.id,
+              id,
+              z.string().max(32000).parse(p.text),
+            );
+          } else if (action === "stop")
+            this.runtime.terminals.stop(session.id, id);
+          else throw Error("Invalid terminal action");
+        } else if (action === "stop") this.runtime.stopChild(session.id, id);
+        else throw Error("Invalid child action");
+        return { completed: true };
+      }
+      case "plan.read":
+        await this.runtime.planning.load(session.id, true);
+        return this.runtime.planning.get(session.id);
+      case "plan.set":
+        await this.runtime.setPlanning(session, z.boolean().parse(p.active));
+        return this.runtime.planning.get(session.id);
+      case "questions.read": {
+        const q = [...this.questions.values()].find(
+          (q) => q.sessionId === session.id,
+        );
+        return q ? { id: q.id, questions: q.questions } : null;
+      }
+      case "questions.respond": {
+        const q = this.questions.get(z.string().uuid().parse(p.id));
+        if (!q || q.sessionId !== session.id)
+          throw Error("Question expired or answered elsewhere");
+        let answers: Record<string, string> | undefined;
+        if (p.cancelled !== true) {
+          answers = z
+            .record(z.string(), z.string().min(1).max(100000))
+            .parse(p.answers);
+          if (
+            Object.keys(answers).length !== q.questions.length ||
+            q.questions.some((question) => !answers![question.id]?.trim())
+          )
+            throw Error("Answer every question explicitly");
+        }
+        q.finish(answers);
+        return { completed: true };
+      }
+      default:
+        throw Error("Unsupported workflow method");
+    }
+  }
+  close() {
+    for (const scope of this.holds.keys()) this.release(scope);
+    for (const q of this.questions.values()) q.finish(undefined);
+  }
+}

@@ -2,6 +2,19 @@
 import * as z from "zod/mini";
 export const protocolVersion = 2;
 export const rpcMethods = [
+  "changes.list",
+  "changes.detail",
+  "changes.rollback",
+  "execution.hold",
+  "execution.release",
+  "execution.read",
+  "execution.action",
+  "plan.read",
+  "plan.set",
+  "plan.execute",
+  "questions.read",
+  "questions.respond",
+
   "hello",
   "command.receipt",
   "session.create",
@@ -34,6 +47,12 @@ export const rpcMethods = [
 ] as const;
 export type RpcMethod = (typeof rpcMethods)[number];
 export const rpcReadMethods: ReadonlySet<string> = new Set([
+  "changes.list",
+  "changes.detail",
+  "execution.read",
+  "plan.read",
+  "questions.read",
+
   "hello",
   "command.receipt",
   "workspace.current",
