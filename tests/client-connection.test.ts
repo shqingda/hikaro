@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { ClientConnection } from "../packages/client-core/src/connection.ts";
 import { rpcCapabilities } from "../packages/protocol/src/contracts.ts";
 
@@ -101,5 +101,79 @@ it("synchronizes a raw transport and fences interrupted commands without replay"
   expect(client.receipts.find((r) => r.method === "prompt")?.status).toBe(
     "unknown",
   );
+  client.close();
+});
+
+it("durably records intent before send and fences a delayed write across connection epochs", async () => {
+  let receive!: (frame: unknown) => void;
+  const sent: any[] = [];
+  let id = 0,
+    commit!: () => void,
+    block = false;
+  const journal: Array<{ id: string; method: any }> = [];
+  const client = new ClientConnection(
+    "device",
+    {
+      observe(fn) {
+        receive = fn;
+        return () => {};
+      },
+      send(frame) {
+        sent.push(frame);
+        queueMicrotask(() =>
+          receive({
+            type: "response",
+            scope: "device",
+            id: frame.id,
+            result:
+              frame.method === "hello"
+                ? rpcCapabilities()
+                : frame.method === "command.receipt"
+                  ? { receipt: null }
+                  : {
+                      session: null,
+                      busy: false,
+                      stream: "",
+                      streamTruncated: false,
+                      cursor: 0,
+                      revision: 0,
+                      approvals: [],
+                    },
+          }),
+        );
+      },
+    },
+    {
+      id: () => String(++id),
+      schedule: () => () => {},
+      intents: {
+        load: async () => [],
+        async save(intents) {
+          journal.splice(0, journal.length, ...intents);
+          if (block)
+            await new Promise<void>((done) => {
+              commit = done;
+            });
+        },
+      },
+    },
+  );
+  await client.connected();
+  block = true;
+  const pending = client.request("prompt", { text: "must never be replayed" });
+  const rejected = expect(pending).rejects.toThrow(/unknown/);
+  await vi.waitFor(() => expect(commit).toBeTypeOf("function"));
+  expect(journal).toEqual([{ id: expect.any(String), method: "prompt" }]);
+  expect(sent.some((frame) => frame.method === "prompt")).toBe(false);
+  client.disconnected();
+  await rejected;
+  block = false;
+  const reconnect = client.connected();
+  commit();
+  await reconnect;
+  expect(sent.some((frame) => frame.method === "prompt")).toBe(false);
+  expect(
+    client.receipts.find((receipt) => receipt.method === "prompt")?.status,
+  ).toBe("unknown");
   client.close();
 });

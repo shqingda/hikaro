@@ -14,7 +14,14 @@ export interface RawTransport {
   send(frame: ClientCommand): void | Promise<void>;
   observe(fn: (frame: unknown) => void): () => void;
 }
+export type Intent = { id: string; method: RpcMethod };
+export interface IntentStore {
+  load(): Promise<Intent[]>;
+  /** Must durably commit before resolving. Store IDs/methods, never prompt data. */
+  save(intents: Intent[]): Promise<void>;
+}
 export type ConnectionOptions = {
+  intents?: IntentStore;
   id(): string;
   /** Platform clock; cancellation must remove the scheduled callback. */
   schedule(fn: () => void, ms: number): () => void;
@@ -24,6 +31,9 @@ export type ConnectionOptions = {
 /** One view of a host. Reconnection retries reads only, never a user's mutation. */
 export class ClientConnection {
   private view: ClientState;
+  private initialization?: Promise<void>;
+  private connectionAttempt = 0;
+  private journalQueue: Promise<void> = Promise.resolve();
   private epoch = 0;
   private active = false;
   private disposed = false;
@@ -71,6 +81,20 @@ export class ClientConnection {
   async connected(): Promise<void> {
     if (this.disposed) throw Error("Client is closed");
     this.disconnected();
+    const attempt = this.connectionAttempt;
+    if (!this.initialization) {
+      const init = (async () => {
+        if (this.options.intents)
+          this.view.restoreIntents(await this.options.intents.load());
+      })();
+      this.initialization = init;
+      void init.catch(() => {
+        if (this.initialization === init) this.initialization = undefined;
+      });
+    }
+    await this.initialization;
+    if (this.disposed || attempt !== this.connectionAttempt)
+      throw Error("Connection replaced");
     this.active = true;
     this.epoch = this.view.beginConnection();
     this.error = null;
@@ -81,6 +105,7 @@ export class ClientConnection {
       if (!this.active || epoch !== this.epoch)
         throw Error("Connection replaced");
       await this.synchronize();
+      if (this.options.intents && epoch === this.epoch) await this.reconcile();
     } catch (error) {
       if (epoch === this.epoch) {
         this.error = error instanceof Error ? error.message : String(error);
@@ -90,6 +115,7 @@ export class ClientConnection {
     }
   }
   disconnected(): void {
+    this.connectionAttempt++;
     this.active = false;
     this.syncing = undefined;
     this.view.disconnected(this.epoch);
@@ -128,6 +154,23 @@ export class ClientConnection {
         ["unknown", "acknowledged"].includes(r.status),
     ))
       await this.request("command.receipt", { commandId: receipt.id });
+    await this.persistIntents();
+  }
+  private persistIntents(): Promise<void> {
+    if (!this.options.intents) return Promise.resolve();
+    const save = () =>
+      this.options.intents!.save(
+        this.receipts
+          .filter(
+            (r) =>
+              !rpcReadMethods.has(r.method) &&
+              !["completed", "failed"].includes(r.status),
+          )
+          .map((r) => ({ id: r.id, method: r.method })),
+      );
+    const task = this.journalQueue.then(save, save);
+    this.journalQueue = task;
+    return task;
   }
   request(
     method: RpcMethod,
@@ -167,8 +210,18 @@ export class ClientConnection {
         this.notify();
         pending.reject(error instanceof Error ? error : Error(String(error)));
       };
+      const epoch = this.epoch;
+      const send = () => {
+        if (!this.active || epoch !== this.epoch || !this.pending.has(frame.id))
+          throw Error(
+            "Connection replaced before send; command was not replayed",
+          );
+        return this.transport.send(frame);
+      };
       try {
-        Promise.resolve(this.transport.send(frame)).catch(failed);
+        if (!rpcReadMethods.has(method) && this.options.intents)
+          void this.persistIntents().then(send).catch(failed);
+        else Promise.resolve(send()).catch(failed);
       } catch (error) {
         failed(error);
       }

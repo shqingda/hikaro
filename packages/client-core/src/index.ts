@@ -40,6 +40,7 @@ export type ExecutionState = {
   canAct: boolean;
   hostInstanceId: string | null;
   session: CurrentSession["session"];
+  sessionRole: "owner" | "view" | "control" | null;
   cursor: number;
   revision: number;
   busy: boolean;
@@ -71,6 +72,7 @@ export class ClientState {
     canAct: false,
     hostInstanceId: null,
     session: null,
+    sessionRole: null,
     cursor: 0,
     revision: 0,
     busy: false,
@@ -98,6 +100,32 @@ export class ClientState {
     return value && copy(value);
   }
 
+  restoreIntents(intents: Array<{ id: string; method: RpcMethod }>): void {
+    if (this.value.connection !== "offline" || this.commands.size)
+      throw Error("Restore intents before connecting");
+    if (intents.length > MAX_RECEIPTS - 4)
+      throw Error("Intent journal capacity exceeded");
+    const seen = new Set<string>();
+    for (const intent of intents) {
+      if (
+        !intent ||
+        typeof intent.id !== "string" ||
+        !intent.id ||
+        intent.id.length > 128 ||
+        !rpcMethods.includes(intent.method) ||
+        reads.has(intent.method) ||
+        seen.has(intent.id)
+      )
+        throw Error("Invalid intent journal");
+      seen.add(intent.id);
+    }
+    for (const intent of intents)
+      this.commands.set(intent.id, {
+        id: intent.id,
+        method: intent.method,
+        status: "unknown",
+      });
+  }
   beginConnection(): number {
     this.disconnected(this.epoch);
     this.epoch++;
@@ -345,6 +373,7 @@ export class ClientState {
       this.overflow = false;
       Object.assign(this.value, snapshot, {
         hostInstanceId: this.value.hostInstanceId,
+        sessionRole: snapshot.sessionRole ?? null,
         runId: snapshot.runId ?? null,
         runStatus: snapshot.runStatus ?? (snapshot.busy ? "unknown" : "idle"),
         events: [],
@@ -383,6 +412,7 @@ export class ClientState {
         "session.fork",
         "session.compact",
         "session.rename",
+        "session.access",
         "session.delete",
         "model.set",
         "client.detach",

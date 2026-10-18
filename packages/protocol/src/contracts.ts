@@ -7,6 +7,8 @@ export const rpcMethods = [
   "session.create",
   "session.list",
   "session.current",
+  "session.access",
+  "session.access.read",
   "session.resume",
   "session.fork",
   "session.compact",
@@ -35,6 +37,7 @@ export const rpcReadMethods: ReadonlySet<string> = new Set([
   "hello",
   "command.receipt",
   "workspace.current",
+  "session.access.read",
   "session.current",
   "session.list",
   "session.export",
@@ -49,11 +52,15 @@ export const rpcReadMethods: ReadonlySet<string> = new Set([
 export const HelloParams = z.object({
   protocolVersions: z.array(z.number().int().min(1)).min(1).max(16).optional(),
 });
-export function rpcCapabilities() {
+export function rpcCapabilities(sharedHost = false) {
   return {
     protocolVersion,
     supportedProtocolVersions: [protocolVersion],
-    methods: [...rpcMethods],
+    methods: rpcMethods.filter(
+      (method) =>
+        sharedHost ||
+        !["session.access", "session.access.read"].includes(method),
+    ),
     snapshotMethod: "session.current" as const,
     eventSequence: "global-monotonic-filtered-by-session" as const,
     scopeRevision: true as const,
@@ -97,6 +104,7 @@ export const Permission = z.object({
     .optional(),
 });
 export const CurrentSession = z.object({
+  sessionRole: z.enum(["owner", "view", "control"]).nullable().optional(),
   session: z
     .object({
       id,
