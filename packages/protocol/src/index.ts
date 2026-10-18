@@ -1,4 +1,4 @@
-import * as z from "zod";
+import * as z from "zod/mini";
 import type { AgentEvent, Message, Session } from "../../core/src/types.ts";
 import { rpcMethods } from "./contracts.ts";
 export { protocolVersion } from "./contracts.ts";
@@ -25,10 +25,10 @@ export const isControlMethod = (method: string) =>
     "steer",
   ].includes(method);
 export const Command = z.object({
-  id: z.string().min(1).max(128),
-  scope: z.string().min(1).max(80).optional(),
+  id: z.string().check(z.minLength(1), z.maxLength(128)),
+  scope: z.optional(z.string().check(z.minLength(1), z.maxLength(80))),
   method: z.enum(rpcMethods),
-  params: z.record(z.string(), z.unknown()).default({}),
+  params: z._default(z.record(z.string(), z.unknown()), {}),
 });
 export type Command = z.infer<typeof Command>;
 export function publicSession(session: Session): Session {
