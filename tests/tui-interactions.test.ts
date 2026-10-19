@@ -1,3 +1,6 @@
+import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { stripVTControlCharacters } from "node:util";
 import { TuiAltScreen, type Terminal } from "@earendil-works/pi-tui";
@@ -70,6 +73,12 @@ function shortcutFixture() {
 
 function interactionView(
   onPrompt: (text: string) => Promise<void> = async () => {},
+  onDraftChange?: (text: string) => void,
+  preparePrompt?: (
+    text: string,
+    signal: AbortSignal,
+  ) => Promise<{ text: string }>,
+  cwd = "/tmp",
 ) {
   const tui = new TuiAltScreen({ ...terminalStub });
   vi.spyOn(tui, "requestRender").mockImplementation(() => {});
@@ -80,9 +89,11 @@ function interactionView(
   });
   const focus = vi.spyOn(tui, "setFocus");
   const view = new HikaroView(tui, {
-    cwd: "/tmp",
+    cwd,
     model: "fixture",
     onPrompt,
+    onDraftChange,
+    preparePrompt,
     onCommand: async () => {},
     onExit: () => {},
   });
@@ -96,6 +107,78 @@ function interactionView(
     } satisfies AgentEvent);
   return { view, input: (data: string) => input(data), focus, event };
 }
+
+it("keeps attachment input and draft on preparation failure without dispatching", async () => {
+  const prompt = vi.fn(async () => {});
+  const saved = vi.fn();
+  const { view } = interactionView(prompt, saved, async () => {
+    throw Error("File does not exist");
+  });
+  try {
+    view.editor.setText("Review @missing.ts");
+    view.editor.handleInput("\r");
+    await vi.waitFor(() =>
+      expect(view.inputError.render(100).join("\n")).toContain(
+        "File does not exist",
+      ),
+    );
+    expect(view.editor.getExpandedText()).toBe("Review @missing.ts");
+    expect(saved).toHaveBeenLastCalledWith("Review @missing.ts");
+    expect(prompt).not.toHaveBeenCalled();
+    expect(view.editor.disableSubmit).toBe(false);
+  } finally {
+    view.dispose();
+  }
+});
+
+it("cancels attachment preparation while retaining the input, even if the loader returns late", async () => {
+  const prompt = vi.fn(async () => {});
+  let release!: () => void;
+  const { view, input } = interactionView(prompt, undefined, async () => {
+    await new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return { text: "prepared" };
+  });
+  try {
+    view.editor.setText("Review @large.ts");
+    view.editor.handleInput("\r");
+    expect(view.editor.getExpandedText()).toBe("Review @large.ts");
+    expect(view.editor.disableSubmit).toBe(true);
+    expect(input("x")).toEqual({ consume: true });
+    input("\x03");
+    release();
+    await vi.waitFor(() => expect(view.editor.disableSubmit).toBe(false));
+    expect(prompt).not.toHaveBeenCalled();
+    expect(view.editor.getExpandedText()).toBe("Review @large.ts");
+  } finally {
+    view.dispose();
+  }
+});
+
+it("autosaves expanded paste text but excludes transient dialog answers", () => {
+  const saved = vi.fn();
+  const { view, event } = interactionView(async () => {}, saved);
+  try {
+    const draft = "line of pasted content\n".repeat(30);
+    view.editor.handleInput("\x1b[200~" + draft + "\x1b[201~");
+    expect(saved).toHaveBeenLastCalledWith(draft);
+    event("ui.request", {
+      id: "private",
+      method: "input",
+      title: "Input",
+      prefill: "private-prefill",
+    });
+    view.editor.handleInput("private-answer");
+    expect(saved.mock.calls.every(([text]) => !text.includes("private"))).toBe(
+      true,
+    );
+    event("ui.closed", { id: "private" });
+    expect(view.editor.getExpandedText()).toBe(draft);
+  } finally {
+    view.dispose();
+  }
+});
 
 describe("TUI immediate cancellation feedback", () => {
   it.each(["\x1b", "\x03"])(
@@ -367,7 +450,8 @@ describe("TUI interaction fixes", () => {
     );
     try {
       await fixture.waitFor(/Sessions · page 1/);
-      fixture.panel.handleInput("Next page");
+      for (let index = 0; index < 50; index++)
+        fixture.panel.handleInput("\x1b[B");
       expect(fixture.screen()).toContain("Enter next page");
       expect(fixture.screen()).not.toMatch(/delete|rename/);
       fixture.panel.handleInput("\x04");
@@ -521,4 +605,37 @@ describe("TUI interaction fixes", () => {
       view.dispose();
     }
   });
+});
+
+it("searches @ files fuzzily and accepts keyboard selection without submitting", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "hikaro-complete-"));
+  await mkdir(join(cwd, ".git"));
+  await writeFile(join(cwd, ".gitignore"), "ignored.txt\n");
+  await writeFile(join(cwd, "ignored.txt"), "hidden");
+  await writeFile(join(cwd, "alpha.txt"), "a");
+  await writeFile(join(cwd, "beta.txt"), "b");
+  await mkdir(join(cwd, "docs"));
+  await writeFile(join(cwd, "docs", "read me.md"), "hello");
+  const prompt = vi.fn(async () => {});
+  const { view } = interactionView(prompt, undefined, undefined, cwd);
+  const screen = () =>
+    stripVTControlCharacters(view.editor.render(100).join("\n"));
+  try {
+    view.editor.handleInput("@");
+    await vi.waitFor(() => expect(screen()).toContain("alpha.txt"));
+    expect(screen()).not.toContain("ignored.txt");
+    view.editor.handleInput("\x1b[B");
+    view.editor.handleInput("\t");
+    expect(view.editor.getText()).not.toBe("@");
+    expect(prompt).not.toHaveBeenCalled();
+    view.editor.setText("");
+    view.editor.handleInput("@docs/rdme");
+    await vi.waitFor(() => expect(screen()).toContain("read me.md"));
+    view.editor.handleInput("\r");
+    expect(view.editor.getText()).toBe('@"docs/read me.md" ');
+    expect(prompt).not.toHaveBeenCalled();
+  } finally {
+    view.dispose();
+    await rm(cwd, { recursive: true, force: true });
+  }
 });

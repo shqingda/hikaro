@@ -563,7 +563,8 @@ describe("TUI interaction fixes", () => {
       await tui.wait("Permissions · Ask for approval", 0);
       const a = await tui.session();
       await tui.wait("Sessions · page 1", tui.send("/sessions\r"));
-      await tui.wait("> E2E B", tui.send("E2E B"));
+      // Search is asynchronous; wait for a selectable result, not the echoed query.
+      await tui.wait(/> E2E B[\s\S]*→ E2E B/, tui.send("E2E B"));
       await tui.wait("Enter send", tui.send("\r"));
       const b = await tui.session();
       expect(b).not.toBe(a);

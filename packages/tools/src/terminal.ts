@@ -1,4 +1,4 @@
-import { z } from "zod";
+import * as z from "zod";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import type { Plugin, ToolContext } from "../../core/src/types.ts";

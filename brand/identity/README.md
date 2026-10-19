@@ -34,20 +34,18 @@ The wordmark carries the same light at a smaller size: the dot over the **i** is
 Beam is a field, not a glow. No gradients, no shadows on the mark, no coloured halo.
 Contrast: ink on beam 10.2:1 · paper on ink 17.5:1 · ink on paper 17.5:1.
 
-## macOS icon
+## Application icon
 
-The Dock icon is drawn, not a full-bleed tile:
+The application icon is drawn, not a full-bleed tile:
 
 - **1024 × 1024** canvas.
 - **824 × 824** icon field, centred: **100 px** transparent margin on every side.
 - Continuous **185** corner (superellipse).
 - Ink field, paper **h**, Beam sun and horizon.
-- The icon is flat; the Dock supplies the shadow.
+- The icon is flat, with no baked-in shadow.
 
 The icon is supplied as:
 
-- `exports/AppIcon.icns` — macOS icon for the app bundle.
-- `exports/AppIcon.iconset/` — the 10 PNG slots used to build the icns.
 - `exports/app-icon-1024.png` … `app-icon-16.png` — transparent-corner PNGs.
 - `assets/app-icon.svg` — source vector.
 
@@ -65,7 +63,7 @@ The product UI keeps its terminal monospace. The serif is the brand voice, not a
 - Minimum mark: **16 px**. Minimum wordmark: **160 px**. Minimum stacked lockup: **220 px** wide.
 - Never put a light shape inside the h. The sun sits behind the shoulder.
 - Never replace the circle with a square, a rounded square, or an icon tile.
-- The macOS rounded square is the canvas, not a second logo frame. Do not add another tile, ring, or monogram frame inside it.
+- The rounded square is the canvas, not a second logo frame. Do not add another tile, ring, or monogram frame inside it.
 - Do not add rays, stars, gradients, glows, or shadows to the mark.
 - The horizon is one line. Do not double it, dash it, or curve it.
 - The mono mark uses the sun as a ring; it is not a solid mono sun.
@@ -81,7 +79,6 @@ assets/
   lockup-stacked.svg, lockup-stacked-on-ink.svg
   app-icon.svg, favicon.svg
 exports/
-  AppIcon.icns, AppIcon.iconset/
   app-icon-16…1024.png
   wordmark-400/800/1600.png, mark-300/600/1200.png
   lockup-stacked-750/1500.png

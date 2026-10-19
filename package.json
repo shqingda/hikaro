@@ -15,11 +15,21 @@
     "test": "vitest run",
     "check": "pnpm typecheck && pnpm test && pnpm build",
     "bench": "node scripts/bench.mjs",
+    "bench:check": "node scripts/bench.mjs --check",
+    "bench:attach:check": "node scripts/bench-shared-host.mjs --check",
+    "bench:harness": "node --import tsx scripts/bench-harness.mjs",
+    "bench:harness:check": "node --import tsx scripts/bench-harness.mjs --check",
     "postinstall": "node scripts/prepare-native.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test:pi": "pnpm build && node scripts/pi-smoke.mjs",
-    "check:relay": "pnpm --filter @hikaro/relay typecheck"
+    "check:relay": "pnpm --filter @hikaro/relay typecheck",
+    "dev:mobile": "pnpm --filter @hikaro/mobile start",
+    "dev:sim": "node scripts/dev-sim.mjs",
+    "mobile:lab:check": "vitest run tests/mobile-lab.test.ts tests/dev-sim.test.ts",
+    "mobile:ios": "pnpm --filter @hikaro/mobile ios",
+    "mobile:android": "pnpm --filter @hikaro/mobile android",
+    "mobile:typecheck": "pnpm --filter @hikaro/mobile typecheck"
   },
   "dependencies": {
     "@anthropic-ai/sandbox-runtime": "0.0.79",
@@ -42,6 +52,7 @@
     "@types/ws": "8.18.1",
     "esbuild": "0.28.2",
     "prettier": "3.9.10",
+    "serve-sim": "0.1.48",
     "tsx": "4.23.15",
     "typescript": "7.0.2",
     "vitest": "5.0.4"

@@ -1,10 +1,14 @@
 import { realpath, readdir } from "node:fs/promises";
 import { relative, isAbsolute, join } from "node:path";
 import { homedir } from "node:os";
-import { z } from "zod";
+import * as z from "zod";
 import type { Plugin } from "../../core/src/types.ts";
 import { resolvePath, allowedPath, updateTextFile } from "./workspace.ts";
-import { readFileBytes, readTextFile } from "./secure-files.ts";
+import {
+  readFileBytes,
+  readTextFile,
+  readFileBytesBatch,
+} from "./secure-files.ts";
 import { runProcess, runWorkspaceCommand, cleanProcessEnv } from "./process.ts";
 export { resolvePath } from "./workspace.ts";
 export { runProcess } from "./process.ts";
@@ -271,7 +275,9 @@ export async function loadInstructions(
   let budget = 32000;
   for (const file of ["AGENTS.md", ".hikaro/AGENTS.md"]) {
     try {
-      const target = await resolvePath(cwd, file);
+      // Avoid starting a secure reader for absent optional instruction files.
+      // Existing files still pass canonical-root checks and descriptor-safe reads.
+      const target = await resolvePath(cwd, await realpath(join(cwd, file)));
       if (!target.inside) continue;
       const text = (
         await readTextFile(
@@ -305,21 +311,34 @@ export async function loadInstructions(
               const path = await realpath(join(root, entry.name, "SKILL.md"));
               const rel = relative(root, path);
               if (rel.startsWith("..") || isAbsolute(rel)) return undefined;
-              const text = (
-                await readTextFile(path, AbortSignal.timeout(10000))
-              ).slice(0, 4096);
-              return {
-                name: entry.name,
-                description:
-                  text.match(/^description:\s*(.+)$/m)?.[1] ?? entry.name,
-                path,
-              };
+              return { name: entry.name, path };
             } catch {
               return undefined;
             }
           }),
       );
-      for (const item of discovered) {
+      const authorized = discovered.filter((item) => item !== undefined);
+      const descriptions: SkillResource[] = [];
+      await readFileBytesBatch(
+        authorized.map((item) => item.path),
+        AbortSignal.timeout(10000),
+        (result, index) => {
+          if (result.status === "rejected") return;
+          const item = authorized[index]!;
+          // Validate the whole file before decoding a bounded prefix. Four
+          // bytes per UTF-16 unit covers every first-4096-character result and
+          // avoids a short V8 slice retaining the complete skill body.
+          const text = result.value
+            .subarray(0, 16384)
+            .toString("utf8")
+            .slice(0, 4096);
+          descriptions.push({
+            ...item,
+            description: text.match(/^description:\s*(.+)$/m)?.[1] ?? item.name,
+          });
+        },
+      );
+      for (const item of descriptions) {
         if (item && !seen.has(item.name) && resources.skills.length < 100) {
           seen.add(item.name);
           resources.skills.push(item);

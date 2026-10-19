@@ -520,68 +520,12 @@ h2 {
 .downloads a { text-decoration: none; border-bottom: 1px solid var(--line-dark); }
 .downloads a:hover { color: var(--beam); border-bottom-color: var(--beam); }
 
-/* ---------- Dock ---------- */
-
-.dock-stage {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
-  gap: clamp(28px, 4vw, 56px);
-  align-items: center;
-  padding: clamp(28px, 4vw, 48px);
-  margin-bottom: clamp(40px, 6vw, 64px);
-  background: var(--ink);
-  color: var(--paper);
-}
-.dock-bar {
-  display: inline-flex;
-  align-items: flex-end;
-  gap: 8px;
-  justify-self: start;
-  padding: 10px 14px;
-  border-radius: 22px;
-  background: rgba(247, 247, 246, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.55);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
-}
-.dock-bar img {
-  width: clamp(48px, 4.6vw, 64px);
-  height: auto;
-  transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-.dock-bar img:hover { transform: translateY(-6px) scale(1.06); }
-.dock-ph {
-  width: clamp(48px, 4.6vw, 64px);
-  aspect-ratio: 1;
-  border-radius: 14px;
-  background: rgba(18, 18, 15, 0.12);
-}
-.dock-copy .mono { color: var(--muted-dark); }
-.dock-copy p {
-  max-width: 36ch;
-  margin-top: 14px;
-  font-size: 1rem;
-  line-height: 1.65;
-}
-.dock-files {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px 18px;
-  margin-top: 20px;
-  font-family: var(--mono);
-  font-size: 12px;
-}
-.dock-files a { text-decoration: none; border-bottom: 1px solid var(--line-dark); }
-.dock-files a:hover { color: var(--beam); border-bottom-color: var(--beam); }
-
-
 /* ---------- responsive ---------- */
 
 @media (max-width: 980px) {
   .hero-copy { grid-column: 1 / 7; }
   .hero-icon { grid-column: 7 / 13; }
   .hero-icon img { width: min(46vw, 520px); }
-  .dock-stage { grid-template-columns: 1fr; }
-  .dock-bar { justify-self: start; }
   .icons-row { grid-template-columns: 1fr; align-items: start; }
   .icon-big img { width: min(60vw, 220px); }
   .icon-sizes { flex-wrap: wrap; gap: 22px; }
@@ -620,10 +564,6 @@ h2 {
   .readme-card { margin-top: 0; }
   .close-grid { grid-template-columns: 1fr; gap: 28px; }
   .close-mark { width: 92px; }
-  .dock-bar { flex-wrap: nowrap; }
-  .dock-ph:nth-of-type(n+3) { display: none; }
-  .dock-stage { padding: 24px; }
-  .dock-copy p { max-width: 42ch; }
 }
 
 @media (max-width: 560px) {
@@ -631,10 +571,6 @@ h2 {
   .nav-brand img { width: 128px; }
   .icon-big img { width: 180px; }
   .icon-sizes { flex-wrap: wrap; gap: 16px; }
-  .dock-stage { padding: 20px; }
-  .dock-bar { gap: 6px; padding: 8px 10px; }
-  .dock-bar img, .dock-ph { width: 46px; }
-  .dock-files { gap: 8px 14px; }
   .inuse { grid-template-columns: 1fr; }
   .icon-mount { width: 100%; display: flex; align-items: center; gap: 18px; }
   .icon-mount figcaption { margin-top: 0; }
@@ -650,5 +586,4 @@ h2 {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
   }
-  .dock-bar img:hover { transform: none; }
 }

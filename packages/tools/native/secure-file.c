@@ -185,9 +185,8 @@ static int send_text(const char *text) {
 }
 
 /* Messages are fixed literals; only the numeric errno is interpolated. */
-static int fail(struct update *update, const char *message, int error_number) {
+static int send_error(const char *message, int error_number) {
   char frame[256];
-  cleanup(update);
   const int length = error_number == 0
                          ? snprintf(frame, sizeof(frame), "{\"error\":\"%s\"}\n",
                                     message)
@@ -196,8 +195,14 @@ static int fail(struct update *update, const char *message, int error_number) {
                                     error_number);
   if (length > 0 && (size_t)length < sizeof(frame)) {
     /* A signal still gets cleanup, even if it prevents a final error frame. */
-    (void)send_bytes(frame, (size_t)length);
+    return send_bytes(frame, (size_t)length);
   }
+  return -1;
+}
+
+static int fail(struct update *update, const char *message, int error_number) {
+  cleanup(update);
+  (void)send_error(message, error_number);
   return 1;
 }
 
@@ -452,6 +457,78 @@ static int receive_content(struct update *update, size_t length,
   return 0;
 }
 
+/* Each request contains only a previously authorized canonical path. Paths use
+ * byte lengths rather than delimiters so newlines remain ordinary filename
+ * bytes, and stdin avoids platform-dependent argv size limits. */
+static int read_many(size_t count, size_t max_bytes) {
+  for (size_t index = 0; index < count; index++) {
+    struct update update = {.parent_fd = -1, .lock_fd = -1, .temporary_fd = -1};
+    char header[128];
+    const int64_t now = milliseconds();
+    size_t path_length;
+    if (now < 0 ||
+        receive_header(header, sizeof(header), now + INPUT_TIMEOUT_MS) != 0 ||
+        !parse_size(header, &path_length) || path_length < 2 ||
+        path_length > PATH_LIMIT) {
+      return fail(&update, "Invalid batch path frame or input interrupted", 0);
+    }
+    char *path = malloc(path_length + 1);
+    if (path == NULL) return fail(&update, "Cannot allocate batch path", errno);
+    size_t received = 0;
+    while (received < path_length) {
+      if (wait_ready(STDIN_FILENO, POLLIN, now + INPUT_TIMEOUT_MS) != 0) {
+        free(path);
+        return fail(&update, "Batch path input interrupted", errno);
+      }
+      const ssize_t bytes = read(STDIN_FILENO, path + received,
+                                 path_length - received);
+      if (bytes < 0 && (errno == EINTR || errno == EAGAIN)) continue;
+      if (bytes <= 0) {
+        free(path);
+        return fail(&update, "Batch path input closed", 0);
+      }
+      received += (size_t)bytes;
+    }
+    path[path_length] = '\0';
+    if (memchr(path, '\0', path_length) != NULL) {
+      free(path);
+      return fail(&update, "Invalid batch path", 0);
+    }
+    const int opened = open_parent(&update, path, false);
+    const int open_error = errno;
+    free(path);
+    if (opened != 0) {
+      cleanup(&update);
+      if (send_error("Cannot securely open parent directory", open_error) != 0)
+        return 1;
+      continue;
+    }
+    struct stat version;
+    bool exists;
+    unsigned char *content;
+    size_t length;
+    const int status = read_current(&update, max_bytes, &exists, &version,
+                                    &content, &length);
+    const int read_error = errno;
+    if (status != 0 || !exists) {
+      cleanup(&update);
+      if (send_error(status != 0 ? "Cannot securely read a stable regular file"
+                                 : "File does not exist",
+                     status != 0 ? read_error : ENOENT) != 0)
+        return 1;
+      continue;
+    }
+    const int header_length = snprintf(header, sizeof(header),
+                                       "{\"exists\":true,\"length\":%zu}\n", length);
+    const int sent = send_bytes(header, (size_t)header_length);
+    const int sent_content = sent == 0 ? send_bytes(content, length) : -1;
+    free(content);
+    cleanup(&update);
+    if (sent != 0 || sent_content != 0) return 1;
+  }
+  return interrupted ? 1 : 0;
+}
+
 int main(int argc, char **argv) {
   struct update update = {.parent_fd = -1, .lock_fd = -1, .temporary_fd = -1};
   struct sigaction action;
@@ -472,6 +549,14 @@ int main(int argc, char **argv) {
     return fail(&update, "Cannot configure IPC", errno);
   }
   size_t max_bytes;
+  if (argc == 4 && strcmp(argv[1], "read-many") == 0) {
+    size_t count;
+    if (!parse_size(argv[2], &count) || count < 1 || count > 100 ||
+        !parse_size(argv[3], &max_bytes) || max_bytes > 2000000U) {
+      return fail(&update, "Invalid batch helper arguments", 0);
+    }
+    return read_many(count, max_bytes);
+  }
   if (argc != 4 ||
       (strcmp(argv[1], "read") != 0 && strcmp(argv[1], "update") != 0) ||
       !parse_size(argv[3], &max_bytes) || max_bytes > MAX_FILE_BYTES) {

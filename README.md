@@ -1,12 +1,12 @@
 # hikaro
 
-Independent TypeScript coding agent. Current scope: fullscreen TUI and bidirectional Pi integration. See [TODO.md](TODO.md) for implementation and acceptance status. Desktop and mobile experiments and their dedicated tests have been removed. Cloud configuration remains optional.
+Independent TypeScript coding agent. Current executable clients: fullscreen TUI and bidirectional Pi integration. See [TODO.md](TODO.md) for implementation and acceptance status. The confirmed direction is [TUI plus a mobile companion](docs/tui-mobile-direction.md): the phone remotely views, approves, supplements and stops work on the computer. The [native M0 companion](docs/mobile.md) now provides pairing, secure credentials and read-only task recovery; physical-device/release acceptance remains pending. Cloud configuration remains optional.
 
 ## Run
 
 Requires **Node 24.21+**, **pnpm 12.11.2**, and `rg`. macOS is the initial supported host.
 
-Installing or building from source also requires a C11 compiler: Xcode Command Line Tools on macOS, or `build-essential` on Linux. Installation and build compile the small file-operation helper; the built CLI includes that executable. File tools refuse to run if it is unavailable.
+Installing or building from source also requires a C11 compiler: Xcode Command Line Tools on macOS, or `build-essential` on Linux. Installation and build compile the small file-operation helper; the built CLI includes that executable. After pulling native helper changes, run `pnpm build` or `pnpm install` before using either `pnpm dev` or `pnpm start`. File tools refuse to run if it is unavailable.
 
 ```sh
 pnpm install
@@ -44,15 +44,18 @@ The current permission mode stays visible independently of the usage footer. Sho
 
 Ctrl+S appears only on actual model choices and active model-setting values. Provider/authentication steps and default-only settings use Enter. Narrow panels wrap values and descriptions, keep the selected choice and reserve Enter/Esc hints. If the available space cannot show the selected content, the panel asks you to resize. Real PTY acceptance at 36×18, 60×18 and 100×24 covers keyboard navigation, resizing, cancellation, draft retention and status feedback. See [validation evidence](docs/validation.md). macOS Terminal appearance, IME and assistive-technology acceptance remain pending.
 
+File candidates use the required `rg` executable and respect ignore rules. Type `@rdme` for fuzzy matches or `@docs/` to narrow the directory; paths containing spaces are quoted automatically. Search is asynchronous and cancellable, capped at 20,000 file paths / 4 MiB of listing output and 20 displayed candidates; narrow the directory in very large workspaces. File contents and permission checks are handled only when submitting. `pnpm dev` runs source directly; after pulling changes, use `pnpm build` before `pnpm start`.
+
 ## Terminal controls
 
 | Command | Action |
 | --- | --- |
-| `/new`, `/sessions`, `/resume [ID]` | Session picker with page navigation and page-local title/description/ID search; Delete/Ctrl+D opens confirmation; Enter deletes, Esc cancels |
+| `/new`, `/sessions [QUERY]`, `/resume [ID]` | Session picker searches titles and IDs across the current workspace, with bounded result pages; Delete/Ctrl+D opens confirmation; Enter deletes, Esc cancels |
 | `/rename TITLE` | Rename the current session; Ctrl+R renames a selected session in `/sessions` |
 | `/export` | Export all saved text messages as Markdown; hidden thinking stays excluded |
 | `/skill:NAME [TASK]` | Invoke a discovered Skill; Skill and plugin commands appear in completion |
 | `/fork`, `/compact` | Branch history or create a continuation summary |
+| `/attach PATH`, `@file`, `@"path with spaces"` | Attach UTF-8 files or PNG/JPEG/GIF/WebP images; `@` opens fuzzy file search, ↑/↓ selects, Tab/Enter completes, Esc closes |
 | `/model`, `/login` | Search models or connect a provider |
 | `/settings` | Tool details, thinking visibility, usage footer, completion bell and startup behavior |
 | `/permissions [ask\|auto\|full]` | Select workspace permissions; Enter applies and saves; Esc closes |
@@ -69,7 +72,9 @@ Ctrl+S appears only on actual model choices and active model-setting values. Pro
 | `Shift+Enter` | New line |
 | `Ctrl+Shift+F` | Search the visible terminal document |
 
-Drafts are saved on session switches and orderly exit. They are not crash recovery or per-keystroke autosave. The last session can be deleted; deleting the current session opens a fresh blank session.
+Draft edits are coalesced and scheduled for saving after 300 ms, including during continuous typing. Saves are serialized per TUI instance, flushed on submission/session switches/orderly exit, and restored after a process crash. The last interval plus any pending storage write can still be lost; this is not recovery of in-memory queued prompts or an interrupted model run. Expanded pasted text is saved, while transient extension-dialog answers are excluded. Storage failures appear near the editor. The existing 100,000-character draft limit remains. The last session can be deleted; deleting the current session opens a fresh blank session.
+
+File references are loaded on submission in the native CLI/TUI, including `--prompt`. Email addresses, escaped `@@` and Markdown code are excluded. External and sensitive files follow the current permission policy; reads retain the existing protection against path replacement. Failed or cancelled preparation keeps the draft. Up to eight references, 128 KiB per text file, 256 KiB combined text and 4 MiB combined attachment bytes are accepted; serialized input must also fit the storage limit. Image content is checked against its declared format and sent as native image parts. Known text-only models reject images; custom endpoint support is determined by the server. OS clipboard-image capture and portable attachment export remain pending. See the [input contract](docs/specs/prompt-attachments.md).
 
 The editor's top border shows an animated **Working**, **Thinking**, **Running TOOL**, or **Compacting** indicator. It pauses while waiting for approval/input and stops on completion, cancellation, session binding and exit. Thinking status is independent of whether reasoning text is displayed.
 
@@ -81,7 +86,9 @@ Official file updates serialize by canonical path, acquire an exclusive `<file>.
 
 File reads and updates use opened directory handles, rejecting symbolic links introduced after path authorization. Updates, locks and temporary-file cleanup stay attached to the authorized directory even if another process renames it. Search and index retrieval use the same protected file reads; search passes the resulting bytes to ripgrep rather than reopening filenames. Direct reads remain limited to 2 MB, index files to 256 kB, and search/update snapshots to 16 MiB.
 
-Usage and model-call/cost budgets belong to the in-memory Agent and its shared child-agent budget, not to persistent session history. Reconstructing an Agent or restarting the host creates a fresh budget; resuming history does not restore usage limits. Model history is bounded separately, trims only at user-turn boundaries, and reports omitted messages. Sessions and events remain persistent.
+Usage and model-call/cost budgets belong to the in-memory Agent and its shared child-agent budget, not to persistent session history. Reconstructing an Agent or restarting the host creates a fresh budget; resuming history does not restore usage limits. Context fitting accounts for system instructions, tool definitions, message payloads, image allowances, output reserve and a safety margin. Its conservative token estimate is not a model tokenizer. At 85% of the available input budget, or before old turns would be omitted, automatic compaction summarizes completed turns into a transactional checkpoint in the same session. Original messages remain available; the current user turn and tool pairs stay exact. Summary requests consume the shared budget, respect cancellation and leases, and must fit before a checkpoint commits. Restart restores the checkpoint. An oversized current turn fails visibly. Manual `/compact` still creates a continuation session. See the [compaction contract](docs/specs/auto-compaction.md).
+
+The client reboot now includes `hello` capability negotiation, a portable `packages/client-core` state layer, run identity snapshots and scoped durable command receipts. `command.receipt` reconciles lost responses; repeated mutation IDs never execute again, and different payloads conflict. Unknown outcomes remain unknown without automatic resend. See the [receipt contract](docs/specs/command-receipts.md) for status and retention boundaries. The shared raw remote adapter and bounded client library APIs are implemented. The opt-in shared host, attached TUI, per-session approval grants and durable local client intents are implemented. Start `pnpm start --host --demo`, then `pnpm start --attach` in another terminal; configured `--serve` attaches the encrypted remote bridge to that same host. Use identical `--cwd` / `--home` values. Ctrl+D detaches the TUI while work continues. See the [shared-host guide](docs/shared-host.md). The [M0 native client](docs/mobile.md) uses this same host. Run `pnpm mobile:ios` once, then `pnpm dev:sim` to reuse the existing iPhone 18 Pro and automatically open the serve-sim browser preview at localhost:3200, without launching DeviceHub or creating another simulator; `pnpm dev:mobile` starts Expo separately. Native-device acceptance remains in the [TUI/mobile plan](docs/tui-mobile-direction.md).
 
 ## Pi integration
 
@@ -122,7 +129,7 @@ See [Cloudflare setup](docs/remote.md). The relay carries encrypted frames; tool
 
 ## Validation
 
-Use the affected test path or filter once, for example `pnpm exec vitest run tests/session-settings.test.ts -t 'session picker'`. Skip tests for documentation and pure styling. Full suites and benchmarks run only when explicitly needed; CI is manual.
+Use the affected test path or filter once, for example `pnpm exec vitest run tests/session-search.test.ts`. Skip tests for documentation and pure styling. Full suites and benchmarks run only when explicitly needed. Correctness CI runs on pull requests and pushes to main; performance measurement is an explicit local command. See the [harness and performance guide](docs/harness-performance.md) for workloads, budgets and evidence limitations.
 
 Optional cloud configuration can be checked with `pnpm check:relay` and `pnpm --filter @hikaro/relay build` (local dry-run, no deployment).
 

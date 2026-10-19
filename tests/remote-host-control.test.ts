@@ -13,7 +13,7 @@ const state = vi.hoisted(() => ({
   secret: undefined as any,
   watcher: undefined as (() => void) | undefined,
   request: vi.fn(),
-  spawnArgs: [] as string[],
+  connectionOptions: undefined as any,
 }));
 vi.mock("node:fs", async (original) => ({
   ...(await original<typeof import("node:fs")>()),
@@ -29,15 +29,17 @@ vi.mock("../packages/remote/src/host-store.ts", () => ({
   withConfigLock: async (_home: string, body: () => Promise<unknown>) => body(),
   keychainStore: {},
 }));
-vi.mock("../packages/protocol/src/client.ts", () => ({
-  ProcessClient: class {
-    constructor(_command: string, args: string[]) {
-      state.spawnArgs = args;
-    }
-    request = state.request;
-    subscribe() {}
-    onExit() {}
-    async close() {}
+vi.mock("../packages/host/src/client.ts", () => ({
+  SharedHostClient: {
+    connect: async (options: unknown) => {
+      state.connectionOptions = options;
+      return {
+        request: state.request,
+        subscribe: () => () => {},
+        onConnection: () => () => {},
+        close: async () => {},
+      };
+    },
   },
 }));
 vi.mock("ws", async () => {
@@ -81,7 +83,6 @@ async function host(options: Partial<Parameters<typeof serveRemote>[0]> = {}) {
   const server = await serveRemote({
     cwd: "/workspace",
     home: "/unused",
-    demo: true,
     ...options,
   });
   cleanups.push(() => server.close());
@@ -109,22 +110,13 @@ async function host(options: Partial<Parameters<typeof serveRemote>[0]> = {}) {
   return { deviceId, connectionId, incoming, send };
 }
 
-it("forwards the configured compatible endpoint to the RPC subprocess", async () => {
-  const baseUrl = "http://127.0.0.1:11434/v1";
-  await host({ demo: false, provider: "local", model: "test", baseUrl });
-  expect(state.spawnArgs).toEqual(
-    expect.arrayContaining([
-      "--provider",
-      "local",
-      "--model",
-      "test",
-      "--base-url",
-      baseUrl,
-    ]),
-  );
-  expect(state.spawnArgs[state.spawnArgs.indexOf("--base-url") + 1]).toBe(
-    baseUrl,
-  );
+it("attaches the encrypted bridge to the existing workspace host", async () => {
+  await host();
+  expect(state.connectionOptions).toEqual({
+    cwd: "/workspace",
+    home: "/unused",
+    mode: "bridge",
+  });
 });
 
 it("forwards cancellation without waiting for a slow remote request", async () => {

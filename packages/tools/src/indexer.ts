@@ -1,4 +1,4 @@
-import { z } from "zod";
+import * as z from "zod";
 import { createHash } from "node:crypto";
 import { runProcess, resolvePath } from "./index.ts";
 import { sensitivePath } from "./workspace.ts";

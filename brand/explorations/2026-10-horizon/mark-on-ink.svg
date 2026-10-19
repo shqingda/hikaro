@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title">
+  <title id="title">Hikaro 向光：深色背景候选</title>
+  <circle cx="179" cy="72" r="25" fill="#F2B500"/>
+  <path d="M36 174C77 76 167 76 220 174H192C153 108 104 108 64 174Z" fill="#F7F7F6"/>
+  <path d="M36 191H220" fill="none" stroke="#F7F7F6" stroke-width="7"/>
+</svg>

@@ -1,3 +1,7 @@
+import type {
+  DurableCommandReceipt,
+  RpcMethod,
+} from "../../protocol/src/contracts.ts";
 import type { Chunk } from "../../tools/src/indexer.ts";
 import type { Job } from "../../core/src/jobs.ts";
 import { Worker } from "node:worker_threads";
@@ -11,6 +15,9 @@ import type {
   MessagePage,
   ModelSelection,
   SessionLease,
+  ContextCheckpoint,
+  ContextCheckpointInput,
+  ContextHistory,
 } from "../../core/src/types.ts";
 export class SQLiteStore implements EventStore {
   private pending = new Map<
@@ -28,13 +35,14 @@ export class SQLiteStore implements EventStore {
       else p?.resolve(result);
     });
     const fail = (e: Error) => {
-      this.failure = e;
+      this.failure ??= e;
       for (const p of this.pending.values()) p.reject(e);
       this.pending.clear();
     };
     worker.on("error", fail);
     worker.on("exit", (code) => {
-      if (!this.closed) fail(new Error(`Storage worker exited (${code})`));
+      if (!this.closed && !this.failure)
+        fail(new Error(`Storage worker exited (${code})`));
     });
   }
   static async open(path: string) {
@@ -79,8 +87,77 @@ export class SQLiteStore implements EventStore {
       modelSelection,
     });
   }
-  sessions(offset = 0, limit = 100, cwd?: string) {
-    return this.request<Session[]>("sessions", { offset, limit, cwd });
+  sessions(
+    offset = 0,
+    limit = 100,
+    cwd?: string,
+    query?: string,
+    scope?: string,
+  ) {
+    return this.request<Session[]>("sessions", {
+      offset,
+      limit,
+      cwd,
+      query,
+      scope,
+    });
+  }
+  claimHost(workspace: string, instanceId: string) {
+    return this.request<boolean>("claimHost", { workspace, instanceId });
+  }
+  releaseHost(workspace: string, instanceId: string) {
+    return this.request<void>("releaseHost", { workspace, instanceId });
+  }
+  setSessionAccess(
+    workspace: string,
+    sessionId: string,
+    scope: string,
+    role: "owner" | "view" | "control" | null,
+  ) {
+    return this.request<void>("setSessionAccess", {
+      workspace,
+      sessionId,
+      scope,
+      role,
+    });
+  }
+  sessionRole(workspace: string, sessionId: string, scope: string) {
+    return this.request<"owner" | "view" | "control" | null>("sessionRole", {
+      workspace,
+      sessionId,
+      scope,
+    });
+  }
+  sessionAccess(workspace: string, sessionId: string) {
+    return this.request<
+      Array<{ scope: string; role: "owner" | "view" | "control" }>
+    >("sessionAccess", { workspace, sessionId });
+  }
+  attachView(
+    workspace: string,
+    scope: string,
+    sessionId: string,
+    local: boolean,
+  ) {
+    return this.request<"owner" | "view" | "control" | null>("attachView", {
+      workspace,
+      scope,
+      sessionId,
+      local,
+    });
+  }
+  saveClientView(workspace: string, scope: string, sessionId: string) {
+    return this.request<void>("saveClientView", {
+      workspace,
+      scope,
+      sessionId,
+    });
+  }
+  clientView(workspace: string, scope: string) {
+    return this.request<string | null>("clientView", { workspace, scope });
+  }
+  revokeScope(workspace: string, scope: string) {
+    return this.request<void>("revokeScope", { workspace, scope });
   }
   forkSession(id: string) {
     return this.request<Session>("forkSession", { id });
@@ -108,9 +185,30 @@ export class SQLiteStore implements EventStore {
   }
   messagePage(
     sessionId: string,
-    options: { before?: number; after?: number; limit?: number } = {},
+    options: {
+      before?: number;
+      after?: number;
+      limit?: number;
+      bounded?: boolean;
+    } = {},
   ) {
     return this.request<MessagePage>("messagePage", { sessionId, ...options });
+  }
+  messageContent(
+    sessionId: string,
+    seq: number,
+    field: "text" | "thinking" | "image" | "artifact" | "toolCalls",
+    offset: number,
+    limit: number,
+    image = 0,
+  ) {
+    return this.request<{
+      data: string;
+      total: number;
+      nextOffset: number | null;
+      encoding: string;
+      mimeType?: string;
+    }>("messageContent", { sessionId, seq, field, offset, limit, image });
   }
   latestSeq(sessionId: string) {
     return this.request<number>("latestSeq", { sessionId });
@@ -129,11 +227,50 @@ export class SQLiteStore implements EventStore {
   messages(sessionId: string, limit = 200) {
     return this.request<Message[]>("messages", { sessionId, limit });
   }
-  contextHistory(sessionId: string) {
-    return this.request<{ messages: Message[]; omitted: number }>(
-      "contextHistory",
-      { sessionId },
+  contextHistory(sessionId: string, options: { after?: number } = {}) {
+    return this.request<ContextHistory>("contextHistory", {
+      sessionId,
+      ...options,
+    });
+  }
+  contextSourcePage(
+    sessionId: string,
+    options: { after: number; through: number; limit?: number },
+  ) {
+    return this.request<Array<{ seq: number; message: Message }>>(
+      "contextSourcePage",
+      { sessionId, ...options },
     );
+  }
+  async commitContextCheckpoint(
+    sessionId: string,
+    checkpoint: ContextCheckpointInput,
+    lease: SessionLease,
+    signal?: AbortSignal,
+  ) {
+    signal?.throwIfAborted();
+    // The worker may be blocked on SQLite's writer lock. A shared flag lets
+    // cancellation win without waiting for the worker's message queue.
+    const cancellation = signal
+      ? new Int32Array(new SharedArrayBuffer(4))
+      : undefined;
+    const abort = () => {
+      if (cancellation) Atomics.compareExchange(cancellation, 0, 0, 1);
+    };
+    signal?.addEventListener("abort", abort, { once: true });
+    try {
+      return await this.request<ContextCheckpoint>("commitContextCheckpoint", {
+        sessionId,
+        ...checkpoint,
+        lease,
+        cancellation: cancellation?.buffer,
+      });
+    } catch (error) {
+      signal?.throwIfAborted();
+      throw error;
+    } finally {
+      signal?.removeEventListener("abort", abort);
+    }
   }
   indexReplace(workspace: string, path: string, chunks: Chunk[]) {
     return this.request<void>("indexReplace", { workspace, path, chunks });
@@ -194,6 +331,47 @@ export class SQLiteStore implements EventStore {
   }
   release(sessionId: string, owner: string) {
     return this.request<void>("release", { sessionId, owner });
+  }
+  latestRunEvent(sessionId: string) {
+    return this.request<AgentEvent | undefined>("latestRunEvent", {
+      sessionId,
+    });
+  }
+  acceptCommand(args: {
+    workspace: string;
+    scope: string;
+    id: string;
+    method: RpcMethod;
+    digest: string;
+    hostInstanceId: string;
+    sessionId: string | null;
+    operationId?: string;
+  }) {
+    return this.request<{ inserted: boolean; receipt: DurableCommandReceipt }>(
+      "acceptCommand",
+      args,
+    );
+  }
+  commandReceipt(args: {
+    workspace: string;
+    scope: string;
+    id: string;
+    hostInstanceId: string;
+  }) {
+    return this.request<DurableCommandReceipt | null>("commandReceipt", args);
+  }
+  finishCommand(args: {
+    workspace: string;
+    scope: string;
+    id: string;
+    hostInstanceId: string;
+    status: "completed" | "failed";
+    sessionId?: string;
+    runId?: string;
+    operationId?: string;
+    error?: string;
+  }) {
+    return this.request<void>("finishCommand", args);
   }
   claim(commandId: string, sessionId: string) {
     return this.request<boolean>("claim", { commandId, sessionId });

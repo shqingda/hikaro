@@ -40,7 +40,8 @@ const token = (r: Request) => {
       ?.slice(6) ?? ""
   );
 };
-const json = (data: unknown, status = 200) => Response.json(data, { status });
+const json = (data: unknown, status = 200) =>
+  Response.json(data, { status, headers: { "Cache-Control": "no-store" } });
 async function body(request: Request): Promise<Record<string, unknown>> {
   if (!request.body) throw Error("Invalid body");
   const reader = request.body.getReader();
@@ -76,7 +77,7 @@ export default {
   async fetch(request: Request, env: Env) {
     const url = new URL(request.url);
     const match = url.pathname.match(
-      /^\/hosts\/([A-Za-z0-9_-]{43})\/(register|enroll|activate|revoke|push|notify-enqueue|host|device\/[A-Za-z0-9_-]{43})$/,
+      /^\/hosts\/([A-Za-z0-9_-]{43})\/(register|enroll|activate|revoke|push|notify-enqueue|host|(?:device|device-status)\/[A-Za-z0-9_-]{43})$/,
     );
     if (!match || url.search) return json({ error: "Not found" }, 404);
     return env.HOSTS.get(env.HOSTS.idFromName(match[1]!)).fetch(request);
@@ -257,6 +258,25 @@ export class HostRelay {
         await this.env.NOTIFICATIONS.send(notice);
       }
       return json({ ok: true });
+    }
+    if (operation === "device-status" && request.method === "GET") {
+      const deviceId = match?.[3];
+      const device = idValid(deviceId)
+        ? await this.state.storage.get<Device>("device:" + deviceId)
+        : undefined;
+      if (
+        !device ||
+        !idValid(secret) ||
+        device.token !== (await hash(secret)) ||
+        (device.expires !== undefined && device.expires <= Date.now())
+      )
+        return json({ error: "Unauthorized" }, 401);
+      return json({
+        confirmed: device.expires === undefined,
+        hostOnline: this.state
+          .getWebSockets("host")
+          .some((s) => s.readyState === WebSocket.OPEN),
+      });
     }
     if (
       request.method !== "GET" ||

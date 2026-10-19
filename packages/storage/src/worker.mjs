@@ -3,22 +3,46 @@ import { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "node:crypto";
 import { chmodSync } from "node:fs";
 const db = new DatabaseSync(workerData.path);
+// SQLite's built-in lower() only folds ASCII. Match the TUI's Unicode search.
+db.function("hikaro_lower", { deterministic: true }, (text) =>
+  text.toLowerCase(),
+);
 if (workerData.path !== ":memory:") chmodSync(workerData.path, 0o600);
-db.exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000;
+db.exec("PRAGMA busy_timeout=5000");
+// Changing journal mode can return BUSY without invoking SQLite's busy handler
+// when two first-open connections race. Retry only that bounded initialization.
+const walDeadline = Date.now() + 5000;
+for (;;) {
+  try {
+    db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;");
+    break;
+  } catch (error) {
+    if (error.errcode !== 5 || Date.now() >= walDeadline) throw error;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+// Serialize schema creation and migration with one durable commit. FULL remains
+// enabled; fresh stores avoid a separate filesystem sync for each DDL statement.
+db.exec("BEGIN IMMEDIATE");
+try {
+  db.exec(`
 CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY,title TEXT NOT NULL,cwd TEXT NOT NULL,createdAt INTEGER NOT NULL,parentId TEXT);
 CREATE TABLE IF NOT EXISTS session_models(sessionId TEXT PRIMARY KEY,data TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS workspace_state(cwd TEXT PRIMARY KEY,sessionId TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS session_drafts(sessionId TEXT PRIMARY KEY,text TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS context_checkpoints(sessionId TEXT PRIMARY KEY,seq INTEGER NOT NULL,throughSeq INTEGER NOT NULL,summary TEXT NOT NULL,timestamp INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS events(seq INTEGER PRIMARY KEY AUTOINCREMENT,sessionId TEXT NOT NULL,type TEXT NOT NULL,data TEXT NOT NULL,timestamp INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS session_events ON events(sessionId,seq);
 CREATE TABLE IF NOT EXISTS chunks(id TEXT PRIMARY KEY,workspace TEXT,path TEXT,line INTEGER,text TEXT,hash TEXT,vector TEXT,model TEXT);
 CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(id UNINDEXED,text);
 CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,sessionId TEXT NOT NULL,task TEXT NOT NULL,runAt INTEGER NOT NULL,state TEXT NOT NULL,owner TEXT,leaseUntil INTEGER,error TEXT);
 CREATE TABLE IF NOT EXISTS leases(sessionId TEXT PRIMARY KEY,owner TEXT NOT NULL,expires INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS session_run_events ON events(sessionId,seq) WHERE type IN ('run.start','run.end');
+CREATE TABLE IF NOT EXISTS rpc_commands(workspace TEXT NOT NULL,scope TEXT NOT NULL,id TEXT NOT NULL,method TEXT NOT NULL,digest TEXT NOT NULL,hostInstanceId TEXT NOT NULL,sessionId TEXT,status TEXT NOT NULL,runId TEXT,operationId TEXT,error TEXT,createdAt INTEGER NOT NULL,updatedAt INTEGER NOT NULL,PRIMARY KEY(workspace,scope,id)) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS commands(id TEXT PRIMARY KEY,sessionId TEXT NOT NULL,createdAt INTEGER NOT NULL);`);
-// Serialize the migration because two runtime processes can open an older DB together.
-db.exec("BEGIN IMMEDIATE");
-try {
+  db.exec(`CREATE TABLE IF NOT EXISTS shared_hosts(workspace TEXT PRIMARY KEY,instanceId TEXT NOT NULL,pid INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS session_access(workspace TEXT NOT NULL,sessionId TEXT NOT NULL,scope TEXT NOT NULL,role TEXT NOT NULL,PRIMARY KEY(workspace,sessionId,scope)) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS client_views(workspace TEXT NOT NULL,scope TEXT NOT NULL,sessionId TEXT NOT NULL,PRIMARY KEY(workspace,scope)) WITHOUT ROWID;`);
   if (
     !db
       .prepare("PRAGMA table_info(leases)")
@@ -90,6 +114,116 @@ function insertSession({ cwd, title, parentId, modelSelection }) {
   return { ...session, ...(modelSelection ? { modelSelection } : {}) };
 }
 const handlers = {
+  claimHost({ workspace, instanceId }) {
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      const previous = db
+        .prepare("SELECT * FROM shared_hosts WHERE workspace=?")
+        .get(workspace);
+      if (previous) {
+        let alive = true;
+        try {
+          process.kill(previous.pid, 0);
+        } catch (e) {
+          if (e.code === "ESRCH") alive = false;
+        }
+        if (alive) {
+          db.exec("COMMIT");
+          return (
+            previous.pid === process.pid && previous.instanceId === instanceId
+          );
+        }
+      }
+      db.prepare(
+        "INSERT INTO shared_hosts VALUES(?,?,?) ON CONFLICT(workspace) DO UPDATE SET instanceId=excluded.instanceId,pid=excluded.pid",
+      ).run(workspace, instanceId, process.pid);
+      db.exec("COMMIT");
+      return true;
+    } catch (e) {
+      db.exec("ROLLBACK");
+      throw e;
+    }
+  },
+  releaseHost({ workspace, instanceId }) {
+    db.prepare(
+      "DELETE FROM shared_hosts WHERE workspace=? AND instanceId=? AND pid=?",
+    ).run(workspace, instanceId, process.pid);
+  },
+  setSessionAccess({ workspace, sessionId, scope, role }) {
+    if (
+      !db
+        .prepare("SELECT 1 FROM sessions WHERE id=? AND cwd=?")
+        .get(sessionId, workspace)
+    )
+      throw Error("Session is outside this workspace");
+    if (role === null)
+      db.prepare(
+        "DELETE FROM session_access WHERE workspace=? AND sessionId=? AND scope=?",
+      ).run(workspace, sessionId, scope);
+    else
+      db.prepare(
+        "INSERT INTO session_access VALUES(?,?,?,?) ON CONFLICT(workspace,sessionId,scope) DO UPDATE SET role=excluded.role",
+      ).run(workspace, sessionId, scope, role);
+  },
+  sessionRole({ workspace, sessionId, scope }) {
+    return (
+      db
+        .prepare(
+          "SELECT role FROM session_access WHERE workspace=? AND sessionId=? AND scope=?",
+        )
+        .get(workspace, sessionId, scope)?.role ?? null
+    );
+  },
+  sessionAccess({ workspace, sessionId }) {
+    return db
+      .prepare(
+        "SELECT scope,role FROM session_access WHERE workspace=? AND sessionId=?",
+      )
+      .all(workspace, sessionId);
+  },
+  attachView({ workspace, scope, sessionId, local }) {
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      const role = handlers.sessionRole({ workspace, sessionId, scope });
+      if (!local && !role) throw Error("Session access denied");
+      handlers.saveClientView({ workspace, scope, sessionId });
+      db.exec("COMMIT");
+      return role;
+    } catch (e) {
+      db.exec("ROLLBACK");
+      throw e;
+    }
+  },
+  saveClientView({ workspace, scope, sessionId }) {
+    db.prepare(
+      "INSERT INTO client_views VALUES(?,?,?) ON CONFLICT(workspace,scope) DO UPDATE SET sessionId=excluded.sessionId",
+    ).run(workspace, scope, sessionId);
+  },
+  clientView({ workspace, scope }) {
+    return (
+      db
+        .prepare(
+          "SELECT sessionId FROM client_views WHERE workspace=? AND scope=?",
+        )
+        .get(workspace, scope)?.sessionId ?? null
+    );
+  },
+  revokeScope({ workspace, scope }) {
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      db.prepare(
+        "DELETE FROM session_access WHERE workspace=? AND scope=?",
+      ).run(workspace, scope);
+      db.prepare("DELETE FROM client_views WHERE workspace=? AND scope=?").run(
+        workspace,
+        scope,
+      );
+      db.exec("COMMIT");
+    } catch (e) {
+      db.exec("ROLLBACK");
+      throw e;
+    }
+  },
   rememberSession({ id }) {
     const session = handlers.session({ id });
     if (!session) throw Error("Session not found");
@@ -153,6 +287,9 @@ const handlers = {
         "commands",
         "leases",
         "jobs",
+        "context_checkpoints",
+        "session_access",
+        "client_views",
       ])
         db.prepare(`DELETE FROM ${table} WHERE sessionId=?`).run(id);
       db.prepare("UPDATE sessions SET parentId=NULL WHERE parentId=?").run(id);
@@ -196,22 +333,43 @@ const handlers = {
       throw error;
     }
   },
-  sessions({ offset = 0, limit = 100, cwd } = {}) {
-    return cwd
-      ? db
-          .prepare(
-            sessionQuery +
-              " WHERE s.cwd=? ORDER BY s.createdAt DESC, s.rowid DESC LIMIT ? OFFSET ?",
-          )
-          .all(cwd, Math.min(limit, 100), offset)
-          .map(decodeSession)
-      : db
-          .prepare(
-            sessionQuery +
-              " ORDER BY s.createdAt DESC, s.rowid DESC LIMIT ? OFFSET ?",
-          )
-          .all(Math.min(limit, 100), offset)
-          .map(decodeSession);
+  sessions({ offset = 0, limit = 100, cwd, query = "", scope } = {}) {
+    if (
+      !Number.isSafeInteger(offset) ||
+      offset < 0 ||
+      !Number.isSafeInteger(limit) ||
+      limit < 1
+    )
+      throw Error("Invalid session pagination");
+    if (typeof query !== "string" || query.length > 512)
+      throw Error("Session search must be at most 512 characters");
+    const where = [],
+      args = [];
+    if (cwd !== undefined) {
+      where.push("s.cwd=?");
+      args.push(cwd);
+    }
+    const text = query.trim().toLowerCase();
+    if (scope !== undefined) {
+      where.push(
+        "EXISTS(SELECT 1 FROM session_access a WHERE a.workspace=s.cwd AND a.sessionId=s.id AND a.scope=?)",
+      );
+      args.push(scope);
+    }
+    if (text) {
+      where.push(
+        "(instr(hikaro_lower(s.title),?)>0 OR instr(lower(s.id),?)>0)",
+      );
+      args.push(text, text);
+    }
+    return db
+      .prepare(
+        sessionQuery +
+          (where.length ? " WHERE " + where.join(" AND ") : "") +
+          " ORDER BY s.createdAt DESC, s.rowid DESC LIMIT ? OFFSET ?",
+      )
+      .all(...args, Math.min(limit, 100), offset)
+      .map(decodeSession);
   },
   forkSession({ id }) {
     db.exec("BEGIN IMMEDIATE");
@@ -244,7 +402,7 @@ const handlers = {
       )
       .get(sessionId).seq;
   },
-  messagePage({ sessionId, before, after, limit = 20 }) {
+  messagePage({ sessionId, before, after, limit = 20, bounded = false }) {
     const ascending = after !== undefined;
     const rows = db
       .prepare(
@@ -258,7 +416,34 @@ const handlers = {
     const items = [];
     let bytes = 0;
     for (const r of rows) {
-      const { providerData, images, ...message } = JSON.parse(r.data).message;
+      const { providerData, images, ...original } = JSON.parse(r.data).message;
+      const message = bounded
+        ? {
+            role: original.role,
+            timestamp: original.timestamp,
+            text: original.text.slice(0, 20000),
+            textLength: original.text.length,
+            ...(original.thinking
+              ? {
+                  thinking: original.thinking.slice(0, 4000),
+                  thinkingLength: original.thinking.length,
+                }
+              : {}),
+            ...(original.name ? { name: original.name.slice(0, 256) } : {}),
+            ...(original.callId ? { callId: original.callId } : {}),
+            ...(original.isError ? { isError: true } : {}),
+            ...(original.toolCalls?.length
+              ? {
+                  toolCalls: original.toolCalls.slice(0, 32).map((call) => ({
+                    id: call.id.slice(0, 128),
+                    name: call.name.slice(0, 256),
+                    arguments: {},
+                  })),
+                  toolCallsTruncated: true,
+                }
+              : {}),
+          }
+        : original;
       const size = Buffer.byteLength(JSON.stringify(message));
       if (items.length && bytes + size > 450000) break;
       items.push({
@@ -286,6 +471,44 @@ const handlers = {
         )
         .get(sessionId, items.at(-1).seq);
     return { items, hasOlder, hasNewer };
+  },
+  messageContent({ sessionId, seq, field, offset, limit, image }) {
+    const row = db
+      .prepare("SELECT type,data FROM events WHERE sessionId=? AND seq=?")
+      .get(sessionId, seq);
+    if (!row) throw Error("Content not found in this session");
+    const event = JSON.parse(row.data);
+    if (field === "artifact") {
+      if (row.type !== "tool.end") throw Error("Not a tool result");
+      return {
+        data:
+          event.result?.data?.artifact ??
+          event.result?.data?.process?.artifact ??
+          "",
+        encoding: "host-artifact-reference",
+        total: 0,
+        nextOffset: null,
+      };
+    }
+    if (row.type !== "message") throw Error("Not a message");
+    const message = event.message;
+    const value =
+      field === "image"
+        ? message.images?.[image]?.data
+        : field === "toolCalls"
+          ? JSON.stringify(message.toolCalls ?? [])
+          : message[field];
+    if (typeof value !== "string") throw Error("Message content not found");
+    const end = Math.min(value.length, offset + limit);
+    return {
+      data: value.slice(offset, end),
+      total: value.length,
+      nextOffset: end < value.length ? end : null,
+      encoding: field === "image" ? "base64" : "utf16",
+      ...(field === "image"
+        ? { mimeType: message.images[image].mimeType }
+        : {}),
+    };
   },
   append({ sessionId, type, data, lease }) {
     db.exec("BEGIN IMMEDIATE");
@@ -340,16 +563,147 @@ const handlers = {
     }
     return result.reverse();
   },
-  contextHistory({ sessionId }) {
+  contextSourcePage({ sessionId, after, through, limit = 40 }) {
+    if (
+      !Number.isSafeInteger(after) ||
+      after < 0 ||
+      !Number.isSafeInteger(through) ||
+      through < after ||
+      !Number.isSafeInteger(limit) ||
+      limit < 1
+    )
+      throw Error("Invalid context source range");
     const rows = db
       .prepare(
-        "SELECT data FROM events WHERE sessionId=? AND type='message' ORDER BY seq DESC",
+        "SELECT seq,data FROM events WHERE sessionId=? AND type='message' AND seq>? AND seq<=? ORDER BY seq LIMIT ?",
       )
-      .iterate(sessionId);
+      .iterate(sessionId, after, through, Math.min(limit, 100));
+    const items = [];
+    let bytes = 0;
+    for (const row of rows) {
+      const { providerData, images, ...content } = JSON.parse(row.data).message;
+      const message = {
+        ...content,
+        ...(images?.length
+          ? {
+              images: images.map((image) => ({
+                mimeType: image.mimeType,
+                data: "",
+              })),
+            }
+          : {}),
+      };
+      const size = Buffer.byteLength(JSON.stringify(message));
+      if (items.length && bytes + size > 450000) break;
+      items.push({ seq: row.seq, message });
+      bytes += size;
+    }
+    return items;
+  },
+  commitContextCheckpoint({
+    sessionId,
+    throughSeq,
+    summary,
+    expectedCheckpointSeq,
+    expectedLastMessageSeq,
+    lease,
+    cancellation,
+  }) {
+    if (
+      !lease ||
+      typeof summary !== "string" ||
+      !summary.trim() ||
+      Buffer.byteLength(summary) > 65536 ||
+      ![throughSeq, expectedCheckpointSeq, expectedLastMessageSeq].every(
+        (n) => Number.isSafeInteger(n) && n >= 0,
+      )
+    )
+      throw Error("Invalid context checkpoint");
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      const cancelled = cancellation ? new Int32Array(cancellation) : undefined;
+      if (cancelled && Atomics.load(cancelled, 0) === 1)
+        throw Error("Context checkpoint cancelled");
+      assertLease(sessionId, lease);
+      const previous = db
+        .prepare(
+          "SELECT seq,throughSeq FROM context_checkpoints WHERE sessionId=?",
+        )
+        .get(sessionId);
+      const latest = db
+        .prepare(
+          "SELECT COALESCE(MAX(seq),0) AS seq FROM events WHERE sessionId=? AND type='message'",
+        )
+        .get(sessionId).seq;
+      if (
+        (previous?.seq ?? 0) !== expectedCheckpointSeq ||
+        latest !== expectedLastMessageSeq
+      )
+        throw Error("Context source or checkpoint changed before commit");
+      if (
+        throughSeq <= (previous?.throughSeq ?? 0) ||
+        throughSeq >= latest ||
+        !db
+          .prepare(
+            "SELECT 1 FROM events WHERE sessionId=? AND type='message' AND seq>? AND seq<=? LIMIT 1",
+          )
+          .get(sessionId, previous?.throughSeq ?? 0, throughSeq)
+      )
+        throw Error("Checkpoint must advance over completed source messages");
+      const next = db
+        .prepare(
+          "SELECT data FROM events WHERE sessionId=? AND type='message' AND seq>? ORDER BY seq LIMIT 1",
+        )
+        .get(sessionId, throughSeq);
+      if (!next || JSON.parse(next.data).message.role !== "user")
+        throw Error("Checkpoint must end at a user-turn boundary");
+      const timestamp = Date.now();
+      const data = {
+        source: sessionId,
+        throughSeq,
+        previousCheckpointSeq: expectedCheckpointSeq,
+        summary,
+      };
+      const event = db
+        .prepare(
+          "INSERT INTO events(sessionId,type,data,timestamp) VALUES(?,?,?,?)",
+        )
+        .run(sessionId, "context.checkpoint", JSON.stringify(data), timestamp);
+      const seq = Number(event.lastInsertRowid);
+      db.prepare(
+        "INSERT INTO context_checkpoints VALUES(?,?,?,?,?) ON CONFLICT(sessionId) DO UPDATE SET seq=excluded.seq,throughSeq=excluded.throughSeq,summary=excluded.summary,timestamp=excluded.timestamp",
+      ).run(sessionId, seq, throughSeq, summary, timestamp);
+      // Atomically choose commit or cancellation. Cancellation after this point
+      // cannot revoke a valid checkpoint; source messages remain untouched.
+      if (cancelled && Atomics.compareExchange(cancelled, 0, 0, 2) === 1)
+        throw Error("Context checkpoint cancelled");
+      db.exec("COMMIT");
+      return { seq, throughSeq, summary, timestamp };
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
+  },
+  contextHistory({ sessionId, after = 0 }) {
+    if (!Number.isSafeInteger(after) || after < 0)
+      throw Error("Invalid context cursor");
+    const checkpoint = db
+      .prepare(
+        "SELECT seq,throughSeq,summary,timestamp FROM context_checkpoints WHERE sessionId=?",
+      )
+      .get(sessionId);
+    const boundary = Math.max(after, checkpoint?.throughSeq ?? 0);
+    const rows = db
+      .prepare(
+        "SELECT seq,data FROM events WHERE sessionId=? AND type='message' AND seq>? ORDER BY seq DESC",
+      )
+      .iterate(sessionId, boundary);
     const messages = [];
     let bytes = 0,
-      truncated = false;
+      truncated = false,
+      lastMessageSeq = checkpoint?.throughSeq ?? 0;
     for (const row of rows) {
+      if (!messages.length) lastMessageSeq = row.seq;
       const size = Buffer.byteLength(row.data);
       if (bytes + size > 8 * 1024 * 1024) {
         truncated = true;
@@ -359,7 +713,7 @@ const handlers = {
       bytes += size;
     }
     messages.reverse();
-    if (!truncated) return { messages, omitted: 0 };
+    if (!truncated) return { messages, omitted: 0, checkpoint, lastMessageSeq };
     const firstUser = messages.findIndex((message) => message.role === "user");
     if (firstUser < 0)
       throw Error(
@@ -368,10 +722,15 @@ const handlers = {
     messages.splice(0, firstUser);
     const total = db
       .prepare(
-        "SELECT COUNT(*) AS count FROM events WHERE sessionId=? AND type='message'",
+        "SELECT COUNT(*) AS count FROM events WHERE sessionId=? AND type='message' AND seq>?",
       )
-      .get(sessionId).count;
-    return { messages, omitted: total - messages.length };
+      .get(sessionId, boundary).count;
+    return {
+      messages,
+      omitted: total - messages.length,
+      checkpoint,
+      lastMessageSeq,
+    };
   },
   indexReplace({ workspace, path, chunks }) {
     db.exec("BEGIN IMMEDIATE");
@@ -572,6 +931,142 @@ const handlers = {
       sessionId,
       owner,
     );
+  },
+  latestRunEvent({ sessionId }) {
+    const row = db
+      .prepare(
+        "SELECT * FROM events WHERE sessionId=? AND type IN ('run.start','run.end') ORDER BY seq DESC LIMIT 1",
+      )
+      .get(sessionId);
+    return row && decode(row);
+  },
+  commandReceipt({ workspace, scope, id, hostInstanceId }) {
+    const row = db
+      .prepare(
+        "SELECT * FROM rpc_commands WHERE workspace=? AND scope=? AND id=?",
+      )
+      .get(workspace, scope, id);
+    if (row) {
+      const { workspace: _, ...receipt } = row;
+      if (
+        receipt.status === "accepted" &&
+        receipt.hostInstanceId !== hostInstanceId
+      )
+        receipt.status = "unknown";
+      for (const key of ["runId", "operationId", "error"])
+        if (receipt[key] === null) delete receipt[key];
+      return receipt;
+    }
+    // Legacy IDs were global and had no scope or digest. Suppress execution
+    // without exposing the original scope's session or claiming equivalence.
+    const legacy = db
+      .prepare(
+        "SELECT c.createdAt FROM commands c JOIN sessions s ON s.id=c.sessionId WHERE c.id=? AND s.cwd=?",
+      )
+      .get(id, workspace);
+    return legacy
+      ? {
+          id,
+          scope,
+          method: "prompt",
+          digest: null,
+          hostInstanceId: null,
+          sessionId: null,
+          status: "unknown",
+          createdAt: legacy.createdAt,
+          updatedAt: legacy.createdAt,
+        }
+      : null;
+  },
+  acceptCommand(args) {
+    const {
+      workspace,
+      scope,
+      id,
+      method,
+      digest,
+      hostInstanceId,
+      sessionId,
+      operationId,
+    } = args;
+    if (!/^[a-f0-9]{64}$/.test(digest)) throw Error("Invalid command digest");
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      const receipt = handlers.commandReceipt(args);
+      if (receipt) {
+        if (
+          receipt.digest !== null &&
+          (receipt.digest !== digest || receipt.method !== method)
+        )
+          throw Error("Command ID payload conflict");
+        db.exec("COMMIT");
+        return { inserted: false, receipt };
+      }
+      if (
+        db
+          .prepare("SELECT count(*) AS n FROM rpc_commands WHERE workspace=?")
+          .get(workspace).n >= 100000
+      )
+        throw Error("Command receipt capacity exceeded; existing IDs retained");
+      const now = Date.now();
+      db.prepare(
+        "INSERT INTO rpc_commands(workspace,scope,id,method,digest,hostInstanceId,sessionId,status,operationId,createdAt,updatedAt) VALUES(?,?,?,?,?,?,?,'accepted',?,?,?)",
+      ).run(
+        workspace,
+        scope,
+        id,
+        method,
+        digest,
+        hostInstanceId,
+        sessionId,
+        operationId ?? null,
+        now,
+        now,
+      );
+      const inserted = handlers.commandReceipt(args);
+      db.exec("COMMIT");
+      return { inserted: true, receipt: inserted };
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
+  },
+  finishCommand({
+    workspace,
+    scope,
+    id,
+    hostInstanceId,
+    status,
+    sessionId,
+    runId,
+    operationId,
+    error,
+  }) {
+    if (status !== "completed" && status !== "failed")
+      throw Error("Invalid command completion");
+    if (
+      error !== undefined &&
+      (typeof error !== "string" || error.length > 4096)
+    )
+      throw Error("Command error capacity exceeded");
+    const changed = db
+      .prepare(
+        "UPDATE rpc_commands SET status=?,sessionId=coalesce(?,sessionId),runId=coalesce(?,runId),operationId=coalesce(?,operationId),error=?,updatedAt=? WHERE workspace=? AND scope=? AND id=? AND hostInstanceId=? AND status='accepted'",
+      )
+      .run(
+        status,
+        sessionId ?? null,
+        runId ?? null,
+        operationId ?? null,
+        error ?? null,
+        Date.now(),
+        workspace,
+        scope,
+        id,
+        hostInstanceId,
+      ).changes;
+    if (!changed)
+      throw Error("Command receipt ownership lost or already settled");
   },
   claim({ commandId, sessionId }) {
     return (

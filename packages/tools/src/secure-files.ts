@@ -74,15 +74,16 @@ class Frames {
 }
 
 function start(
-  mode: "read" | "update",
+  mode: "read" | "update" | "read-many",
   path: string,
   signal: AbortSignal,
   limit: number,
 ) {
   signal.throwIfAborted();
+  const batch = mode === "read-many";
   if (
-    !path.startsWith("/") ||
-    path.includes("\0") ||
+    (!batch && (!path.startsWith("/") || path.includes("\0"))) ||
+    (batch && !/^(?:[1-9][0-9]?|100)$/.test(path)) ||
     !Number.isSafeInteger(limit) ||
     limit < 0 ||
     limit > capacity
@@ -164,6 +165,9 @@ function start(
     },
     async close() {
       child.stdin.end();
+      // An interrupted batch may have unread frames. Release the pipe so a
+      // helper that already exited cannot wait forever for stdout consumption.
+      child.stdout.destroy();
       stop();
       await done.catch(() => {});
     },
@@ -194,6 +198,69 @@ export async function readTextFile(
   limit = 2_000_000,
 ) {
   return (await readFileBytes(path, signal, limit)).toString("utf8");
+}
+
+/** Authorize every canonical path first. Results are provisional until this
+ * promise succeeds; consume each result immediately rather than retaining file
+ * bodies. Individual file errors continue, while IPC failure/cancellation aborts
+ * the batch. At most one file body and bounded pipe buffers are held at a time. */
+export async function readFileBytesBatch(
+  paths: readonly string[],
+  signal: AbortSignal,
+  receive: (result: PromiseSettledResult<Buffer>, index: number) => void,
+  limit = 2_000_000,
+) {
+  signal.throwIfAborted();
+  if (
+    paths.length > 100 ||
+    !Number.isSafeInteger(limit) ||
+    limit < 0 ||
+    limit > 2_000_000 ||
+    paths.some(
+      (path) =>
+        !path.startsWith("/") ||
+        path.includes("\0") ||
+        Buffer.byteLength(path) > 32768,
+    )
+  )
+    throw Error(
+      "Invalid secure file batch (100 paths and 2,000,000 byte limit)",
+    );
+  if (!paths.length) return;
+  const worker = start("read-many", String(paths.length), signal, limit);
+  // Send and consume concurrently: either pipe may apply backpressure before a
+  // large manifest or file finishes. Every input byte is bounded and authorized.
+  const request = worker.send(
+    Buffer.concat(
+      paths.flatMap((path) => {
+        const bytes = Buffer.from(path);
+        return [Buffer.from(`${bytes.length}\n`), bytes];
+      }),
+    ),
+  );
+  void request.catch(() => {});
+  try {
+    for (let index = 0; index < paths.length; index++) {
+      signal.throwIfAborted();
+      let result: PromiseSettledResult<Buffer>;
+      try {
+        const content = await worker.snapshot();
+        if (content === undefined) throw Error("Invalid secure file snapshot");
+        result = { status: "fulfilled", value: content };
+      } catch (error) {
+        signal.throwIfAborted();
+        if (!(error instanceof SecureFileError)) throw error;
+        result = { status: "rejected", reason: error };
+      }
+      receive(result, index);
+    }
+    await request;
+    await worker.done;
+    signal.throwIfAborted();
+  } finally {
+    await worker.close();
+    await request.catch(() => {});
+  }
 }
 
 export async function replaceTextFile(

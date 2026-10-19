@@ -3,8 +3,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { modelCapabilities, type ModelSettings } from "./settings.ts";
 import type { ModelSelection } from "../../core/src/types.ts";
-import { z } from "zod";
-import { createModels, InMemoryCredentialStore } from "@earendil-works/pi-ai";
+import * as z from "zod";
 const selectionSchema = z.object({
   provider: z.string().min(1),
   model: z.string().min(1),
@@ -79,6 +78,8 @@ export class ProviderCatalog {
   ) {}
   async collection() {
     if (!this.models) {
+      const { createModels, InMemoryCredentialStore } =
+        await import("@earendil-works/pi-ai");
       const { builtinModels } =
         await import("@earendil-works/pi-ai/providers/all");
       const browsing = builtinModels({

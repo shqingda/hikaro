@@ -14,6 +14,7 @@ export class ProcessClient {
     }
   >();
   private listeners = new Set<(value: any) => void>();
+  private observers = new Set<(value: unknown) => void>();
   private exits = new Set<(error: Error) => void>();
   private stderr = "";
   private ended?: Error;
@@ -28,22 +29,32 @@ export class ProcessClient {
     this.child = spawn(command, args, { ...options, stdio: "pipe" });
     const parser = new JsonLines((value) => {
       const message = value as any;
-      if (message.type === "response" && typeof message.id === "string") {
-        const pending = this.pending.get(message.id);
-        if (!pending) return;
-        this.pending.delete(message.id);
-        clearTimeout(pending.timer);
-        if (message.error || message.success === false) {
-          pending.reject(
-            Error(
-              typeof message.error === "string"
-                ? message.error
-                : JSON.stringify(message.error ?? "RPC request failed"),
-            ),
-          );
-        } else pending.resolve(message.result ?? message.data ?? message);
-      } else {
-        for (const listener of this.listeners) listener(message);
+      try {
+        if (message.type === "response" && typeof message.id === "string") {
+          const pending = this.pending.get(message.id);
+          if (!pending) return;
+          this.pending.delete(message.id);
+          clearTimeout(pending.timer);
+          if (message.error || message.success === false) {
+            pending.reject(
+              Error(
+                typeof message.error === "string"
+                  ? message.error
+                  : JSON.stringify(message.error ?? "RPC request failed"),
+              ),
+            );
+          } else pending.resolve(message.result ?? message.data ?? message);
+        } else {
+          for (const listener of this.listeners) listener(message);
+        }
+      } finally {
+        for (const observer of this.observers) {
+          try {
+            observer(value);
+          } catch {
+            /* A state view must not break the transport. */
+          }
+        }
       }
     });
     this.child.stdout.on("data", (chunk) => {
@@ -82,6 +93,14 @@ export class ProcessClient {
     }
     this.pending.clear();
     for (const listener of this.exits) listener(error);
+  }
+
+  /** All raw frames, in wire order, including responses; no duplicate request dispatch. */
+  observe(observer: (value: unknown) => void) {
+    this.observers.add(observer);
+    return () => {
+      this.observers.delete(observer);
+    };
   }
 
   subscribe(listener: (value: any) => void) {

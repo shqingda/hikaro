@@ -114,7 +114,9 @@ export async function createPiProvider(options: {
       provider: options.provider,
       baseUrl: normalizeEndpointUrl(options.baseUrl),
       reasoning: false,
-      input: ["text"],
+      // The compatible transport can carry images. Actual model support is
+      // unknown here; let the endpoint reject it instead of dropping content.
+      input: ["text", "image"],
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
       contextWindow: options.contextWindow ?? 32768,
       maxTokens: 8192,
@@ -140,10 +142,20 @@ export async function createPiProvider(options: {
     },
   );
   const selected = model;
+  const maxOutputTokens = Math.min(
+    selected.maxTokens,
+    16384,
+    Math.max(
+      256,
+      Math.floor((preferences.contextWindow ?? selected.contextWindow) * 0.35),
+    ),
+  );
   return {
     id: options.provider,
     model: options.model,
     contextWindow: preferences.contextWindow ?? selected.contextWindow,
+    maxOutputTokens,
+    supportsImages: options.baseUrl ? undefined : selected.input.includes("image"),
     async *stream(input): AsyncGenerator<ProviderEvent> {
       const context = {
         systemPrompt: input.system,
@@ -156,16 +168,7 @@ export async function createPiProvider(options: {
         reasoning:
           preferences.reasoning === "off" ? undefined : preferences.reasoning,
         sessionId: input.sessionId,
-        maxTokens: Math.min(
-          selected.maxTokens,
-          16384,
-          Math.max(
-            256,
-            Math.floor(
-              (preferences.contextWindow ?? selected.contextWindow) * 0.35,
-            ),
-          ),
-        ),
+        maxTokens: maxOutputTokens,
       };
       const stream =
         preferences.speed && preferences.speed !== "default"

@@ -3,35 +3,36 @@ import type { HikaroView } from "./index.ts";
 export async function openSessions(
   view: HikaroView,
   current: () => string,
-  list: (offset: number, limit: number) => Promise<Session[]>,
+  list: (offset: number, limit: number, query?: string) => Promise<Session[]>,
   resume: (id: string) => Promise<void>,
   remove: (id: string) => Promise<string | undefined>,
   rename?: (id: string, title: string) => Promise<void>,
+  initialQuery = "",
 ) {
   const { panel, signal, close } = view.openModelPanel();
   let warning = "",
-    offset = 0;
+    offset = 0,
+    query = initialQuery;
   try {
     for (;;) {
-      const rows = await list(offset, 51);
-      const sessions = rows.slice(0, 50);
+      let rows = await list(offset, 51, query);
+      let sessions = rows.slice(0, 50);
       if (!sessions.length && offset) {
         offset = Math.max(0, offset - 50);
         continue;
       }
+      const choices = () => [
+        ...sessions.map((session) => ({
+          value: session.id,
+          label: `${session.id === current() ? "● " : ""}${session.title}`,
+          description: session.id,
+        })),
+        ...(offset ? [{ value: "__previous", label: "Previous page…" }] : []),
+        ...(rows.length > 50 ? [{ value: "__next", label: "Next page…" }] : []),
+      ];
       const picked = await panel.choose(
-        `Sessions · page ${offset / 50 + 1} · search this page`,
-        [
-          ...sessions.map((session) => ({
-            value: session.id,
-            label: `${session.id === current() ? "● " : ""}${session.title}`,
-            description: session.id,
-          })),
-          ...(offset ? [{ value: "__previous", label: "Previous page…" }] : []),
-          ...(rows.length > 50
-            ? [{ value: "__next", label: "Next page…" }]
-            : []),
-        ],
+        `Sessions · page ${offset / 50 + 1} · search this workspace`,
+        choices(),
         warning,
         undefined,
         {
@@ -40,7 +41,17 @@ export async function openSessions(
           allowRename: (item) =>
             !!rename && sessions.some((session) => session.id === item.value),
           search: true,
-          emptyMessage: "No matching sessions on this page",
+          searchQuery: query,
+          loadItems: async (text) => {
+            const found = await list(0, 51, text);
+            if (signal.aborted || text !== panel.searchQuery) return [];
+            offset = 0;
+            panel.setTitle("Sessions · page 1 · search this workspace");
+            rows = found;
+            sessions = rows.slice(0, 50);
+            return choices();
+          },
+          emptyMessage: "No matching sessions in this workspace",
           enterAction: (item) =>
             item.value === "__previous"
               ? "previous page"
@@ -49,6 +60,7 @@ export async function openSessions(
                 : "resume",
         },
       );
+      query = picked.query ?? query;
       if (picked.value === "__previous") {
         offset -= 50;
         warning = "";

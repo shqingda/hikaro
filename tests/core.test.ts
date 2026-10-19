@@ -8,6 +8,7 @@ import {
   type Message,
 } from "../packages/core/src/index.ts";
 import { SQLiteStore } from "../packages/storage/src/index.ts";
+import { fitContext } from "../packages/core/src/context.ts";
 import { JsonLines } from "../packages/protocol/src/index.ts";
 import { codingPlugin, resolvePath } from "../packages/tools/src/index.ts";
 import { codemodePlugin } from "../packages/tools/src/codemode.ts";
@@ -52,6 +53,54 @@ const simple: ProviderAdapter = {
   },
 };
 describe("independent agent loop", () => {
+  it("snapshots the current run identity and restores persisted outcomes conservatively", async () => {
+    const { agent, session, store, tools } = await fixture(simple);
+    expect(agent.snapshot()).toMatchObject({ runId: null, runStatus: "idle" });
+    let active: ReturnType<Agent["snapshot"]> | undefined;
+    agent.subscribe((event) => {
+      if (event.type === "run.start") active = agent.snapshot();
+    });
+    await agent.prompt("Task");
+    const events = await store.events(session.id);
+    const started = events.find((event) => event.type === "run.start")!;
+    const ended = events.find((event) => event.type === "run.end")!;
+    expect(active).toMatchObject({
+      busy: true,
+      runId: started.data.runId,
+      runStatus: "running",
+    });
+    expect(agent.snapshot()).toMatchObject({
+      busy: false,
+      runId: started.data.runId,
+      runStatus: "completed",
+    });
+    const reopened = new Agent({
+      session,
+      store,
+      tools,
+      provider: simple,
+      approve: async () => false,
+    });
+    reopened.initializeCursor(ended.seq, ended);
+    expect(reopened.snapshot()).toMatchObject({
+      busy: false,
+      runId: started.data.runId,
+      runStatus: "completed",
+    });
+    reopened.initializeCursor(started.seq, started);
+    expect(reopened.snapshot()).toMatchObject({
+      busy: false,
+      runId: started.data.runId,
+      runStatus: "unknown",
+    });
+    reopened.initializeCursor(ended.seq);
+    expect(reopened.snapshot()).toMatchObject({
+      busy: false,
+      runId: null,
+      runStatus: "unknown",
+    });
+  });
+
   it.each(["prompt", "compact"] as const)(
     "keeps a cancelled %s cancelled when the provider returns a final result",
     async (operation) => {
@@ -78,6 +127,10 @@ describe("independent agent loop", () => {
       const work =
         operation === "prompt" ? agent.prompt("Task") : agent.compact();
       await expect(work).rejects.toMatchObject({ name: "AbortError" });
+      expect(agent.snapshot()).toMatchObject({
+        busy: false,
+        runStatus: "cancelled",
+      });
       expect(
         (await store.events(session.id))
           .filter((event) => event.type === "run.end")
@@ -507,17 +560,9 @@ describe("independent agent loop", () => {
     },
     { contextWindow: 10000, omitted: 5, firstRetained: "Continue" },
   ])(
-    "reports history omitted by the storage capacity and keeps whole turns ($contextWindow)",
+    "reports storage and request capacity omissions without splitting turns ($contextWindow)",
     async ({ contextWindow, omitted, firstRetained }) => {
-      let received: Message[] = [];
-      const { agent, store, session } = await fixture({
-        ...simple,
-        contextWindow,
-        async *stream(input) {
-          received = input.messages;
-          yield* simple.stream(input);
-        },
-      });
+      const { store, session } = await fixture(simple);
       const message = (role: Message["role"], text: string): Message => ({
         role,
         text,
@@ -545,12 +590,16 @@ describe("independent agent loop", () => {
       await store.append(session.id, "message", {
         message: message("assistant", "y".repeat(5 * 1024 * 1024)),
       });
-      const windowed: Record<string, unknown>[] = [];
-      agent.subscribe((event) => {
-        if (event.type === "context.windowed") windowed.push(event.data);
+      await store.append(session.id, "message", {
+        message: message("user", "Continue"),
       });
-      await agent.prompt("Continue");
-      expect(windowed).toEqual([expect.objectContaining({ omitted })]);
+      const history = await store.contextHistory(session.id);
+      expect(history.omitted).toBe(3);
+      const context = fitContext(history.messages, contextWindow, {
+        omitted: history.omitted,
+      });
+      expect(context.omitted).toBe(omitted);
+      const received = context.messages;
       expect(received[0]?.text).toMatch(/Earlier conversation omitted/);
       expect(received[1]?.text).toBe(firstRetained);
       expect(received.at(-1)?.text).toBe("Continue");

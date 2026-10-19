@@ -8,6 +8,9 @@ const { values, positionals } = parseArgs({
   args: cliArgs,
   allowPositionals: true,
   options: {
+    host: { type: "boolean" },
+    attach: { type: "boolean" },
+    "client-id": { type: "string" },
     serve: { type: "boolean" },
     pair: { type: "boolean" },
     relay: { type: "string" },
@@ -34,7 +37,7 @@ const { values, positionals } = parseArgs({
 async function main() {
   if (values.help) {
     console.log(
-      `hikaro — independent coding agent\n\nUsage: hikaro [--demo] [--provider anthropic --model MODEL]\n  --trust             Allow file edits inside this workspace\n  --prompt, -p TEXT   Run once and print the response\n  --rpc               JSONL protocol over stdin/stdout\n  --models            List provider/model identifiers\n  --session ID        Resume a saved session\n  --continue, -c      Resume last opened session (default in TUI)\n  --new               Start a new interactive session\n  --base-url URL      OpenAI-compatible endpoint\n  --endpoint-key-env NAME  Save this environment key for the exact --base-url\n  --cwd PATH          Workspace (defaults to current directory)\n  --home PATH         Data directory (defaults to ~/.hikaro)\n\nAPI keys use provider environment variables. Interactive /permissions controls workspace approval mode.\nUse --demo to try the UI without credentials.`,
+      `hikaro — independent coding agent\n\nUsage: hikaro [--demo] [--provider anthropic --model MODEL]\n  --trust             Allow file edits inside this workspace\n  --prompt, -p TEXT   Run once and print the response\n  --host              Run a persistent shared task host\n  --attach            Attach this TUI to the shared host\n  --serve             Connect the shared host to the encrypted relay\n  --client-id ID      Stable attached TUI identity (default: main)\n  --rpc               JSONL protocol over stdin/stdout\n  --models            List provider/model identifiers\n  --session ID        Resume a saved session\n  --continue, -c      Resume last opened session (default in TUI)\n  --new               Start a new interactive session\n  --base-url URL      OpenAI-compatible endpoint\n  --endpoint-key-env NAME  Save this environment key for the exact --base-url\n  --cwd PATH          Workspace (defaults to current directory)\n  --home PATH         Data directory (defaults to ~/.hikaro)\n\nAPI keys use provider environment variables. Interactive /permissions controls workspace approval mode.\nUse --demo to try the UI without credentials.`,
     );
     return;
   }
@@ -90,6 +93,37 @@ async function main() {
     const { revokeDevice } =
       await import("../../../packages/remote/src/host.ts");
     await revokeDevice(options.home, values.revoke);
+    return;
+  }
+  if (
+    (values.attach || values.serve) &&
+    (values.demo ||
+      values.provider ||
+      values.model ||
+      values["base-url"] ||
+      values.trust)
+  )
+    throw Error(
+      "Configure --demo, provider, model, endpoint and trust on --host; clients attach to its existing configuration",
+    );
+  if (values.host) {
+    if (values.attach || values.serve || values.rpc || values.prompt)
+      throw Error("--host runs independently of client modes");
+    const { serveSharedHost } = await import("./shared-host.ts");
+    const host = await serveSharedHost(options);
+    console.error(`Hikaro shared host ready: ${host.endpoint.cwd}`);
+    return;
+  }
+  if (values.attach) {
+    if (values.serve || values.rpc || values.prompt)
+      throw Error("Choose one client mode");
+    const { attachTui } = await import("./attached-tui.ts");
+    await attachTui({
+      ...options,
+      session: values.session,
+      newSession: values.new,
+      clientId: values["client-id"],
+    });
     return;
   }
   if (values.serve) {
@@ -164,7 +198,8 @@ async function main() {
         if (e.type === "tool.end" && (e.data.result as any)?.isError)
           process.stderr.write(`${(e.data.result as any).text}\n`);
       });
-      await agent.prompt(values.prompt);
+      const prepared = await runtime.preparePrompt(session, values.prompt);
+      await agent.prompt(prepared.text, prepared.images);
       process.stdout.write("\n");
     } finally {
       await runtime.close();
@@ -175,10 +210,7 @@ async function main() {
     throw Error(
       "Interactive mode requires a terminal. Use --prompt TEXT or --rpc.",
     );
-  const { createTerminal, HikaroView } =
-    await import("../../../packages/tui/src/index.ts");
-  const tui = createTerminal();
-  let view: InstanceType<typeof HikaroView>;
+  let view: import("../../../packages/tui/src/index.ts").HikaroView;
   let exiting = false;
   const { loadPermissionMode, permissionOptions } =
     await import("../../../packages/runtime/src/permissions.ts");
@@ -188,11 +220,17 @@ async function main() {
     options.home ?? join(homedir(), ".hikaro"),
     options.cwd,
   );
-  const runtime = await Runtime.open({
-    ...options,
-    permissionMode,
-    approve: (r, s) => view.approve(r, s),
-  });
+  const { openInteractive } = await import("./interactive-startup.ts");
+  const { view: ui, runtime } = await openInteractive(
+    import("../../../packages/tui/src/index.ts"),
+    Runtime.open({
+      ...options,
+      permissionMode,
+      approve: (r, s) => view.approve(r, s),
+    }),
+  );
+  const { createTerminal, HikaroView } = ui;
+  const tui = createTerminal();
   const { loadTuiPreferences, saveTuiPreferences } =
     await import("../../../packages/tui/src/preferences.ts");
   let preferences = await loadTuiPreferences(runtime.options.home!);
@@ -224,14 +262,21 @@ async function main() {
     await runtime.close();
     throw error;
   }
+  const { DraftSaver } = await import("../../../packages/tui/src/drafts.ts");
+  let draftSessionId = session.id;
+  const drafts = new DraftSaver(
+    (id, text) => runtime.store.saveDraft(id, text),
+    (error) => view.setError(`Draft autosave failed: ${String(error)}`),
+  );
   const exit = () => {
     if (exiting) return;
     exiting = true;
     view.dispose();
     tui.stop({ preserveScreen: true });
     console.log(`\nContinue: pnpm start · New session: pnpm start --new`);
-    void runtime.store
-      .saveDraft(session.id, view.editor.getText())
+    drafts.update(draftSessionId, view.editor.getExpandedText());
+    void drafts
+      .flush()
       .finally(() => runtime.close())
       .then(
         () => {
@@ -284,8 +329,9 @@ async function main() {
   };
   const bind = async (next: typeof session) => {
     if (agent.busy) throw Error("Cancel the active run first");
-    if (await runtime.store.session(session.id))
-      await runtime.store.saveDraft(session.id, view.editor.getText());
+    if (await runtime.store.session(draftSessionId))
+      drafts.update(draftSessionId, view.editor.getExpandedText());
+    await drafts.flush();
     session = next;
     await runtime.store.rememberSession(next.id);
     agent = await runtime.agent(next);
@@ -300,7 +346,13 @@ async function main() {
     updateStatus();
     const page = await history("latest");
     view.showMessages(page.messages, page);
-    view.editor.setText(await runtime.store.draft(next.id));
+    const savedDraft = await drafts.restore(draftSessionId, next.id, (id) =>
+      runtime.store.draft(id),
+    );
+    if (savedDraft !== undefined) {
+      draftSessionId = next.id;
+      view.editor.setText(savedDraft);
+    }
   };
   const applyPreferences = async (next: typeof preferences) => {
     preferences = await saveTuiPreferences(runtime.options.home!, next);
@@ -323,6 +375,7 @@ async function main() {
     cwd: options.cwd,
     model: `${agent.options.provider.id}/${agent.options.provider.model}`,
     onPreferences: (patch) => applyPreferences({ ...preferences, ...patch }),
+    onDraftChange: (text) => drafts.update(draftSessionId, text),
     commands: [
       ...runtime.resources.skills.map((skill) => ({
         name: "skill:" + skill.name,
@@ -333,8 +386,13 @@ async function main() {
         description: "Plugin command",
       })),
     ],
-    onPrompt: async (text) => {
-      await runtime.store.saveDraft(session.id, "");
+    preparePrompt: (text, signal) =>
+      text.startsWith("!")
+        ? Promise.resolve({ text })
+        : runtime.preparePrompt(session, text, signal),
+    onPrompt: async (text, images) => {
+      drafts.update(session.id, "");
+      await drafts.flush();
       if (text.startsWith("!")) {
         await agent.executeTool(
           "shell",
@@ -343,7 +401,7 @@ async function main() {
         );
         return;
       }
-      await agent.prompt(text);
+      await agent.prompt(text, images);
     },
     onExit: exit,
     onHistory: history,
@@ -474,8 +532,17 @@ async function main() {
         case "quit":
           exit();
           return;
+        case "attach": {
+          if (!arg.trim())
+            return 'Use /attach PATH, then add your question and send. You can also type @file or @"path with spaces" directly.';
+          const { attachmentReference } =
+            await import("../../../packages/runtime/src/attachments.ts");
+          // Accept quoted or shell-escaped paths from terminal drag-and-drop.
+          view.editor.setText(attachmentReference(arg) + " ");
+          return "Attachment added. Add your question and press Enter.";
+        }
         case "help":
-          return "/new  /sessions  /resume [ID]  /rename TITLE  /export\n/fork  /compact  /model provider/model\n/settings  /permissions [ask|auto|full]\n/context [default]  /thinking [default]  /speed [default]\n/status  /resources\n/steer instructions  /tools  /older  /newer  /latest  /quit\n!COMMAND follows the current permission mode. Ctrl+C cancels. Ctrl+D exits. Shift+Enter adds a line.\nNew prompts queue while the agent works.";
+          return '/new  /sessions  /resume [ID]  /rename TITLE  /export\n/fork  /compact  /model provider/model\n/attach PATH · @file or @"path with spaces" attaches text/images\n/settings  /permissions [ask|auto|full]\n/context [default]  /thinking [default]  /speed [default]\n/status  /resources\n/steer instructions  /tools  /older  /newer  /latest  /quit\n!COMMAND follows the current permission mode. Ctrl+C cancels. Ctrl+D exits. Shift+Enter adds a line.\nNew prompts queue while the agent works.';
         case "new":
           await bind(await runtime.session());
           return;
@@ -496,12 +563,13 @@ async function main() {
           await openSessions(
             view,
             () => session.id,
-            (offset, limit) =>
-              runtime.store.sessions(offset, limit, runtime.options.cwd),
+            (offset, limit, query) =>
+              runtime.store.sessions(offset, limit, runtime.options.cwd, query),
             async (id) => {
               await bind(await runtime.session(id));
             },
             async (id) => {
+              await drafts.flush();
               const result = await runtime.deleteSession(id);
               if (id === session.id) await bind(await runtime.session());
               return result.cleanupError;
@@ -510,6 +578,7 @@ async function main() {
               const next = await runtime.renameSession(id, title);
               if (id === session.id) session = next;
             },
+            command === "sessions" ? arg : "",
           );
           return;
         }
@@ -587,20 +656,24 @@ async function main() {
     if (event.type === "run.end") updateStatus();
   });
   updateStatus();
-  void Promise.all([
-    readGit(["symbolic-ref", "--quiet", "--short", "HEAD"]),
-    readGit([
-      "-c",
-      "core.fsmonitor=false",
-      "--no-optional-locks",
-      "status",
-      "--porcelain",
-      "-uno",
-    ]),
-  ]).then(([branch, dirty]) => {
-    gitBranch = branch + (dirty ? "*" : "");
-    updateStatus();
-  });
+  const refreshGitStatus = () => {
+    if (exiting) return;
+    void Promise.all([
+      readGit(["symbolic-ref", "--quiet", "--short", "HEAD"]),
+      readGit([
+        "-c",
+        "core.fsmonitor=false",
+        "--no-optional-locks",
+        "status",
+        "--porcelain",
+        "-uno",
+      ]),
+    ]).then(([branch, dirty]) => {
+      if (exiting) return;
+      gitBranch = branch + (dirty ? "*" : "");
+      updateStatus();
+    });
+  };
   view.setPreferences(preferences);
   view.bind(agent);
   view.showMessages(
@@ -614,6 +687,10 @@ async function main() {
   tui.setLayoutRoot(view.layout);
   tui.setFocus(view.editor);
   tui.start();
+  // The editor, saved draft, history and permissions are ready. Paint them
+  // immediately; advisory Git metadata can update after this first frame.
+  tui.requestRender(true);
+  setImmediate(refreshGitStatus);
   view.startTheme();
   runtime.startJobs();
   process.once("SIGTERM", exit);

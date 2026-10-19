@@ -10,3 +10,9 @@ coverage/
 packages/tools/src/secure-file-helper
 packages/tools/src/secure-file-helper.*
 artifacts/
+
+apps/mobile/.expo/
+apps/mobile/ios/
+apps/mobile/android/
+
+apps/mobile/expo-env.d.ts

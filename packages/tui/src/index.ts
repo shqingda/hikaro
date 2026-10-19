@@ -1,3 +1,4 @@
+import { FileAutocompleteProvider } from "./file-autocomplete.ts";
 import {
   TuiAltScreen,
   ProcessTerminal,
@@ -6,7 +7,6 @@ import {
   ScrollView,
   VStack,
   Markdown,
-  CombinedAutocompleteProvider,
   matchesKey,
   isKeyRelease,
   visibleWidth,
@@ -23,6 +23,7 @@ import type {
   AgentBackend,
   AgentEvent,
   Message,
+  ImageInput,
   PermissionRequest,
 } from "../../core/src/types.ts";
 import type { PiUIResponse } from "../../pi-bridge/src/index.ts";
@@ -168,6 +169,7 @@ export class HikaroView {
   readonly modelSlot = new Container();
   readonly approvalSlot = new Container();
   private modelController?: AbortController;
+  private preparingPrompt?: AbortController;
   private modelPanel?: ModelPanel;
   readonly historyHint = new Text("", 1, 0);
   readonly header: Text;
@@ -207,11 +209,18 @@ export class HikaroView {
     readonly options: {
       cwd: string;
       model: string;
-      onPrompt: (text: string) => Promise<void>;
+      onPrompt: (text: string, images?: ImageInput[]) => Promise<void>;
+      preparePrompt?: (
+        text: string,
+        signal: AbortSignal,
+      ) => Promise<{ text: string; images?: ImageInput[] }>;
       onCommand: (text: string) => Promise<string | void>;
       onExit: () => void;
+      /** Shared-host views can detach while an approval or unsent draft is open. */
+      detachOnCtrlD?: boolean;
       onHistory?: (direction: HistoryDirection) => Promise<HistoryPage>;
       onPreferences?: (patch: Partial<TuiPreferences>) => Promise<void>;
+      onDraftChange?: (text: string) => void;
       commands?: Array<{ name: string; description: string }>;
     },
   ) {
@@ -234,8 +243,12 @@ export class HikaroView {
       },
       { paddingX: 1 },
     );
+    this.editor.onChange = () => {
+      if (!this.dialog && !this.disposed)
+        options.onDraftChange?.(this.editor.getExpandedText());
+    };
     this.editor.setAutocompleteProvider(
-      new CombinedAutocompleteProvider(
+      new FileAutocompleteProvider(
         [
           { name: "help", description: "Commands and shortcuts" },
           {
@@ -250,6 +263,7 @@ export class HikaroView {
           { name: "sessions", description: "List sessions" },
           { name: "resume", description: "Resume a session" },
           { name: "rename", description: "Rename this session" },
+          { name: "attach", description: "Add a file or image: /attach PATH" },
           {
             name: "export",
             description: "Export the conversation as Markdown",
@@ -369,7 +383,9 @@ export class HikaroView {
         ? options.onCommand(text).then((result) => {
             if (result) this.notice(result);
           })
-        : options.onPrompt(text);
+        : options.preparePrompt
+          ? this.submitPrompt(text)
+          : options.onPrompt(text);
       void work.catch((error) => {
         if (error instanceof Error && error.name === "AbortError") return;
         this.setError(
@@ -380,8 +396,17 @@ export class HikaroView {
     this.removeInput = tui.addInputListener((data) => {
       if (this.disposed) return undefined;
       if (isKeyRelease(data)) return { consume: true };
+      if (options.detachOnCtrlD && matchesKey(data, "ctrl+d")) {
+        options.onExit();
+        return { consume: true };
+      }
       if (this.approval) {
         this.approval.panel.handleInput(data);
+        return { consume: true };
+      }
+      if (this.preparingPrompt) {
+        if (matchesKey(data, "escape") || matchesKey(data, "ctrl+c"))
+          this.preparingPrompt.abort();
         return { consume: true };
       }
       if (this.modelPanel) {
@@ -468,6 +493,30 @@ export class HikaroView {
     this.busy = false;
     this.unsubscribe = backend.subscribe((event) => this.event(event));
     this.updateFooter();
+  }
+  /** Restore authoritative execution state without fabricating run events. */
+  restoreExecution(snapshot: {
+    busy: boolean;
+    stream: string;
+    streamTruncated: boolean;
+  }) {
+    this.busy = snapshot.busy;
+    this.activity = "Working";
+    if (snapshot.stream && !this.history.hasNewer) {
+      if (!this.draft) {
+        this.draft = new MessageComponent(
+          this.nextMessage++,
+          "assistant",
+          "",
+          true,
+        );
+        this.append(this.draft);
+      }
+      this.draftText = snapshot.stream.slice(-STREAM_PREVIEW_CHARS);
+      this.draft.setText(this.draftText);
+    }
+    this.updateFooter();
+    this.tui.requestRender();
   }
   startTheme() {
     const apply = (light: boolean) => {
@@ -656,6 +705,10 @@ export class HikaroView {
       this.draftText = "";
       this.thinkingDraft = undefined;
       this.thinkingText = "";
+    } else if (event.type === "context.compacting") {
+      this.activity = "Compacting";
+    } else if (event.type === "context.checkpoint") {
+      this.activity = "Working";
     } else if (event.type === "text.delta") {
       this.activity = "Working";
       if (this.history.hasNewer) {
@@ -795,7 +848,7 @@ export class HikaroView {
   private nextDialog() {
     if (this.dialog || this.approval || !this.dialogs.length) return;
     this.dialog = this.dialogs.shift()!;
-    this.dialogSavedText = this.editor.getText();
+    this.dialogSavedText = this.editor.getExpandedText();
     this.editor.setText(this.dialog.prefill ?? "");
     this.notice(
       `${this.dialog.title ?? "Pi extension"}${this.dialog.message ? "\n" + this.dialog.message : ""}` +
@@ -851,14 +904,37 @@ export class HikaroView {
     this.updateFooter();
     this.tui.requestRender();
   }
+  private async submitPrompt(text: string) {
+    if (!this.options.preparePrompt) return this.options.onPrompt(text);
+    const controller = new AbortController();
+    this.preparingPrompt = controller;
+    // Editor.submitValue clears itself first. Restore immediately so both the
+    // display and autosave retain the draft until attachment validation succeeds.
+    this.editor.setText(text);
+    this.editor.disableSubmit = true;
+    this.updateFooter();
+    let prepared: { text: string; images?: ImageInput[] };
+    try {
+      prepared = await this.options.preparePrompt(text, controller.signal);
+      controller.signal.throwIfAborted();
+    } finally {
+      this.preparingPrompt = undefined;
+      this.editor.disableSubmit = false;
+      this.updateFooter();
+    }
+    this.editor.setText("");
+    return this.options.onPrompt(prepared.text, prepared.images);
+  }
   private updateFooter() {
     this.editor.setActivity(
-      this.busy && !this.disposed
+      (this.busy || this.preparingPrompt) && !this.disposed
         ? this.approval
           ? "Approval required"
-          : this.dialog
-            ? "Waiting for input"
-            : this.activity
+          : this.preparingPrompt
+            ? "Loading attachments"
+            : this.dialog
+              ? "Waiting for input"
+              : this.activity
         : "",
       !this.approval && !this.dialog && !this.modelPanel,
     );
@@ -936,6 +1012,7 @@ export class HikaroView {
     if (!this.disposed) this.tui.requestRender();
   }
   dispose() {
+    this.preparingPrompt?.abort();
     this.modelController?.abort();
     this.removeScheme?.();
     if (this.disposed) return;

@@ -1,14 +1,14 @@
 import { readFile, writeFile, rename } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { z } from "zod";
+import * as z from "zod/mini";
 const schema = z.object({
-  version: z.literal(2).default(2),
-  showToolDetails: z.boolean().default(false),
-  showThinking: z.boolean().default(false),
-  showUsage: z.boolean().default(true),
-  completionBell: z.boolean().default(false),
-  resumeOnStart: z.boolean().default(true),
+  version: z._default(z.literal(2), 2),
+  showToolDetails: z._default(z.boolean(), false),
+  showThinking: z._default(z.boolean(), false),
+  showUsage: z._default(z.boolean(), true),
+  completionBell: z._default(z.boolean(), false),
+  resumeOnStart: z._default(z.boolean(), true),
 });
 export type TuiPreferences = z.infer<typeof schema>;
 export const defaultTuiPreferences: TuiPreferences = schema.parse({});
@@ -25,7 +25,9 @@ export async function loadTuiPreferences(home: string) {
     return schema.parse(saved);
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-    return { ...defaultTuiPreferences };
+    return {
+      ...defaultTuiPreferences,
+    };
   }
 }
 export async function saveTuiPreferences(
@@ -34,7 +36,9 @@ export async function saveTuiPreferences(
 ) {
   const next = schema.parse(preferences);
   const temp = join(home, ".tui-" + randomUUID() + ".tmp");
-  await writeFile(temp, JSON.stringify(next), { mode: 0o600 });
+  await writeFile(temp, JSON.stringify(next), {
+    mode: 0o600,
+  });
   await rename(temp, join(home, "tui-preferences.json"));
   return next;
 }

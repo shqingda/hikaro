@@ -1,6 +1,6 @@
 # Current scope
 
-TUI and bidirectional Pi integration are active. Desktop and mobile experimental clients, their shared state package, and dedicated tests have been removed. Cloud configuration is an optional direction with scope pending. [TODO.md](../TODO.md) is the current implementation ledger.
+TUI and bidirectional Pi integration are active. Portable client state, durable host receipts and an encrypted remote adapter support the confirmed mobile companion direction. An opt-in independent host now owns one canonical workspace/home pair: `--attach` TUI and `--serve` encrypted devices share that Runtime through owner-only authenticated IPC. Session grants, approval authority and reconnect/unknown-outcome recovery are implemented; see the [shared-host guide](shared-host.md). The native mobile app and physical-device lifecycle acceptance remain pending. See the [TUI/mobile plan](tui-mobile-direction.md). Cloud deployment remains optional. [TODO.md](../TODO.md) is the current implementation ledger.
 
 # Implementation and design review
 
@@ -49,6 +49,10 @@ RPC protocol v2 accepts `session.compact` immediately with `{accepted: true, ope
 Remote disconnect retains execution for reconnection. Device revocation detaches and cancels every still-active operation owned by that device scope, including sessions it no longer has selected and work retained after a disconnect. Merely viewing another scope's session does not transfer ownership. Third-party in-process plugins remain trusted code; these TypeScript services do not sandbox them.
 
 Context history reports storage omissions and preserves full user turns before model context fitting. Usage and cost/model-call budgets are Agent-lifetime values shared with child agents; they are not restored from session events. Restarting the host or rebuilding an Agent resets the budget. Continuation creation after compaction is still a sequence of storage operations, not a single transaction.
+
+Context fitting accounts for system instructions, current tool definitions, normalized or provider-native message payloads, image allowances, omission notices, output reserve and a 5% safety margin. ASCII letter/digit runs use a conservative three-characters-per-token heuristic; other characters use UTF-8 byte cost, with message-envelope overhead and a fixed image allowance. This is explicitly an estimate, not a tokenizer guarantee. The Pi adapter exposes the same output ceiling it passes to the SDK. An oversized latest turn fails before dispatch; the shared model-call budget is rechecked and decremented together after asynchronous lease/history checks. Manual summary inputs include tool arguments and source event sequence numbers and respect bounded request chunks. Original event history remains authoritative.
+
+TUI draft saving coalesces input on a 300 ms timer, serializes writes, and flushes before submission/session changes/exit. Text is owned by the session whose editor is bound, even while a new Agent initializes. Same-session settings/model rebinds preserve live input; different-session binds restore the destination after flushing the outgoing draft. Completed saves survive process crashes, but the last timer/write window and queued prompts remain outside that guarantee. Session search executes in the SQLite worker over workspace-scoped title/ID matches, uses bounded result pages, and preserves Unicode lowercase matching. It does not search message bodies or change RPC v2 capabilities.
 
 ## Interface rules
 

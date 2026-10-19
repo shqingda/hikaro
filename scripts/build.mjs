@@ -1,23 +1,10 @@
 import { build } from "esbuild";
 import { mkdir, copyFile, chmod, readdir, unlink } from "node:fs/promises";
 import { buildSecureFileHelper } from "./build-native.mjs";
+import { cliBuildOptions } from "./build-options.mjs";
 await buildSecureFileHelper();
 await mkdir("dist", { recursive: true });
-const result = await build({
-  entryPoints: { hikaro: "apps/cli/src/index.ts" },
-  outdir: "dist",
-  entryNames: "[name]",
-  chunkNames: "chunk-[hash]",
-  outExtension: { ".js": ".mjs" },
-  bundle: true,
-  splitting: true,
-  platform: "node",
-  target: "node24",
-  format: "esm",
-  packages: "external",
-  sourcemap: true,
-  metafile: true,
-});
+const result = await build(cliBuildOptions());
 await copyFile("packages/storage/src/worker.mjs", "dist/worker.mjs");
 await copyFile(
   "packages/tools/src/secure-file-helper",
