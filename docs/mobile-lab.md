@@ -13,3 +13,5 @@ pnpm dev:sim
 此前的 `mobile:lab` 专用设备启动入口已移除，额外的 Hikaro Mobile Lab 设备及生成的测试 CA／任务数据也已删除。原来的 iPhone 18 Pro 与 iOS 27.0 runtime 保留。
 
 `pnpm mobile:lab:check` 仅运行无界面的必要工具测试：既有设备复用／浏览器打开／跨项目保护，以及隔离临时目录中的真实 TLS relay、确认、只读授权和任务恢复。它不会创建、删除或修改模拟器。
+
+隔离 fixture 通过 `HIKARO_MOBILE_FIXTURE_CA` 显式加载自己的私有 CA，并追加到该进程已有的信任来源；人工启动时也接受原有 `NODE_EXTRA_CA_CERTS` 路径。这样不依赖测试运行器对子进程启动环境的处理，也不覆盖原有 CA。证书链及主机名校验保持开启，不写入系统或模拟器证书库。HTTP 失败只记录目标 origin 与错误码，不记录路径、请求头或凭据。

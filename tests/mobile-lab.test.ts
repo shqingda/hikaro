@@ -84,7 +84,7 @@ it("requires confirmation and grants over real TLS, then restores the same task 
       execArgv: ["--import", "tsx"],
       env: {
         ...process.env,
-        NODE_EXTRA_CA_CERTS: join(root, "server.pem"),
+        HIKARO_MOBILE_FIXTURE_CA: join(root, "server.pem"),
         HIKARO_MOBILE_FIXTURE_DIR: root,
         HIKARO_MOBILE_LAB_PORT: String(port),
       },

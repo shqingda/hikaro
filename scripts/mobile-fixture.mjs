@@ -2,6 +2,7 @@
 // TLS and production pairing/grant checks stay enabled.
 import { createRequire } from "node:module";
 import { channel } from "node:diagnostics_channel";
+import { getCACertificates, setDefaultCACertificates } from "node:tls";
 import { join, resolve } from "node:path";
 import { mkdir, readFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
@@ -23,7 +24,9 @@ import {
 import { openLab } from "./mobile-lab-files.mjs";
 
 const directory = process.env.HIKARO_MOBILE_FIXTURE_DIR;
-if (!directory || !process.env.NODE_EXTRA_CA_CERTS)
+const caPath =
+  process.env.HIKARO_MOBILE_FIXTURE_CA ?? process.env.NODE_EXTRA_CA_CERTS;
+if (!directory || !caPath)
   throw Error(
     "Internal relay fixture requires an owned private directory and TLS files; use pnpm dev:sim for the existing simulator",
   );
@@ -32,6 +35,12 @@ channel("undici:request:error").subscribe(({ request, error }) => {
   console.error("Lab HTTP failure:", request.origin, error.code ?? error.name);
 });
 const lab = await openLab(directory);
+// Only this isolated fixture process trusts its private CA. Load it explicitly
+// rather than relying on startup environment inheritance through test runners.
+setDefaultCACertificates([
+  ...getCACertificates("default"),
+  await readFile(caPath, "utf8"),
+]);
 const port = Number(process.env.HIKARO_MOBILE_LAB_PORT ?? 8443);
 if (!Number.isInteger(port) || port < 1024 || port > 65535)
   throw Error("Invalid lab relay port");
