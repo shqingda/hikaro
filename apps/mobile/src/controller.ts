@@ -1,5 +1,10 @@
 import * as z from "zod";
 import {
+  contentPage,
+  contentRequestOffset,
+  type ContentPage,
+} from "./content.ts";
+import {
   RemoteClient,
   parsePairing,
   validatePairing,
@@ -54,6 +59,7 @@ const allowed = new Set([
   "session.current",
   "session.list",
   "messages.read",
+  "messages.content",
   "session.resume",
   "command.receipt",
 ]);
@@ -92,6 +98,14 @@ export type MobileState = {
   loading: boolean;
   error: string | null;
   unknown: number;
+  content: {
+    sessionId: string;
+    seq: number;
+    offset: number;
+    page: ContentPage | null;
+  } | null;
+  contentLoading: boolean;
+  contentError: string | null;
 };
 const empty = (phase: MobileState["phase"]): MobileState => ({
   phase,
@@ -113,6 +127,9 @@ const empty = (phase: MobileState["phase"]): MobileState => ({
   loading: false,
   error: null,
   unknown: 0,
+  content: null,
+  contentLoading: false,
+  contentError: null,
 });
 /** A read-only view. No public escape hatch exposes mutation-capable transport. */
 export class MobileController {
@@ -121,6 +138,7 @@ export class MobileController {
   private epoch = 0;
   private historyEpoch = 0;
   private listEpoch = 0;
+  private contentEpoch = 0;
   private credentialQueue: Promise<unknown> = Promise.resolve();
   private pendingPairing?: Pairing;
   private pairing?: Pairing;
@@ -162,6 +180,13 @@ export class MobileController {
     return task;
   }
   private stop() {
+    this.contentEpoch++;
+    this.value = {
+      ...this.value,
+      content: null,
+      contentLoading: false,
+      contentError: null,
+    };
     this.paint?.();
     this.paint = undefined;
     for (const release of this.releases.splice(0)) release();
@@ -303,6 +328,7 @@ export class MobileController {
         }
         const current = s.session?.id;
         const restored = s.canAct && (!ready || selected !== current);
+        if (restored || selected !== current) this.closeMessage();
         if (selected !== current) {
           this.historyEpoch++;
           this.update({ messages: [], hasOlder: false, hasNewer: false });
@@ -434,6 +460,7 @@ export class MobileController {
   }
   async select(sessionId: string) {
     if (!this.client?.state.canAct) throw Error("Not connected");
+    this.closeMessage();
     const epoch = this.epoch;
     this.update({ loading: true, error: null });
     try {
@@ -446,6 +473,51 @@ export class MobileController {
       throw error;
     } finally {
       if (epoch === this.epoch) this.update({ loading: false });
+    }
+  }
+  closeMessage() {
+    this.contentEpoch++;
+    this.update({ content: null, contentLoading: false, contentError: null });
+  }
+  async readMessage(seq: number, offset = 0) {
+    const client = this.client,
+      epoch = this.epoch,
+      sessionId = client?.state.session?.id;
+    if (!client?.state.canAct || !sessionId)
+      throw Error("Not connected to a task");
+    if (!Number.isSafeInteger(seq) || seq < 0) throw Error("Invalid message");
+    const requestOffset = contentRequestOffset(offset),
+      read = ++this.contentEpoch;
+    const current = () =>
+      epoch === this.epoch &&
+      read === this.contentEpoch &&
+      client === this.client &&
+      sessionId === client.state.session?.id;
+    this.update({
+      content: { sessionId, seq, offset, page: null },
+      contentLoading: true,
+      contentError: null,
+    });
+    try {
+      const raw = await client.request("messages.content", {
+        sessionId,
+        seq,
+        field: "text",
+        offset: requestOffset,
+        limit: 8192,
+      });
+      if (current())
+        this.update({
+          content: { sessionId, seq, offset, page: contentPage(raw, offset) },
+          contentLoading: false,
+        });
+    } catch (error) {
+      if (current())
+        this.update({
+          contentLoading: false,
+          contentError: "无法读取这段正文。请检查查看授权或重试。",
+        });
+      throw error;
     }
   }
   async history(direction: "older" | "newer" | "latest" = "latest") {

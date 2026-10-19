@@ -1,8 +1,10 @@
 # 移动端 M0
 
-M0 是 iOS／Android 原生只读客户端：扫码或粘贴配对码、核对主机身份、安全保存设备凭据、连接共享 host、分页查看获授权任务，以及恢复历史和当前输出。发送、审批、停止留到 M1。图片暂显示数量，长消息保留预览；不在手机缓存任务正文。
+M0 是 iOS／Android 原生只读客户端：扫码或粘贴配对码、核对主机身份、安全保存设备凭据、连接共享 host、分页查看获授权任务，以及恢复历史和当前输出。发送、审批、停止留到 M1。图片暂显示数量；长消息可从预览打开“阅读全文”，按段阅读与复制，不在手机缓存任务正文。操作与边界见 [长消息阅读](specs/mobile-reading.md)。
 
 ## 启动
+
+**模拟器入口统一为 `pnpm dev:sim`**：复用原有 iPhone 18 Pro／iOS 27.0，自动打开 `http://localhost:3200/`，不启动 DeviceHub，不创建新设备、不安装测试 CA。配对与任务授权使用你配置的 relay；以下是完整步骤。
 
 在仓库根目录：
 
@@ -19,7 +21,7 @@ pnpm start --host --demo
 ```sh
 pnpm mobile:ios       # 首次构建并安装 iOS 开发客户端，需要 macOS / Xcode
 pnpm mobile:android   # Android 原生开发构建，需要 Android SDK
-pnpm dev:sim          # 已安装 iOS 客户端后的日常浏览器预览
+pnpm dev:sim          # 复用已有设备，自动打开浏览器预览，不启动 DeviceHub
 pnpm dev:mobile       # 单独启动 Metro，明确使用 --dev-client
 pnpm mobile:typecheck
 ```
@@ -75,7 +77,7 @@ M0 不注册携带凭据的 `hikaro://pair#…` 系统深链接；配对只从 A
    pnpm start --serve
    ```
 
-4. 模拟器里使用配对码输入框（提示为 `hikaro://pair#…`），输入终端 C 生成的完整配对 URI，再点“核对配对信息”，核对主机并“保存并连接”。模拟器不用于真实相机扫码验收。浏览器预览若不能粘贴，使用 Xcode Simulator 的键盘／粘贴功能；不要把配对 URI 放进浏览器地址栏。
+4. 模拟器里使用配对码输入框（提示为 `hikaro://pair#…`），输入终端 C 生成的完整配对 URI，再点“核对配对信息”，核对主机并“保存并连接”。模拟器不用于真实相机扫码验收。无 DeviceHub 的原生粘贴步骤见 [原有 iPhone 验收记录](mobile-m0-acceptance.md#复测操作)；不要把配对 URI 放进浏览器地址栏。
 5. 在终端 C 按提示确认设备。在终端 B 当前任务内执行 `/share <手机显示的设备ID> view`，然后在手机刷新并选择任务。没有该授权时，空列表是预期行为。
 6. 在 TUI 继续对话，检查手机显示同一任务的最新输出；点预览下方 Home，再打开 Hikaro，检查恢复。停止终端 C 的桥接后手机应显示离线；重新执行 `pnpm start --serve` 后应恢复。电脑任务不会因手机离开而停止。
 7. 在 TUI 执行 `/share <设备ID> off`，手机应失去该任务访问权。M0 当前仅支持查看，手机发送、审批和停止属于 M1，尚未开放。
@@ -88,4 +90,4 @@ M0 不注册携带凭据的 `hikaro://pair#…` 系统深链接；配对只从 A
 
 ## 验证与后续
 
-验收证据见 [validation](validation.md) 和 [M0 规格](specs/mobile-m0.md)。开发构建、模拟器和生产 JS 导出不是签名分发或真机性能验收。下一阶段补充 iOS／Android 真机网络、锁屏／杀进程、真实相机扫描、发布版性能与 30 分钟内存验收，再推进 M1 的审批、补充和停止。
+验收证据见 [原有 iPhone 18 Pro 原生验收](mobile-m0-acceptance.md)、[validation](validation.md) 和 [M0 规格](specs/mobile-m0.md)。开发构建、模拟器和生产 JS 导出不是签名分发或真机性能验收。下一阶段补充 iOS／Android 真机网络、锁屏／杀进程、真实相机扫描、发布版性能与 30 分钟内存验收，再推进 M1 的审批、补充和停止。

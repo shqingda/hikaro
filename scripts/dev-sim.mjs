@@ -151,8 +151,9 @@ export async function launchSimulator(io) {
       DEVICE,
       `hikaro-companion://expo-development-client/?url=${encodeURIComponent(METRO)}`,
     );
+  await io.run("open", ["http://localhost:3200/"]);
   io.log(
-    `Hikaro 模拟器已就绪：http://localhost:3200/\n服务在后台运行，日志：${LOG_DIR}\n在 Codex 内置浏览器打开以上地址；请实际检查点击和滑动。`,
+    `已复用 iPhone 模拟器并打开：http://localhost:3200/\n服务在后台运行，无需 DeviceHub 窗口。日志：${LOG_DIR}`,
   );
 }
 

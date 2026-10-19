@@ -1,5 +1,13 @@
 import { it, expect } from "vitest";
-import { mkdtemp, readFile, rm, symlink, stat } from "node:fs/promises";
+import {
+  mkdtemp,
+  readFile,
+  writeFile,
+  rm,
+  symlink,
+  stat,
+} from "node:fs/promises";
+import { X509Certificate } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { execFile, fork, type ChildProcess } from "node:child_process";
@@ -56,6 +64,29 @@ it("requires confirmation and grants over real TLS, then restores the same task 
   try {
     const lab = await openLab(root);
     const exec = promisify(execFile);
+    const certConfig = join(root, "cert.cnf");
+    await writeFile(
+      certConfig,
+      `[req]
+prompt = no
+distinguished_name = dn
+[dn]
+CN = localhost
+[ca_ext]
+basicConstraints = critical,CA:TRUE
+keyUsage = critical,keyCertSign,cRLSign
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always
+[server_ext]
+basicConstraints = critical,CA:FALSE
+keyUsage = critical,digitalSignature,keyEncipherment
+extendedKeyUsage = serverAuth
+subjectAltName = IP:127.0.0.1,DNS:localhost
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid,issuer
+`,
+      { mode: 0o600 },
+    );
     await exec("openssl", [
       "req",
       "-x509",
@@ -63,18 +94,57 @@ it("requires confirmation and grants over real TLS, then restores the same task 
       "rsa:2048",
       "-nodes",
       "-keyout",
-      join(root, "server-key.pem"),
+      join(root, "ca-key.pem"),
       "-out",
-      join(root, "server.pem"),
+      join(root, "ca.pem"),
       "-days",
       "1",
       "-subj",
-      "/CN=localhost",
-      "-addext",
-      "subjectAltName=IP:127.0.0.1,DNS:localhost",
-      "-addext",
-      "basicConstraints=critical,CA:TRUE",
+      "/CN=Hikaro M0 Test CA",
+      "-config",
+      certConfig,
+      "-extensions",
+      "ca_ext",
     ]);
+    await exec("openssl", [
+      "req",
+      "-new",
+      "-newkey",
+      "rsa:2048",
+      "-nodes",
+      "-keyout",
+      join(root, "server-key.pem"),
+      "-out",
+      join(root, "server.csr"),
+      "-config",
+      certConfig,
+    ]);
+    await exec("openssl", [
+      "x509",
+      "-req",
+      "-in",
+      join(root, "server.csr"),
+      "-CA",
+      join(root, "ca.pem"),
+      "-CAkey",
+      join(root, "ca-key.pem"),
+      "-CAcreateserial",
+      "-days",
+      "1",
+      "-extfile",
+      certConfig,
+      "-extensions",
+      "server_ext",
+      "-out",
+      join(root, "server.pem"),
+    ]);
+    const ca = new X509Certificate(await readFile(join(root, "ca.pem")));
+    const leaf = new X509Certificate(await readFile(join(root, "server.pem")));
+    expect(ca.ca).toBe(true);
+    expect(leaf.ca).toBe(false);
+    expect(leaf.checkIssued(ca) && leaf.verify(ca.publicKey)).toBe(true);
+    expect(leaf.checkIP("127.0.0.1")).toBe("127.0.0.1");
+    await writeFile(join(root, "server.pem"), leaf.toString() + ca.toString());
     const server = createServer();
     server.listen(0, "127.0.0.1");
     await once(server, "listening");
@@ -84,7 +154,7 @@ it("requires confirmation and grants over real TLS, then restores the same task 
       execArgv: ["--import", "tsx"],
       env: {
         ...process.env,
-        NODE_EXTRA_CA_CERTS: join(root, "server.pem"),
+        HIKARO_MOBILE_FIXTURE_CA: join(root, "ca.pem"),
         HIKARO_MOBILE_FIXTURE_DIR: root,
         HIKARO_MOBILE_LAB_PORT: String(port),
       },
@@ -123,7 +193,7 @@ it("requires confirmation and grants over real TLS, then restores the same task 
         new WebSocket(url, protocols, { ca: requireCa }) as any,
       reconnectMs: 50,
     });
-    const requireCa = await readFile(join(root, "server.pem"));
+    const requireCa = await readFile(join(root, "ca.pem"));
     remote.subscribe((frame) => {
       if (frame.type === "connection") connected = frame.status === "connected";
     });

@@ -25,7 +25,8 @@ export default function Task() {
   useEffect(() => {
     if (["unpaired", "revoked", "review"].includes(state.phase))
       router.replace("/");
-  }, [state.phase]);
+    else if (online && !state.session) router.replace("/tasks");
+  }, [state.phase, online, state.session]);
   return (
     <FlatList
       contentInsetAdjustmentBehavior="automatic"
@@ -83,6 +84,11 @@ export default function Task() {
           </Text>
           <Text
             selectable
+            numberOfLines={
+              (item.message.textLength ?? 0) > item.message.text.length
+                ? 12
+                : undefined
+            }
             style={{ color: colors.label, fontSize: 16, lineHeight: 25 }}
           >
             {readable(item.message.text)}
@@ -94,7 +100,18 @@ export default function Task() {
           )}
           {item.message.textLength !== undefined &&
             item.message.textLength > item.message.text.length && (
-              <Note>当前显示这条长消息的预览；完整内容请在电脑查看。</Note>
+              <View style={{ gap: 10 }}>
+                <Note>当前显示长消息预览，可以按段阅读全文。</Note>
+                <Action
+                  title="阅读全文"
+                  quiet
+                  disabled={!online || state.contentLoading}
+                  onPress={() => {
+                    void controller.readMessage(item.seq).catch(() => {});
+                    router.push("/message");
+                  }}
+                />
+              </View>
             )}
         </View>
       )}

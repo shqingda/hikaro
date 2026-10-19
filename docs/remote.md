@@ -1,5 +1,7 @@
 # Remote host and Cloudflare
 
+Use `pnpm dev:sim` for the existing iPhone 18 Pro browser preview; it opens localhost:3200 without launching DeviceHub or provisioning another simulator. Pairing and task grants use the relay configured below. The encrypted local relay fixture remains available to headless tests (`pnpm mobile:lab:check`); it does not provision or change simulators.
+
 Cloudflare stores connection/device metadata and hashed bearer tokens. Application commands and events use authenticated NaCl encryption between paired devices. Each connection performs a mutual challenge handshake and checks direction and sequence. Keys are pinned by the pairing code. This protocol does **not** claim forward secrecy.
 
 ## Deploy your relay

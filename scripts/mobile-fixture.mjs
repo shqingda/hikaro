@@ -1,6 +1,9 @@
 // Local mobile lab only. Its identities and workspace never reach real Keychain.
 // TLS and production pairing/grant checks stay enabled.
 import { createRequire } from "node:module";
+import { channel } from "node:diagnostics_channel";
+import { connect, getCACertificates, setDefaultCACertificates } from "node:tls";
+import { X509Certificate } from "node:crypto";
 import { join, resolve } from "node:path";
 import { mkdir, readFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
@@ -22,9 +25,23 @@ import {
 import { openLab } from "./mobile-lab-files.mjs";
 
 const directory = process.env.HIKARO_MOBILE_FIXTURE_DIR;
-if (!directory || !process.env.NODE_EXTRA_CA_CERTS)
-  throw Error("Start with pnpm mobile:lab; isolated TLS files are required");
+const caPath =
+  process.env.HIKARO_MOBILE_FIXTURE_CA ?? process.env.NODE_EXTRA_CA_CERTS;
+if (!directory || !caPath)
+  throw Error(
+    "Internal relay fixture requires an owned private directory and TLS files; use pnpm dev:sim for the existing simulator",
+  );
+channel("undici:request:error").subscribe(({ request, error }) => {
+  // Report only the origin/code: request paths and headers can contain credentials.
+  console.error("Lab HTTP failure:", request.origin, error.code ?? error.name);
+});
 const lab = await openLab(directory);
+// Only this isolated fixture process trusts its private CA. Load it explicitly
+// rather than relying on startup environment inheritance through test runners.
+setDefaultCACertificates([
+  ...getCACertificates("default"),
+  await readFile(caPath, "utf8"),
+]);
 const port = Number(process.env.HIKARO_MOBILE_LAB_PORT ?? 8443);
 if (!Number.isInteger(port) || port < 1024 || port > 65535)
   throw Error("Invalid lab relay port");
@@ -78,13 +95,14 @@ function clearPending() {
   pending.clear();
 }
 async function start() {
+  const certificate = await readFile(join(directory, "server.pem"), "utf8");
   mf = new Miniflare(
     convertV4MiniflareOptions({
       host: "127.0.0.1",
       port,
       https: true,
       httpsKey: await readFile(join(directory, "server-key.pem"), "utf8"),
-      httpsCert: await readFile(join(directory, "server.pem"), "utf8"),
+      httpsCert: certificate,
       modules: true,
       script: built.outputFiles[0].text,
       compatibilityDate: "2026-10-01",
@@ -95,6 +113,26 @@ async function start() {
     }),
   );
   await mf.ready;
+  // Validate the wire chain and pin before any pairing credentials are sent.
+  const ca = await readFile(caPath);
+  await new Promise((resolve, reject) => {
+    const socket = connect({ host: "127.0.0.1", port, ca }, () => {
+      const actual = socket.getPeerX509Certificate()?.fingerprint256;
+      const expected = new X509Certificate(certificate).fingerprint256;
+      socket.end();
+      if (actual !== expected)
+        reject(
+          Error(
+            `Lab TLS certificate mismatch: expected ${expected}, received ${actual}`,
+          ),
+        );
+      else resolve();
+    });
+    socket.once("error", reject);
+    socket.setTimeout(5000, () =>
+      socket.destroy(Error("Lab TLS probe timed out")),
+    );
+  });
   host = await serveSharedHost({ home, cwd, demo: true });
   owner = await SharedHostClient.connect({
     home,
