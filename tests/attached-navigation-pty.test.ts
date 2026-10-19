@@ -153,12 +153,18 @@ it("navigates sessions, model/defaults, settings, resources and login from the a
     await wait("PLUGIN-VIEW:ready");
     await wait("Host plugins", send("\x1b"));
     await wait("Enter send", send("\x1b"));
-    await wait("Permission required", send("!printf manual-ui-proof\r"));
+    await wait(
+      "Permission required",
+      send("! --unrestricted printf manual-ui-proof\r"),
+    );
     await wait("Manual command finished", send("\x1b[A\r"));
-    await wait("Permission required", send("!touch rejected-ui-proof\r"));
+    await wait(
+      "Permission required",
+      send("! --unrestricted touch rejected-ui-proof\r"),
+    );
     await wait("Manual command failed", send("\x1b"));
     await expect(readFile(join(cwd, "rejected-ui-proof"))).rejects.toThrow();
-    await wait("Permission required", send("!sleep 30\r"));
+    await wait("Permission required", send("! --unrestricted sleep 30\r"));
     const running = send("\x1b[A\r");
     await vi.waitFor(async () =>
       expect((await probe!.request("session.current")).busy).toBe(true),

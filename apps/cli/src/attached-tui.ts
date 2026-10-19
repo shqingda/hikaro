@@ -1,3 +1,4 @@
+import { parseManualCommand } from "../../../packages/tui/src/manual-command.ts";
 import { AttachedWorkflows } from "./attached-workflows.ts";
 import { randomUUID } from "node:crypto";
 import { SharedHostClient } from "../../../packages/host/src/client.ts";
@@ -373,7 +374,7 @@ export async function attachTui(options: {
         if (text.startsWith("!")) {
           const result = await client.request("tool.manual", {
             sessionId: client.state.session?.id,
-            command: text.slice(1),
+            ...parseManualCommand(text),
           });
           await refresh();
           view.notice(
@@ -409,7 +410,7 @@ export async function attachTui(options: {
           leave();
           return;
         case "/help":
-          return "Shared host: /recovery, /export, /plugins, !COMMAND (host approvals apply), /changes, /tasks, /plan [TASK], /plan cancel · host workflows. /sessions [query], /resume ID, /new, /rename title, /compact, /fork, /steer text, /status, /access, /share DEVICE view|control|off, /model [PROVIDER/MODEL], /login, /settings, /permissions, /context [default], /thinking [default], /speed [default], /resources [query], /attach PATH. Ctrl+C stops the selected task; Ctrl+D detaches. Local files use the existing @ completion.";
+          return "Shared host: /recovery, /export, /plugins, ![--unrestricted] COMMAND (host approvals apply), /changes, /tasks, /plan [TASK], /plan cancel · host workflows. /sessions [query], /resume ID, /new, /rename title, /compact, /fork, /steer text, /status, /access, /share DEVICE view|control|off, /model [PROVIDER/MODEL], /login, /settings, /permissions, /context [default], /thinking [default], /speed [default], /resources [query], /attach PATH. Ctrl+C stops the selected task; Ctrl+D detaches. Local files use the existing @ completion.";
         case "/status":
           return JSON.stringify(
             {

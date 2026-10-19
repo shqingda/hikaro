@@ -26,7 +26,13 @@ it("runs local extensions and manual tools, exports results and refuses Plan sid
     join(home, "config.json"),
     JSON.stringify({ plugins: [{ path: "plugin.mjs", trusted: true }] }),
   );
-  let host = await serveSharedHost({ home, cwd, demo: true, trusted: true });
+  let host = await serveSharedHost({
+    home,
+    cwd,
+    demo: true,
+    trusted: true,
+    permissionMode: "full",
+  });
   let client = await SharedHostClient.connect({
     home,
     cwd,
@@ -48,8 +54,14 @@ it("runs local extensions and manual tools, exports results and refuses Plan sid
         kind: "view",
       }),
     ).toMatchObject({ text: "view:ready" });
-    await client.request("tool.manual", { command: "printf manual-proof" });
-    const running = client.request("tool.manual", { command: "sleep 20" });
+    await client.request("tool.manual", {
+      command: "printf manual-proof",
+      unrestricted: true,
+    });
+    const running = client.request("tool.manual", {
+      command: "sleep 20",
+      unrestricted: true,
+    });
     await vi.waitFor(async () =>
       expect((await client.request("session.current")).busy).toBe(true),
     );
@@ -63,14 +75,20 @@ it("runs local extensions and manual tools, exports results and refuses Plan sid
       includeThinking: false,
     });
     expect(await readFile(exported.path, "utf8")).toContain("manual-proof");
-    const params = { command: "printf once >> once.txt" };
+    const params = { command: "printf once >> once.txt", unrestricted: true };
     await client.request("tool.manual", params, false, { id: "manual-once" });
     expect(
       await client.request("tool.manual", params, false, { id: "manual-once" }),
     ).toMatchObject({ duplicate: true });
     await client.close();
     await host.close();
-    host = await serveSharedHost({ home, cwd, demo: true, trusted: true });
+    host = await serveSharedHost({
+      home,
+      cwd,
+      demo: true,
+      trusted: true,
+      permissionMode: "full",
+    });
     client = await SharedHostClient.connect({
       home,
       cwd,

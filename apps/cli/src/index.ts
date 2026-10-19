@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { parseManualCommand } from "../../../packages/tui/src/manual-command.ts";
 import { execFile } from "node:child_process";
 import { parseArgs } from "node:util";
 const cliArgs = process.argv.slice(2);
@@ -261,6 +262,7 @@ async function main() {
   }
   await runtime.store.rememberSession(session.id);
   let agent: Awaited<ReturnType<typeof runtime.agent>>;
+  let promptWork: Promise<void> | undefined;
   try {
     agent = await runtime.agent(session);
   } catch (error) {
@@ -442,20 +444,21 @@ async function main() {
       drafts.update(session.id, "");
       await drafts.flush();
       if (text.startsWith("!")) {
-        await agent.executeTool(
-          "shell",
-          { command: text.slice(1).trim() },
-          text,
-        );
+        await agent.executeTool("shell", parseManualCommand(text), text);
         return;
       }
       const work = agent.prompt(text, images);
+      promptWork = work;
       const pending = agent.pendingPrompts().length;
       if (pending)
         view.notice(
           `Message queued · ${pending} pending. Use /tasks to manage.`,
         );
-      await work;
+      try {
+        await work;
+      } finally {
+        if (promptWork === work) promptWork = undefined;
+      }
       await reviewCurrentPlan();
     },
     onExit: exit,
@@ -598,6 +601,13 @@ async function main() {
           return;
         }
         case "changes": {
+          // run.end reaches the view before lease release and queue cleanup.
+          if (
+            agent.busy &&
+            agent.snapshot().runStatus !== "running" &&
+            promptWork
+          )
+            await promptWork;
           if (agent.busy)
             throw Error("Finish or cancel the run before reviewing changes.");
           const { openChangeReview } =
@@ -664,7 +674,7 @@ async function main() {
           return "Attachment added. Add your question and press Enter.";
         }
         case "help":
-          return '/plan [TASK] · Read-only exploration, questions and plan review\n/plan cancel · Leave without executing\n/tasks · Manage queued messages, background terminals and child agents\n/changes · Review and roll back recorded file edits\n/new  /sessions  /resume [ID]  /rename TITLE  /export\n/fork  /compact  /model provider/model\n/attach PATH · @file or @"path with spaces" attaches text/images\n/settings  /permissions [ask|auto|full]\n/context [default]  /thinking [default]  /speed [default]\n/status  /resources\n/steer instructions  /tools  /older  /newer  /latest  /quit\n!COMMAND follows the current permission mode. Ctrl+C cancels. Ctrl+D exits. Shift+Enter adds a line.\nNew prompts queue while the agent works.';
+          return '/plan [TASK] · Read-only exploration, questions and plan review\n/plan cancel · Leave without executing\n/tasks · Manage queued messages, background terminals and child agents\n/changes · Review and roll back recorded file edits\n/new  /sessions  /resume [ID]  /rename TITLE  /export\n/fork  /compact  /model provider/model\n/attach PATH · @file or @"path with spaces" attaches text/images\n/settings  /permissions [ask|auto|full]\n/context [default]  /thinking [default]  /speed [default]\n/status  /resources\n/steer instructions  /tools  /older  /newer  /latest  /quit\n![--unrestricted] COMMAND follows the current permission mode. Ctrl+C cancels. Ctrl+D exits. Shift+Enter adds a line.\nNew prompts queue while the agent works.';
         case "new":
           await bind(await runtime.session());
           return;

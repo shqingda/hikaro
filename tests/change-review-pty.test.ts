@@ -119,7 +119,9 @@ it("reviews a real model file edit, cancels confirmation, then rolls it back fro
     });
   try {
     await wait("/help");
-    await wait("Review fixture completed.", send("Change sample.txt\r"));
+    const submitted = send("Change sample.txt\r");
+    await wait("Review fixture completed.", submitted);
+    await wait("Enter send", submitted);
     expect(await readFile(join(cwd, "sample.txt"), "utf8")).toBe(modified);
     await wait("File changes", send("/changes\r"));
     await wait("original line 0", send("\r"));

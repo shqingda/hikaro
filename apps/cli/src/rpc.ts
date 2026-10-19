@@ -505,7 +505,10 @@ export async function serveRpc(
           try {
             const outcome = await agent.executeTool(
               "shell",
-              { command: text },
+              {
+                command: text,
+                unrestricted: z.boolean().parse(p.unrestricted ?? false),
+              },
               "!" + text,
               { scope, commandId: id },
             );
