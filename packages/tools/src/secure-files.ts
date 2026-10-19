@@ -266,16 +266,19 @@ export async function readFileBytesBatch(
 export async function replaceTextFile(
   path: string,
   signal: AbortSignal,
-  replace: (current: string | undefined) => string,
+  replace: (current: string | undefined) => string | undefined,
   beforeCommit?: () => Promise<void>,
 ) {
   const worker = start("update", path, signal, capacity);
   try {
     const current = await worker.snapshot();
-    const content = Buffer.from(replace(current?.toString("utf8")));
+    const next = replace(current?.toString("utf8"));
+    const content = Buffer.from(next ?? "");
     if (content.length > capacity) throw Error("File update exceeds 16 MiB");
     signal.throwIfAborted();
-    await worker.send(`PREPARE ${content.length}\n`);
+    await worker.send(
+      next === undefined ? "DELETE\n" : `PREPARE ${content.length}\n`,
+    );
     await worker.send(content);
     if ((await worker.frames.header()).prepared !== true)
       throw Error("Invalid secure file prepare response");

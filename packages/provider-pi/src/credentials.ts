@@ -17,6 +17,9 @@ export class KeychainCredentials implements CredentialStore {
       .digest("hex")
       .slice(0, 16);
   }
+  invalidate() {
+    this.checked = 0;
+  }
   private async index() {
     if (Date.now() - this.checked < 1000) return this.cache;
     try {

@@ -3,30 +3,79 @@ import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import type { Plugin, ToolContext } from "../../core/src/types.ts";
 import type { IPty } from "node-pty";
+type TerminalRecord = {
+  pty: IPty;
+  owner: string;
+  command: string;
+  output: string;
+  dropped: number;
+  preview: string;
+  previewDropped: number;
+  stopping: boolean;
+  exitCode?: number;
+};
+export class TerminalManager {
+  readonly records = new Map<string, TerminalRecord>();
+  find(owner: string, id: string) {
+    const term = this.records.get(id);
+    if (!term || term.owner !== owner)
+      throw Error("Terminal not found in this session");
+    return term;
+  }
+  list(owner: string) {
+    return [...this.records.keys()]
+      .filter((id) => this.records.get(id)!.owner === owner)
+      .map((id) => this.detail(owner, id));
+  }
+  detail(owner: string, id: string) {
+    const t = this.find(owner, id);
+    return {
+      id,
+      command: t.command,
+      output: t.preview,
+      dropped: t.previewDropped,
+      exitCode: t.exitCode,
+      state:
+        t.exitCode !== undefined
+          ? "exited"
+          : t.stopping
+            ? "stopping"
+            : "running",
+    };
+  }
+  send(owner: string, id: string, input: string) {
+    const t = this.find(owner, id);
+    if (t.exitCode !== undefined || t.stopping)
+      throw Error("Terminal is stopping or already exited");
+    if (input.length > 32000) throw Error("Input exceeds 32,000 characters");
+    t.pty.write(input);
+  }
+  stop(owner: string, id: string) {
+    const t = this.find(owner, id);
+    if (t.exitCode !== undefined || t.stopping) return;
+    t.pty.kill();
+    t.stopping = true;
+  }
+  prune() {
+    const exited = [...this.records].filter(
+      ([, t]) => t.exitCode !== undefined,
+    );
+    for (const [id] of exited.slice(0, Math.max(0, exited.length - 32)))
+      this.records.delete(id);
+  }
+}
 export function terminalPlugin(
   trusted: boolean | (() => boolean),
   fullAccess: () => boolean = () => false,
+  manager = new TerminalManager(),
 ): Plugin {
   return {
     id: "hikaro.terminal",
     apiVersion: 1,
     setup(host) {
-      const terminals = new Map<
-        string,
-        {
-          pty: IPty;
-          owner: string;
-          output: string;
-          dropped: number;
-          exitCode?: number;
-        }
-      >();
-      const find = (id: string, ctx: ToolContext) => {
-        const term = terminals.get(id);
-        if (!term || term.owner !== ctx.sessionId)
-          throw Error("Terminal not found in this session");
-        return term;
-      };
+      const terminals = manager.records;
+      const find = (id: string, ctx: ToolContext) =>
+        manager.find(ctx.sessionId, id);
       host.registerTool({
         name: "terminal_start",
         description:
@@ -82,7 +131,12 @@ export function terminalPlugin(
                 { cwd: ctx.cwd, env, cols: args.cols, rows: args.rows },
               );
           const id = randomUUID();
-          const term = {
+          manager.prune();
+          const term: TerminalRecord = {
+            command: args.command,
+            preview: "",
+            previewDropped: 0,
+            stopping: false,
             pty,
             owner: ctx.sessionId,
             output: "",
@@ -92,6 +146,11 @@ export function terminalPlugin(
           terminals.set(id, term);
           pty.onData((data) => {
             term.output += data;
+            term.preview += data;
+            if (term.preview.length > 64000) {
+              term.previewDropped += term.preview.length - 64000;
+              term.preview = term.preview.slice(-64000);
+            }
             if (term.output.length > 64000) {
               term.dropped += term.output.length - 64000;
               term.output = term.output.slice(-64000);
@@ -99,6 +158,7 @@ export function terminalPlugin(
           });
           pty.onExit((event) => {
             term.exitCode = event.exitCode;
+            manager.prune();
           });
           return {
             text: `Terminal ${id} started. Read output with terminal_read; stop it explicitly when finished.`,
@@ -128,7 +188,7 @@ export function terminalPlugin(
               dropped,
             },
           };
-          if (t.exitCode !== undefined) terminals.delete(id);
+          // Keep bounded completed records for user-visible result confirmation.
           return result;
         },
       });
@@ -139,9 +199,7 @@ export function terminalPlugin(
         schema: z.object({ id: z.string(), input: z.string().max(32000) }),
         async execute({ id, input }, ctx) {
           ctx.signal.throwIfAborted();
-          const t = find(id, ctx);
-          if (t.exitCode !== undefined) throw Error("Terminal already exited");
-          t.pty.write(input);
+          manager.send(ctx.sessionId, id, input);
           return { text: "Input sent" };
         },
       });
@@ -150,7 +208,7 @@ export function terminalPlugin(
         description: "Stop an interactive or background terminal.",
         schema: z.object({ id: z.string() }),
         async execute({ id }, ctx) {
-          find(id, ctx).pty.kill();
+          manager.stop(ctx.sessionId, id);
           return { text: "Terminal stop requested" };
         },
       });

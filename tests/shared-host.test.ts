@@ -210,6 +210,44 @@ it("shares one run and explicitly owned approvals through local IPC and the encr
     expect(await remote.client.request("session.list")).toEqual([]);
     await local.request("session.access", { deviceId, role: "view" });
     await remote.client.request("session.resume", { sessionId: session.id });
+    expect(
+      await remote.client.request("plan.read", { sessionId: session.id }),
+    ).toMatchObject({ active: false });
+    expect(
+      await remote.client.request("changes.list", { sessionId: session.id }),
+    ).toMatchObject({ items: [] });
+    expect(
+      await remote.client.request("execution.read", {
+        sessionId: session.id,
+        kind: "queue",
+      }),
+    ).toEqual([]);
+    for (const method of [
+      "plan.set",
+      "execution.hold",
+      "execution.action",
+      "changes.rollback",
+      "questions.respond",
+    ] as const) {
+      await expect(
+        remote.client.request(method, { sessionId: session.id, active: true }),
+      ).rejects.toThrow(/denied/);
+    }
+    for (const method of [
+      "plugins.list",
+      "plugins.invoke",
+      "tool.manual",
+      "session.export.file",
+      "permissions.set",
+      "providers.reload",
+      "resources.list",
+    ] as const) {
+      await expect(
+        remote.client.request(method, { mode: "full" }),
+      ).rejects.toThrow(
+        "Only local owner clients can manage host access or defaults",
+      );
+    }
     await expect(
       remote.client.request("prompt", { text: "unauthorized" }),
     ).rejects.toThrow(/denied/);

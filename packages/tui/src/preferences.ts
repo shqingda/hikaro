@@ -10,6 +10,7 @@ const schema = z.object({
   completionBell: z._default(z.boolean(), false),
   resumeOnStart: z._default(z.boolean(), true),
 });
+export const parseTuiPreferences = (value: unknown) => schema.parse(value);
 export type TuiPreferences = z.infer<typeof schema>;
 export const defaultTuiPreferences: TuiPreferences = schema.parse({});
 export async function loadTuiPreferences(home: string) {

@@ -639,3 +639,53 @@ it("searches @ files fuzzily and accepts keyboard selection without submitting",
     await rm(cwd, { recursive: true, force: true });
   }
 });
+
+it("yields execution management to a real approval without denying it or losing the draft", async () => {
+  const { view, input } = interactionView();
+  try {
+    view.editor.setText("saved draft");
+    const manager = view.openModelPanel({ yieldToApproval: true });
+    const waiting = manager.panel
+      .choose("Execution manager", [{ value: "close", label: "Close" }])
+      .catch((error) => error.name);
+    let decided = false;
+    const approval = view
+      .approve(
+        {
+          id: "approval",
+          sessionId: "fixture",
+          tool: "shell",
+          reason: "Run a command",
+          arguments: { command: "true" },
+        },
+        new AbortController().signal,
+      )
+      .then((value) => {
+        decided = true;
+        return value;
+      });
+    expect(manager.signal.aborted).toBe(true);
+    expect(await waiting).toBe("AbortError");
+    expect(decided).toBe(false);
+    expect(view.editor.getText()).toBe("saved draft");
+    input("\x1b");
+    expect(await approval).toBe(false);
+  } finally {
+    view.dispose();
+  }
+});
+
+it("lets structured questions replace execution management and preserves the editor draft", async () => {
+  const { view } = interactionView();
+  try {
+    view.editor.setText("draft question");
+    const manager = view.openModelPanel({ yieldToApproval: true });
+    const questions = view.openModelPanel({ interruptYielding: true });
+    expect(manager.signal.aborted).toBe(true);
+    expect(questions.signal.aborted).toBe(false);
+    questions.close();
+    expect(view.editor.getText()).toBe("draft question");
+  } finally {
+    view.dispose();
+  }
+});

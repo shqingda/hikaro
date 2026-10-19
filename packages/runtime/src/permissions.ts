@@ -55,7 +55,15 @@ export async function loadPermissionMode(
   home: string,
   cwd: string,
 ): Promise<PermissionMode> {
-  return (await savedModes(home))[await realpath(cwd)] ?? "ask";
+  return (await loadSavedPermissionMode(home, cwd)) ?? "ask";
+}
+
+/** Undefined preserves a non-interactive host's existing trust policy. */
+export async function loadSavedPermissionMode(
+  home: string,
+  cwd: string,
+): Promise<PermissionMode | undefined> {
+  return (await savedModes(home))[await realpath(cwd)];
 }
 
 export async function savePermissionMode(

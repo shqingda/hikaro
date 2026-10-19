@@ -595,24 +595,28 @@ int main(int argc, char **argv) {
   if (now < 0 || receive_header(header, sizeof(header), now + INPUT_TIMEOUT_MS) != 0) {
     return fail(&update, "Update preparation interrupted or timed out", errno);
   }
-  size_t new_length;
-  if (strncmp(header, "PREPARE ", 8) != 0 ||
-      !parse_size(header + 8, &new_length) || new_length > max_bytes) {
+  const bool deleting = strcmp(header, "DELETE") == 0;
+  size_t new_length = 0;
+  if (!deleting && (strncmp(header, "PREPARE ", 8) != 0 ||
+      !parse_size(header + 8, &new_length) || new_length > max_bytes)) {
     return fail(&update, "Invalid update preparation or update aborted", 0);
   }
-  if (create_temporary(&update) != 0) {
-    return fail(&update, "Cannot create private temporary file", errno);
+  if (!deleting) {
+    if (create_temporary(&update) != 0) {
+      return fail(&update, "Cannot create private temporary file", errno);
+    }
+    if (receive_content(&update, new_length, now + INPUT_TIMEOUT_MS) != 0) {
+      return fail(&update, "Update content interrupted or timed out", errno);
+    }
+    const mode_t mask = umask(0);
+    (void)umask(mask);
+    const mode_t mode = exists ? version.st_mode & 0777 : (mode_t)(0666 & ~mask);
+    if (fchmod(update.temporary_fd, mode) != 0 || fsync(update.temporary_fd) != 0 ||
+        fstat(update.temporary_fd, &update.temporary_stat) != 0) {
+      return fail(&update, "Cannot prepare temporary file", errno);
+    }
   }
-  if (receive_content(&update, new_length, now + INPUT_TIMEOUT_MS) != 0) {
-    return fail(&update, "Update content interrupted or timed out", errno);
-  }
-  const mode_t mask = umask(0);
-  (void)umask(mask);
-  const mode_t mode = exists ? version.st_mode & 0777 : (mode_t)(0666 & ~mask);
-  if (fchmod(update.temporary_fd, mode) != 0 || fsync(update.temporary_fd) != 0 ||
-      fstat(update.temporary_fd, &update.temporary_stat) != 0) {
-    return fail(&update, "Cannot prepare temporary file", errno);
-  }
+  if (deleting && !exists) return fail(&update, "File already absent", ENOENT);
   if (send_text("{\"prepared\":true}\n") != 0) {
     return fail(&update, "IPC output closed", errno);
   }
@@ -630,6 +634,13 @@ int main(int argc, char **argv) {
                   !same_version(&version, &current))) ||
       (!exists && (status == 0 || errno != ENOENT))) {
     return fail(&update, "File changed during editing. Read it before retrying.", 0);
+  }
+  if (deleting) {
+    if (interrupted) return fail(&update, "Update interrupted", 0);
+    if (unlinkat(update.parent_fd, update.basename, 0) != 0 || fsync(update.parent_fd) != 0)
+      return fail(&update, "Cannot commit file removal", errno);
+    cleanup(&update);
+    return send_text("{\"committed\":true}\n") == 0 ? 0 : 1;
   }
   struct stat temporary_current;
   if (fstatat(update.parent_fd, update.temporary_name, &temporary_current,

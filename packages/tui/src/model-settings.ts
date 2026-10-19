@@ -4,7 +4,7 @@ import type { ModelSelection, ModelSettings } from "../../core/src/types.ts";
 export type ModelControl = "context" | "thinking" | "speed";
 export async function openModelControl(
   view: HikaroView,
-  catalog: ProviderCatalog,
+  catalog: Pick<ProviderCatalog, "capabilities">,
   field: ModelControl,
   active: ModelSelection,
   defaults: ModelSelection,

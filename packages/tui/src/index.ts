@@ -168,6 +168,7 @@ export class HikaroView {
   readonly inputError = new Text("", 1, 0);
   readonly modelSlot = new Container();
   readonly approvalSlot = new Container();
+  private panelYieldsToApproval = false;
   private modelController?: AbortController;
   private preparingPrompt?: AbortController;
   private modelPanel?: ModelPanel;
@@ -442,8 +443,17 @@ export class HikaroView {
     );
     this.tui.requestRender();
   }
-  openModelPanel() {
+  closeModelPanel() {
+    this.modelController?.abort();
+  }
+  openModelPanel(options?: {
+    yieldToApproval?: boolean;
+    interruptYielding?: boolean;
+  }) {
+    if (options?.interruptYielding && this.panelYieldsToApproval)
+      this.modelController?.abort();
     if (this.modelPanel) throw Error("Model picker is already open");
+    this.panelYieldsToApproval = options?.yieldToApproval ?? false;
     this.setError("");
     const controller = new AbortController();
     const panel = new ModelPanel(
@@ -956,6 +966,7 @@ export class HikaroView {
     );
   }
   approve(request: PermissionRequest, signal: AbortSignal): Promise<boolean> {
+    if (this.panelYieldsToApproval) this.modelController?.abort();
     if (
       this.approval ||
       this.dialog ||

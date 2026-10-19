@@ -15,6 +15,7 @@ export async function openSessions(
     query = initialQuery;
   try {
     for (;;) {
+      panel.progress("Loading sessions…");
       let rows = await list(offset, 51, query);
       let sessions = rows.slice(0, 50);
       if (!sessions.length && offset) {

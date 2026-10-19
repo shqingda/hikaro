@@ -4,7 +4,10 @@ import type { AuthPrompt } from "@earendil-works/pi-ai";
 import type { HikaroView } from "./index.ts";
 export async function openModelPicker(
   view: HikaroView,
-  catalog: ProviderCatalog,
+  catalog: Pick<
+    ProviderCatalog,
+    "available" | "providers" | "login" | "refresh"
+  >,
   select: (
     provider: string,
     model: string,
