@@ -2,7 +2,8 @@
 // TLS and production pairing/grant checks stay enabled.
 import { createRequire } from "node:module";
 import { channel } from "node:diagnostics_channel";
-import { getCACertificates, setDefaultCACertificates } from "node:tls";
+import { connect, getCACertificates, setDefaultCACertificates } from "node:tls";
+import { X509Certificate } from "node:crypto";
 import { join, resolve } from "node:path";
 import { mkdir, readFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
@@ -94,13 +95,14 @@ function clearPending() {
   pending.clear();
 }
 async function start() {
+  const certificate = await readFile(join(directory, "server.pem"), "utf8");
   mf = new Miniflare(
     convertV4MiniflareOptions({
       host: "127.0.0.1",
       port,
       https: true,
       httpsKey: await readFile(join(directory, "server-key.pem"), "utf8"),
-      httpsCert: await readFile(join(directory, "server.pem"), "utf8"),
+      httpsCert: certificate,
       modules: true,
       script: built.outputFiles[0].text,
       compatibilityDate: "2026-10-01",
@@ -111,6 +113,26 @@ async function start() {
     }),
   );
   await mf.ready;
+  // Validate the wire chain and pin before any pairing credentials are sent.
+  const ca = await readFile(caPath);
+  await new Promise((resolve, reject) => {
+    const socket = connect({ host: "127.0.0.1", port, ca }, () => {
+      const actual = socket.getPeerX509Certificate()?.fingerprint256;
+      const expected = new X509Certificate(certificate).fingerprint256;
+      socket.end();
+      if (actual !== expected)
+        reject(
+          Error(
+            `Lab TLS certificate mismatch: expected ${expected}, received ${actual}`,
+          ),
+        );
+      else resolve();
+    });
+    socket.once("error", reject);
+    socket.setTimeout(5000, () =>
+      socket.destroy(Error("Lab TLS probe timed out")),
+    );
+  });
   host = await serveSharedHost({ home, cwd, demo: true });
   owner = await SharedHostClient.connect({
     home,
