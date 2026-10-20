@@ -447,7 +447,7 @@ async function main() {
         await agent.executeTool("shell", parseManualCommand(text), text);
         return;
       }
-      const work = agent.prompt(text, images);
+      const { completion: work } = await agent.enqueuePrompt(text, images);
       promptWork = work;
       const pending = agent.pendingPrompts().length;
       if (pending)

@@ -58,14 +58,16 @@ export function executionItems(
       title: t.command,
       state:
         t.state + (t.exitCode === undefined ? "" : ` · exit ${t.exitCode}`),
-      detail: `Command: ${t.command}\nState: ${t.state} · exit code: ${t.exitCode ?? "pending"}\n${t.dropped ? `[${t.dropped} earlier characters omitted]\n` : ""}${t.output || "No output yet."}`,
+      detail: `Command: ${t.command}\nState: ${t.state} · exit code: ${t.exitCode ?? "pending"}\nCleanup: ${t.cleanup}${t.exitSignal ? ` · signal ${t.exitSignal}` : ""}${t.stopError ? `\n${t.stopError}` : ""}\n${t.dropped ? `[${t.dropped} earlier characters omitted]\n` : ""}${t.output || "No output yet."}`,
       actions:
         t.state === "running"
           ? [
               { value: "send", label: "Send a line…" },
               { value: "stop", label: "Stop terminal…" },
             ]
-          : [],
+          : t.state === "stop_failed"
+            ? [{ value: "stop", label: "Retry stop terminal…" }]
+            : [],
     }));
   return runtime.childTasks(session).map((t) => ({
     id: t.id,
