@@ -1,13 +1,12 @@
 import { parseManualCommand } from "../../../packages/tui/src/manual-command.ts";
-import { AttachedWorkflows } from "./attached-workflows.ts";
+import type { AttachedWorkflows } from "./attached-workflows.ts";
 import { randomUUID } from "node:crypto";
 import { SharedHostClient } from "../../../packages/host/src/client.ts";
 import { ClientFiles } from "../../../packages/host/src/client-files.ts";
 import { ClientConnection } from "../../../packages/client-core/src/connection.ts";
-import {
-  createTerminal,
+import type {
   HikaroView,
-  type HistoryDirection,
+  HistoryDirection,
 } from "../../../packages/tui/src/index.ts";
 import { DraftSaver } from "../../../packages/tui/src/drafts.ts";
 import {
@@ -30,10 +29,22 @@ export async function attachTui(options: {
 }) {
   if (!process.stdin.isTTY || !process.stdout.isTTY)
     throw Error("--attach requires a terminal");
-  const transport = await SharedHostClient.connect({
-    ...options,
-    clientId: options.clientId ?? "main",
-  });
+  const { openInteractive } = await import("./interactive-startup.ts");
+  const {
+    runtime: transport,
+    view: [ui, workflowsModule],
+  } = await openInteractive(
+    Promise.all([
+      import("../../../packages/tui/src/index.ts"),
+      import("./attached-workflows.ts"),
+    ]),
+    SharedHostClient.connect({
+      ...options,
+      clientId: options.clientId ?? "main",
+    }),
+  );
+  const { createTerminal, HikaroView } = ui;
+  const { AttachedWorkflows } = workflowsModule;
   const files = await ClientFiles.open(
     transport.endpoint.home,
     transport.endpoint.key,

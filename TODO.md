@@ -393,3 +393,11 @@ pnpm exec vitest run tests/pty.test.ts -t 'critical TUI workflows'
 - [x] 增加按需运行的 `pnpm check:install`，隔离目录重新安装锁定依赖、类型检查、原生构建及产物 PTY 启动/退出通过。
 - [x] 记录源码安装及升级/回退约束；尚未宣称正式发布包或跨版本兼容验收完成。
 - 证据见 [隔离安装验收](docs/validation/clean-install.md)。发布估算：TUI 83%，移动端 35%。
+
+## 2026-10-20：启动性能与指定版本升级回退
+
+- [x] 独立 TUI 提前启动 SQLite worker；附着 TUI 并行连接与 UI 加载。同一构建的启动 p95：174.58 / 188.54 ms，原 200 ms 门槛通过。
+- [x] 从实际旧版本 3a7bc2b 的历史、模型设置、草稿升级到当前版本，再从升级前备份回到旧版继续运行，数据库完整性核对通过。
+- [x] 5 个定向测试、类型检查和构建通过；保留性能失败/通过的完整样本。
+- [ ] 共享合计内存、真实模型闭环、物理终端/IME、长时稳定性和正式分发仍是发布工作。
+- [验收证据](docs/validation/release-performance-upgrade.md)。发布估算：TUI 87%，移动端 35%，未到 95%。

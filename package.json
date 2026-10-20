@@ -15,6 +15,7 @@
     "test": "vitest run",
     "check": "pnpm typecheck && pnpm test && pnpm build",
     "check:install": "node scripts/check-install.mjs",
+    "check:upgrade": "node scripts/check-upgrade.mjs",
     "bench": "node scripts/bench.mjs",
     "bench:check": "node scripts/bench.mjs --check",
     "bench:attach:check": "node scripts/bench-shared-host.mjs --check",

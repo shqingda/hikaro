@@ -222,17 +222,30 @@ async function main() {
     options.cwd,
   );
   const { openInteractive } = await import("./interactive-startup.ts");
+  // Start the storage worker before evaluating the TUI's synchronous module
+  // graph, so schema initialization can progress while the main thread loads UI.
+  const { SQLiteStore } =
+    await import("../../../packages/storage/src/index.ts");
+  const startupStore = await SQLiteStore.open(
+    join(options.home ?? join(homedir(), ".hikaro"), "sessions.sqlite"),
+  );
   const { view: ui, runtime } = await openInteractive(
     import("../../../packages/tui/src/index.ts"),
-    Runtime.open({
-      ...options,
-      permissionMode,
-      approve: (r, s) => view.approve(r, s),
-      askUser: async (questions, signal) => {
-        const { askQuestions } =
-          await import("../../../packages/tui/src/planning.ts");
-        return askQuestions(view, questions, signal);
+    Runtime.open(
+      {
+        ...options,
+        permissionMode,
+        approve: (r, s) => view.approve(r, s),
+        askUser: async (questions, signal) => {
+          const { askQuestions } =
+            await import("../../../packages/tui/src/planning.ts");
+          return askQuestions(view, questions, signal);
+        },
       },
+      startupStore,
+    ).catch(async (error) => {
+      await startupStore.close();
+      throw error;
     }),
   );
   const { createTerminal, HikaroView } = ui;
