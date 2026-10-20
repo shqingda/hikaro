@@ -1,6 +1,6 @@
 import type { Agent } from "../../core/src/index.ts";
 import type { Runtime } from "./index.ts";
-export type ExecutionKind = "queue" | "terminals" | "children";
+export type ExecutionKind = "queue" | "terminals" | "children" | "steering";
 export type ExecutionItem = {
   id: string;
   title: string;
@@ -10,7 +10,7 @@ export type ExecutionItem = {
   actions: { value: string; label: string }[];
 };
 export function executionItems(
-  agent: Pick<Agent, "pendingPrompts">,
+  agent: Pick<Agent, "pendingPrompts" | "pendingSteering">,
   runtime: Pick<Runtime, "terminals" | "childTasks">,
   session: string,
   kind: ExecutionKind,
@@ -31,6 +31,21 @@ export function executionItems(
         ...(q.recovered
           ? [{ value: "resume", label: "Resume recovered message…" }]
           : []),
+        { value: "edit", label: "Edit message" },
+        { value: "first", label: "Move to front" },
+        { value: "remove", label: "Remove message" },
+      ],
+    }));
+  if (kind === "steering")
+    return agent.pendingSteering().map((q, i) => ({
+      id: q.id,
+      title: `${i + 1}. ${q.text}`,
+      state: "Pending next model turn · memory only",
+      editText: q.text,
+      detail:
+        q.text +
+        "\n\nApplies to the next model turn. Consumption is paused while this manager is open. Not saved across host restart.",
+      actions: [
         { value: "edit", label: "Edit message" },
         { value: "first", label: "Move to front" },
         { value: "remove", label: "Remove message" },

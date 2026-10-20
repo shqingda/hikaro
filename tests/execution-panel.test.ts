@@ -14,6 +14,10 @@ it("manages a queued message through the panel and resumes dispatch on close", a
     agent: {
       holdQueue: () => release,
       pendingPrompts: () => queue,
+      pendingSteering: () => [],
+      updateSteering: () => {},
+      prioritizeSteering: () => {},
+      removeSteering: () => {},
       updatePending: async (_id: string, text: string) => {
         queue[0]!.text = text;
       },

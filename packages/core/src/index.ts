@@ -130,7 +130,8 @@ export class PluginHost {
 export class Agent implements AgentBackend {
   private listeners = new Set<(e: AgentEvent) => void>();
   private controller?: AbortController;
-  private steering: Array<{ text: string; scope?: string }> = [];
+  private steering: Array<{ id: string; text: string; scope?: string }> = [];
+  private queueWaiters = new Set<() => void>();
   private compacting = false;
   private origin?: { scope?: string; commandId?: string };
   private queueHolds = 0;
@@ -429,6 +430,7 @@ export class Agent implements AgentBackend {
       if (released) return;
       released = true;
       this.queueHolds--;
+      if (!this.queueHolds) for (const resume of this.queueWaiters) resume();
       void this.drain();
     };
   }
@@ -482,8 +484,52 @@ export class Agent implements AgentBackend {
     });
   }
   steer(text: string, scope?: string) {
+    if (!text.trim()) throw Error("Steering message cannot be empty");
     if (this.steering.length >= 16) throw Error("Steering queue is full");
-    this.steering.push({ text, scope });
+    this.steering.push({ id: randomUUID(), text, scope });
+  }
+  pendingSteering() {
+    return this.steering.map(({ id, text }) => ({ id, text }));
+  }
+  private steeringIndex(id: string) {
+    const index = this.steering.findIndex((item) => item.id === id);
+    if (index < 0)
+      throw Error("Steering message is no longer pending; refresh the list.");
+    return index;
+  }
+  updateSteering(id: string, text: string) {
+    const item = this.steering[this.steeringIndex(id)]!;
+    if (!text.trim()) throw Error("Steering message cannot be empty");
+    item.text = text;
+  }
+  prioritizeSteering(id: string) {
+    const [item] = this.steering.splice(this.steeringIndex(id), 1);
+    this.steering.unshift(item!);
+  }
+  removeSteering(id: string) {
+    this.steering.splice(this.steeringIndex(id), 1);
+  }
+  private async waitForSteeringRelease(signal: AbortSignal) {
+    while (this.queueHolds && this.steering.length) {
+      signal.throwIfAborted();
+      await new Promise<void>((resolve, reject) => {
+        const cleanup = () => {
+          this.queueWaiters.delete(resume);
+          signal.removeEventListener("abort", abort);
+        };
+        const resume = () => {
+          cleanup();
+          resolve();
+        };
+        const abort = () => {
+          cleanup();
+          reject(signal.reason);
+        };
+        this.queueWaiters.add(resume);
+        signal.addEventListener("abort", abort, { once: true });
+      });
+    }
+    signal.throwIfAborted();
   }
   /** Revocation removes this participant's work without stopping another owner. */
   cancelScope(scope: string) {
@@ -982,6 +1028,7 @@ export class Agent implements AgentBackend {
           throw Error("Session cost budget reached");
         if (this.budget.modelCallsLeft <= 0)
           throw Error("Shared model-call budget exhausted");
+        await this.waitForSteeringRelease(signal);
         for (const { text } of this.steering.splice(0))
           await this.message({ role: "user", text, timestamp: Date.now() });
         const { system, tools, context } = await this.requestContext(
@@ -1039,6 +1086,7 @@ export class Agent implements AgentBackend {
         await this.message(final);
         if (!final.toolCalls?.length) {
           signal.throwIfAborted();
+          await this.waitForSteeringRelease(signal);
           if (this.steering.length) continue;
           await this.emit("run.end", {
             runId,

@@ -4,7 +4,7 @@ import type { Runtime } from "../../../packages/runtime/src/index.ts";
 import type { Agent, Session } from "../../../packages/core/src/index.ts";
 import type { Questions } from "../../../packages/runtime/src/planning.ts";
 import { executionItems } from "../../../packages/runtime/src/execution-items.ts";
-const kindSchema = z.enum(["queue", "terminals", "children"]);
+const kindSchema = z.enum(["queue", "terminals", "children", "steering"]);
 export class RpcWorkflows {
   private holds = new Map<
     string,
@@ -208,6 +208,13 @@ export class RpcWorkflows {
           else if (action === "remove") await agent.removePending(id);
           else if (action === "resume") await agent.resumePending(id, scope);
           else throw Error("Invalid queue action");
+        } else if (kind === "steering") {
+          this.renew(scope, session.id, p.token);
+          if (action === "edit")
+            agent.updateSteering(id, z.string().max(100000).parse(p.text));
+          else if (action === "first") agent.prioritizeSteering(id);
+          else if (action === "remove") agent.removeSteering(id);
+          else throw Error("Invalid steering action");
         } else if (kind === "terminals") {
           if (action === "send") {
             await this.runtime.planning.load(session.id, true);

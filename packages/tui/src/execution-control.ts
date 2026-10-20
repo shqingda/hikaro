@@ -16,6 +16,10 @@ type LocalSource = {
     | "prioritizePending"
     | "removePending"
     | "resumePending"
+    | "pendingSteering"
+    | "updateSteering"
+    | "prioritizeSteering"
+    | "removeSteering"
   >;
   runtime: Pick<Runtime, "terminals" | "childTasks" | "stopChild">;
   session: string;
@@ -52,6 +56,11 @@ export function localExecutionSource(source: LocalSource): ExecutionSource {
         else if (action === "remove") await source.agent.removePending(id);
         else if (action === "resume") await source.agent.resumePending(id);
         else throw Error("Unknown queue action");
+      } else if (kind === "steering") {
+        if (action === "edit") source.agent.updateSteering(id, text!);
+        else if (action === "first") source.agent.prioritizeSteering(id);
+        else if (action === "remove") source.agent.removeSteering(id);
+        else throw Error("Unknown steering action");
       } else if (kind === "terminals") {
         if (action === "send")
           source.runtime.terminals.send(source.session, id, text!);
@@ -77,9 +86,10 @@ export async function openExecutionControl(
     queue: "Pending messages",
     terminals: "Background terminals",
     children: "Child agents",
+    steering: "Steering messages",
   };
   let message =
-    "Pending dispatch is paused while this manager is open. Active work continues. Close to resume.";
+    "Prompt dispatch and steering consumption are paused while this manager is open. Close to resume.";
   const confirm = async (title: string, detail: string) =>
     (
       await panel.choose(
@@ -104,6 +114,7 @@ export async function openExecutionControl(
           { value: "queue", label: names.queue },
           { value: "terminals", label: names.terminals },
           { value: "children", label: names.children },
+          { value: "steering", label: names.steering },
           { value: "close", label: "Close and resume queue" },
         ],
         message,
