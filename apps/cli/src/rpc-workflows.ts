@@ -152,14 +152,15 @@ export class RpcWorkflows {
         const kind = kindSchema.parse(p.kind),
           id = z.string().parse(p.id),
           action = z
-            .enum(["edit", "first", "remove", "send", "stop"])
+            .enum(["edit", "first", "remove", "resume", "send", "stop"])
             .parse(p.action);
         if (kind === "queue") {
           this.renew(scope, session.id, p.token);
           if (action === "edit")
-            agent.updatePending(id, z.string().max(100000).parse(p.text));
-          else if (action === "first") agent.prioritizePending(id);
-          else if (action === "remove") agent.removePending(id);
+            await agent.updatePending(id, z.string().max(100000).parse(p.text));
+          else if (action === "first") await agent.prioritizePending(id);
+          else if (action === "remove") await agent.removePending(id);
+          else if (action === "resume") await agent.resumePending(id, scope);
           else throw Error("Invalid queue action");
         } else if (kind === "terminals") {
           if (action === "send") {

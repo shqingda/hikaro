@@ -248,14 +248,15 @@ export async function serveRpc(
     state: ScopeState,
     includeSelected = true,
     revokedScope?: string,
+    preserveRecovered = false,
   ) => {
     state.generation++;
     for (const operation of state.work.operations) operation.abort();
     for (const agent of state.work.activeAgents.keys()) {
       if (shared && revokedScope) agent.cancelScope(revokedScope);
-      else agent.cancel();
+      else agent.cancel(preserveRecovered);
     }
-    if (includeSelected) state.agent?.cancel();
+    if (includeSelected) state.agent?.cancel(preserveRecovered);
   };
   const releaseWork = (scope: string, work: ScopeWork, agent?: Agent) => {
     if (agent) {
@@ -910,9 +911,19 @@ export async function serveRpc(
               runId = String(event.data.runId);
           });
           ownAgent(state.work, agent);
+          let accepted: Awaited<ReturnType<Agent["enqueuePrompt"]>>;
+          try {
+            accepted = await agent.enqueuePrompt(text, images, {
+              scope,
+              commandId: command.id,
+            });
+          } catch (error) {
+            stopRunTracking();
+            releaseWork(scope, state.work, agent);
+            throw error;
+          }
           track(
-            agent
-              .prompt(text, images, { scope, commandId: command.id })
+            accepted.completion
               .then(async () => {
                 await finish("completed", {
                   sessionId: session.id,
@@ -1102,7 +1113,7 @@ export async function serveRpc(
     workflows.close();
     for (const a of approvals.values()) a.finish(false);
     for (const state of scopes.values()) {
-      cancel(state);
+      cancel(state, true, undefined, true);
       state.unsubscribe?.();
     }
     for (const work of ownedWork.values())

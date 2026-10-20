@@ -26,6 +26,8 @@ for (;;) {
 db.exec("BEGIN IMMEDIATE");
 try {
   db.exec(`
+CREATE TABLE IF NOT EXISTS pending_prompts(sessionId TEXT NOT NULL,id TEXT PRIMARY KEY,data TEXT NOT NULL,position INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS pending_prompt_order ON pending_prompts(sessionId,position);
 CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY,title TEXT NOT NULL,cwd TEXT NOT NULL,createdAt INTEGER NOT NULL,parentId TEXT);
 CREATE TABLE IF NOT EXISTS session_models(sessionId TEXT PRIMARY KEY,data TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS workspace_state(cwd TEXT PRIMARY KEY,sessionId TEXT NOT NULL);
@@ -265,6 +267,44 @@ const handlers = {
       ).run(id, text);
     else db.prepare("DELETE FROM session_drafts WHERE sessionId=?").run(id);
   },
+  pendingPrompts({ sessionId }) {
+    return db
+      .prepare(
+        "SELECT data FROM pending_prompts WHERE sessionId=? ORDER BY position,id",
+      )
+      .all(sessionId)
+      .map((row) => JSON.parse(row.data));
+  },
+  insertPendingPrompt({ sessionId, item }) {
+    if (!db.prepare("SELECT 1 FROM sessions WHERE id=?").get(sessionId))
+      throw Error("Session not found");
+    db.prepare(
+      "INSERT INTO pending_prompts SELECT ?,?,?,COALESCE(MAX(position),0)+1 FROM pending_prompts WHERE sessionId=?",
+    ).run(sessionId, item.id, JSON.stringify(item), sessionId);
+  },
+  updatePendingPrompt({ sessionId, id, text }) {
+    const result = db
+      .prepare(
+        "UPDATE pending_prompts SET data=json_set(data,'$.text',?) WHERE sessionId=? AND id=?",
+      )
+      .run(text, sessionId, id);
+    if (!result.changes)
+      throw Error("Message is no longer queued; refresh the list.");
+  },
+  prioritizePendingPrompt({ sessionId, id }) {
+    const result = db
+      .prepare(
+        "UPDATE pending_prompts SET position=(SELECT COALESCE(MIN(position),0)-1 FROM pending_prompts WHERE sessionId=?) WHERE sessionId=? AND id=?",
+      )
+      .run(sessionId, sessionId, id);
+    if (!result.changes)
+      throw Error("Message is no longer queued; refresh the list.");
+  },
+  takePendingPrompt({ sessionId, id }) {
+    return !!db
+      .prepare("DELETE FROM pending_prompts WHERE sessionId=? AND id=?")
+      .run(sessionId, id).changes;
+  },
   deleteSession({ id }) {
     db.exec("BEGIN IMMEDIATE");
     try {
@@ -288,6 +328,7 @@ const handlers = {
         "leases",
         "jobs",
         "context_checkpoints",
+        "pending_prompts",
         "session_access",
         "client_views",
       ])

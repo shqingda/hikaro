@@ -30,10 +30,11 @@ it("holds queued messages for editing, reorders/removes by ID, then dispatches o
     const one = agent.prompt("one");
     const two = agent.prompt("two");
     const three = agent.prompt("three").catch((e) => e.name);
+    await agent.queueSettled();
     const [a, b, c] = agent.pendingPrompts();
-    agent.updatePending(b!.id, "edited two");
-    agent.prioritizePending(b!.id);
-    agent.removePending(c!.id);
+    await agent.updatePending(b!.id, "edited two");
+    await agent.prioritizePending(b!.id);
+    await agent.removePending(c!.id);
     expect(agent.pendingPrompts().map((x) => x.text)).toEqual([
       "edited two",
       "one",
@@ -44,7 +45,7 @@ it("holds queued messages for editing, reorders/removes by ID, then dispatches o
     release();
     await Promise.all([one, two]);
     expect(received).toEqual(["edited two", "one"]);
-    expect(() => agent.updatePending(a!.id, "late")).toThrow(
+    await expect(agent.updatePending(a!.id, "late")).rejects.toThrow(
       /no longer queued/,
     );
   } finally {

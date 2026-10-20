@@ -19,10 +19,18 @@ export function executionItems(
     return agent.pendingPrompts().map((q, i) => ({
       id: q.id,
       title: `${i + 1}. ${q.text}`,
-      state: `${q.attachments} image attachments`,
+      state: `${q.recovered ? "Recovered · confirmation required · " : ""}${q.attachments} image attachments`,
       editText: q.text,
-      detail: q.text + `\n\nImage attachments: ${q.attachments}`,
+      detail:
+        q.text +
+        `\n\nImage attachments: ${q.attachments}` +
+        (q.recovered
+          ? "\nRecovered after interruption. Confirm resume to send; closing this panel will not send it."
+          : ""),
       actions: [
+        ...(q.recovered
+          ? [{ value: "resume", label: "Resume recovered message…" }]
+          : []),
         { value: "edit", label: "Edit message" },
         { value: "first", label: "Move to front" },
         { value: "remove", label: "Remove message" },

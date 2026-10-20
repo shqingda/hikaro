@@ -6,17 +6,20 @@ import type { HikaroView } from "../packages/tui/src/index.ts";
 it("manages a queued message through the panel and resumes dispatch on close", async () => {
   const abort = new AbortController();
   const panel = new ModelPanel(abort.signal, () => {});
-  let queue = [{ id: "one", text: "original", attachments: 0 }];
+  let queue = [
+    { id: "one", text: "original", attachments: 0, recovered: false },
+  ];
   const release = vi.fn();
   const source = {
     agent: {
       holdQueue: () => release,
       pendingPrompts: () => queue,
-      updatePending: (_id: string, text: string) => {
+      updatePending: async (_id: string, text: string) => {
         queue[0]!.text = text;
       },
-      prioritizePending: () => {},
-      removePending: () => {
+      prioritizePending: async () => {},
+      resumePending: async () => {},
+      removePending: async () => {
         queue = [];
       },
     },

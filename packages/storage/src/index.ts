@@ -1,3 +1,4 @@
+import type { PendingPrompt } from "../../core/src/pending-prompts.ts";
 import type {
   DurableCommandReceipt,
   RpcMethod,
@@ -67,6 +68,21 @@ export class SQLiteStore implements EventStore {
       this.pending.set(id, { resolve, reject });
       this.worker.postMessage({ id, method, args });
     });
+  }
+  pendingPrompts(sessionId: string) {
+    return this.request<PendingPrompt[]>("pendingPrompts", { sessionId });
+  }
+  insertPendingPrompt(sessionId: string, item: PendingPrompt) {
+    return this.request<void>("insertPendingPrompt", { sessionId, item });
+  }
+  updatePendingPrompt(sessionId: string, id: string, text: string) {
+    return this.request<void>("updatePendingPrompt", { sessionId, id, text });
+  }
+  prioritizePendingPrompt(sessionId: string, id: string) {
+    return this.request<void>("prioritizePendingPrompt", { sessionId, id });
+  }
+  takePendingPrompt(sessionId: string, id: string) {
+    return this.request<boolean>("takePendingPrompt", { sessionId, id });
   }
   createSession(
     cwd: string,

@@ -1,3 +1,4 @@
+import type { PendingPrompt, PendingPromptStore } from "./pending-prompts.ts";
 import { randomUUID } from "node:crypto";
 import * as z from "zod";
 import { checkpointMessage, fitContext, summarizeHistory } from "./context.ts";
@@ -133,14 +134,13 @@ export class Agent implements AgentBackend {
   private compacting = false;
   private origin?: { scope?: string; commandId?: string };
   private queueHolds = 0;
-  private queue: Array<{
-    id: string;
-    text: string;
-    images?: ImageInput[];
-    origin?: { scope?: string; commandId?: string };
-    resolve: () => void;
-    reject: (e: unknown) => void;
-  }> = [];
+  private queue: Array<
+    PendingPrompt & {
+      recovered?: boolean;
+      resolve: () => void;
+      reject: (e: unknown) => void;
+    }
+  > = [];
   private draining = false;
   private runActive = false;
   private runId: string | null = null;
@@ -220,7 +220,7 @@ export class Agent implements AgentBackend {
   }
   snapshot() {
     return {
-      busy: this.runActive || this.queue.length > 0,
+      busy: this.runActive || this.queue.some((item) => !item.recovered),
       stream: this.streamPreview,
       streamTruncated: this.streamTruncated,
       cursor: this.cursor,
@@ -237,6 +237,7 @@ export class Agent implements AgentBackend {
     readonly options: {
       session: Session;
       store: EventStore;
+      pendingStore?: PendingPromptStore;
       provider: ProviderAdapter;
       tools: ToolRegistry;
       system?: string;
@@ -262,7 +263,7 @@ export class Agent implements AgentBackend {
     };
   }
   get busy() {
-    return this.draining;
+    return this.draining || this.queueWrites > 0;
   }
   subscribe(fn: (e: AgentEvent) => void) {
     this.listeners.add(fn);
@@ -338,17 +339,87 @@ export class Agent implements AgentBackend {
       );
     if (!text.trim() && !images?.length) return;
     if (this.queue.length >= 32) throw Error("Prompt queue is full");
-    return new Promise<void>((resolve, reject) => {
-      this.queue.push({
-        id: randomUUID(),
-        text,
-        images,
-        origin,
-        resolve,
-        reject,
-      });
-      void this.drain();
+    const accepted = await this.enqueuePrompt(text, images, origin);
+    return accepted.completion;
+  }
+  async enqueuePrompt(
+    text: string,
+    images?: ImageInput[],
+    origin?: { scope?: string; commandId?: string },
+  ) {
+    if (images?.length && this.options.provider.supportsImages === false)
+      throw Error(
+        "The selected model does not support image input. Choose an image-capable model.",
+      );
+    if (this.compacting)
+      throw Error(
+        "Wait for compaction to finish before sending another prompt.",
+      );
+    if (!text.trim() && !images?.length) throw Error("Prompt is empty");
+    let resolve!: () => void, reject!: (error: unknown) => void;
+    const completion = new Promise<void>((yes, no) => {
+      resolve = yes;
+      reject = no;
     });
+    // Acceptance and completion are separate: a caller may attach after dispatch starts.
+    void completion.catch(() => {});
+    await this.queueOperation(async () => {
+      if (this.queue.length >= 32) throw Error("Prompt queue is full");
+      const item = { id: randomUUID(), text, images, origin, resolve, reject };
+      await this.options.pendingStore?.insertPendingPrompt(
+        this.options.session.id,
+        { id: item.id, text, images, origin },
+      );
+      this.queue.push(item);
+    });
+    void this.drain();
+    return { completion };
+  }
+  private queueTail: Promise<unknown> = Promise.resolve();
+  private queueWrites = 0;
+  private queueOperation<T>(operation: () => Promise<T>): Promise<T> {
+    this.queueWrites++;
+    const result = this.queueTail.then(operation).finally(() => {
+      this.queueWrites--;
+    });
+    this.queueTail = result.catch(() => {});
+    return result;
+  }
+  async queueSettled() {
+    await this.queueTail;
+  }
+  async restorePending() {
+    await this.queueOperation(async () => {
+      const items =
+        (await this.options.pendingStore?.pendingPrompts(
+          this.options.session.id,
+        )) ?? [];
+      for (const item of items) {
+        if (!this.queue.some((q) => q.id === item.id))
+          this.queue.push({
+            ...item,
+            recovered: true,
+            resolve() {},
+            reject(error) {
+              console.error(`Recovered message failed: ${String(error)}`);
+            },
+          });
+      }
+    });
+  }
+  async resumePending(id: string, scope?: string) {
+    await this.queueOperation(async () => {
+      const item = this.queue[this.pendingIndex(id)]!;
+      if (!item.recovered) throw Error("Message is already queued");
+      if (item.origin?.scope !== scope)
+        throw Error("Restore from the original client identity");
+      if (item.images?.length && this.options.provider.supportsImages === false)
+        throw Error(
+          "The selected model does not support image input. Choose an image-capable model.",
+        );
+      item.recovered = false;
+    });
+    void this.drain();
   }
   /** Freeze dispatch while the user manages pending work; active work continues. */
   holdQueue() {
@@ -362,10 +433,11 @@ export class Agent implements AgentBackend {
     };
   }
   pendingPrompts() {
-    return this.queue.map(({ id, text, images }) => ({
+    return this.queue.map(({ id, text, images, recovered }) => ({
       id,
       text,
       attachments: images?.length ?? 0,
+      recovered: recovered ?? false,
     }));
   }
   private pendingIndex(id: string) {
@@ -375,18 +447,39 @@ export class Agent implements AgentBackend {
     return index;
   }
   updatePending(id: string, text: string) {
-    const item = this.queue[this.pendingIndex(id)]!;
-    if (!text.trim() && !item.images?.length)
-      throw Error("Message cannot be empty");
-    item.text = text;
+    return this.queueOperation(async () => {
+      const item = this.queue[this.pendingIndex(id)]!;
+      if (!text.trim() && !item.images?.length)
+        throw Error("Message cannot be empty");
+      await this.options.pendingStore?.updatePendingPrompt(
+        this.options.session.id,
+        id,
+        text,
+      );
+      item.text = text;
+    });
   }
   prioritizePending(id: string) {
-    const [item] = this.queue.splice(this.pendingIndex(id), 1);
-    this.queue.unshift(item!);
+    return this.queueOperation(async () => {
+      const index = this.pendingIndex(id);
+      await this.options.pendingStore?.prioritizePendingPrompt(
+        this.options.session.id,
+        id,
+      );
+      const [item] = this.queue.splice(index, 1);
+      this.queue.unshift(item!);
+    });
   }
   removePending(id: string) {
-    const [item] = this.queue.splice(this.pendingIndex(id), 1);
-    item!.reject(new DOMException("Removed from queue", "AbortError"));
+    return this.queueOperation(async () => {
+      const index = this.pendingIndex(id);
+      await this.options.pendingStore?.takePendingPrompt(
+        this.options.session.id,
+        id,
+      );
+      const [item] = this.queue.splice(index, 1);
+      item!.reject(new DOMException("Removed from queue", "AbortError"));
+    });
   }
   steer(text: string, scope?: string) {
     if (this.steering.length >= 16) throw Error("Steering queue is full");
@@ -394,30 +487,81 @@ export class Agent implements AgentBackend {
   }
   /** Revocation removes this participant's work without stopping another owner. */
   cancelScope(scope: string) {
+    this.scopeEpochs.set(scope, (this.scopeEpochs.get(scope) ?? 0) + 1);
     if (this.origin?.scope === scope && !this.compacting)
       this.controller?.abort();
-    const kept: typeof this.queue = [];
-    for (const item of this.queue) {
-      if (item.origin?.scope === scope)
-        item.reject(new DOMException("Client revoked", "AbortError"));
-      else kept.push(item);
-    }
-    this.queue = kept;
+    void this.discardPending((item) => item.origin?.scope === scope);
     this.steering = this.steering.filter((item) => item.scope !== scope);
   }
-  cancel() {
+  private cancelEpoch = 0;
+  private scopeEpochs = new Map<string, number>();
+  private async discardPending(
+    matches: (item: PendingPrompt & { recovered?: boolean }) => boolean,
+  ) {
+    try {
+      await this.queueOperation(async () => {
+        for (const item of [...this.queue]) {
+          if (!matches(item)) continue;
+          await this.options.pendingStore?.takePendingPrompt(
+            this.options.session.id,
+            item.id,
+          );
+          this.queue.splice(this.pendingIndex(item.id), 1);
+          item.reject(new DOMException("Cancelled", "AbortError"));
+        }
+      });
+    } catch (error) {
+      // A failed durable cancellation must never let memory-only state dispatch.
+      this.queueHolds++;
+      console.error(`Could not persist queue cancellation: ${String(error)}`);
+    }
+  }
+  cancel(preserveRecovered = false) {
+    this.cancelEpoch++;
     this.controller?.abort();
-    for (const item of this.queue.splice(0))
-      item.reject(new DOMException("Cancelled", "AbortError"));
+    void this.discardPending((item) => !preserveRecovered || !item.recovered);
     this.steering = [];
   }
   private async drain() {
     if (this.draining) return;
     this.draining = true;
     try {
-      while (this.queue.length && !this.queueHolds) {
-        const item = this.queue.shift()!;
+      for (;;) {
+        const epoch = this.cancelEpoch;
+        const scopes = new Map(this.scopeEpochs);
+        const item = await this.queueOperation(async () => {
+          if (this.queueHolds) return;
+          const index = this.queue.findIndex((item) => !item.recovered);
+          if (index < 0) return;
+          const item = this.queue[index]!;
+          try {
+            if (
+              this.options.pendingStore &&
+              !(await this.options.pendingStore.takePendingPrompt(
+                this.options.session.id,
+                item.id,
+              ))
+            )
+              throw Error(
+                "Message was claimed or removed elsewhere; it will not be replayed",
+              );
+          } catch (error) {
+            item.recovered = true;
+            item.reject(error);
+            return;
+          }
+          this.queue.splice(index, 1);
+          return item;
+        });
+        if (!item) break;
         try {
+          if (
+            epoch !== this.cancelEpoch ||
+            (item.origin?.scope &&
+              scopes.get(item.origin.scope) !==
+                this.scopeEpochs.get(item.origin.scope))
+          )
+            throw new DOMException("Cancelled", "AbortError");
           this.origin = item.origin;
           await this.run(item.text, item.images);
           item.resolve();
@@ -427,6 +571,8 @@ export class Agent implements AgentBackend {
       }
     } finally {
       this.draining = false;
+      if (!this.queueHolds && this.queue.some((item) => !item.recovered))
+        void this.drain();
     }
   }
   private async message(m: Message) {

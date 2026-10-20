@@ -15,6 +15,7 @@ type LocalSource = {
     | "updatePending"
     | "prioritizePending"
     | "removePending"
+    | "resumePending"
   >;
   runtime: Pick<Runtime, "terminals" | "childTasks" | "stopChild">;
   session: string;
@@ -46,9 +47,10 @@ export function localExecutionSource(source: LocalSource): ExecutionSource {
     },
     async act(kind, id, action, text) {
       if (kind === "queue") {
-        if (action === "edit") source.agent.updatePending(id, text!);
-        else if (action === "first") source.agent.prioritizePending(id);
-        else if (action === "remove") source.agent.removePending(id);
+        if (action === "edit") await source.agent.updatePending(id, text!);
+        else if (action === "first") await source.agent.prioritizePending(id);
+        else if (action === "remove") await source.agent.removePending(id);
+        else if (action === "resume") await source.agent.resumePending(id);
         else throw Error("Unknown queue action");
       } else if (kind === "terminals") {
         if (action === "send")
@@ -217,6 +219,11 @@ export async function openExecutionControl(
               panel.progress("Applying action…");
               await source.act(kind, item.id, "remove");
               message = "Message removed; it will not be sent.";
+            } else if (action.value === "resume") {
+              if (!(await confirm("Resume recovered message?", item.detail)))
+                continue;
+              await source.act(kind, item.id, "resume");
+              message = "Message restored to queue. Close the manager to send.";
             } else if (action.value === "send") {
               const text = await panel.prompt(
                 "Send a line to terminal",
