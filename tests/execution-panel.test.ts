@@ -31,6 +31,7 @@ it("manages a queued message through the panel and resumes dispatch on close", a
       terminals: new TerminalManager(),
       childTasks: () => [],
       stopChild: () => {},
+      executionHistory: async () => [],
     },
     session: "s",
   };

@@ -1071,6 +1071,14 @@ const handlers = {
       owner,
     );
   },
+  recentRunEvents({ sessionId }) {
+    return db
+      .prepare(
+        "SELECT * FROM events WHERE sessionId=? AND type IN ('run.start','run.end') ORDER BY seq DESC LIMIT 200",
+      )
+      .all(sessionId)
+      .map(decode);
+  },
   latestRunEvent({ sessionId }) {
     const row = db
       .prepare(

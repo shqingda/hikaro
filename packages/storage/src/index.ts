@@ -368,6 +368,9 @@ export class SQLiteStore implements EventStore {
   release(sessionId: string, owner: string) {
     return this.request<void>("release", { sessionId, owner });
   }
+  recentRunEvents(sessionId: string) {
+    return this.request<AgentEvent[]>("recentRunEvents", { sessionId });
+  }
   latestRunEvent(sessionId: string) {
     return this.request<AgentEvent | undefined>("latestRunEvent", {
       sessionId,

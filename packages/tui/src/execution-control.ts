@@ -21,7 +21,10 @@ type LocalSource = {
     | "prioritizeSteering"
     | "removeSteering"
   >;
-  runtime: Pick<Runtime, "terminals" | "childTasks" | "stopChild">;
+  runtime: Pick<
+    Runtime,
+    "terminals" | "childTasks" | "stopChild" | "executionHistory"
+  >;
   session: string;
 };
 export type ExecutionSource = {
@@ -37,19 +40,21 @@ export function localExecutionSource(source: LocalSource): ExecutionSource {
       return async () => release();
     },
     async list(kind) {
+      if (kind === "history")
+        return source.runtime.executionHistory(source.session);
       return executionItems(source.agent, source.runtime, source.session, kind);
     },
     async detail(kind, id) {
-      const item = executionItems(
-        source.agent,
-        source.runtime,
-        source.session,
-        kind,
+      const item = (
+        kind === "history"
+          ? await source.runtime.executionHistory(source.session)
+          : executionItems(source.agent, source.runtime, source.session, kind)
       ).find((t) => t.id === id);
       if (!item) throw Error("Item is no longer available");
       return item;
     },
     async act(kind, id, action, text) {
+      if (kind === "history") throw Error("Execution history is read-only");
       if (kind === "queue") {
         if (action === "edit") await source.agent.updatePending(id, text!);
         else if (action === "first") await source.agent.prioritizePending(id);
@@ -87,6 +92,7 @@ export async function openExecutionControl(
     terminals: "Background terminals",
     children: "Child agents",
     steering: "Steering messages",
+    history: "Execution history",
   };
   let message =
     "Prompt dispatch and steering consumption are paused while this manager is open. Close to resume.";
@@ -115,6 +121,7 @@ export async function openExecutionControl(
           { value: "terminals", label: names.terminals },
           { value: "children", label: names.children },
           { value: "steering", label: names.steering },
+          { value: "history", label: names.history },
           { value: "close", label: "Close and resume queue" },
         ],
         message,
@@ -177,28 +184,31 @@ export async function openExecutionControl(
             );
             let refreshing = false;
             let active = true;
-            const timer = setInterval(() => {
-              if (!active || signal.aborted || refreshing) return;
-              refreshing = true;
-              void source
-                .detail(kind, item.id)
-                .then((latest) => {
-                  if (active && !signal.aborted)
-                    panel.updateDocument(
-                      `${names[kind]} · ${latest.state}`,
-                      latest.detail,
-                    );
-                })
-                .catch((error) => {
-                  if (active && !signal.aborted) {
-                    view.setError(String(error));
-                    close();
-                  }
-                })
-                .finally(() => {
-                  refreshing = false;
-                });
-            }, 500);
+            const timer =
+              kind === "history"
+                ? undefined
+                : setInterval(() => {
+                    if (!active || signal.aborted || refreshing) return;
+                    refreshing = true;
+                    void source
+                      .detail(kind, item.id)
+                      .then((latest) => {
+                        if (active && !signal.aborted)
+                          panel.updateDocument(
+                            `${names[kind]} · ${latest.state}`,
+                            latest.detail,
+                          );
+                      })
+                      .catch((error) => {
+                        if (active && !signal.aborted) {
+                          view.setError(String(error));
+                          close();
+                        }
+                      })
+                      .finally(() => {
+                        refreshing = false;
+                      });
+                  }, 500);
             let action;
             try {
               action = await pending;

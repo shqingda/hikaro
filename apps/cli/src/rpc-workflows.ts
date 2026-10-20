@@ -4,7 +4,13 @@ import type { Runtime } from "../../../packages/runtime/src/index.ts";
 import type { Agent, Session } from "../../../packages/core/src/index.ts";
 import type { Questions } from "../../../packages/runtime/src/planning.ts";
 import { executionItems } from "../../../packages/runtime/src/execution-items.ts";
-const kindSchema = z.enum(["queue", "terminals", "children", "steering"]);
+const kindSchema = z.enum([
+  "queue",
+  "terminals",
+  "children",
+  "steering",
+  "history",
+]);
 export class RpcWorkflows {
   private holds = new Map<
     string,
@@ -181,7 +187,10 @@ export class RpcWorkflows {
       case "execution.read": {
         if (p.token !== undefined) this.renew(scope, session.id, p.token);
         const kind = kindSchema.parse(p.kind);
-        const items = executionItems(agent, this.runtime, session.id, kind);
+        const items =
+          kind === "history"
+            ? await this.runtime.executionHistory(session.id)
+            : executionItems(agent, this.runtime, session.id, kind);
         if (p.id !== undefined) {
           const item = items.find((t) => t.id === z.string().parse(p.id));
           if (!item) throw Error("Item no longer available");
@@ -200,6 +209,7 @@ export class RpcWorkflows {
           action = z
             .enum(["edit", "first", "remove", "resume", "send", "stop"])
             .parse(p.action);
+        if (kind === "history") throw Error("Execution history is read-only");
         if (kind === "queue") {
           this.renew(scope, session.id, p.token);
           if (action === "edit")

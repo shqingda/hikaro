@@ -1,6 +1,7 @@
 import type { Agent } from "../../core/src/index.ts";
 import type { Runtime } from "./index.ts";
-export type ExecutionKind = "queue" | "terminals" | "children" | "steering";
+export type ExecutionKind =
+  "queue" | "terminals" | "children" | "steering" | "history";
 export type ExecutionItem = {
   id: string;
   title: string;
@@ -13,7 +14,7 @@ export function executionItems(
   agent: Pick<Agent, "pendingPrompts" | "pendingSteering">,
   runtime: Pick<Runtime, "terminals" | "childTasks">,
   session: string,
-  kind: ExecutionKind,
+  kind: Exclude<ExecutionKind, "history">,
 ): ExecutionItem[] {
   if (kind === "queue")
     return agent.pendingPrompts().map((q, i) => ({

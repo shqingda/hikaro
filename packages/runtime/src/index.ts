@@ -1,3 +1,4 @@
+import { executionHistory } from "./execution-history.ts";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { homedir } from "node:os";
@@ -154,6 +155,9 @@ export class Runtime {
     return this.changePlanning(session, () =>
       this.planning.approve(session.id, id),
     );
+  }
+  executionHistory(sessionId: string) {
+    return executionHistory(this.store, sessionId);
   }
   readonly terminals = new TerminalManager();
   private children = new Map<
