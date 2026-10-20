@@ -65,6 +65,7 @@ export type RuntimeOptions = {
     questions: Questions,
     signal: AbortSignal,
     sessionId: string,
+    scope?: string,
   ) => Promise<Record<string, string> | undefined>;
   approve: (r: PermissionRequest, signal: AbortSignal) => Promise<boolean>;
 };
@@ -355,6 +356,7 @@ export class Runtime {
             questions,
             ctx.signal,
             ctx.sessionId,
+            ctx.scope,
           );
           ctx.signal.throwIfAborted();
           return answers

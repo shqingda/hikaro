@@ -26,6 +26,8 @@ for (;;) {
 db.exec("BEGIN IMMEDIATE");
 try {
   db.exec(`
+CREATE TABLE IF NOT EXISTS pending_questions(id TEXT PRIMARY KEY,sessionId TEXT NOT NULL,scope TEXT NOT NULL,data TEXT NOT NULL,status TEXT NOT NULL,answers TEXT,createdAt INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS pending_question_scope ON pending_questions(sessionId,scope,status);
 CREATE TABLE IF NOT EXISTS pending_prompts(sessionId TEXT NOT NULL,id TEXT PRIMARY KEY,data TEXT NOT NULL,position INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS pending_prompt_order ON pending_prompts(sessionId,position);
 CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY,title TEXT NOT NULL,cwd TEXT NOT NULL,createdAt INTEGER NOT NULL,parentId TEXT);
@@ -267,6 +269,101 @@ const handlers = {
       ).run(id, text);
     else db.prepare("DELETE FROM session_drafts WHERE sessionId=?").run(id);
   },
+  saveQuestion({ question }) {
+    const result = db
+      .prepare(
+        "INSERT INTO pending_questions SELECT ?,id,?,?,'pending',NULL,? FROM sessions WHERE id=?",
+      )
+      .run(
+        question.id,
+        question.scope,
+        JSON.stringify(question),
+        Date.now(),
+        question.sessionId,
+      );
+    if (!result.changes) throw Error("Session not found");
+  },
+  pendingQuestions({ sessionId, scope }) {
+    return db
+      .prepare(
+        "SELECT data FROM pending_questions WHERE sessionId=? AND scope=? AND status='pending' ORDER BY createdAt,id LIMIT 32",
+      )
+      .all(sessionId, scope)
+      .map((row) => JSON.parse(row.data));
+  },
+  settleQuestion({ id, sessionId, scope, hostInstanceId, answers, workspace }) {
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      const row = db
+        .prepare(
+          "SELECT data FROM pending_questions WHERE id=? AND sessionId=? AND scope=? AND status='pending'",
+        )
+        .get(id, sessionId, scope);
+      if (!row) throw Error("Question expired or belongs to another identity");
+      if (workspace) {
+        if (
+          !db
+            .prepare("SELECT 1 FROM sessions WHERE id=? AND cwd=?")
+            .get(sessionId, workspace)
+        )
+          throw Error("Session access denied");
+        if (!scope.startsWith("local:")) {
+          const role = handlers.sessionRole({ workspace, sessionId, scope });
+          if (role !== "owner" && role !== "control")
+            throw Error("Session access denied");
+        }
+      }
+      const question = JSON.parse(row.data);
+      const recovered = question.hostInstanceId !== hostInstanceId;
+      if (
+        answers &&
+        (Object.keys(answers).length !== question.questions.length ||
+          question.questions.some(
+            (q) => typeof answers[q.id] !== "string" || !answers[q.id].trim(),
+          ))
+      )
+        throw Error("Answer every question explicitly");
+      // Recovery adds model context only when no execution owns this session.
+      // Live responses are audit metadata; their tool result supplies context.
+      if (recovered) assertLease(sessionId);
+      const timestamp = Date.now();
+      db.prepare(
+        "UPDATE pending_questions SET status=?,answers=? WHERE id=?",
+      ).run(
+        answers ? "answered" : "cancelled",
+        answers ? JSON.stringify(answers) : null,
+        id,
+      );
+      db.prepare(
+        "INSERT INTO events(sessionId,type,data,timestamp) VALUES(?,?,?,?)",
+      ).run(
+        sessionId,
+        "question.response",
+        JSON.stringify({ question, answers, cancelled: !answers, recovered }),
+        timestamp,
+      );
+      if (recovered && answers) {
+        const text =
+          "Answers to questions recovered after host interruption. No previous operation was resumed.\n\n" +
+          question.questions
+            .map((q) => q.question + "\n" + answers[q.id])
+            .join("\n\n");
+        db.prepare(
+          "INSERT INTO events(sessionId,type,data,timestamp) VALUES(?,?,?,?)",
+        ).run(
+          sessionId,
+          "message",
+          JSON.stringify({ message: { role: "user", text, timestamp } }),
+          timestamp,
+        );
+      }
+      db.exec("COMMIT");
+      return { recovered };
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
+  },
   pendingPrompts({ sessionId }) {
     return db
       .prepare(
@@ -329,6 +426,7 @@ const handlers = {
         "jobs",
         "context_checkpoints",
         "pending_prompts",
+        "pending_questions",
         "session_access",
         "client_views",
       ])

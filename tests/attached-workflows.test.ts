@@ -55,14 +55,12 @@ it("chunks snapshots, scopes pending questions, and expires abandoned queue hold
     await invoke("changes.rollback", { id: list.items[0]!.id });
     expect(await readFile(join(home, "sample"), "utf8")).toBe("before");
     const records = await runtime.changes.list(session.id);
-    const listing = vi
-      .spyOn(runtime.changes, "list")
-      .mockResolvedValueOnce(
-        Array.from({ length: 100 }, () => ({
-          ...records[0]!,
-          path: "/" + "\u0001".repeat(3000),
-        })),
-      );
+    const listing = vi.spyOn(runtime.changes, "list").mockResolvedValueOnce(
+      Array.from({ length: 100 }, () => ({
+        ...records[0]!,
+        path: "/" + "\u0001".repeat(3000),
+      })),
+    );
     const page = (await invoke("changes.list")) as {
       items: unknown[];
       more: boolean;
@@ -76,6 +74,7 @@ it("chunks snapshots, scopes pending questions, and expires abandoned queue hold
       [{ id: "q", question: "Choose", options: ["A", "B"] }],
       abort.signal,
       session.id,
+      "one",
     );
     const question = (await invoke("questions.read")) as { id: string };
     await expect(
@@ -99,6 +98,7 @@ it("chunks snapshots, scopes pending questions, and expires abandoned queue hold
       [{ id: "q", question: "Again?" }],
       abort.signal,
       session.id,
+      "one",
     );
     abort.abort();
     expect(await cancelled).toBeUndefined();

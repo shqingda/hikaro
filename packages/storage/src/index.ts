@@ -1,3 +1,4 @@
+import type { PendingQuestion } from "../../runtime/src/pending-questions.ts";
 import type { PendingPrompt } from "../../core/src/pending-prompts.ts";
 import type {
   DurableCommandReceipt,
@@ -68,6 +69,25 @@ export class SQLiteStore implements EventStore {
       this.pending.set(id, { resolve, reject });
       this.worker.postMessage({ id, method, args });
     });
+  }
+  saveQuestion(question: PendingQuestion) {
+    return this.request<void>("saveQuestion", { question });
+  }
+  pendingQuestions(sessionId: string, scope: string) {
+    return this.request<PendingQuestion[]>("pendingQuestions", {
+      sessionId,
+      scope,
+    });
+  }
+  settleQuestion(input: {
+    id: string;
+    sessionId: string;
+    scope: string;
+    hostInstanceId: string;
+    answers?: Record<string, string>;
+    workspace?: string;
+  }) {
+    return this.request<{ recovered: boolean }>("settleQuestion", input);
   }
   pendingPrompts(sessionId: string) {
     return this.request<PendingPrompt[]>("pendingPrompts", { sessionId });

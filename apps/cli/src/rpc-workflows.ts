@@ -24,7 +24,21 @@ export class RpcWorkflows {
       finish: (answers: Record<string, string> | undefined) => void;
     }
   >();
-  constructor(private runtime: Runtime) {}
+  private writes = new Set<Promise<unknown>>();
+  private closing = false;
+  constructor(
+    private runtime: Runtime,
+    private hostInstanceId: string = randomUUID(),
+    private enforceAccess = false,
+  ) {}
+  async ready() {
+    await Promise.all([...this.writes]);
+  }
+  private writing<T>(work: Promise<T>) {
+    this.writes.add(work);
+    void work.finally(() => this.writes.delete(work)).catch(() => {});
+    return work;
+  }
   private release(scope: string) {
     const held = this.holds.get(scope);
     if (held) {
@@ -44,24 +58,56 @@ export class RpcWorkflows {
   ask(
     questions: Questions,
     signal: AbortSignal,
-    sessionId: string,
+    executionSessionId: string,
+    scope = "default",
   ): Promise<Record<string, string> | undefined> {
     signal.throwIfAborted();
     const id = randomUUID();
-    return new Promise((resolve) => {
-      const abort = () => finish(undefined);
+    const sessionId = this.runtime.approvalAuthority(executionSessionId);
+    const saved = this.writing(
+      this.runtime.store.saveQuestion({
+        id,
+        sessionId,
+        executionSessionId,
+        scope,
+        hostInstanceId: this.hostInstanceId,
+        questions,
+      }),
+    );
+    return new Promise((resolve, reject) => {
       const finish = (answers: Record<string, string> | undefined) => {
         signal.removeEventListener("abort", abort);
         this.questions.delete(id);
         resolve(answers);
       };
-      this.questions.set(id, {
-        id,
-        sessionId: this.runtime.approvalAuthority(sessionId),
-        questions,
-        finish,
-      });
+      const abort = () => {
+        if (this.closing) return finish(undefined);
+        void this.writing(
+          saved.then(() =>
+            this.runtime.store.settleQuestion({
+              id,
+              sessionId,
+              scope,
+              hostInstanceId: this.hostInstanceId,
+            }),
+          ),
+        ).then(
+          () => finish(undefined),
+          (error) => {
+            finish(undefined);
+            console.error(
+              `Question cancellation could not be saved: ${String(error)}`,
+            );
+          },
+        );
+      };
+      this.questions.set(id, { id, sessionId, questions, finish });
       signal.addEventListener("abort", abort, { once: true });
+      void saved.catch((error) => {
+        signal.removeEventListener("abort", abort);
+        this.questions.delete(id);
+        reject(error);
+      });
     });
   }
   async handle(
@@ -186,14 +232,28 @@ export class RpcWorkflows {
         await this.runtime.setPlanning(session, z.boolean().parse(p.active));
         return this.runtime.planning.get(session.id);
       case "questions.read": {
-        const q = [...this.questions.values()].find(
-          (q) => q.sessionId === session.id,
-        );
-        return q ? { id: q.id, questions: q.questions } : null;
+        await this.ready();
+        const q = (
+          await this.runtime.store.pendingQuestions(session.id, scope)
+        )[0];
+        return q
+          ? {
+              id: q.id,
+              questions: q.questions,
+              recovered: q.hostInstanceId !== this.hostInstanceId,
+            }
+          : null;
       }
       case "questions.respond": {
-        const q = this.questions.get(z.string().uuid().parse(p.id));
-        if (!q || q.sessionId !== session.id)
+        await this.ready();
+        const id = z.string().uuid().parse(p.id);
+        const q = (
+          await this.runtime.store.pendingQuestions(session.id, scope)
+        ).find((q) => q.id === id);
+        if (
+          !q ||
+          (q.hostInstanceId === this.hostInstanceId && !this.questions.has(id))
+        )
           throw Error("Question expired or answered elsewhere");
         let answers: Record<string, string> | undefined;
         if (p.cancelled !== true) {
@@ -206,14 +266,25 @@ export class RpcWorkflows {
           )
             throw Error("Answer every question explicitly");
         }
-        q.finish(answers);
-        return { completed: true };
+        const result = await this.runtime.store.settleQuestion({
+          id,
+          sessionId: session.id,
+          scope,
+          hostInstanceId: this.hostInstanceId,
+          answers,
+          ...(this.enforceAccess
+            ? { workspace: this.runtime.options.cwd }
+            : {}),
+        });
+        this.questions.get(id)?.finish(answers);
+        return { completed: true, recovered: result.recovered };
       }
       default:
         throw Error("Unsupported workflow method");
     }
   }
   close() {
+    this.closing = true;
     for (const scope of this.holds.keys()) this.release(scope);
     for (const q of this.questions.values()) q.finish(undefined);
   }

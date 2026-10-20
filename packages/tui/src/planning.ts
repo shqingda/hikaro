@@ -8,6 +8,7 @@ export async function askQuestions(
   view: HikaroView,
   questions: Questions,
   runSignal: AbortSignal,
+  recovered = false,
 ): Promise<Record<string, string> | undefined> {
   runSignal.throwIfAborted();
   const { panel, signal, close } = view.openModelPanel({
@@ -33,8 +34,10 @@ export async function askQuestions(
       }
       const q = questions[index]!;
       const choice = await panel.readDocument(
-        `Question ${index + 1}/${questions.length}`,
-        q.question,
+        `${recovered ? "Recovered question" : "Question"} ${index + 1}/${questions.length}`,
+        (recovered
+          ? "Host interrupted. Answers will be saved to this session; send a new message to continue. No previous operation will run automatically.\n\n"
+          : "") + q.question,
         [
           ...(q.options ?? []).map((label, i) => ({ value: String(i), label })),
           { value: "custom", label: "Write my answer…" },

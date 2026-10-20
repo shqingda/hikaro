@@ -139,8 +139,8 @@ export async function serveRpc(
   const runtime = await Runtime.open(
     {
       ...options,
-      askUser: (questions, signal, sessionId) =>
-        workflows.ask(questions, signal, sessionId),
+      askUser: (questions, signal, sessionId, scope) =>
+        workflows.ask(questions, signal, sessionId, scope),
       approve: (request, signal) =>
         new Promise((resolve) => {
           if (signal.aborted) {
@@ -181,7 +181,7 @@ export async function serveRpc(
     },
     shared?.store,
   );
-  workflows = new RpcWorkflows(runtime);
+  workflows = new RpcWorkflows(runtime, hostInstanceId, !!shared);
   runtime.startJobs();
   const requireLive = (scope: string, state: ScopeState) => {
     if (shuttingDown || scopes.get(scope) !== state)

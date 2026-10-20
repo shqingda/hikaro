@@ -89,10 +89,11 @@ export class AttachedWorkflows {
     this.polling = true;
     const id = this.client.state.session.id;
     try {
-      const q = await this.request<{ id: string; questions: Questions } | null>(
-        "questions.read",
-        id,
-      );
+      const q = await this.request<{
+        id: string;
+        questions: Questions;
+        recovered?: boolean;
+      } | null>("questions.read", id);
       if (this.modal === "menu") return;
       if (this.question && this.question.id !== q?.id)
         this.question.abort.abort();
@@ -101,13 +102,38 @@ export class AttachedWorkflows {
         const abort = new AbortController();
         this.question = { id: q.id, abort };
         this.modal = "questions";
-        void askQuestions(this.view, q.questions, abort.signal)
+        void askQuestions(this.view, q.questions, abort.signal, q.recovered)
           .then(async (answers) => {
-            if (!abort.signal.aborted)
-              await this.request("questions.respond", id, {
-                id: q.id,
-                ...(answers ? { answers } : { cancelled: true }),
-              });
+            while (!abort.signal.aborted) {
+              try {
+                await this.request("questions.respond", id, {
+                  id: q.id,
+                  ...(answers ? { answers } : { cancelled: true }),
+                });
+                if (q.recovered)
+                  this.view.notice(
+                    answers
+                      ? "Recovered answers saved. Send a new message to continue; no operation was resumed."
+                      : "Recovered questions dismissed. No answers were inferred.",
+                  );
+                return;
+              } catch (error) {
+                if (!q.recovered || abort.signal.aborted) throw error;
+                const { panel, close } = this.view.openModelPanel();
+                abort.signal.addEventListener("abort", close, { once: true });
+                try {
+                  const choice = await panel.readDocument(
+                    "Answers not saved",
+                    `${String(error)}\n\nYour answers are retained here. A previous execution lease can take up to 30 seconds to expire. Retry when the session is idle.`,
+                    [{ value: "retry", label: "Retry saving answers" }],
+                  );
+                  if (choice.value !== "retry") return;
+                } finally {
+                  abort.signal.removeEventListener("abort", close);
+                  close();
+                }
+              }
+            }
           })
           .catch((error) => this.view.setError(String(error)))
           .finally(() => {
