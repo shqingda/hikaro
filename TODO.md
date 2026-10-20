@@ -387,3 +387,9 @@ pnpm exec vitest run tests/pty.test.ts -t 'critical TUI workflows'
 - [x] 普通 TUI 等待消息持久化入队后显示队列数量，修复队列已接受却没有提示的问题。
 - [x] 5 个不同定向用例通过（含唯一真实 PTY 脚本），类型检查、构建通过。未运行全量测试或性能基准。
 - 证据、失败记录与范围限制见 [停止终态验收](docs/validation/terminal-stop-outcomes.md)。TUI 发布估算 82%，移动端 35%。
+
+## 2026-10-20：TUI 隔离安装验收
+
+- [x] 增加按需运行的 `pnpm check:install`，隔离目录重新安装锁定依赖、类型检查、原生构建及产物 PTY 启动/退出通过。
+- [x] 记录源码安装及升级/回退约束；尚未宣称正式发布包或跨版本兼容验收完成。
+- 证据见 [隔离安装验收](docs/validation/clean-install.md)。发布估算：TUI 83%，移动端 35%。

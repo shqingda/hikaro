@@ -134,3 +134,5 @@ Use the affected test path or filter once, for example `pnpm exec vitest run tes
 Optional cloud configuration can be checked with `pnpm check:relay` and `pnpm --filter @hikaro/relay build` (local dry-run, no deployment).
 
 Read [validation status](docs/validation.md) for measured results and remaining acceptance checks. The core and TUI are implemented; remaining daily-use and Pi acceptance work is tracked in TODO.md.
+
+Source installation, upgrade/rollback precautions and the isolated `pnpm check:install` acceptance command: [TUI installation guide](docs/install-release.md).
