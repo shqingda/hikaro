@@ -784,6 +784,12 @@ it("restores the same granted host task after a lost selection acknowledgement, 
         m.message.role === "user" && m.message.textLength === fullText.length,
     )!;
     expect(user.message.textLength).toBeGreaterThan(20000);
+    // Match text beyond the list preview through the real encrypted RPC path.
+    await app.inspection.searchMessages("中文🌅");
+    expect(app.state.inspection.search?.items).toEqual([
+      expect.objectContaining({ seq: user.seq, role: "user" }),
+    ]);
+    expect(app.state.inspection.search?.items[0]?.snippet).toContain("中文🌅");
     await app.readMessage(user.seq);
     expect(fullText.startsWith(app.state.content!.page!.data)).toBe(true);
     await app.readMessage(user.seq, 8190);
@@ -816,6 +822,8 @@ it("restores the same granted host task after a lost selection acknowledgement, 
     });
     expect(app.state.session?.id).toBe(session.id);
     expect(f.sent.filter((f) => f.method === "session.resume")).toHaveLength(1);
+    await app.inspection.searchMessages("中文🌅");
+    expect(app.state.inspection.search?.items[0]?.seq).toBe(user.seq);
     await app.readMessage(user.seq);
     await local.request("session.access", {
       deviceId: f.pairing.deviceId,
@@ -825,6 +833,8 @@ it("restores the same granted host task after a lost selection acknowledgement, 
     await vi.waitFor(() => expect(app.state.sessions).toEqual([]));
     expect(app.state.messages).toEqual([]);
     expect(app.state.content).toBeNull();
+    expect(app.state.inspection.search).toBeNull();
+    await expect(app.inspection.searchMessages("中文🌅")).rejects.toThrow();
     await vi.waitFor(async () =>
       expect(await f.store.snapshots.load(pairingScope(f.pairing))).toBeNull(),
     );
