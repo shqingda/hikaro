@@ -1,11 +1,43 @@
 import { expect, it, vi } from "vitest";
 import {
   MobileComposer,
+  parseDraft,
   type DraftRecord,
   type DraftStore,
 } from "../apps/mobile/src/composer.ts";
 
 const session = { id: "one", title: "任务", cwd: "/workspace", createdAt: 1 };
+it("preserves the submission method across recovery and accepts older prompt drafts", async () => {
+  const { app, store } = fixture();
+  await app.select(session);
+  app.edit(session.id, "补充要求");
+  await expect(
+    app.send(
+      session.id,
+      "steer-id",
+      async () => {
+        throw Error("lost reply");
+      },
+      "steer",
+    ),
+  ).rejects.toThrow("lost reply");
+  const reopened = new MobileComposer(store, () => {});
+  reopened.bind("device-a");
+  await reopened.select();
+  expect(reopened.state.record?.submission).toMatchObject({
+    id: "steer-id",
+    method: "steer",
+  });
+  expect(
+    parseDraft(
+      JSON.stringify({
+        session,
+        text: "old",
+        submission: { id: "old", status: "unknown" },
+      }),
+    ).submission?.method,
+  ).toBe("prompt");
+});
 function fixture() {
   const rows = new Map<string, DraftRecord>();
   const store: DraftStore = {

@@ -11,6 +11,7 @@ const recordSchema = z.object({
   submission: z
     .object({
       id: z.string().min(1).max(128),
+      method: z.enum(["prompt", "steer"]).default("prompt"),
       status: z.enum(["pending", "unknown", "failed"]),
     })
     .optional(),
@@ -179,6 +180,7 @@ export class MobileComposer {
             ...current,
             submission: {
               id,
+              method: current.submission!.method,
               status: status === "failed" ? "failed" : "unknown",
             },
           };
@@ -206,6 +208,7 @@ export class MobileComposer {
     sessionId: string,
     id: string,
     dispatch: (text: string) => Promise<unknown>,
+    method: "prompt" | "steer" = "prompt",
   ) {
     const record = this.state.record,
       scope = this.scope,
@@ -223,7 +226,7 @@ export class MobileComposer {
       throw Error("Empty or unresolved draft");
     const pending = recordSchema.parse({
       ...record,
-      submission: { id, status: "pending" },
+      submission: { id, method, status: "pending" },
     });
     this.update({ sending: true });
     try {
