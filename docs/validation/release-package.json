@@ -1,0 +1,22 @@
+{
+  "status": "passed",
+  "sha256": "a1f1cda32c0049a039ba14f5a9ad33053c4b75abd1670b1d167685008b288d96",
+  "artifact": "/Users/shqingda/Projects/hikaro/artifacts/release/hikaro-0.1.0-darwin-arm64.tgz",
+  "platform": "darwin",
+  "arch": "arm64",
+  "node": "v26.12.0",
+  "emptyNpmCache": true,
+  "checks": [
+    "artifact checksum",
+    "npm install --engine-strict",
+    "installed bin demo prompt",
+    "packaged native file helper read",
+    "installed node-pty TUI startup and clean exit"
+  ],
+  "limitations": [
+    "current macOS developer machine",
+    "real provider and Keychain not exercised",
+    "not signed/notarized or publicly published"
+  ],
+  "finishedAt": "2026-10-21T08:16:55.141Z"
+}

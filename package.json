@@ -33,7 +33,9 @@
     "mobile:lab:check": "vitest run tests/mobile-lab.test.ts tests/dev-sim.test.ts",
     "mobile:ios": "pnpm --filter @hikaro/mobile ios",
     "mobile:android": "pnpm --filter @hikaro/mobile android",
-    "mobile:typecheck": "pnpm --filter @hikaro/mobile typecheck"
+    "mobile:typecheck": "pnpm --filter @hikaro/mobile typecheck",
+    "release:pack": "node scripts/package-release.mjs",
+    "check:release": "node scripts/check-release.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sandbox-runtime": "0.0.79",

@@ -419,3 +419,10 @@ pnpm exec vitest run tests/pty.test.ts -t 'critical TUI workflows'
 - [x] 17 项定向检查、单个真实 PTY E2E、类型检查和构建通过。
 - [ ] 下一项：正式分发产物/安装验证；真实模型、物理终端/IME 与移动端真机验收仍需完成。
 - [验收记录](docs/validation/queue-finalization.md)。TUI 90%，移动端 35%，未到 95%。
+
+## 2026-10-21：候选分发包与空缓存安装
+
+- [x] macOS arm64 tarball：bin 入口、完整运行文件、生产依赖 shrinkwrap、平台/Node 限制、SHA-256 与来源 manifest。
+- [x] 空 npm 缓存与独立目录安装后，离线任务、原生文件读取、真实 TUI 启停通过。
+- [ ] 最低 Node 版本/干净机器、真实模型/物理终端、依赖安全审计、签名/公证和公开分发仍待完成。
+- [验收证据](docs/validation/release-package.md)。TUI 92%，移动端 35%，未到 95%。

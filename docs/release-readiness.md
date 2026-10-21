@@ -4,7 +4,7 @@
 
 | 产品 | 发布完成度估算 | 本轮变化 |
 | --- | --- | --- |
-| TUI | **90%** | 队列收尾竞态已修复并通过连续操作与 PTY 验收；真实环境和正式分发仍待完成 |
+| TUI | **92%** | macOS arm64 候选分发包及空缓存安装通过；真实环境、签名/公开分发仍待完成 |
 | 移动端完整控制器 | **35%** | 本轮未修改或验收移动端，进度不变 |
 
 TUI 当前主要验收平台为 macOS。移动端 M0 只读功能不能代替 M1 审批、补充和停止闭环。仍未到 95%，没有完成真实模型、物理终端或真机发布验收。
@@ -33,3 +33,5 @@ TUI 当前主要验收平台为 macOS。移动端 M0 只读功能不能代替 M1
 本轮性能、升级与回退证据：[发布阻塞验收](validation/release-performance-upgrade.md)。
 
 2026-10-21：完整 30 分钟结果与局限见 [验收记录](validation/shared-memory-soak.md)。此前发现的 prompt completion / drain 收尾竞态现已修复，见 [定向验收](validation/queue-finalization.md)。
+
+候选包与空缓存安装证据：[分发包验收](validation/release-package.md)。尚未公开发布，不等同于所有环境可 release。

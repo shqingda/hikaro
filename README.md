@@ -135,4 +135,4 @@ Optional cloud configuration can be checked with `pnpm check:relay` and `pnpm --
 
 Read [validation status](docs/validation.md) for measured results and remaining acceptance checks. The core and TUI are implemented; remaining daily-use and Pi acceptance work is tracked in TODO.md.
 
-Source installation, upgrade/rollback precautions and the isolated `pnpm check:install` acceptance command: [TUI installation guide](docs/install-release.md).
+Source installation, macOS arm64 candidate tarballs (`pnpm release:pack` / `pnpm check:release`), upgrade/rollback precautions and isolated installation checks: [TUI installation guide](docs/install-release.md).
