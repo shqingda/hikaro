@@ -1,6 +1,9 @@
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { ClientConnection } from "../packages/client-core/src/connection.ts";
+import { ClientState } from "../packages/client-core/src/index.ts";
 import { rpcCapabilities } from "../packages/protocol/src/contracts.ts";
+
+afterEach(() => vi.restoreAllMocks());
 
 it("does not turn a successful mutation into a failure when an older host lacks receipt queries", async () => {
   let receive!: (frame: unknown) => void;
@@ -42,11 +45,19 @@ it("does not turn a successful mutation into a failure when an older host lacks 
   client.subscribe(() => {
     throw Error("broken view");
   });
+  const snapshots = vi.spyOn(ClientState.prototype, "state", "get");
   await client.connected();
   expect(await client.request("draft.save", { text: "saved" })).toEqual({
     saved: true,
   });
   expect(methods).not.toContain("command.receipt");
+  // Transport synchronization must not clone stream/history for boolean checks.
+  expect(snapshots).not.toHaveBeenCalled();
+  const snapshot = client.state;
+  snapshot.canAct = false;
+  snapshot.events.push({ seq: 999, type: "injected", timestamp: 0 });
+  expect(client.state.canAct).toBe(true);
+  expect(client.state.events).toEqual([]);
   client.close();
 });
 

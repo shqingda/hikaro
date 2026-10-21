@@ -36,11 +36,11 @@ export class AttachedWorkflows {
     params: Record<string, unknown> = {},
   ): Promise<T> {
     const epoch = this.epoch;
-    const current = () =>
-      !this.stopped &&
-      epoch === this.epoch &&
-      this.client.state.canAct &&
-      this.client.state.session?.id === sessionId;
+    const current = () => {
+      if (this.stopped || epoch !== this.epoch) return false;
+      const state = this.client.state;
+      return state.canAct && state.session?.id === sessionId;
+    };
     if (!current())
       throw Error(
         "Connection or session changed; reopen the panel. No action was replayed.",
@@ -77,17 +77,18 @@ export class AttachedWorkflows {
     }
   }
   private async poll() {
+    const state = this.client.state;
     if (
       this.modal === "menu" ||
       this.stopped ||
       this.polling ||
-      !this.client.state.canAct ||
-      !this.client.state.session ||
-      this.client.state.sessionRole === "view"
+      !state.canAct ||
+      !state.session ||
+      state.sessionRole === "view"
     )
       return;
     this.polling = true;
-    const id = this.client.state.session.id;
+    const id = state.session.id;
     try {
       const q = await this.request<{
         id: string;

@@ -1,4 +1,4 @@
-import { z } from "zod";
+import * as z from "zod";
 import type { Runtime } from "../../../packages/runtime/src/index.ts";
 import type { ModelSelection } from "../../../packages/core/src/types.ts";
 import { permissionModeSchema } from "../../../packages/runtime/src/permissions.ts";

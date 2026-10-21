@@ -7,6 +7,10 @@ await mkdir("dist", { recursive: true });
 const result = await build(cliBuildOptions());
 await copyFile("packages/storage/src/worker.mjs", "dist/worker.mjs");
 await copyFile(
+  "packages/storage/src/statement-cache.mjs",
+  "dist/statement-cache.mjs",
+);
+await copyFile(
   "packages/tools/src/secure-file-helper",
   "dist/secure-file-helper",
 );

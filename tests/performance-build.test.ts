@@ -133,3 +133,38 @@ describe("production startup packaging", () => {
     );
   });
 });
+
+it("keeps host planning schemas out of the attached planning view graph", async () => {
+  const { cliBuildOptions } = await import(buildOptionsPath);
+  const directory = await fixtureDirectory();
+  const result = await build({
+    ...cliBuildOptions(),
+    entryPoints: { planning: "packages/tui/src/planning.ts" },
+    outdir: directory,
+    write: false,
+  });
+  const inputs = Object.keys(result.metafile!.inputs);
+  expect(inputs.some((path) => path.endsWith("runtime/src/plan-text.ts"))).toBe(
+    true,
+  );
+  expect(inputs.some((path) => path.endsWith("runtime/src/planning.ts"))).toBe(
+    false,
+  );
+  expect(inputs.some((path) => path.includes("/zod/"))).toBe(false);
+});
+
+it("does not retain unused Zod locales in the production graph", async () => {
+  const { cliBuildOptions } = await import(buildOptionsPath);
+  const result = await build({ ...cliBuildOptions(), write: false });
+  const locales = new Set(
+    Object.values(result.metafile!.outputs).flatMap((output) =>
+      Object.entries(output.inputs)
+        .filter(
+          ([path, input]) =>
+            path.includes("zod/v4/locales/") && input.bytesInOutput > 0,
+        )
+        .map(([path]) => path.split("/").at(-1)),
+    ),
+  );
+  expect([...locales]).toEqual(["en.js"]);
+});

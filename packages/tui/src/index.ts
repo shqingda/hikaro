@@ -567,7 +567,9 @@ export class HikaroView {
       .catch(() => {});
   }
   setInfo(info: string) {
-    this.info = sanitize(info);
+    const next = sanitize(info);
+    if (next === this.info) return;
+    this.info = next;
     this.updateFooter();
     this.tui.requestRender();
   }

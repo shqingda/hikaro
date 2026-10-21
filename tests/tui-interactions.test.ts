@@ -689,3 +689,29 @@ it("lets structured questions replace execution management and preserves the edi
     view.dispose();
   }
 });
+
+it("does not redraw an unchanged shared-host status during idle polling", () => {
+  const tui = new TuiAltScreen(terminalStub);
+  const render = vi.spyOn(tui, "requestRender").mockImplementation(() => {});
+  const view = new HikaroView(tui, {
+    cwd: "/tmp",
+    model: "shared host",
+    onPrompt: async () => {},
+    onCommand: async () => {},
+    onExit: () => {},
+  });
+  try {
+    view.setInfo("Shared host · session");
+    render.mockClear();
+    for (let poll = 0; poll < 100; poll++)
+      view.setInfo("Shared host · session");
+    expect(render).not.toHaveBeenCalled();
+    view.setInfo("Host disconnected / synchronizing · draft stays local");
+    expect(render).toHaveBeenCalledOnce();
+    expect(
+      stripVTControlCharacters(view.layout.render(100).join("\n")),
+    ).toContain("Host disconnected");
+  } finally {
+    view.dispose();
+  }
+});

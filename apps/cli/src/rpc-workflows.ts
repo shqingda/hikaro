@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { z } from "zod";
+import * as z from "zod";
 import type { Runtime } from "../../../packages/runtime/src/index.ts";
 import type { Agent, Session } from "../../../packages/core/src/index.ts";
 import type { Questions } from "../../../packages/runtime/src/planning.ts";

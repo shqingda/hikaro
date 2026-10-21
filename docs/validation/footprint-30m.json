@@ -1,0 +1,1430 @@
+{
+  "bundleSha256": "46bc2aee652a4524daa065657dbdaca69a480f4e9ced2a3b3585618f08e011e0",
+  "bundleFiles": {
+    "chunk-222YDC45.mjs": "942ace316f49d4a41d4eaef3142ba3cd0486c17e577c5d72e4e05152e00f979f",
+    "chunk-25VDCPYH.mjs": "723dca4dee7b13372c24de73b9c709878f121d0dc812a9560242626e8a6572d6",
+    "chunk-2RKF6DDL.mjs": "78a360ea05410bc86d632df864e5bf61a0268271187d36ca2190530201568f10",
+    "chunk-4WS6AYPU.mjs": "a1074dd904db3232497beeddfec645124969680380688aee604a6b43e2c28304",
+    "chunk-53RIAGG3.mjs": "370e833852edc071a7d42c1be80561d5f73ce5734af923ba862c6fc3d11dedef",
+    "chunk-53RNKZRB.mjs": "7d1b32dbe283a4e20bcb6da0692f8c40053e01507ba0716d85666d7ca254d5de",
+    "chunk-5UGCPCOL.mjs": "d1a8326827d826d30756a2060ff1411b61754c2704340b80f66f316f344a7d93",
+    "chunk-65BKVN3F.mjs": "7192eaaf32a5cb25196d5fe22fc441659d3e19dd12274be667af7d64e5e16577",
+    "chunk-6DZA276K.mjs": "f3484fa1f4aeb42f676ebfc9f61e84ea9b84f71f4501eae10559b00eadf62401",
+    "chunk-6ZYQEE4V.mjs": "48349e1d81d33038ae7310a2bd7ba7296487a59af4d479e8955d99b0015c0996",
+    "chunk-7G4AMPSX.mjs": "0d08cd1d0902076d97afdb7549f2d0878f5a8768cb536ddda7c7f63545795833",
+    "chunk-A4CMOISY.mjs": "5857b5a633dba2a062bb8b1b5163f34c27cf4fbbc3ddee21640b39bb07110314",
+    "chunk-AIA6QKGF.mjs": "d200defe83af34acbec845233fa35f5e6899bfcedea174d296a32fbd432c92b9",
+    "chunk-ARWR2WPK.mjs": "fb21ecdc9b5e6c120a29a0a1cb6be36d9d39877a669623fb3170bf0aed4b2583",
+    "chunk-AYRCWTSO.mjs": "e06dc468d66179558b0e20e952db92c3312afaf01ed8c7cfcba1e91035f9f19a",
+    "chunk-B2V32VVF.mjs": "175aea0c4ae711f2b883f84b00ec8f1573041744ace87adad6c64afe93926c76",
+    "chunk-BKNLU2ZU.mjs": "79555ee072f10331f99df3c056fd9a84a6788a3fa7c6e44716a56568afce7053",
+    "chunk-BSTYVNS4.mjs": "df7655a4f21237e1279b10c54cac32faa3c3268088f3b56f022719fd70d5845c",
+    "chunk-CZ6A6BEC.mjs": "05c200f8a4cb7a421eea21d7a16ff2e2064252c117bef3de313b6061143a075b",
+    "chunk-DZ3N4LA3.mjs": "87bec2d9f203177aaa4999c39287815f9be06f442d401002c2cba414edaac720",
+    "chunk-ERSCU7BP.mjs": "bdede7ab740575ac61de77053eea9596866978f44a94ff9a5489edf1c243b0eb",
+    "chunk-F7SROTUJ.mjs": "8a18a8760b3d5dfb4879a3f0fd65dd8b928c8b16152393cc9da65aaac36b7d0c",
+    "chunk-FDHTKUNC.mjs": "dbf947c13b7bd67575cf24aaae02220bab553dea75c22cc09cf9a8271ae8b7a7",
+    "chunk-FGTAP4KS.mjs": "f6d6228d345ad644a74e3c5929092a24f25324bbdd787b74f5a9961b212001ca",
+    "chunk-FIFHGTPE.mjs": "0ccd6c8399b43bd0481028351f2e84a2d33b701efcc187dfdc78ed32294ba3a2",
+    "chunk-H6SBNO2I.mjs": "6e42dbce2b1b019b41bf149d4948819eeacc5d30fc635af2a829d6aa7187279f",
+    "chunk-HVBX4FU3.mjs": "1487d8be78d08ede9a62883812ca101006958202e2b8ca7ae49e9ac96c2467a6",
+    "chunk-HZI7AZDX.mjs": "896cbed3508dca404e163c3a2be1cf98a72b897bc98a6c2e9d3f75e3a2af3c7b",
+    "chunk-HZWWJL43.mjs": "64a715508cb2bd82d2eb5ec0c8d3b7892cb7283c8902a32d5789af516ba30505",
+    "chunk-IRWAYS2Q.mjs": "05f0dd0f476d0567bd2d9c0cf9cac070ccf9f5d24a2b738ce0dcbc12da022ae5",
+    "chunk-IUNI2SAE.mjs": "9b3086b99b7d361b01f2697bafa2053047c7b01885da97bd0615cfb0a2caf109",
+    "chunk-JUAMXSFM.mjs": "b5816c7a689d9682390aaf2c4ca3b921f7b31bd674bcf378331798e6476a3451",
+    "chunk-K3DNNZIO.mjs": "19514c904a1e5a5437b8c9fbab6740fa2140127c9ae05a72dee8b36b72906baa",
+    "chunk-KPNIDGLV.mjs": "56e975c2755fee31c0e18310522976b27a2a602fa2f5bdf24a9a8221d51f3060",
+    "chunk-KQSI7PY4.mjs": "f2d7500f0678960d6022bbef0d68882dcf905b1d24963184c1a88be569dd877e",
+    "chunk-KXPYNFG4.mjs": "a2452d5d1499c2d5e4f5660412f39cbe04d8f6497cdfe878709947fe3f4adee2",
+    "chunk-LD7NOR5E.mjs": "49f9a950fda7187cca8bf3111576fcc5f4d5a8a771469cf39060402b12ce36b3",
+    "chunk-LWS47KWJ.mjs": "d14684e67f0c645859e504d6eb13cff5712ec09e5f878a573d6e797ddee84c2a",
+    "chunk-MBMBIOHI.mjs": "5971d1bff91a37409564dea7353ad58d9dd73f539ff085e11c7e6e4664b1b169",
+    "chunk-MGDMMYDY.mjs": "4d9661f0aea8e99343583e1b75dc1f787d41b4eedd7ca06bdb7923c774bd50a9",
+    "chunk-MO6OOZZZ.mjs": "d6e39fa43484333d90a4a3fd2f7d53ff5b3ff2571e424e1bce7f0be2ac7ae8a8",
+    "chunk-MZ6RL7BN.mjs": "54baa1239648c5f057e98c4897e85170126692a4023d1cbcf7cab94c1d15b95d",
+    "chunk-NM6LII2C.mjs": "f2293da2bc7855c6bf8769fd64bb8bdf7f05fa1dbce93faa0a7bb982ef807967",
+    "chunk-NUYM2QXT.mjs": "b93caccaab97ca858e9cd8bcc9bf968b0d7b78830ecc44fef907fb0b2a2603b3",
+    "chunk-NYLY7R6I.mjs": "7ce89a900bf83a4ad064fb5093aacc7a5b448d093577d0535f2f065e15c88bd8",
+    "chunk-OAM3NU5X.mjs": "6088f3520bfcdeefd64bab8a922e69f88344c647d6759b542a4091380c24d7e9",
+    "chunk-OY3CX75W.mjs": "094c966e2903a610272911fa4f4e43db375fdc78e0dcf66043bc06e8cd448572",
+    "chunk-PJ2SUVQF.mjs": "cc6b7237226cad7b1f0e482a6db2b74ea0ce74756f9c99c927f4e125a169315c",
+    "chunk-PP4M6XDH.mjs": "dee4ce2b53c074c6d0ac2f8cd51c7e0a20b3cee5f231ff797b6794679583a34f",
+    "chunk-PYDPSWGE.mjs": "49c890f3352a0e31043cdfc5b4c18f1707844e64d1cf244280367429926b0be3",
+    "chunk-PZOV74UA.mjs": "74e8e728066af358aa5b2c5bc9ff60904598d0eaa98656887f0026776c3cd58d",
+    "chunk-RE4T32X4.mjs": "d37ef95630245316e70334c89fc49623e7fc36a81e94445b74be2e86b6dc950e",
+    "chunk-RJOOGL7M.mjs": "6be7c278419de2e3ecafd36bf41c0a246df95832a135db66e9192e9073e7363c",
+    "chunk-RU3YAQZJ.mjs": "25fda85903743622bb0da39e0a4ef712071ab98681023d6d80ac74827322a747",
+    "chunk-RZNHM3OB.mjs": "349befb5be6b4bd278aa5144232f8d481439d164eb6348bb040b2f72b39d6a2a",
+    "chunk-S6YB244W.mjs": "e28b43eada22196cfdfdc062aeaba48c80be644d7c068723c6851e2f7465c7cd",
+    "chunk-SH3D4C2O.mjs": "ff0598a6e86947f337c53604461ac7326216ca99dd64429b2fcc475d887615ab",
+    "chunk-SIDGQ222.mjs": "90e284a0f1628a6006c98700f9d4dcbe676cbe749d779cbefd80f5eedbed6595",
+    "chunk-SRFKSTNK.mjs": "4e77afd1417015b52611db64d47cf38836a97629cfeff9508b02521d3b7a4299",
+    "chunk-T2SAJ675.mjs": "27f45d92d9bf0591079d9901f1fc52943e2aa03a47e519d6e846f5ef0f93364f",
+    "chunk-TESGUDUA.mjs": "3b42e6a99fc957a94bb6a89bc26ac947f707e8eda6207e8a6849284d1ce2f5d0",
+    "chunk-U2N4WGBY.mjs": "dde0540bcc577ed9dfe3bfc7d5f6fd1ee77142f2fc6c2a2d0c0ab697a38216c1",
+    "chunk-UFUMVZOE.mjs": "df98346e47b9f554122de5330253f85ccaa4525c13e18defcd26f61dadc7dd92",
+    "chunk-UMXEEGVY.mjs": "45b2ccd970f3181fd111c7cbf9d6591ecfe419df6d8204991b24bde2e68ce056",
+    "chunk-V3LTEOWG.mjs": "8948f9309df0991198da8efbf9442f3731035746136c5e4eb914b4a28a0792d4",
+    "chunk-V4BGPBBZ.mjs": "14bffaa3da3dc0d4c4b0cb7265484bf25b0ce9112d38cd6d9c9a26dc46c89475",
+    "chunk-VUUYNYWG.mjs": "1455a5c9172ba739e1a2559546f00759902f2bcf0cc856a4b2788bdd2ebc1db5",
+    "chunk-X5L3LWRM.mjs": "72507cca589fca025329284cd71e271465901ffc4587439d6eba192cd7938b77",
+    "chunk-XKORQCVZ.mjs": "33136e04860085a3097975ceb7cb41f2b79a996945317ff8d8910f6f60e870e2",
+    "chunk-XVJ2ODIO.mjs": "b1a25473f006b9e5f5cb6eab583963ddc9d03c212f9d6c96d26bf6ff1ae6fd4e",
+    "chunk-YEET2W3S.mjs": "ccc98dd025c772c5551acbb2a69ad2288d2a0a2e545cfa0639a7f13f37d4d7ff",
+    "chunk-YRYA4MZO.mjs": "a477d28b75a552ba62f25dfc6033eb35c377402cf1af5cafb4186be320f0bbde",
+    "chunk-YXHTNLKI.mjs": "33f339014bd330c765287bb91db21df8f20d1629eaf3314ae2b075f1c1715a04",
+    "chunk-Z3UJI2C2.mjs": "9f4f51cbbcfc5dd5bcd7a2bab5f0507cb0038368a9c4fcc8e3074d883c169ed0",
+    "chunk-ZCGAOR5G.mjs": "1974b3755bba4d562bde51daa9273d5754b5ba5e720a624583a3ed26887a9b2d",
+    "codemode-worker.mjs": "7a70287905ec208be04d52b6d9157fa5068366cb73371be8fca76cd82c64ddd5",
+    "hikaro.mjs": "9f0b384091c4ae335d19ad1ffd1a4c9ad96644a542e39487299ea0baad710323",
+    "sandbox-runner.mjs": "f79151e4405bc24d2adcc1e05a792967a18156eedcb4481cdb6985e3ea7ab7d3",
+    "secure-file-helper": "7d2064fe37f7b0bb6b7fadb74de40675fea5e957b18e226b39b6503316d9cd22",
+    "statement-cache.mjs": "8c8caa0a0ed1307c3358316b11f126fc8c344b9bada45fe0fe04e04b4c939f90",
+    "worker.mjs": "6bbbfefcc8f94c0b6bf4a7127cc2e202defd6d0516fc53b58e580adcaf884e46"
+  },
+  "schemaVersion": 2,
+  "assessmentScope": "functional-soak",
+  "memoryAssessment": "pending-platform-baseline",
+  "memoryPassed": null,
+  "environment": {
+    "runtime": "v26.12.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "osRelease": "27.0.0",
+    "cpu": "Apple M3 Pro",
+    "logicalCpus": 11,
+    "loadAverage": [
+      3.48583984375,
+      2.6015625,
+      2.33447265625
+    ],
+    "freeMemoryMiB": 244.34375,
+    "revision": "7abedc51c3ace998183635284763d8f94ea3f738",
+    "dirty": true
+  },
+  "minutes": 30,
+  "warmupMinutes": 1,
+  "status": "passed",
+  "samples": [
+    {
+      "elapsedMs": 0,
+      "wallTimeMs": 1792565570192,
+      "hostRssMiB": 74.828125,
+      "tuiRssMiB": 52.28125,
+      "combinedRssMiB": 127.109375,
+      "hostMemory": {
+        "memoryMiB": 55.147491455078125
+      },
+      "tuiMemory": {
+        "memoryMiB": 27.9564208984375
+      },
+      "attributedMemoryMiB": 83.10391235351562
+    },
+    {
+      "elapsedMs": 19997.246417000002,
+      "wallTimeMs": 1792565590189,
+      "hostRssMiB": 70.71875,
+      "tuiRssMiB": 52.5,
+      "combinedRssMiB": 123.21875,
+      "hostMemory": {
+        "memoryMiB": 54.56927490234375
+      },
+      "tuiMemory": {
+        "memoryMiB": 28.12836456298828
+      },
+      "attributedMemoryMiB": 82.69763946533203
+    },
+    {
+      "elapsedMs": 40000.522209,
+      "wallTimeMs": 1792565610192,
+      "hostRssMiB": 72.0625,
+      "tuiRssMiB": 52.75,
+      "combinedRssMiB": 124.8125,
+      "hostMemory": {
+        "memoryMiB": 55.85082244873047
+      },
+      "tuiMemory": {
+        "memoryMiB": 28.23773956298828
+      },
+      "attributedMemoryMiB": 84.08856201171875
+    },
+    {
+      "elapsedMs": 60023.024542,
+      "wallTimeMs": 1792565630215,
+      "hostRssMiB": 65.953125,
+      "tuiRssMiB": 49.21875,
+      "combinedRssMiB": 115.171875,
+      "hostMemory": {
+        "memoryMiB": 55.053855895996094
+      },
+      "tuiMemory": {
+        "memoryMiB": 28.30023956298828
+      },
+      "attributedMemoryMiB": 83.35409545898438
+    },
+    {
+      "elapsedMs": 79992.192209,
+      "wallTimeMs": 1792565650184,
+      "hostRssMiB": 64.484375,
+      "tuiRssMiB": 49.96875,
+      "combinedRssMiB": 114.453125,
+      "hostMemory": {
+        "memoryMiB": 55.72582244873047
+      },
+      "tuiMemory": {
+        "memoryMiB": 28.37836456298828
+      },
+      "attributedMemoryMiB": 84.10418701171875
+    },
+    {
+      "elapsedMs": 100025.03316699999,
+      "wallTimeMs": 1792565670217,
+      "hostRssMiB": 67.296875,
+      "tuiRssMiB": 50.9375,
+      "combinedRssMiB": 118.234375,
+      "hostMemory": {
+        "memoryMiB": 57.491539001464844
+      },
+      "tuiMemory": {
+        "memoryMiB": 29.019149780273438
+      },
+      "attributedMemoryMiB": 86.51068878173828
+    },
+    {
+      "elapsedMs": 119994.327334,
+      "wallTimeMs": 1792565690186,
+      "hostRssMiB": 68.1875,
+      "tuiRssMiB": 51.453125,
+      "combinedRssMiB": 119.640625,
+      "hostMemory": {
+        "memoryMiB": 57.86663055419922
+      },
+      "tuiMemory": {
+        "memoryMiB": 29.30046844482422
+      },
+      "attributedMemoryMiB": 87.16709899902344
+    },
+    {
+      "elapsedMs": 140030.839167,
+      "wallTimeMs": 1792565710223,
+      "hostRssMiB": 66.71875,
+      "tuiRssMiB": 50.828125,
+      "combinedRssMiB": 117.546875,
+      "hostMemory": {
+        "memoryMiB": 58.10102844238281
+      },
+      "tuiMemory": {
+        "memoryMiB": 29.425537109375
+      },
+      "attributedMemoryMiB": 87.52656555175781
+    },
+    {
+      "elapsedMs": 160031.091584,
+      "wallTimeMs": 1792565730223,
+      "hostRssMiB": 70.75,
+      "tuiRssMiB": 50.71875,
+      "combinedRssMiB": 121.46875,
+      "hostMemory": {
+        "memoryMiB": 60.33549499511719
+      },
+      "tuiMemory": {
+        "memoryMiB": 29.066139221191406
+      },
+      "attributedMemoryMiB": 89.4016342163086
+    },
+    {
+      "elapsedMs": 180031.573625,
+      "wallTimeMs": 1792565750224,
+      "hostRssMiB": 70.671875,
+      "tuiRssMiB": 51.171875,
+      "combinedRssMiB": 121.84375,
+      "hostMemory": {
+        "memoryMiB": 60.22618865966797
+      },
+      "tuiMemory": {
+        "memoryMiB": 29.191207885742188
+      },
+      "attributedMemoryMiB": 89.41739654541016
+    },
+    {
+      "elapsedMs": 200031.725375,
+      "wallTimeMs": 1792565770224,
+      "hostRssMiB": 70.78125,
+      "tuiRssMiB": 51.21875,
+      "combinedRssMiB": 122,
+      "hostMemory": {
+        "memoryMiB": 60.16368865966797
+      },
+      "tuiMemory": {
+        "memoryMiB": 29.253753662109375
+      },
+      "attributedMemoryMiB": 89.41744232177734
+    },
+    {
+      "elapsedMs": 220008.8165,
+      "wallTimeMs": 1792565790201,
+      "hostRssMiB": 71.796875,
+      "tuiRssMiB": 51.734375,
+      "combinedRssMiB": 123.53125,
+      "hostMemory": {
+        "memoryMiB": 61.054473876953125
+      },
+      "tuiMemory": {
+        "memoryMiB": 29.84766387939453
+      },
+      "attributedMemoryMiB": 90.90213775634766
+    },
+    {
+      "elapsedMs": 240032.99841700002,
+      "wallTimeMs": 1792565810225,
+      "hostRssMiB": 71.390625,
+      "tuiRssMiB": 51.390625,
+      "combinedRssMiB": 122.78125,
+      "hostMemory": {
+        "memoryMiB": 60.52317810058594
+      },
+      "tuiMemory": {
+        "memoryMiB": 29.488265991210938
+      },
+      "attributedMemoryMiB": 90.01144409179688
+    },
+    {
+      "elapsedMs": 260009.11520899998,
+      "wallTimeMs": 1792565830201,
+      "hostRssMiB": 71.96875,
+      "tuiRssMiB": 51.453125,
+      "combinedRssMiB": 123.421875,
+      "hostMemory": {
+        "memoryMiB": 61.16398620605469
+      },
+      "tuiMemory": {
+        "memoryMiB": 29.59770965576172
+      },
+      "attributedMemoryMiB": 90.7616958618164
+    },
+    {
+      "elapsedMs": 280036.80454199994,
+      "wallTimeMs": 1792565850229,
+      "hostRssMiB": 73.203125,
+      "tuiRssMiB": 51.859375,
+      "combinedRssMiB": 125.0625,
+      "hostMemory": {
+        "memoryMiB": 62.55486297607422
+      },
+      "tuiMemory": {
+        "memoryMiB": 30.113494873046875
+      },
+      "attributedMemoryMiB": 92.6683578491211
+    },
+    {
+      "elapsedMs": 300007.65858399996,
+      "wallTimeMs": 1792565870200,
+      "hostRssMiB": 72.4375,
+      "tuiRssMiB": 51.6875,
+      "combinedRssMiB": 124.125,
+      "hostMemory": {
+        "memoryMiB": 57.08599853515625
+      },
+      "tuiMemory": {
+        "memoryMiB": 29.91039276123047
+      },
+      "attributedMemoryMiB": 86.99639129638672
+    },
+    {
+      "elapsedMs": 320005.89875000005,
+      "wallTimeMs": 1792565890198,
+      "hostRssMiB": 72.828125,
+      "tuiRssMiB": 52.5625,
+      "combinedRssMiB": 125.390625,
+      "hostMemory": {
+        "memoryMiB": 57.429771423339844
+      },
+      "tuiMemory": {
+        "memoryMiB": 30.754302978515625
+      },
+      "attributedMemoryMiB": 88.18407440185547
+    },
+    {
+      "elapsedMs": 340033.89704199997,
+      "wallTimeMs": 1792565910226,
+      "hostRssMiB": 77.234375,
+      "tuiRssMiB": 52.09375,
+      "combinedRssMiB": 129.328125,
+      "hostMemory": {
+        "memoryMiB": 57.88301086425781
+      },
+      "tuiMemory": {
+        "memoryMiB": 30.25428009033203
+      },
+      "attributedMemoryMiB": 88.13729095458984
+    },
+    {
+      "elapsedMs": 359998.791584,
+      "wallTimeMs": 1792565930191,
+      "hostRssMiB": 76.8125,
+      "tuiRssMiB": 52.609375,
+      "combinedRssMiB": 129.421875,
+      "hostMemory": {
+        "memoryMiB": 57.351715087890625
+      },
+      "tuiMemory": {
+        "memoryMiB": 30.848190307617188
+      },
+      "attributedMemoryMiB": 88.19990539550781
+    },
+    {
+      "elapsedMs": 380010.69245900004,
+      "wallTimeMs": 1792565950203,
+      "hostRssMiB": 77.15625,
+      "tuiRssMiB": 53.625,
+      "combinedRssMiB": 130.78125,
+      "hostMemory": {
+        "memoryMiB": 57.726783752441406
+      },
+      "tuiMemory": {
+        "memoryMiB": 30.988861083984375
+      },
+      "attributedMemoryMiB": 88.71564483642578
+    },
+    {
+      "elapsedMs": 400043.105875,
+      "wallTimeMs": 1792565970236,
+      "hostRssMiB": 78.125,
+      "tuiRssMiB": 53.390625,
+      "combinedRssMiB": 131.515625,
+      "hostMemory": {
+        "memoryMiB": 58.773841857910156
+      },
+      "tuiMemory": {
+        "memoryMiB": 30.73883819580078
+      },
+      "attributedMemoryMiB": 89.51268005371094
+    },
+    {
+      "elapsedMs": 420061.18045900005,
+      "wallTimeMs": 1792565990254,
+      "hostRssMiB": 78.21875,
+      "tuiRssMiB": 53.59375,
+      "combinedRssMiB": 131.8125,
+      "hostMemory": {
+        "memoryMiB": 54.195716857910156
+      },
+      "tuiMemory": {
+        "memoryMiB": 30.863929748535156
+      },
+      "attributedMemoryMiB": 85.05964660644531
+    },
+    {
+      "elapsedMs": 440041.86199999996,
+      "wallTimeMs": 1792566010234,
+      "hostRssMiB": 78.34375,
+      "tuiRssMiB": 54.203125,
+      "combinedRssMiB": 132.546875,
+      "hostMemory": {
+        "memoryMiB": 54.28944396972656
+      },
+      "tuiMemory": {
+        "memoryMiB": 31.6141357421875
+      },
+      "attributedMemoryMiB": 85.90357971191406
+    },
+    {
+      "elapsedMs": 460043.00049999997,
+      "wallTimeMs": 1792566030236,
+      "hostRssMiB": 78.15625,
+      "tuiRssMiB": 53.90625,
+      "combinedRssMiB": 132.0625,
+      "hostMemory": {
+        "memoryMiB": 53.78937530517578
+      },
+      "tuiMemory": {
+        "memoryMiB": 31.301612854003906
+      },
+      "attributedMemoryMiB": 85.09098815917969
+    },
+    {
+      "elapsedMs": 480017.584959,
+      "wallTimeMs": 1792566050210,
+      "hostRssMiB": 78.265625,
+      "tuiRssMiB": 53.71875,
+      "combinedRssMiB": 131.984375,
+      "hostMemory": {
+        "memoryMiB": 53.86750030517578
+      },
+      "tuiMemory": {
+        "memoryMiB": 31.1297607421875
+      },
+      "attributedMemoryMiB": 84.99726104736328
+    },
+    {
+      "elapsedMs": 500047.7307920001,
+      "wallTimeMs": 1792566070240,
+      "hostRssMiB": 78.640625,
+      "tuiRssMiB": 53.734375,
+      "combinedRssMiB": 132.375,
+      "hostMemory": {
+        "memoryMiB": 54.32073974609375
+      },
+      "tuiMemory": {
+        "memoryMiB": 31.19232940673828
+      },
+      "attributedMemoryMiB": 85.51306915283203
+    },
+    {
+      "elapsedMs": 520016.150792,
+      "wallTimeMs": 1792566090209,
+      "hostRssMiB": 78.359375,
+      "tuiRssMiB": 54.34375,
+      "combinedRssMiB": 132.703125,
+      "hostMemory": {
+        "memoryMiB": 53.992591857910156
+      },
+      "tuiMemory": {
+        "memoryMiB": 31.91126251220703
+      },
+      "attributedMemoryMiB": 85.90385437011719
+    },
+    {
+      "elapsedMs": 540050.5261670001,
+      "wallTimeMs": 1792566110243,
+      "hostRssMiB": 78.125,
+      "tuiRssMiB": 54.4375,
+      "combinedRssMiB": 132.5625,
+      "hostMemory": {
+        "memoryMiB": 53.758216857910156
+      },
+      "tuiMemory": {
+        "memoryMiB": 32.09892272949219
+      },
+      "attributedMemoryMiB": 85.85713958740234
+    },
+    {
+      "elapsedMs": 560047.660375,
+      "wallTimeMs": 1792566130240,
+      "hostRssMiB": 78.421875,
+      "tuiRssMiB": 54.140625,
+      "combinedRssMiB": 132.5625,
+      "hostMemory": {
+        "memoryMiB": 54.055137634277344
+      },
+      "tuiMemory": {
+        "memoryMiB": 31.786399841308594
+      },
+      "attributedMemoryMiB": 85.84153747558594
+    },
+    {
+      "elapsedMs": 580049.2449170001,
+      "wallTimeMs": 1792566150242,
+      "hostRssMiB": 78.1875,
+      "tuiRssMiB": 53.953125,
+      "combinedRssMiB": 132.140625,
+      "hostMemory": {
+        "memoryMiB": 53.773887634277344
+      },
+      "tuiMemory": {
+        "memoryMiB": 31.598922729492188
+      },
+      "attributedMemoryMiB": 85.37281036376953
+    },
+    {
+      "elapsedMs": 600043.6346250001,
+      "wallTimeMs": 1792566170236,
+      "hostRssMiB": 78.625,
+      "tuiRssMiB": 54.5,
+      "combinedRssMiB": 133.125,
+      "hostMemory": {
+        "memoryMiB": 54.274024963378906
+      },
+      "tuiMemory": {
+        "memoryMiB": 32.224037170410156
+      },
+      "attributedMemoryMiB": 86.49806213378906
+    },
+    {
+      "elapsedMs": 620050.99,
+      "wallTimeMs": 1792566190244,
+      "hostRssMiB": 78.875,
+      "tuiRssMiB": 54.046875,
+      "combinedRssMiB": 132.921875,
+      "hostMemory": {
+        "memoryMiB": 54.477195739746094
+      },
+      "tuiMemory": {
+        "memoryMiB": 31.755264282226562
+      },
+      "attributedMemoryMiB": 86.23246002197266
+    },
+    {
+      "elapsedMs": 640023.0425,
+      "wallTimeMs": 1792566210216,
+      "hostRssMiB": 78.984375,
+      "tuiRssMiB": 54.15625,
+      "combinedRssMiB": 133.140625,
+      "hostMemory": {
+        "memoryMiB": 54.617889404296875
+      },
+      "tuiMemory": {
+        "memoryMiB": 31.880332946777344
+      },
+      "attributedMemoryMiB": 86.49822235107422
+    },
+    {
+      "elapsedMs": 660050.557125,
+      "wallTimeMs": 1792566230243,
+      "hostRssMiB": 78.296875,
+      "tuiRssMiB": 54.453125,
+      "combinedRssMiB": 132.75,
+      "hostMemory": {
+        "memoryMiB": 53.91474151611328
+      },
+      "tuiMemory": {
+        "memoryMiB": 32.2867431640625
+      },
+      "attributedMemoryMiB": 86.20148468017578
+    },
+    {
+      "elapsedMs": 680050.45175,
+      "wallTimeMs": 1792566250243,
+      "hostRssMiB": 78.984375,
+      "tuiRssMiB": 54.28125,
+      "combinedRssMiB": 133.265625,
+      "hostMemory": {
+        "memoryMiB": 54.61793518066406
+      },
+      "tuiMemory": {
+        "memoryMiB": 32.130516052246094
+      },
+      "attributedMemoryMiB": 86.74845123291016
+    },
+    {
+      "elapsedMs": 700014.889042,
+      "wallTimeMs": 1792566270208,
+      "hostRssMiB": 79.84375,
+      "tuiRssMiB": 61.890625,
+      "combinedRssMiB": 141.734375,
+      "hostMemory": {
+        "memoryMiB": 55.49311828613281
+      },
+      "tuiMemory": {
+        "memoryMiB": 38.240028381347656
+      },
+      "attributedMemoryMiB": 93.73314666748047
+    },
+    {
+      "elapsedMs": 720050.776375,
+      "wallTimeMs": 1792566290244,
+      "hostRssMiB": 79.359375,
+      "tuiRssMiB": 61.53125,
+      "combinedRssMiB": 140.890625,
+      "hostMemory": {
+        "memoryMiB": 55.024391174316406
+      },
+      "tuiMemory": {
+        "memoryMiB": 37.865028381347656
+      },
+      "attributedMemoryMiB": 92.88941955566406
+    },
+    {
+      "elapsedMs": 740059.682125,
+      "wallTimeMs": 1792566310253,
+      "hostRssMiB": 79.734375,
+      "tuiRssMiB": 62.234375,
+      "combinedRssMiB": 141.96875,
+      "hostMemory": {
+        "memoryMiB": 55.43073272705078
+      },
+      "tuiMemory": {
+        "memoryMiB": 34.787017822265625
+      },
+      "attributedMemoryMiB": 90.2177505493164
+    },
+    {
+      "elapsedMs": 760018.489959,
+      "wallTimeMs": 1792566330212,
+      "hostRssMiB": 80.03125,
+      "tuiRssMiB": 61.875,
+      "combinedRssMiB": 141.90625,
+      "hostMemory": {
+        "memoryMiB": 55.75890350341797
+      },
+      "tuiMemory": {
+        "memoryMiB": 34.44329071044922
+      },
+      "attributedMemoryMiB": 90.20219421386719
+    },
+    {
+      "elapsedMs": 780035.2465,
+      "wallTimeMs": 1792566350228,
+      "hostRssMiB": 80.484375,
+      "tuiRssMiB": 61.8125,
+      "combinedRssMiB": 142.296875,
+      "hostMemory": {
+        "memoryMiB": 56.16522216796875
+      },
+      "tuiMemory": {
+        "memoryMiB": 34.39643859863281
+      },
+      "attributedMemoryMiB": 90.56166076660156
+    },
+    {
+      "elapsedMs": 800061.693709,
+      "wallTimeMs": 1792566370255,
+      "hostRssMiB": 81,
+      "tuiRssMiB": 61.921875,
+      "combinedRssMiB": 142.921875,
+      "hostMemory": {
+        "memoryMiB": 56.71214294433594
+      },
+      "tuiMemory": {
+        "memoryMiB": 34.55278015136719
+      },
+      "attributedMemoryMiB": 91.26492309570312
+    },
+    {
+      "elapsedMs": 820034.967709,
+      "wallTimeMs": 1792566390228,
+      "hostRssMiB": 82.46875,
+      "tuiRssMiB": 61.859375,
+      "combinedRssMiB": 144.328125,
+      "hostMemory": {
+        "memoryMiB": 58.384315490722656
+      },
+      "tuiMemory": {
+        "memoryMiB": 34.50592803955078
+      },
+      "attributedMemoryMiB": 92.89024353027344
+    },
+    {
+      "elapsedMs": 840060.75275,
+      "wallTimeMs": 1792566410254,
+      "hostRssMiB": 81.015625,
+      "tuiRssMiB": 61.96875,
+      "combinedRssMiB": 142.984375,
+      "hostMemory": {
+        "memoryMiB": 56.821678161621094
+      },
+      "tuiMemory": {
+        "memoryMiB": 34.69354248046875
+      },
+      "attributedMemoryMiB": 91.51522064208984
+    },
+    {
+      "elapsedMs": 860036.494542,
+      "wallTimeMs": 1792566430230,
+      "hostRssMiB": 82.28125,
+      "tuiRssMiB": 63.421875,
+      "combinedRssMiB": 145.703125,
+      "hostMemory": {
+        "memoryMiB": 58.228179931640625
+      },
+      "tuiMemory": {
+        "memoryMiB": 33.64680480957031
+      },
+      "attributedMemoryMiB": 91.87498474121094
+    },
+    {
+      "elapsedMs": 880061.7738750001,
+      "wallTimeMs": 1792566450255,
+      "hostRssMiB": 82.1875,
+      "tuiRssMiB": 63.375,
+      "combinedRssMiB": 145.5625,
+      "hostMemory": {
+        "memoryMiB": 58.13445281982422
+      },
+      "tuiMemory": {
+        "memoryMiB": 33.553077697753906
+      },
+      "attributedMemoryMiB": 91.68753051757812
+    },
+    {
+      "elapsedMs": 900091.3441250001,
+      "wallTimeMs": 1792566470285,
+      "hostRssMiB": 82.78125,
+      "tuiRssMiB": 63.453125,
+      "combinedRssMiB": 146.234375,
+      "hostMemory": {
+        "memoryMiB": 58.77519226074219
+      },
+      "tuiMemory": {
+        "memoryMiB": 33.67814636230469
+      },
+      "attributedMemoryMiB": 92.45333862304688
+    },
+    {
+      "elapsedMs": 920068.608584,
+      "wallTimeMs": 1792566490262,
+      "hostRssMiB": 83.375,
+      "tuiRssMiB": 63.65625,
+      "combinedRssMiB": 147.03125,
+      "hostMemory": {
+        "memoryMiB": 59.46282958984375
+      },
+      "tuiMemory": {
+        "memoryMiB": 33.959510803222656
+      },
+      "attributedMemoryMiB": 93.4223403930664
+    },
+    {
+      "elapsedMs": 940042.929959,
+      "wallTimeMs": 1792566510237,
+      "hostRssMiB": 82.5625,
+      "tuiRssMiB": 63.46875,
+      "combinedRssMiB": 146.03125,
+      "hostMemory": {
+        "memoryMiB": 58.58776092529297
+      },
+      "tuiMemory": {
+        "memoryMiB": 33.78765869140625
+      },
+      "attributedMemoryMiB": 92.37541961669922
+    },
+    {
+      "elapsedMs": 960069.298084,
+      "wallTimeMs": 1792566530263,
+      "hostRssMiB": 82.203125,
+      "tuiRssMiB": 63.484375,
+      "combinedRssMiB": 145.6875,
+      "hostMemory": {
+        "memoryMiB": 58.05646514892578
+      },
+      "tuiMemory": {
+        "memoryMiB": 33.818931579589844
+      },
+      "attributedMemoryMiB": 91.87539672851562
+    },
+    {
+      "elapsedMs": 980083.770209,
+      "wallTimeMs": 1792566550277,
+      "hostRssMiB": 83.0625,
+      "tuiRssMiB": 63.84375,
+      "combinedRssMiB": 146.90625,
+      "hostMemory": {
+        "memoryMiB": 59.00975036621094
+      },
+      "tuiMemory": {
+        "memoryMiB": 33.100318908691406
+      },
+      "attributedMemoryMiB": 92.11006927490234
+    },
+    {
+      "elapsedMs": 1000045.6551249999,
+      "wallTimeMs": 1792566570239,
+      "hostRssMiB": 83.015625,
+      "tuiRssMiB": 63.515625,
+      "combinedRssMiB": 146.53125,
+      "hostMemory": {
+        "memoryMiB": 58.96287536621094
+      },
+      "tuiMemory": {
+        "memoryMiB": 32.75654602050781
+      },
+      "attributedMemoryMiB": 91.71942138671875
+    },
+    {
+      "elapsedMs": 1020046.350584,
+      "wallTimeMs": 1792566590240,
+      "hostRssMiB": 82.578125,
+      "tuiRssMiB": 63.703125,
+      "combinedRssMiB": 146.28125,
+      "hostMemory": {
+        "memoryMiB": 58.47845458984375
+      },
+      "tuiMemory": {
+        "memoryMiB": 33.02228546142578
+      },
+      "attributedMemoryMiB": 91.50074005126953
+    },
+    {
+      "elapsedMs": 1040079.021667,
+      "wallTimeMs": 1792566610273,
+      "hostRssMiB": 83.359375,
+      "tuiRssMiB": 63.984375,
+      "combinedRssMiB": 147.34375,
+      "hostMemory": {
+        "memoryMiB": 59.3848876953125
+      },
+      "tuiMemory": {
+        "memoryMiB": 33.38177490234375
+      },
+      "attributedMemoryMiB": 92.76666259765625
+    },
+    {
+      "elapsedMs": 1060084.6706669999,
+      "wallTimeMs": 1792566630279,
+      "hostRssMiB": 82.578125,
+      "tuiRssMiB": 63.515625,
+      "combinedRssMiB": 146.09375,
+      "hostMemory": {
+        "memoryMiB": 58.55669403076172
+      },
+      "tuiMemory": {
+        "memoryMiB": 32.94432067871094
+      },
+      "attributedMemoryMiB": 91.50101470947266
+    },
+    {
+      "elapsedMs": 1080089.0881669999,
+      "wallTimeMs": 1792566650283,
+      "hostRssMiB": 82.828125,
+      "tuiRssMiB": 63.84375,
+      "combinedRssMiB": 146.671875,
+      "hostMemory": {
+        "memoryMiB": 58.8536376953125
+      },
+      "tuiMemory": {
+        "memoryMiB": 33.33503723144531
+      },
+      "attributedMemoryMiB": 92.18867492675781
+    },
+    {
+      "elapsedMs": 1100047.383375,
+      "wallTimeMs": 1792566670241,
+      "hostRssMiB": 83.0625,
+      "tuiRssMiB": 63.546875,
+      "combinedRssMiB": 146.609375,
+      "hostMemory": {
+        "memoryMiB": 59.11930847167969
+      },
+      "tuiMemory": {
+        "memoryMiB": 33.03816223144531
+      },
+      "attributedMemoryMiB": 92.157470703125
+    },
+    {
+      "elapsedMs": 1120055.470709,
+      "wallTimeMs": 1792566690249,
+      "hostRssMiB": 82.859375,
+      "tuiRssMiB": 63.6875,
+      "combinedRssMiB": 146.546875,
+      "hostMemory": {
+        "memoryMiB": 58.853660583496094
+      },
+      "tuiMemory": {
+        "memoryMiB": 33.25702667236328
+      },
+      "attributedMemoryMiB": 92.11068725585938
+    },
+    {
+      "elapsedMs": 1140057.283834,
+      "wallTimeMs": 1792566710251,
+      "hostRssMiB": 83.171875,
+      "tuiRssMiB": 63.578125,
+      "combinedRssMiB": 146.75,
+      "hostMemory": {
+        "memoryMiB": 59.213104248046875
+      },
+      "tuiMemory": {
+        "memoryMiB": 33.13200378417969
+      },
+      "attributedMemoryMiB": 92.34510803222656
+    },
+    {
+      "elapsedMs": 1160086.3645839998,
+      "wallTimeMs": 1792566730280,
+      "hostRssMiB": 83.34375,
+      "tuiRssMiB": 63.640625,
+      "combinedRssMiB": 146.984375,
+      "hostMemory": {
+        "memoryMiB": 59.431922912597656
+      },
+      "tuiMemory": {
+        "memoryMiB": 33.24147033691406
+      },
+      "attributedMemoryMiB": 92.67339324951172
+    },
+    {
+      "elapsedMs": 1180059.9940419998,
+      "wallTimeMs": 1792566750254,
+      "hostRssMiB": 83.296875,
+      "tuiRssMiB": 63.765625,
+      "combinedRssMiB": 147.0625,
+      "hostMemory": {
+        "memoryMiB": 59.385047912597656
+      },
+      "tuiMemory": {
+        "memoryMiB": 33.44470977783203
+      },
+      "attributedMemoryMiB": 92.82975769042969
+    },
+    {
+      "elapsedMs": 1200097.434375,
+      "wallTimeMs": 1792566770292,
+      "hostRssMiB": 83.0625,
+      "tuiRssMiB": 63.734375,
+      "combinedRssMiB": 146.796875,
+      "hostMemory": {
+        "memoryMiB": 59.11940002441406
+      },
+      "tuiMemory": {
+        "memoryMiB": 33.41345977783203
+      },
+      "attributedMemoryMiB": 92.5328598022461
+    },
+    {
+      "elapsedMs": 1220059.5892919998,
+      "wallTimeMs": 1792566790254,
+      "hostRssMiB": 84.171875,
+      "tuiRssMiB": 63.796875,
+      "combinedRssMiB": 147.96875,
+      "hostMemory": {
+        "memoryMiB": 60.35400390625
+      },
+      "tuiMemory": {
+        "memoryMiB": 33.475982666015625
+      },
+      "attributedMemoryMiB": 93.82998657226562
+    },
+    {
+      "elapsedMs": 1240063.296292,
+      "wallTimeMs": 1792566810257,
+      "hostRssMiB": 83.15625,
+      "tuiRssMiB": 64.453125,
+      "combinedRssMiB": 147.609375,
+      "hostMemory": {
+        "memoryMiB": 59.26013946533203
+      },
+      "tuiMemory": {
+        "memoryMiB": 34.210472106933594
+      },
+      "attributedMemoryMiB": 93.47061157226562
+    },
+    {
+      "elapsedMs": 1260099.215625,
+      "wallTimeMs": 1792566830293,
+      "hostRssMiB": 83.453125,
+      "tuiRssMiB": 63.96875,
+      "combinedRssMiB": 147.421875,
+      "hostMemory": {
+        "memoryMiB": 59.68219757080078
+      },
+      "tuiMemory": {
+        "memoryMiB": 33.66352844238281
+      },
+      "attributedMemoryMiB": 93.3457260131836
+    },
+    {
+      "elapsedMs": 1280098.71275,
+      "wallTimeMs": 1792566850293,
+      "hostRssMiB": 83.125,
+      "tuiRssMiB": 64.109375,
+      "combinedRssMiB": 147.234375,
+      "hostMemory": {
+        "memoryMiB": 59.38536834716797
+      },
+      "tuiMemory": {
+        "memoryMiB": 33.86676788330078
+      },
+      "attributedMemoryMiB": 93.25213623046875
+    },
+    {
+      "elapsedMs": 1300068.183084,
+      "wallTimeMs": 1792566870262,
+      "hostRssMiB": 83.59375,
+      "tuiRssMiB": 64.09375,
+      "combinedRssMiB": 147.6875,
+      "hostMemory": {
+        "memoryMiB": 59.916709899902344
+      },
+      "tuiMemory": {
+        "memoryMiB": 33.85118865966797
+      },
+      "attributedMemoryMiB": 93.76789855957031
+    },
+    {
+      "elapsedMs": 1320102.242875,
+      "wallTimeMs": 1792566890297,
+      "hostRssMiB": 82.1875,
+      "tuiRssMiB": 58.5625,
+      "combinedRssMiB": 140.75,
+      "hostMemory": {
+        "memoryMiB": 60.229347229003906
+      },
+      "tuiMemory": {
+        "memoryMiB": 35.351234436035156
+      },
+      "attributedMemoryMiB": 95.58058166503906
+    },
+    {
+      "elapsedMs": 1340075.220084,
+      "wallTimeMs": 1792566910270,
+      "hostRssMiB": 82.109375,
+      "tuiRssMiB": 58.984375,
+      "combinedRssMiB": 141.09375,
+      "hostMemory": {
+        "memoryMiB": 60.151222229003906
+      },
+      "tuiMemory": {
+        "memoryMiB": 35.88264465332031
+      },
+      "attributedMemoryMiB": 96.03386688232422
+    },
+    {
+      "elapsedMs": 1360073.583042,
+      "wallTimeMs": 1792566930268,
+      "hostRssMiB": 82.09375,
+      "tuiRssMiB": 58.671875,
+      "combinedRssMiB": 140.765625,
+      "hostMemory": {
+        "memoryMiB": 60.16691589355469
+      },
+      "tuiMemory": {
+        "memoryMiB": 35.55449676513672
+      },
+      "attributedMemoryMiB": 95.7214126586914
+    },
+    {
+      "elapsedMs": 1380133.595709,
+      "wallTimeMs": 1792566950328,
+      "hostRssMiB": 83,
+      "tuiRssMiB": 58.796875,
+      "combinedRssMiB": 141.796875,
+      "hostMemory": {
+        "memoryMiB": 61.16705322265625
+      },
+      "tuiMemory": {
+        "memoryMiB": 35.7264404296875
+      },
+      "attributedMemoryMiB": 96.89349365234375
+    },
+    {
+      "elapsedMs": 1400081.4879589998,
+      "wallTimeMs": 1792566970276,
+      "hostRssMiB": 82.75,
+      "tuiRssMiB": 58.765625,
+      "combinedRssMiB": 141.515625,
+      "hostMemory": {
+        "memoryMiB": 60.901405334472656
+      },
+      "tuiMemory": {
+        "memoryMiB": 35.72648620605469
+      },
+      "attributedMemoryMiB": 96.62789154052734
+    },
+    {
+      "elapsedMs": 1420080.7896669998,
+      "wallTimeMs": 1792566990275,
+      "hostRssMiB": 82.6875,
+      "tuiRssMiB": 58.890625,
+      "combinedRssMiB": 141.578125,
+      "hostMemory": {
+        "memoryMiB": 60.807701110839844
+      },
+      "tuiMemory": {
+        "memoryMiB": 35.91407775878906
+      },
+      "attributedMemoryMiB": 96.7217788696289
+    },
+    {
+      "elapsedMs": 1440086.213292,
+      "wallTimeMs": 1792567010281,
+      "hostRssMiB": 83.546875,
+      "tuiRssMiB": 58.875,
+      "combinedRssMiB": 142.421875,
+      "hostMemory": {
+        "memoryMiB": 61.714088439941406
+      },
+      "tuiMemory": {
+        "memoryMiB": 35.89845275878906
+      },
+      "attributedMemoryMiB": 97.61254119873047
+    },
+    {
+      "elapsedMs": 1460081.163375,
+      "wallTimeMs": 1792567030276,
+      "hostRssMiB": 82.578125,
+      "tuiRssMiB": 58.9375,
+      "combinedRssMiB": 141.515625,
+      "hostMemory": {
+        "memoryMiB": 60.714088439941406
+      },
+      "tuiMemory": {
+        "memoryMiB": 35.97662353515625
+      },
+      "attributedMemoryMiB": 96.69071197509766
+    },
+    {
+      "elapsedMs": 1480082.0001669999,
+      "wallTimeMs": 1792567050277,
+      "hostRssMiB": 83.1875,
+      "tuiRssMiB": 59.28125,
+      "combinedRssMiB": 142.46875,
+      "hostMemory": {
+        "memoryMiB": 61.292236328125
+      },
+      "tuiMemory": {
+        "memoryMiB": 36.41426086425781
+      },
+      "attributedMemoryMiB": 97.70649719238281
+    },
+    {
+      "elapsedMs": 1500081.2325,
+      "wallTimeMs": 1792567070276,
+      "hostRssMiB": 83.890625,
+      "tuiRssMiB": 59.265625,
+      "combinedRssMiB": 143.15625,
+      "hostMemory": {
+        "memoryMiB": 62.07362365722656
+      },
+      "tuiMemory": {
+        "memoryMiB": 36.39863586425781
+      },
+      "attributedMemoryMiB": 98.47225952148438
+    },
+    {
+      "elapsedMs": 1520084.6305,
+      "wallTimeMs": 1792567090279,
+      "hostRssMiB": 83.25,
+      "tuiRssMiB": 59.484375,
+      "combinedRssMiB": 142.734375,
+      "hostMemory": {
+        "memoryMiB": 61.401702880859375
+      },
+      "tuiMemory": {
+        "memoryMiB": 36.69562530517578
+      },
+      "attributedMemoryMiB": 98.09732818603516
+    },
+    {
+      "elapsedMs": 1540118.1849999998,
+      "wallTimeMs": 1792567110313,
+      "hostRssMiB": 82.75,
+      "tuiRssMiB": 59.359375,
+      "combinedRssMiB": 142.109375,
+      "hostMemory": {
+        "memoryMiB": 60.901702880859375
+      },
+      "tuiMemory": {
+        "memoryMiB": 36.586273193359375
+      },
+      "attributedMemoryMiB": 97.48797607421875
+    },
+    {
+      "elapsedMs": 1560086.2385,
+      "wallTimeMs": 1792567130281,
+      "hostRssMiB": 83.53125,
+      "tuiRssMiB": 59.515625,
+      "combinedRssMiB": 143.046875,
+      "hostMemory": {
+        "memoryMiB": 61.79248809814453
+      },
+      "tuiMemory": {
+        "memoryMiB": 36.77386474609375
+      },
+      "attributedMemoryMiB": 98.56635284423828
+    },
+    {
+      "elapsedMs": 1580090.767542,
+      "wallTimeMs": 1792567150286,
+      "hostRssMiB": 83.09375,
+      "tuiRssMiB": 59.484375,
+      "combinedRssMiB": 142.578125,
+      "hostMemory": {
+        "memoryMiB": 61.27679443359375
+      },
+      "tuiMemory": {
+        "memoryMiB": 36.726966857910156
+      },
+      "attributedMemoryMiB": 98.0037612915039
+    },
+    {
+      "elapsedMs": 1600120.7285,
+      "wallTimeMs": 1792567170316,
+      "hostRssMiB": 76.921875,
+      "tuiRssMiB": 59.5625,
+      "combinedRssMiB": 136.484375,
+      "hostMemory": {
+        "memoryMiB": 54.338905334472656
+      },
+      "tuiMemory": {
+        "memoryMiB": 36.883331298828125
+      },
+      "attributedMemoryMiB": 91.22223663330078
+    },
+    {
+      "elapsedMs": 1620129.1206669998,
+      "wallTimeMs": 1792567190324,
+      "hostRssMiB": 77.359375,
+      "tuiRssMiB": 60.125,
+      "combinedRssMiB": 137.484375,
+      "hostMemory": {
+        "memoryMiB": 54.729576110839844
+      },
+      "tuiMemory": {
+        "memoryMiB": 37.4927978515625
+      },
+      "attributedMemoryMiB": 92.22237396240234
+    },
+    {
+      "elapsedMs": 1640131.5056669998,
+      "wallTimeMs": 1792567210326,
+      "hostRssMiB": 77.296875,
+      "tuiRssMiB": 59.625,
+      "combinedRssMiB": 136.921875,
+      "hostMemory": {
+        "memoryMiB": 54.714019775390625
+      },
+      "tuiMemory": {
+        "memoryMiB": 36.9927978515625
+      },
+      "attributedMemoryMiB": 91.70681762695312
+    },
+    {
+      "elapsedMs": 1660097.621334,
+      "wallTimeMs": 1792567230293,
+      "hostRssMiB": 77.265625,
+      "tuiRssMiB": 59.59375,
+      "combinedRssMiB": 136.859375,
+      "hostMemory": {
+        "memoryMiB": 54.745361328125
+      },
+      "tuiMemory": {
+        "memoryMiB": 36.977195739746094
+      },
+      "attributedMemoryMiB": 91.7225570678711
+    },
+    {
+      "elapsedMs": 1680131.927167,
+      "wallTimeMs": 1792567250327,
+      "hostRssMiB": 77.015625,
+      "tuiRssMiB": 59.609375,
+      "combinedRssMiB": 136.625,
+      "hostMemory": {
+        "memoryMiB": 54.495361328125
+      },
+      "tuiMemory": {
+        "memoryMiB": 37.039764404296875
+      },
+      "attributedMemoryMiB": 91.53512573242188
+    },
+    {
+      "elapsedMs": 1700127.738292,
+      "wallTimeMs": 1792567270323,
+      "hostRssMiB": 77.296875,
+      "tuiRssMiB": 59.71875,
+      "combinedRssMiB": 137.015625,
+      "hostMemory": {
+        "memoryMiB": 54.308067321777344
+      },
+      "tuiMemory": {
+        "memoryMiB": 37.227378845214844
+      },
+      "attributedMemoryMiB": 91.53544616699219
+    },
+    {
+      "elapsedMs": 1720137.1105,
+      "wallTimeMs": 1792567290332,
+      "hostRssMiB": 77.015625,
+      "tuiRssMiB": 60.515625,
+      "combinedRssMiB": 137.53125,
+      "hostMemory": {
+        "memoryMiB": 53.995521545410156
+      },
+      "tuiMemory": {
+        "memoryMiB": 38.0869140625
+      },
+      "attributedMemoryMiB": 92.08243560791016
+    },
+    {
+      "elapsedMs": 1740135.714,
+      "wallTimeMs": 1792567310331,
+      "hostRssMiB": 78.4375,
+      "tuiRssMiB": 59.984375,
+      "combinedRssMiB": 138.421875,
+      "hostMemory": {
+        "memoryMiB": 55.573875427246094
+      },
+      "tuiMemory": {
+        "memoryMiB": 37.50872039794922
+      },
+      "attributedMemoryMiB": 93.08259582519531
+    },
+    {
+      "elapsedMs": 1760103.8820419998,
+      "wallTimeMs": 1792567330299,
+      "hostRssMiB": 76.875,
+      "tuiRssMiB": 60.015625,
+      "combinedRssMiB": 136.890625,
+      "hostMemory": {
+        "memoryMiB": 53.917510986328125
+      },
+      "tuiMemory": {
+        "memoryMiB": 37.5869140625
+      },
+      "attributedMemoryMiB": 91.50442504882812
+    },
+    {
+      "elapsedMs": 1780133.357959,
+      "wallTimeMs": 1792567350329,
+      "hostRssMiB": 77.578125,
+      "tuiRssMiB": 60.125,
+      "combinedRssMiB": 137.703125,
+      "hostMemory": {
+        "memoryMiB": 54.698875427246094
+      },
+      "tuiMemory": {
+        "memoryMiB": 37.6337890625
+      },
+      "attributedMemoryMiB": 92.3326644897461
+    },
+    {
+      "elapsedMs": 1800130.591334,
+      "wallTimeMs": 1792567370326,
+      "hostRssMiB": 77.15625,
+      "tuiRssMiB": 63.203125,
+      "combinedRssMiB": 140.359375,
+      "hostMemory": {
+        "memoryMiB": 54.277000427246094
+      },
+      "tuiMemory": {
+        "memoryMiB": 38.477699279785156
+      },
+      "attributedMemoryMiB": 92.75469970703125
+    }
+  ],
+  "turns": 94,
+  "limits": {
+    "measuredMinutes": 30
+  },
+  "diagnosticReferences": {
+    "legacyRssGrowthPercent": 10
+  },
+  "workload": "Persistent local SSE fixture host and attached TUI; one streamed prompt every 20s; durable run completion and rendered response checked; no forced GC or process restart",
+  "memoryMetric": "macos-physical-footprint",
+  "memoryScope": "host + one TUI; SQLite worker included in host; fixture excluded",
+  "baseline": {
+    "hostRssMiB": 74.828125,
+    "tuiRssMiB": 52.28125,
+    "combinedRssMiB": 127.109375,
+    "hostMemory": {
+      "memoryMiB": 55.147491455078125
+    },
+    "tuiMemory": {
+      "memoryMiB": 27.9564208984375
+    },
+    "attributedMemoryMiB": 83.10391235351562
+  },
+  "measuredStartedAt": "2026-10-21T06:52:50.192Z",
+  "elapsedMs": 1800130.591334,
+  "final": {
+    "hostRssMiB": 77.15625,
+    "tuiRssMiB": 63.203125,
+    "combinedRssMiB": 140.359375,
+    "hostMemory": {
+      "memoryMiB": 54.277000427246094
+    },
+    "tuiMemory": {
+      "memoryMiB": 38.477699279785156
+    },
+    "attributedMemoryMiB": 92.75469970703125
+  },
+  "growthPercent": 10.424093423478787,
+  "peakCombinedRssMiB": 147.96875,
+  "peakGrowthPercent": 16.41057160417947,
+  "stabilityPassed": true,
+  "exits": {
+    "host": 0,
+    "tui": 0
+  },
+  "finishedAt": "2026-10-21T07:22:50.381Z"
+}

@@ -139,8 +139,7 @@ export async function attachTui(options: {
       };
     },
   };
-  const syncApprovals = () => {
-    const state = client.state;
+  const syncApprovals = (state = client.state) => {
     const live = state.canAct ? state.approvals : [];
     for (const [id, controller] of approvals)
       if (!live.some((a) => a.id === id)) {
@@ -257,12 +256,9 @@ export async function attachTui(options: {
       void refresh();
       return;
     }
-    if (
-      frame.type !== "event" ||
-      !client.state.canAct ||
-      frame.event.sessionId !== client.state.session?.id
-    )
-      return;
+    if (frame.type !== "event") return;
+    const state = client.state;
+    if (!state.canAct || frame.event.sessionId !== state.session?.id) return;
     const event = frame.event as AgentEvent;
     if (loading) {
       const bytes = Buffer.byteLength(JSON.stringify(event));
@@ -301,7 +297,7 @@ export async function attachTui(options: {
         stream: "",
         streamTruncated: false,
       });
-    } else syncApprovals();
+    } else syncApprovals(state);
   });
   const offConnection = transport.onConnection((connected) => {
     if (connected) void client.connected().catch(fail);

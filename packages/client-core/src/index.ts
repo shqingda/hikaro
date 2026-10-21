@@ -89,6 +89,10 @@ export class ClientState {
   get state(): ExecutionState {
     return copy(this.value);
   }
+  /** Read synchronization readiness without allocating a full UI snapshot. */
+  get needsSynchronization(): boolean {
+    return this.value.connection === "connected" && this.value.syncRequired;
+  }
   get receipts(): CommandReceipt[] {
     return [...this.commands.values()].map(copy);
   }

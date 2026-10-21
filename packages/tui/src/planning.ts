@@ -1,8 +1,5 @@
-import {
-  planText,
-  type Plan,
-  type Questions,
-} from "../../runtime/src/planning.ts";
+import { planText } from "../../runtime/src/plan-text.ts";
+import type { Plan, Questions } from "../../runtime/src/planning.ts";
 import type { HikaroView } from "./index.ts";
 export async function askQuestions(
   view: HikaroView,

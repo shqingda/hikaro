@@ -133,7 +133,7 @@ export class ClientConnection {
       );
     if (this.syncing)
       return this.syncing.then(() => {
-        if (this.active && this.view.state.syncRequired)
+        if (this.active && this.view.needsSynchronization)
           return this.synchronize(attempt + 1);
       });
     const task = this.request("session.current").then(() => {});
@@ -247,7 +247,7 @@ export class ClientConnection {
       }
       this.notify();
     }).then(async (result) => {
-      if (!recovery && this.active && this.view.state.syncRequired)
+      if (!recovery && this.active && this.view.needsSynchronization)
         await this.synchronize();
       if (
         !rpcReadMethods.has(method) &&
@@ -287,11 +287,7 @@ export class ClientConnection {
       }
     }
     this.notify();
-    if (
-      this.view.state.connection === "connected" &&
-      this.view.state.syncRequired &&
-      !this.syncing
-    ) {
+    if (this.view.needsSynchronization && !this.syncing) {
       const epoch = this.epoch;
       void Promise.resolve()
         .then(() => {

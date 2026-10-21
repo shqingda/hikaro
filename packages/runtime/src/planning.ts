@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { z } from "zod";
+import * as z from "zod";
 export const questionsSchema = z.object({
   questions: z
     .array(
@@ -89,6 +89,4 @@ export class Planning {
     return state.plan;
   }
 }
-export function planText(plan: Plan) {
-  return `${plan.title}\n\n${plan.steps.map((step, i) => `${i + 1}. ${step}`).join("\n\n")}\n\nValidation\n${plan.validation}`;
-}
+export { planText } from "./plan-text.ts";

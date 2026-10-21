@@ -405,3 +405,10 @@ pnpm exec vitest run tests/pty.test.ts -t 'critical TUI workflows'
 ## 2026-10-21：纠正内存发布口径
 
 按用户要求撤销未经论证的 RSS 合计 100 MiB 硬门槛。旧报告保留，不追改为通过；平台内存采集与预算待校准。见 [验收口径](docs/specs/shared-memory-soak.md)。TUI 87%，移动端 35%；口径修正不计作实现进度。
+
+## 2026-10-21：完成新口径 30 分钟窗口
+
+- [x] 前轮优化：48 项定向检查、根项目/移动端类型检查、构建通过。完整 PTY 30.002 分钟、94 条任务、正常退出，构建指纹一致。
+- [x] 建立 macOS footprint 基线：起点 83.10、终点 92.75、峰值 98.57 MiB，最后窗口自然回落；不替代平台预算或长期无泄漏结论。
+- [ ] 已有队列收尾竞态：prompt completion 早于 drain 清理，紧接手动工具调用可能报 busy；候选与 HEAD 均复现，存储补充检查 14 通过、1 失败。
+- [验收证据](docs/validation/shared-memory-soak.md)。TUI 89%，移动端 35%，未到 95%。
