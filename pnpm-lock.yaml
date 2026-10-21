@@ -164,6 +164,9 @@ settings:
 
 packageExtensionsChecksum: sha256-1d+REkr3Xoabbd3k+2s1Qr6KQpg8zfJqaDh3NmjAP7k=
 
+patchedDependencies:
+  node-forge@1.4.0: f4102010606aeae3659ca90c049b6f2c7dbad95884b46ecbba77fc08c660e295
+
 importers:
 
   .:
@@ -4491,7 +4494,7 @@ snapshots:
     dependencies:
       '@pondwader/socks5-server': 1.0.10
       commander: 12.1.0
-      node-forge: 1.4.0
+      node-forge: 1.4.0(patch_hash=f4102010606aeae3659ca90c049b6f2c7dbad95884b46ecbba77fc08c660e295)
       zod: 3.25.76
 
   '@anthropic-ai/sdk@0.129.0(zod@4.6.7)':
@@ -5358,7 +5361,7 @@ snapshots:
       glob: 13.0.6
       lan-network: 0.2.1
       multitars: 1.0.2
-      node-forge: 1.4.0
+      node-forge: 1.4.0(patch_hash=f4102010606aeae3659ca90c049b6f2c7dbad95884b46ecbba77fc08c660e295)
       npm-package-arg: 11.0.3
       ora: 3.4.0
       picomatch: 4.0.7
@@ -5395,7 +5398,7 @@ snapshots:
 
   '@expo/code-signing-certificates@0.0.7':
     dependencies:
-      node-forge: 1.4.0
+      node-forge: 1.4.0(patch_hash=f4102010606aeae3659ca90c049b6f2c7dbad95884b46ecbba77fc08c660e295)
 
   '@expo/config-plugins@58.0.9(supports-color@10.2.2)(typescript@7.0.2)':
     dependencies:
@@ -7907,7 +7910,7 @@ snapshots:
       fetch-blob: 3.2.0
       formdata-polyfill: 4.0.10
 
-  node-forge@1.4.0: {}
+  node-forge@1.4.0(patch_hash=f4102010606aeae3659ca90c049b6f2c7dbad95884b46ecbba77fc08c660e295): {}
 
   node-int64@0.4.0: {}
 

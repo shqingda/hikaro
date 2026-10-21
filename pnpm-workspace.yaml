@@ -17,3 +17,5 @@ packageExtensions:
   "serve-sim@0.1.48":
     dependencies:
       typescript: "5.9.3"
+patchedDependencies:
+  node-forge@1.4.0: patches/node-forge@1.4.0.patch

@@ -13,6 +13,7 @@ import { join, resolve } from "node:path";
 import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
+import { verifyForge } from "./forge-patch.mjs";
 
 const exec = promisify(execFile);
 if (!process.argv[2])
@@ -73,7 +74,26 @@ try {
     join(prefix, "node_modules/hikaro/package.json"),
   );
   const { spawn } = require("node-pty");
+  const runtime = createRequire(
+    require.resolve("@anthropic-ai/sandbox-runtime"),
+  );
+  const forge = await verifyForge(
+    resolve(runtime.resolve("node-forge/package.json"), ".."),
+    { distribution: true },
+  );
+  await exec(
+    process.execPath,
+    [
+      resolve(import.meta.dirname, "check-forge-fix.mjs"),
+      join(prefix, "node_modules/hikaro/package.json"),
+    ],
+    { cwd: workspace, timeout: 30000 },
+  );
   const bin = join(prefix, "node_modules/.bin/hikaro");
+  assert.equal(
+    (await exec(bin, ["--version"])).stdout.trim(),
+    "hikaro " + require("./package.json").version,
+  );
   const result = await exec(
     bin,
     [
@@ -137,9 +157,13 @@ try {
     node: process.version,
     nodeExecutable: process.execPath,
     emptyNpmCache: true,
+    forge,
     checks: [
       "artifact checksum",
       "npm install --engine-strict",
+      "installed forge complete Node implementation matches source patch",
+      "installed forge accepts valid signatures and rejects malformed DigestAlgorithm (8 cases)",
+      "installed bin version",
       "installed bin demo prompt",
       "packaged native file helper read",
       "installed node-pty TUI startup and clean exit",

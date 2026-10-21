@@ -3,8 +3,9 @@ import { mkdtemp, mkdir, cp, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createHash } from "node:crypto";
-import { auditDirectory } from "./release-audit.mjs";
+import { auditDirectory, auditArtifact } from "./release-audit.mjs";
 import { isMain } from "./bench-support.mjs";
+import { patchForge, assessPatchedAudit } from "./forge-patch.mjs";
 
 export function releaseManifest(source, platform, arch) {
   if (platform !== "darwin" || arch !== "arm64")
@@ -22,6 +23,7 @@ export function releaseManifest(source, platform, arch) {
     files: ["dist", "postinstall.mjs", "README.md", "npm-shrinkwrap.json"],
     scripts: { postinstall: "node postinstall.mjs" },
     dependencies: source.dependencies,
+    bundledDependencies: ["@anthropic-ai/sandbox-runtime"],
   };
 }
 
@@ -57,21 +59,15 @@ await chmod(join(dirname(require.resolve('node-pty/package.json')), 'prebuilds',
     // Resolve once and ship the complete production dependency lock in the tarball.
     execFileSync(
       "npm",
-      [
-        "install",
-        "--package-lock-only",
-        "--ignore-scripts",
-        "--omit=dev",
-        "--no-audit",
-        "--no-fund",
-      ],
+      ["install", "--ignore-scripts", "--omit=dev", "--no-audit", "--no-fund"],
       { cwd: stage, stdio: "inherit", timeout: 240000 },
     );
     await cp(
       join(stage, "package-lock.json"),
       join(stage, "npm-shrinkwrap.json"),
     );
-    const audit = auditDirectory(stage);
+    await patchForge(join(stage, "node_modules/node-forge"));
+    const audit = await assessPatchedAudit(auditDirectory(stage), stage);
     await writeFile(
       join(output, "package-audit.json"),
       JSON.stringify(audit, null, 2) + "\n",
@@ -120,6 +116,8 @@ await chmod(join(dirname(require.resolve('node-pty/package.json')), 'prebuilds',
       artifact + ".sha256",
       `${sha256}  ${artifact.split("/").at(-1)}\n`,
     );
+    if (!(await auditArtifact(artifact)).passed)
+      throw Error("Packed artifact security verification failed");
     await writeFile(
       join(output, "manifest.json"),
       JSON.stringify(metadata, null, 2) + "\n",

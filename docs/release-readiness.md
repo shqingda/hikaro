@@ -4,7 +4,7 @@
 
 | 产品 | 发布完成度估算 | 本轮变化 |
 | --- | --- | --- |
-| TUI | **92%** | 候选包及最低 Node 安装通过；生产依赖高危公告阻塞，真实环境与正式分发待完成 |
+| TUI | **94%** | node-forge 安全回移、上游兼容及最低 Node 分发安装通过；真实环境与正式分发待完成 |
 | 移动端完整控制器 | **35%** | 本轮未修改或验收移动端，进度不变 |
 
 TUI 当前主要验收平台为 macOS。移动端 M0 只读功能不能代替 M1 审批、补充和停止闭环。仍未到 95%，没有完成真实模型、物理终端或真机发布验收。
@@ -36,6 +36,6 @@ TUI 当前主要验收平台为 macOS。移动端 M0 只读功能不能代替 M1
 
 候选包与空缓存安装证据：[分发包验收](validation/release-package.md)。尚未公开发布，不等同于所有环境可 release。
 
-最低 Node 24.21.0 安装运行已通过；node-forge 高危生产依赖尚无发布修复，当前阻断正式 release。见 [证据与门禁](validation/node-minimum-security.md)。进度保持 TUI 92%、移动端 35%。
+最低 Node 24.21.0 安装运行已通过。此前 node-forge 阻塞记录见 [历史证据](validation/node-minimum-security.md)；本轮完成固定安全回移、上游兼容及产物安装核验，见 [当前证据](validation/forge-backport.md)。TUI 94%、移动端 35%，未到 95%。
 
-node-forge 当前沙箱路径的动态探针与上游候选补丁隔离测试已通过；生产修复尚未落地，仍阻断。另补 `hikaro --version`。见 [可达性记录](validation/forge-reachability.md)。
+node-forge 原始 registry audit 告警仍保留；只有实际 Node 代码完全匹配已验证的补丁时才能记录该公告已修复。真实模型、物理终端中文 IME 与正式分发仍未完成。此前探针范围见 [可达性记录](validation/forge-reachability.md)。

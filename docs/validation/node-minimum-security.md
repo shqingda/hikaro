@@ -1,5 +1,7 @@
 # 最低 Node 与生产依赖验收（2026-10-21）
 
+> 后续状态：本记录中的“尚未修复”是当时结论。2026-10-21 后续已完成 Node 安全回移、上游兼容和分发安装验收，见 [当前记录](forge-backport.md)；原始 registry 告警仍保留。
+
 ## 最低版本通过
 
 从 https://nodejs.org/dist/v24.21.0/ 下载 darwin-arm64 归档，按同站 SHASUMS256.txt 校验。归档 SHA-256：`bed7eea5325e1108f32ce5228ddd6a5f0f08a499ee42aa7442aea583702f6057`。只解压至 artifacts/node-minimum，不改变系统 Node。

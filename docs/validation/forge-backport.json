@@ -1,0 +1,194 @@
+{
+  "upstreamBaseCommit": "fa385f92440879601240020f158bed68e444e83a",
+  "upstreamPatchCommit": "ceba34402e329f0365134f23fe19898756527d65",
+  "testRunner": "mocha@5.2.0, NODE_ENV=test, timeout=30000",
+  "upstreamAdjustments": [
+    "Replace only tests/unit/rsa.js with pinned PR regression file",
+    "Remove upstream describe.only in tests/unit/jsbn.js so every Node suite actually runs",
+    "Use exact verified patched lib/rsa.js"
+  ],
+  "upstream": [
+    {
+      "node": "26.12.0",
+      "suites": 38,
+      "tests": 833,
+      "passes": 829,
+      "pending": [
+        "rsa should generate same 512 bit key pair (prng+sync,prng+sync+purejs)",
+        "rsa should generate same 512 bit key pair (prng+sync,prng+async)",
+        "rsa should generate same 512 bit key pair (prng+async,prng+sync)",
+        "rsa should generate same 512 bit key pair (prng+async,prng+async)"
+      ],
+      "failures": 0,
+      "start": "2026-10-21T08:51:31.491Z",
+      "end": "2026-10-21T08:51:34.552Z",
+      "duration": 3061,
+      "nestedRegression": [
+        "rsa signature verification should check nested DigestAlgorithm element count"
+      ]
+    },
+    {
+      "node": "24.21.0",
+      "suites": 38,
+      "tests": 833,
+      "passes": 829,
+      "pending": [
+        "rsa should generate same 512 bit key pair (prng+sync,prng+sync+purejs)",
+        "rsa should generate same 512 bit key pair (prng+sync,prng+async)",
+        "rsa should generate same 512 bit key pair (prng+async,prng+sync)",
+        "rsa should generate same 512 bit key pair (prng+async,prng+async)"
+      ],
+      "failures": 0,
+      "start": "2026-10-21T08:55:43.608Z",
+      "end": "2026-10-21T08:55:46.922Z",
+      "duration": 3314,
+      "nestedRegression": [
+        "rsa signature verification should check nested DigestAlgorithm element count"
+      ]
+    }
+  ],
+  "sourceInstall": {
+    "passed": true,
+    "isolated": true,
+    "frozenLockfile": true,
+    "ignoreScripts": true,
+    "proof": {
+      "version": "1.4.0",
+      "rsaSha256": "447c5441cea1b125e23661d7e27a8b1759cc3400241c0013b2d034b4ee1dbf50",
+      "verifiedNodeFiles": 49
+    },
+    "upstream": {
+      "version": "1.4.0",
+      "rsaSha256": "447c5441cea1b125e23661d7e27a8b1759cc3400241c0013b2d034b4ee1dbf50",
+      "verifiedNodeFiles": 49
+    },
+    "checkedAt": "2026-10-21T08:55:40.053Z"
+  },
+  "scriptsDisabledInstall": {
+    "passed": true,
+    "ignoreScripts": true,
+    "proof": {
+      "version": "1.4.0",
+      "rsaSha256": "447c5441cea1b125e23661d7e27a8b1759cc3400241c0013b2d034b4ee1dbf50",
+      "verifiedNodeFiles": 49
+    },
+    "checkedAt": "2026-10-21T08:56:41.980Z"
+  },
+  "artifactInstall": {
+    "status": "passed",
+    "sha256": "003976229d04334bc1d873f843ba93e5883405ccf548e92f7a48cc696eee6dc5",
+    "artifact": "/Users/shqingda/Projects/hikaro/artifacts/release/hikaro-0.1.0-darwin-arm64.tgz",
+    "platform": "darwin",
+    "arch": "arm64",
+    "node": "v24.21.0",
+    "nodeExecutable": "/Users/shqingda/Projects/hikaro/artifacts/node-minimum/node-v24.21.0-darwin-arm64/bin/node",
+    "emptyNpmCache": true,
+    "forge": {
+      "version": "1.4.0",
+      "rsaSha256": "447c5441cea1b125e23661d7e27a8b1759cc3400241c0013b2d034b4ee1dbf50",
+      "verifiedNodeFiles": 49
+    },
+    "checks": [
+      "artifact checksum",
+      "npm install --engine-strict",
+      "installed forge complete Node implementation matches source patch",
+      "installed forge accepts valid signatures and rejects malformed DigestAlgorithm (8 cases)",
+      "installed bin version",
+      "installed bin demo prompt",
+      "packaged native file helper read",
+      "installed node-pty TUI startup and clean exit"
+    ],
+    "limitations": [
+      "current macOS developer machine",
+      "real provider and Keychain not exercised",
+      "not signed/notarized or publicly published"
+    ],
+    "finishedAt": "2026-10-21T08:56:11.615Z"
+  },
+  "signatureRegression": {
+    "status": "passed",
+    "scope": "installed source backport against isolated original",
+    "version": "1.4.0",
+    "sourceSha256": "fd4740238145ec26470eb3f06a627c72039538ce1307dbdce40521f94dfd0a50",
+    "patchedSha256": "447c5441cea1b125e23661d7e27a8b1759cc3400241c0013b2d034b4ee1dbf50",
+    "cases": [
+      {
+        "hash": "sha1",
+        "parameters": false,
+        "validAccepted": true,
+        "baselineAcceptedMalformed": true,
+        "candidateRejectedMalformed": true,
+        "nativeRejectedMalformed": true
+      },
+      {
+        "hash": "sha1",
+        "parameters": true,
+        "validAccepted": true,
+        "baselineAcceptedMalformed": true,
+        "candidateRejectedMalformed": true,
+        "nativeRejectedMalformed": true
+      },
+      {
+        "hash": "sha256",
+        "parameters": false,
+        "validAccepted": true,
+        "baselineAcceptedMalformed": true,
+        "candidateRejectedMalformed": true,
+        "nativeRejectedMalformed": true
+      },
+      {
+        "hash": "sha256",
+        "parameters": true,
+        "validAccepted": true,
+        "baselineAcceptedMalformed": true,
+        "candidateRejectedMalformed": true,
+        "nativeRejectedMalformed": true
+      },
+      {
+        "hash": "sha384",
+        "parameters": false,
+        "validAccepted": true,
+        "baselineAcceptedMalformed": true,
+        "candidateRejectedMalformed": true,
+        "nativeRejectedMalformed": true
+      },
+      {
+        "hash": "sha384",
+        "parameters": true,
+        "validAccepted": true,
+        "baselineAcceptedMalformed": true,
+        "candidateRejectedMalformed": true,
+        "nativeRejectedMalformed": true
+      },
+      {
+        "hash": "sha512",
+        "parameters": false,
+        "validAccepted": true,
+        "baselineAcceptedMalformed": true,
+        "candidateRejectedMalformed": true,
+        "nativeRejectedMalformed": true
+      },
+      {
+        "hash": "sha512",
+        "parameters": true,
+        "validAccepted": true,
+        "baselineAcceptedMalformed": true,
+        "candidateRejectedMalformed": true,
+        "nativeRejectedMalformed": true
+      }
+    ]
+  },
+  "workspaceAuditMetadata": {
+    "vulnerabilities": {
+      "info": 0,
+      "low": 0,
+      "moderate": 1,
+      "high": 2,
+      "critical": 0
+    },
+    "dependencies": 661,
+    "devDependencies": 0,
+    "optionalDependencies": 49,
+    "totalDependencies": 710
+  }
+}

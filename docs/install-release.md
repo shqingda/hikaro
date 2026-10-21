@@ -50,7 +50,7 @@ pnpm check:upgrade 3a7bc2b
 
 ## macOS arm64 候选分发包
 
-维护者运行 `pnpm release:pack`，从当前源码重新构建，生成 `artifacts/release/hikaro-0.1.0-darwin-arm64.tgz`、SHA-256 文件及 manifest。包包含 CLI/chunks/workers、已编译文件操作 helper、生产依赖的 npm-shrinkwrap 锁文件，不包含移动端、开发依赖或个人数据。依赖仍需联网下载，这不是内含 Node 的单文件离线程序。候选保留 private=true 防止误发布到 registry；只允许当前已验证的 darwin-arm64 构建目标。
+维护者运行 `pnpm release:pack`，从当前源码重新构建，生成 `artifacts/release/hikaro-0.1.0-darwin-arm64.tgz`、SHA-256 文件及 manifest。包包含 CLI/chunks/workers、已编译文件操作 helper、生产依赖的 npm-shrinkwrap 锁文件，以及带安全回移补丁的 sandbox-runtime/node-forge 依赖树，不包含移动端、开发依赖或个人数据。依赖仍需联网下载，这不是内含 Node 的单文件离线程序。候选保留 private=true 防止误发布到 registry；只允许当前已验证的 darwin-arm64 构建目标。
 
 用户在自己的安装目录安装：
 
@@ -60,7 +60,7 @@ npm install --engine-strict --prefix "$HOME/.local/share/hikaro-app" ./hikaro-0.
 "$HOME/.local/share/hikaro-app/node_modules/.bin/hikaro" --demo
 ```
 
-需要 Node 24.21+ 和 npm、rg；本机验收使用 Node 26。若 npm 提示安装脚本审批，检查并按其提示批准需要的原生依赖脚本。其他 Node 版本、无开发工具的全新机器、Gatekeeper 隔离属性及签名/公证尚需验收。SHA-256 用于检测内容变化，不提供发布者身份认证；只使用可信渠道获得的包与校验值。
+需要 Node 24.21+ 和 npm、rg；最低版本验收使用 Node 24.21.0。若 npm 提示安装脚本审批，检查并按其提示批准需要的原生依赖脚本。未覆盖的 Node 版本、无开发工具的全新机器、Gatekeeper 隔离属性及签名/公证尚需验收。SHA-256 用于检测内容变化，不提供发布者身份认证；只使用可信渠道获得的包与校验值。
 
 运行 `pnpm check:release artifacts/release/hikaro-0.1.0-darwin-arm64.tgz` 验收实际 tarball：独立安装前缀、空 npm 缓存、校验和、实际 bin 离线任务、已打包原生 helper 读取、由安装目录自己的 node-pty 启动 TUI 并正常退出。输出同名 `.validation.json`，不复用工作区 node_modules，不接触用户 home。构建或 README 改变后需重新打包并验收对应 SHA，旧验证不能覆盖新包。
 
@@ -68,4 +68,8 @@ npm install --engine-strict --prefix "$HOME/.local/share/hikaro-app" ./hikaro-0.
 
 ## 候选包安全检查
 
-`pnpm audit:release ARTIFACT.tgz` 审计实际包内的生产锁，结果绑定 SHA；`release:pack` 也会在打包前执行检查。high/critical 或无法取得有效审计结果会阻断，不代表历史候选包自动被批准。2026-10-21：最低 Node 24.21.0 安装运行通过，但 node-forge 高危公告尚未解决，当前候选不可作为正式安全验收通过的 release。见 [最低版本与安全记录](validation/node-minimum-security.md)。
+`pnpm audit:release ARTIFACT.tgz` 检查包内生产锁及实际捆绑的 node-forge Node 实现，结果绑定 SHA；`release:pack` 在打包前和打包后均执行检查。无法取得有效审计结果、未修复的 high/critical、新公告或补丁哈希不符都会阻断。
+
+node-forge 1.4.0 使用固定的上游 PR #1152 安全回移，版本号不变。源码通过 pnpm patchedDependencies 安装；候选包直接携带相同的 49 个 Node 源文件，安装时不需要再执行补丁。TUI 包不包含未修复的浏览器/Flash 预编译文件。原始 registry audit 仍显示该版本命中的 2 个 high 依赖节点（同一公告）；报告明确区分 `registryPassed: false` 与经过完整文件哈希核验的 `remediations`，没有忽略列表或降低审计级别。换版本或出现新公告必须重新评估。
+
+安装验收还会从安装目录实际解析 forge，验证源码一致性并运行 8 组正常/畸形签名回归。该补丁只覆盖此公告的 Node 实现，不代表移动端、浏览器 bundle 或所有发布门槛通过。见 [安全回移验收](validation/forge-backport.md)。

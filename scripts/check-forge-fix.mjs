@@ -1,4 +1,4 @@
-// Isolated candidate evaluation; never changes installed packages or audit policy.
+// Compare the installed backport with an isolated, hash-verified original.
 // Candidate: https://github.com/digitalbazaar/forge/pull/1152 (ceba344).
 import { createRequire } from "node:module";
 import { mkdtemp, cp, readFile, writeFile, rm, mkdir } from "node:fs/promises";
@@ -6,7 +6,9 @@ import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { createHash, generateKeyPairSync, verify } from "node:crypto";
 import assert from "node:assert/strict";
-const require = createRequire(import.meta.url);
+const require = createRequire(
+  process.argv[2] ? resolve(process.argv[2]) : import.meta.url,
+);
 const runtime = createRequire(require.resolve("@anthropic-ai/sandbox-runtime"));
 const source = dirname(runtime.resolve("node-forge/package.json"));
 const metadata = JSON.parse(
@@ -21,22 +23,24 @@ const temporary = await mkdtemp(join(tmpdir(), "hikaro-forge-fix-"));
 try {
   await cp(source, temporary, { recursive: true });
   const file = join(temporary, "lib/rsa.js");
-  const original = await readFile(file, "utf8");
-  const before = "obj.value.length !== 2) {";
+  const patched = await readFile(file, "utf8");
   assert.equal(
-    original.split(before).length,
-    2,
-    "Candidate patch context must match exactly once",
+    createHash("sha256").update(patched).digest("hex"),
+    "447c5441cea1b125e23661d7e27a8b1759cc3400241c0013b2d034b4ee1dbf50",
   );
-  const patched = original.replace(
-    before,
+  const original = patched.replace(
     "obj.value.length !== 2 ||\n            obj.value[0].value.length !== (('parameters' in capture) ? 2 : 1)) {",
+    "obj.value.length !== 2) {",
   );
-  await writeFile(file, patched);
-  const baseline = runtime("node-forge");
-  const candidate = createRequire(join(temporary, "package.json"))(
+  assert.equal(
+    createHash("sha256").update(original).digest("hex"),
+    "fd4740238145ec26470eb3f06a627c72039538ce1307dbdce40521f94dfd0a50",
+  );
+  await writeFile(file, original);
+  const baseline = createRequire(join(temporary, "package.json"))(
     "./lib/index.js",
   );
+  const candidate = runtime("node-forge");
   // Locally generated test key, never an external key or real credential.
   const keys = generateKeyPairSync("rsa", {
     modulusLength: 2048,
@@ -104,7 +108,7 @@ try {
     }
   const report = {
     status: "passed",
-    scope: "isolated candidate; production remains unpatched",
+    scope: "installed Node backport against isolated original",
     version: metadata.version,
     sourceSha256: createHash("sha256").update(original).digest("hex"),
     patchedSha256: createHash("sha256").update(patched).digest("hex"),

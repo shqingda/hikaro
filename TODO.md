@@ -441,3 +441,11 @@ pnpm exec vitest run tests/pty.test.ts -t 'critical TUI workflows'
 - [x] `hikaro --version` 及 5 项构建测试、类型检查、构建通过，Node 24/26 输出一致。
 - [ ] 安全回移需完成上游兼容回归、统一锁定与安装产物证明；当前 release 安全阻塞保持。
 - [证据](docs/validation/forge-reachability.md)。TUI 92%，移动端 35%，未到 95%。
+
+## 2026-10-21：node-forge 安全回移落地
+
+- [x] pnpm 固定补丁与分发包携带相同的 49 个 Node 源文件，不依赖 postinstall 打补丁；保留版本和原始 audit 告警。
+- [x] 上游兼容：Node 24/26 各 829 passing、4 原有 pending、0 failing；正常/畸形签名 8 组回归通过。
+- [x] 源码 frozen 安装、分发包禁用脚本安装、最低 Node 空缓存安装及真实 PTY 验收通过；类型检查、构建通过。
+- [ ] 继续真实模型、物理终端 IME、正式分发验收；没有公开发布。
+- [证据](docs/validation/forge-backport.md)。TUI 94%，移动端 35%，尚未到 95%。

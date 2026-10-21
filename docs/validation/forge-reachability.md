@@ -1,5 +1,7 @@
 # node-forge 可达性与候选修复（2026-10-21）
 
+> 后续状态：本记录中的“尚未修复”是当时结论。2026-10-21 后续已完成 Node 安全回移、上游兼容和分发安装验收，见 [当前记录](forge-backport.md)；原始 registry 告警仍保留。
+
 ## 当前边界
 
 TUI 的终端工具启动 packages/tools/src/sandbox-runner.mjs，唯一 sandbox-runtime 调用是固定配置的 initialize / wrapWithSandboxArgv / reset。allowedDomains 为空、不传用户配置、不启用 tlsTerminate/mitmProxy、不提供网络审批回调；普通沙箱命令不允许外连。显式 Full Access 是另外的已批准执行边界，不能用本结论为任意用户脚本背书。

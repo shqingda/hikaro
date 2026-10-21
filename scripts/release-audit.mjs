@@ -1,9 +1,10 @@
 import { execFileSync } from "node:child_process";
-import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { isMain } from "./bench-support.mjs";
+import { forgeProof, assessPatchedAudit, verifyForge } from "./forge-patch.mjs";
 
 export function assessAudit(result) {
   const counts = result.metadata?.vulnerabilities;
@@ -57,12 +58,47 @@ export async function auditArtifact(artifact) {
       JSON.parse(content.toString());
       await writeFile(join(directory, file), content);
     }
+    // Read only exact, reviewed paths; never extract arbitrary archive entries.
+    const entries = execFileSync("tar", ["-tzf", artifact], {
+      encoding: "utf8",
+      maxBuffer: 16 * 1024 * 1024,
+    })
+      .trim()
+      .split("\n");
+    const forgeEntries = entries.filter((entry) =>
+      entry.includes("/node-forge/"),
+    );
+    const expectedFiles = [
+      "package.json",
+      "LICENSE",
+      "README.md",
+      ...Object.keys(forgeProof.files).map((file) => "lib/" + file),
+    ];
+    const prefix = "package/node_modules/node-forge/";
+    for (const entry of forgeEntries) {
+      if (!expectedFiles.some((file) => entry === prefix + file))
+        throw Error(`Unexpected forge archive entry: ${entry}`);
+    }
+    if (new Set(forgeEntries).size !== forgeEntries.length)
+      throw Error("Duplicate forge archive entries");
+    for (const file of expectedFiles) {
+      const content = execFileSync("tar", ["-xOf", artifact, prefix + file], {
+        maxBuffer: 8 * 1024 * 1024,
+      });
+      const destination = join(directory, "node_modules/node-forge", file);
+      await mkdir(dirname(destination), { recursive: true });
+      await writeFile(destination, content);
+    }
+    await verifyForge(join(directory, "node_modules/node-forge"), {
+      distribution: true,
+    });
     const report = {
       artifact,
       sha256,
       measuredAt: new Date().toISOString(),
-      scope: "tarball production dependency lock",
-      ...auditDirectory(directory),
+      scope:
+        "tarball production dependency lock and bundled forge implementation",
+      ...(await assessPatchedAudit(auditDirectory(directory), directory)),
     };
     await writeFile(
       artifact + ".audit.json",
