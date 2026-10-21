@@ -16,6 +16,7 @@ export async function openChangeReview(
       after: string;
     }>;
     rollback(id: string, signal: AbortSignal): Promise<void>;
+    redo?(id: string, signal: AbortSignal): Promise<void>;
   },
 ) {
   const cwd = await realpath(source.cwd);
@@ -77,22 +78,29 @@ export async function openChangeReview(
         const action = await panel.readDocument(
           `${path} · ${entry.state}`,
           changeDiff(path, before, after),
-          entry.state === "committed",
+          entry.state === "reverted" && source.redo
+            ? [{ value: "redo", label: "Reapply this edit…" }]
+            : entry.state === "committed",
         );
-        if (action.value !== "rollback") continue;
+        if (action.value !== "rollback" && action.value !== "redo") continue;
+        const redo = action.value === "redo";
         const confirmed = await panel.choose(
-          "Confirm file rollback",
+          redo ? "Confirm reapply edit" : "Confirm file rollback",
           [
-            { value: "cancel", label: "Keep this change" },
+            {
+              value: "cancel",
+              label: redo ? "Keep current file" : "Keep this change",
+            },
             {
               value: "confirm",
-              label:
-                before === undefined
+              label: redo
+                ? "Reapply recorded contents"
+                : before === undefined
                   ? "Delete created file"
                   : "Restore previous contents",
             },
           ],
-          `${entry.path}\n${before === undefined ? "Removes this newly created file." : "Restores contents from before this edit."} Later edits cause a conflict and are preserved.`,
+          `${entry.path}\n${redo ? "Reapplies the recorded edit as a new change." : before === undefined ? "Removes this newly created file." : "Restores contents from before this edit."} Later edits cause a conflict and are preserved.`,
           undefined,
           {
             search: false,
@@ -103,9 +111,12 @@ export async function openChangeReview(
           },
         );
         if (confirmed.value !== "confirm") continue;
-        panel.progress("Rolling back…");
-        await source.rollback(selected, signal);
-        message = `Rolled back ${path}. ${before === undefined ? "Created file removed." : "Previous contents restored."}`;
+        panel.progress(redo ? "Reapplying…" : "Rolling back…");
+        if (redo) await source.redo!(selected, signal);
+        else await source.rollback(selected, signal);
+        message = redo
+          ? `Reapplied ${path}. A new change was recorded.`
+          : `Rolled back ${path}. ${before === undefined ? "Created file removed." : "Previous contents restored."}`;
         view.notice(message);
       } catch (error) {
         if (signal.aborted) throw error;

@@ -156,3 +156,29 @@ it("serializes competing rollbacks without applying the same change twice", asyn
   expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
   expect(await readFile(path, "utf8")).toBe("original");
 });
+
+it.each([false, true])(
+  "reapplies reverted changes as undoable new entries, preserving conflicts (created=%s)",
+  async (created) => {
+    const { journal, path, signal } = await fixture();
+    if (!created) await writeFile(path, "original");
+    await journal.update("session", path, signal, () => "changed");
+    const [entry] = await journal.list("session");
+    await expect(journal.redo("session", entry!.id, signal)).rejects.toThrow(
+      /unavailable/,
+    );
+    await journal.rollback("session", entry!.id, signal);
+    await journal.redo("session", entry!.id, signal);
+    expect(await readFile(path, "utf8")).toBe("changed");
+    const reapplied = (await journal.list("session")).find(
+      (e) => e.id !== entry!.id,
+    )!;
+    expect(reapplied.state).toBe("committed");
+    await journal.rollback("session", reapplied.id, signal);
+    await writeFile(path, "newer work");
+    await expect(journal.redo("session", entry!.id, signal)).rejects.toThrow(
+      /Preserve/,
+    );
+    expect(await readFile(path, "utf8")).toBe("newer work");
+  },
+);

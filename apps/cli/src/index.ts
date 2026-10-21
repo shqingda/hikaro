@@ -651,6 +651,7 @@ async function main() {
             detail: (id) => runtime.changes.detail(session.id, id),
             rollback: (id, signal) =>
               runtime.rollbackChange(session, id, signal),
+            redo: (id, signal) => runtime.redoChange(session, id, signal),
           });
           return;
         }

@@ -14,6 +14,7 @@ export const rpcMethods = [
   "changes.detail",
   "changes.diff",
   "changes.rollback",
+  "changes.redo",
   "execution.hold",
   "execution.release",
   "execution.read",

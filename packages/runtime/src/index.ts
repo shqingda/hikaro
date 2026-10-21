@@ -203,19 +203,30 @@ export class Runtime {
     return (this.changeJournal ??= new ChangeJournal(this.options.home!));
   }
   async rollbackChange(session: Session, id: string, signal: AbortSignal) {
+    return this.applyRecordedChange(session, id, signal, "rollback");
+  }
+  async redoChange(session: Session, id: string, signal: AbortSignal) {
+    return this.applyRecordedChange(session, id, signal, "redo");
+  }
+  private async applyRecordedChange(
+    session: Session,
+    id: string,
+    signal: AbortSignal,
+    action: "rollback" | "redo",
+  ) {
     await this.session(session.id);
     await this.planning.load(session.id, true);
     if (this.planning.get(session.id).active)
-      throw Error("Plan mode is read-only; rollback is unavailable");
+      throw Error(`Plan mode is read-only; ${action} is unavailable`);
     if ([...this.agents.values()].some((agent) => agent.busy))
-      throw Error("Finish or cancel running tasks before rollback.");
+      throw Error(`Finish or cancel running tasks before ${action}.`);
     const active = AbortSignal.any([
       signal,
       this.lifecycle.signal,
       AbortSignal.timeout(15000),
     ]);
     const lease = await this.store.acquireLease(session.id, randomUUID());
-    if (!lease) throw Error("Session is running elsewhere; rollback refused.");
+    if (!lease) throw Error(`Session is running elsewhere; ${action} refused.`);
     const note = (text: string) =>
       this.store.append(
         session.id,
@@ -227,19 +238,19 @@ export class Runtime {
       const { entry } = await this.changes.detail(session.id, id);
       active.throwIfAborted();
       await note(
-        `The user requested rollback of file change ${id} at ${entry.path}. If no result follows, inspect the file before continuing; the outcome is unknown.`,
+        `The user requested ${action} of file change ${id} at ${entry.path}. If no result follows, inspect the file before continuing; the outcome is unknown.`,
       );
       try {
-        await this.changes.rollback(session.id, id, active, async () => {
+        await this.changes[action](session.id, id, active, async () => {
           active.throwIfAborted();
           await this.store.assertLease(session.id, lease);
         });
         await note(
-          `File rollback completed: ${entry.path}. ${entry.before === null ? "The newly created file was removed." : "The contents before this edit were restored."} Read the file again before further changes.`,
+          `File ${action} completed: ${entry.path}. ${action === "redo" ? "The recorded edit was reapplied." : entry.before === null ? "The newly created file was removed." : "The contents before this edit were restored."} Read the file again before further changes.`,
         );
       } catch (error) {
         await note(
-          `File rollback did not complete cleanly: ${String(error)}. Inspect the file and change record before retrying.`,
+          `File ${action} did not complete cleanly: ${String(error)}. Inspect the file and change record before retrying.`,
         );
         throw error;
       }

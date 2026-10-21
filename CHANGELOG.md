@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased — change reapplication
+
+- TUI `/changes` can reapply a reverted edit after explicit confirmation. Reapplication refuses conflicting newer contents and creates a new undoable journal entry. Shared hosts advertise `changes.redo`; older hosts do not show this action.
+
 ## Unreleased — search and portable exports
 
 - TUI: `/search [TEXT]` searches the current session's complete message text in standalone and attached mode. Browse bounded result pages and open the original message in sections.

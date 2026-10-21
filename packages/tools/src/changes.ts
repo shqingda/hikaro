@@ -159,6 +159,35 @@ export class ChangeJournal {
     );
     if (entry) await this.saveRecord(session, { ...entry, state: "committed" });
   }
+  async redo(
+    session: string,
+    id: string,
+    signal: AbortSignal,
+    checkpoint?: () => Promise<void>,
+  ) {
+    const { entry, before, after } = await this.detail(session, id);
+    if (entry.state !== "reverted")
+      throw Error(`This change is ${entry.state}; redo is unavailable.`);
+    // Record reapplication as a new edit, so it can itself be undone and audited.
+    await this.update(
+      session,
+      entry.path,
+      signal,
+      (current) => {
+        if (current !== before)
+          throw Error(
+            "File changed after rollback. Preserve the newer work; redo refused.",
+          );
+        return after;
+      },
+      async () => {
+        await checkpoint?.();
+        if ((await this.record(session, id)).state !== "reverted")
+          throw Error("Change state changed; redo refused.");
+      },
+    );
+    return entry;
+  }
   async rollback(
     session: string,
     id: string,

@@ -299,6 +299,12 @@ export class AttachedWorkflows {
             signal.throwIfAborted();
             await this.request("changes.rollback", id, { id: changeId });
           },
+          redo: this.client.supports("changes.redo")
+            ? async (changeId, signal) => {
+                signal.throwIfAborted();
+                await this.request("changes.redo", id, { id: changeId });
+              }
+            : undefined,
         });
       } else {
         let token: string | undefined;

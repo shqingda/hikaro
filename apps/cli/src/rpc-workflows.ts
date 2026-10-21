@@ -192,11 +192,10 @@ export class RpcWorkflows {
         };
       }
       case "changes.rollback":
-        await this.runtime.rollbackChange(
-          session,
-          z.string().uuid().parse(p.id),
-          AbortSignal.timeout(15000),
-        );
+      case "changes.redo":
+        await this.runtime[
+          method === "changes.redo" ? "redoChange" : "rollbackChange"
+        ](session, z.string().uuid().parse(p.id), AbortSignal.timeout(15000));
         return { completed: true };
       case "execution.hold": {
         this.release(scope);
