@@ -37,3 +37,5 @@ TUI 当前主要验收平台为 macOS。移动端 M0 只读功能不能代替 M1
 候选包与空缓存安装证据：[分发包验收](validation/release-package.md)。尚未公开发布，不等同于所有环境可 release。
 
 最低 Node 24.21.0 安装运行已通过；node-forge 高危生产依赖尚无发布修复，当前阻断正式 release。见 [证据与门禁](validation/node-minimum-security.md)。进度保持 TUI 92%、移动端 35%。
+
+node-forge 当前沙箱路径的动态探针与上游候选补丁隔离测试已通过；生产修复尚未落地，仍阻断。另补 `hikaro --version`。见 [可达性记录](validation/forge-reachability.md)。

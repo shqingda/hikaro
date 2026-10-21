@@ -1,0 +1,73 @@
+{
+  "status": "passed",
+  "scope": "isolated candidate; production remains unpatched",
+  "version": "1.4.0",
+  "sourceSha256": "fd4740238145ec26470eb3f06a627c72039538ce1307dbdce40521f94dfd0a50",
+  "patchedSha256": "447c5441cea1b125e23661d7e27a8b1759cc3400241c0013b2d034b4ee1dbf50",
+  "cases": [
+    {
+      "hash": "sha1",
+      "parameters": false,
+      "validAccepted": true,
+      "baselineAcceptedMalformed": true,
+      "candidateRejectedMalformed": true,
+      "nativeRejectedMalformed": true
+    },
+    {
+      "hash": "sha1",
+      "parameters": true,
+      "validAccepted": true,
+      "baselineAcceptedMalformed": true,
+      "candidateRejectedMalformed": true,
+      "nativeRejectedMalformed": true
+    },
+    {
+      "hash": "sha256",
+      "parameters": false,
+      "validAccepted": true,
+      "baselineAcceptedMalformed": true,
+      "candidateRejectedMalformed": true,
+      "nativeRejectedMalformed": true
+    },
+    {
+      "hash": "sha256",
+      "parameters": true,
+      "validAccepted": true,
+      "baselineAcceptedMalformed": true,
+      "candidateRejectedMalformed": true,
+      "nativeRejectedMalformed": true
+    },
+    {
+      "hash": "sha384",
+      "parameters": false,
+      "validAccepted": true,
+      "baselineAcceptedMalformed": true,
+      "candidateRejectedMalformed": true,
+      "nativeRejectedMalformed": true
+    },
+    {
+      "hash": "sha384",
+      "parameters": true,
+      "validAccepted": true,
+      "baselineAcceptedMalformed": true,
+      "candidateRejectedMalformed": true,
+      "nativeRejectedMalformed": true
+    },
+    {
+      "hash": "sha512",
+      "parameters": false,
+      "validAccepted": true,
+      "baselineAcceptedMalformed": true,
+      "candidateRejectedMalformed": true,
+      "nativeRejectedMalformed": true
+    },
+    {
+      "hash": "sha512",
+      "parameters": true,
+      "validAccepted": true,
+      "baselineAcceptedMalformed": true,
+      "candidateRejectedMalformed": true,
+      "nativeRejectedMalformed": true
+    }
+  ]
+}

@@ -433,3 +433,11 @@ pnpm exec vitest run tests/pty.test.ts -t 'critical TUI workflows'
 - [x] 产物生产锁审计和打包前高危阻断门禁已验证；服务失败不能当作通过。
 - [ ] node-forge 高危 GHSA-86w9-cpqp-85rv 尚无发布修复；TUI 正式 release 被阻断。移动端另有 uuid/braces 公告，未伪称修复。
 - [验收记录](docs/validation/node-minimum-security.md)。TUI 92%，移动端 35%，未到 95%。
+
+## 2026-10-21：node-forge 可达性与版本查询
+
+- [x] 固定沙箱配置的真实读写/越界拒绝/网络拒绝路径通过 forge API 探针及正对照，未观察到 forge 调用。
+- [x] 上游 PR #1152 候选条件在临时副本中通过 8 组正常/畸形签名回归；没有改动生产依赖或豁免 audit。
+- [x] `hikaro --version` 及 5 项构建测试、类型检查、构建通过，Node 24/26 输出一致。
+- [ ] 安全回移需完成上游兼容回归、统一锁定与安装产物证明；当前 release 安全阻塞保持。
+- [证据](docs/validation/forge-reachability.md)。TUI 92%，移动端 35%，未到 95%。
