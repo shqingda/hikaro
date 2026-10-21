@@ -4,10 +4,10 @@
 
 | 产品 | 发布完成度估算 | 本轮变化 |
 | --- | --- | --- |
-| TUI | **94%** | node-forge 安全回移、上游兼容及最低 Node 分发安装通过；真实环境与正式分发待完成 |
+| TUI | **94%** | 安全回移、最低 Node 安装及真实订阅模型基础闭环通过；IME、异常场景与正式分发待完成 |
 | 移动端完整控制器 | **35%** | 本轮未修改或验收移动端，进度不变 |
 
-TUI 当前主要验收平台为 macOS。移动端 M0 只读功能不能代替 M1 审批、补充和停止闭环。仍未到 95%，没有完成真实模型、物理终端或真机发布验收。
+TUI 当前主要验收平台为 macOS。移动端 M0 只读功能不能代替 M1 审批、补充和停止闭环。仍未到 95%，真实订阅模型基础闭环已通过，完整异常场景、物理终端和真机发布验收尚未完成。
 
 ## TUI v0.1 的发布门槛
 
@@ -38,4 +38,6 @@ TUI 当前主要验收平台为 macOS。移动端 M0 只读功能不能代替 M1
 
 最低 Node 24.21.0 安装运行已通过。此前 node-forge 阻塞记录见 [历史证据](validation/node-minimum-security.md)；本轮完成固定安全回移、上游兼容及产物安装核验，见 [当前证据](validation/forge-backport.md)。TUI 94%、移动端 35%，未到 95%。
 
-node-forge 原始 registry audit 告警仍保留；只有实际 Node 代码完全匹配已验证的补丁时才能记录该公告已修复。真实模型、物理终端中文 IME 与正式分发仍未完成。此前探针范围见 [可达性记录](validation/forge-reachability.md)。
+node-forge 原始 registry audit 告警仍保留；只有实际 Node 代码完全匹配已验证的补丁时才能记录该公告已修复。真实模型异常场景、物理终端中文 IME 与正式分发仍未完成。此前探针范围见 [可达性记录](validation/forge-reachability.md)。
+
+真实订阅模型基础闭环已通过：[OAuth 实测与 IME 待验项](validation/live-model-ime.md)。不将源码 Runtime 的结果扩大为打包 CLI、物理 IME 或全部异常恢复场景通过。

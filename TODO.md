@@ -449,3 +449,11 @@ pnpm exec vitest run tests/pty.test.ts -t 'critical TUI workflows'
 - [x] 源码 frozen 安装、分发包禁用脚本安装、最低 Node 空缓存安装及真实 PTY 验收通过；类型检查、构建通过。
 - [ ] 继续真实模型、物理终端 IME、正式分发验收；没有公开发布。
 - [证据](docs/validation/forge-backport.md)。TUI 94%，移动端 35%，尚未到 95%。
+
+## 2026-10-21：真实订阅模型基础闭环
+
+- [x] 验收使用 xAI 现有订阅 OAuth 与正常刷新流程，移除错误的 API Key 前提；独立工作区/会话数据。
+- [x] grok-4.7 实际读取→修改→执行测试→查看 diff，5 次工具调用无错误，完成终态正确；测试和项目配置不变、无额外文件。
+- [x] 保留首次运行的沙箱拒绝与模型恢复证据；修正 fixture 缺少 package.json 后正常路径通过。
+- [ ] IME 等待人工结果；打包 CLI 订阅与真实异常恢复场景、正式分发仍待验收。
+- [证据](docs/validation/live-model-ime.md)。TUI 94%，移动端 35%，尚未到 95%。
