@@ -429,7 +429,7 @@ export class HikaroView {
         void this.answerDialog(undefined);
         return { consume: true };
       }
-      if (matchesKey(data, "ctrl+d") && !this.editor.getText()) {
+      if (matchesKey(data, "ctrl+d") && !this.dialog) {
         options.onExit();
         return { consume: true };
       }

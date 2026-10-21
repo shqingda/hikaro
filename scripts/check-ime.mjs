@@ -24,11 +24,15 @@ const resume = [
   "--cwd",
   cwd,
 ];
+console.log("输入法检查：这是独立的离线测试，不会使用你的个人会话或模型账号。");
 console.log(
-  "Offline IME acceptance. No personal sessions or model credentials are used.",
-);
-console.log(
-  "Keep this resume command for draft recovery:\n" +
+  "检查 5 项：\n" +
+    "1. 打 nihao，输入法小框还在列出汉字时，用回车结束选字：这一下不能同时发送消息。上屏的是汉字还是拼音由输入法决定；离开选字后，再按回车才发送。\n" +
+    "2. 输入 中文 abc 123 😀，左右移动、退格，看看是否删错字或光标错位。\n" +
+    "3. 粘贴两行文字，应保留换行，不自动发送。\n" +
+    "4. 缩窄终端窗口再拉宽，输入内容应完整。\n" +
+    "5. 输入 草稿恢复测试，先别发送，按 Ctrl+D 退出，再执行下面的命令，草稿应回来。\n\n" +
+    "草稿恢复命令：\n" +
     resume.map(quote).join(" "),
 );
 const child = spawn(
@@ -43,9 +47,10 @@ child.on("error", (error) => {
 child.on("exit", (code) => {
   process.exitCode = code ?? 1;
   console.log(
-    "\nResume to check the unsent draft:\n" + resume.map(quote).join(" "),
+    "\n复制这条命令，检查未发送的草稿是否恢复：\n" +
+      resume.map(quote).join(" "),
   );
   console.log(
-    "Report terminal/input-method versions and each check result; this launcher does not certify IME acceptance.",
+    "请反馈终端版本、输入法名称和 5 项的通过/失败。启动脚本本身不代表输入法检查通过。",
   );
 });
