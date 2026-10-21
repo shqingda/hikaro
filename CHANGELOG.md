@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased — search and portable exports
+
+- TUI: `/search [TEXT]` searches the current session's complete message text in standalone and attached mode. Browse bounded result pages and open the original message in sections.
+- TUI: `/export` saves stored message images beside Markdown using relative links. Copy the `.md.assets` directory with the Markdown file. Generic external attachments and tool artifacts are not yet bundled.
+- Mobile: task message search, paginated results and original-message reading are implemented. Type checks, reader tests and both platform bundles pass; native search interaction remains unverified.
+
 ## Unreleased — mobile companion
 
 - Read task images on demand with previous/next and zoom controls; browse recorded file changes and Unicode-safe, paged diffs. A negotiated read-only `changes.diff` method shares the TUI diff implementation. Reading clears on context loss and does not resume automatically. View-only host integration and native iOS image/diff/lifecycle acceptance pass.
