@@ -407,3 +407,7 @@ Necessary verification, without a full-suite run:
 Final original startup gate: **165.54 ms p95** (cold V8 cache, 3 warmups / 30 launches, warm OS caches), ordinary input **1.26 ms p95**, ready RSS **70.66 MiB p95**. The 10k harness passes all existing gates. Failed startup attempts, the shared-load baseline/candidate comparison and the reverted early-worker experiment are preserved in [the performance ledger](harness-performance.md). No successful measurement was used to erase a failure or weaken a threshold.
 
 C0 is still not complete as a whole: remote raw transport wiring, remaining client-facing session/history/attachment APIs and host/native lifecycle remain staged work. No native mobile application, signed mobile package, production relay, external provider or physical-device acceptance is claimed.
+
+## Mobile steering queue — 2026-10-21
+
+Next-turn instructions, queue editing/reordering/deletion, original-client recovery confirmation and receipt reconciliation are implemented. Sixteen distinct targeted cases, repository/mobile typechecks and iOS/Android Hermes exports passed. Native iOS submission, ordering, delete confirmation and release-on-close were verified in Codex's browser preview; automatic renewal no longer disables the editor. Native edit gestures, restore-confirmation interaction and physical-device distribution remain unqualified. See [the complete evidence and boundaries](validation/mobile-steering.md).

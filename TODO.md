@@ -514,3 +514,10 @@ pnpm exec vitest run tests/pty.test.ts -t 'critical TUI workflows'
 - [x] Codex 内置浏览器中的原生 iOS 验证：中文两行与 emoji 粘贴、点击发送一次、离线编辑、前后台/杀进程恢复、重连保留不自动发送及撤销清理；默认启动模拟器不再打开系统浏览器，另 5 项脚本回归通过。
 - [ ] 原生回车/软件键盘/IME、Android、生产 relay 和真机验收；下一模型轮 steering、图片/diff、通知和分发继续推进。
 - [验收证据](docs/validation/mobile-composer.md)。发布准备估算 TUI **98%**、移动端 **50%**。
+
+## 2026-10-21：手机补充指令队列
+
+- [x] 下一模型轮补充、提交方法持久化、回执核对不重发；管理页全文、编辑、置顶、删除与原身份恢复确认，host 再验权限。
+- [x] 16 项不同定向用例、根/移动类型检查和双平台 Hermes 导出通过。原生 iOS 补充一次、置顶、取消/确认删除、关闭释放后只消费一次通过；修复续期暂时禁用编辑器的问题。
+- [ ] 原生编辑手势、放弃修改与恢复确认、键盘/IME、Android、物理设备与生产分发仍待验。
+- [验收证据](docs/validation/mobile-steering.md)。发布准备估算 TUI **98%**、移动端 **55%**。

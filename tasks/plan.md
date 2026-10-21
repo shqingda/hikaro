@@ -4,6 +4,10 @@
 
 ## 执行顺序
 
+本轮 steering 自动回归和原生发送/置顶/删除/关闭释放通过，修复续期打断编辑，见 docs/validation/mobile-steering.md。下一步补齐原生审批、停止与编辑/恢复确认，再推进图片/diff 和通知；原生输入事件、Android、真机和分发继续保留待验，不能由 controller 测试代替。
+
+本轮接入移动 steering：沿用已有 steer / execution 协议和持久回执，在草稿中保存提交类型，添加独立队列管理模块及原生页面，支持查看全文、编辑、置顶、删除、恢复确认。管理页持有并续期 15 秒 host hold，退出/后台/换任务/失去权限释放或等待到期；异步晚到回复不得恢复旧页面。定向测试为 mobile-composer、mobile-steering 和 mobile-controller 中新增 steering 场景，后者是唯一实际 host E2E 文件；完成根/移动类型检查及双平台导出。开发预览只复用现有设备与 Codex 内置浏览器，不把导出当作原生验收。
+
 模拟器预览误开系统 Chrome 已修复：默认不调用 macOS open，显式 `--open-browser` 才打开系统浏览器，5 项定向测试通过。已在 Codex 内置浏览器操作现有 iOS App，完成中文多行粘贴、显式发送、离线编辑、前后台及杀进程恢复、重连不发送和撤销清理。记录证据并审查后提交推送。
 
 移动端发送与离线草稿已实现，自动回归与上述原生 iOS 子集通过，见 `docs/validation/mobile-composer.md`。预览键盘事件尚未可靠送达，回车、软件键盘和 IME 不计通过；下一轮继续键盘路径与 steering 控制。生产 relay、Android、真机和签名验收继续保留，不将开发隧道、模拟器或 controller fixture 当作这些验收。
