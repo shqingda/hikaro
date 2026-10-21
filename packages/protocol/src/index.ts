@@ -19,6 +19,7 @@ export const isControlMethod = (method: string) =>
     "hello",
     "command.receipt",
     "cancel",
+    "run.cancel",
     "tool.manual",
     "approval.respond",
     "questions.respond",

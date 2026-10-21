@@ -25,6 +25,7 @@ import {
   rpcReadMethods,
   HelloParams,
   rpcCapabilities,
+  RunCancelParams,
 } from "../../../packages/protocol/src/contracts.ts";
 const integer = (
   value: unknown,
@@ -394,6 +395,7 @@ export async function serveRpc(
             "prompt",
             "steer",
             "cancel",
+            "run.cancel",
             "tool.manual",
             "plugins.invoke",
           ].includes(command.method) ||
@@ -965,6 +967,27 @@ export async function serveRpc(
           cancel(state);
           result = {};
           break;
+        case "run.cancel": {
+          const { sessionId, runId } = RunCancelParams.parse(p);
+          const agent = state.agent;
+          if (!agent || state.session?.id !== sessionId)
+            throw Error("Command must target the selected session");
+          const current = agent.snapshot();
+          if (
+            !current.busy ||
+            current.runStatus !== "running" ||
+            current.runId !== runId
+          )
+            throw Error(
+              "Run is no longer active; refresh before deciding again",
+            );
+          // Do not yield between checking the run and aborting it. Scope-wide
+          // cancellation could also stop unrelated work in another session.
+          agent.cancel();
+          await finish("completed", { sessionId, runId });
+          result = { accepted: true, runId };
+          break;
+        }
         case "approval.respond": {
           const approval = approvals.get(z.string().parse(p.id));
           if (!approval)
@@ -1007,6 +1030,7 @@ export async function serveRpc(
       }
       if (
         accepted &&
+        !settled &&
         command.method !== "prompt" &&
         command.method !== "plan.execute" &&
         command.method !== "session.compact"
@@ -1042,6 +1066,7 @@ export async function serveRpc(
         // reserving space for cancellation, approval and detach replies.
         const critical = [
           "cancel",
+          "run.cancel",
           "approval.respond",
           "questions.respond",
           "client.detach",

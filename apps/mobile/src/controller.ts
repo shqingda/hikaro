@@ -1,6 +1,7 @@
 import * as z from "zod";
 import {
   rpcReadMethods,
+  RunCancelResult,
   type Permission,
 } from "../../../packages/protocol/src/contracts.ts";
 import type {
@@ -71,6 +72,7 @@ const allowed = new Set([
   "session.resume",
   "command.receipt",
   "approval.respond",
+  "run.cancel",
 ]);
 export type MobileState = {
   phase:
@@ -108,6 +110,7 @@ export type MobileState = {
   error: string | null;
   unknown: number;
   sessionRole: ExecutionState["sessionRole"];
+  canStopRun: boolean;
   approvals: Permission[];
   receipts: CommandReceipt[];
   actionPending: string | null;
@@ -142,6 +145,7 @@ const empty = (phase: MobileState["phase"]): MobileState => ({
   error: null,
   unknown: 0,
   sessionRole: null,
+  canStopRun: false,
   approvals: [],
   receipts: [],
   actionPending: null,
@@ -207,6 +211,7 @@ export class MobileController {
       contentError: null,
       approvals: [],
       sessionRole: null,
+      canStopRun: false,
       actionPending: null,
       actionNotice: null,
     };
@@ -377,9 +382,16 @@ export class MobileController {
             runId: s.runId,
             runStatus: s.runStatus,
             sessionRole: s.sessionRole,
+            canStopRun:
+              s.canAct &&
+              client.supports("run.cancel") &&
+              s.busy &&
+              s.runStatus === "running" &&
+              !!s.runId &&
+              ["owner", "control"].includes(s.sessionRole ?? ""),
             approvals: s.canAct ? s.approvals : [],
-            receipts: client.receipts.filter(
-              (r) => r.method === "approval.respond",
+            receipts: client.receipts.filter((r) =>
+              ["approval.respond", "run.cancel"].includes(r.method),
             ),
             error: null,
             unknown: client.receipts.filter(
@@ -557,6 +569,60 @@ export class MobileController {
         this.update({
           actionNotice:
             "决定未确认或已失效。请核对回执与电脑状态，不会自动重发。",
+        });
+      throw error;
+    } finally {
+      if (epoch === this.epoch) this.update({ actionPending: null });
+    }
+  }
+  async stopRun(sessionId: string, runId: string) {
+    const client = this.client,
+      epoch = this.epoch,
+      state = client?.state;
+    if (
+      !client ||
+      !state?.canAct ||
+      !["owner", "control"].includes(state.sessionRole ?? "")
+    ) {
+      this.update({
+        actionNotice: "请先恢复连接，并确认电脑已授予当前任务的控制权限。",
+      });
+      throw Error("Current session control permission required");
+    }
+    if (!client.supports("run.cancel")) {
+      this.update({
+        actionNotice: "请更新电脑上的 Hikaro 后，再从手机停止运行。",
+      });
+      throw Error("Host does not support run cancellation");
+    }
+    if (
+      state.session?.id !== sessionId ||
+      state.runId !== runId ||
+      !state.busy ||
+      state.runStatus !== "running"
+    ) {
+      this.update({
+        actionNotice: "这次运行已结束或任务已变化，原停止确认已失效。",
+      });
+      throw Error("Run confirmation expired");
+    }
+    if (this.value.actionPending) throw Error("An operation is pending");
+    this.update({ actionPending: runId, actionNotice: "正在发送停止请求…" });
+    try {
+      const result = RunCancelResult.parse(
+        await client.request("run.cancel", { sessionId, runId }),
+      );
+      if (result.runId !== runId)
+        throw Error("Stop receipt does not match the requested run");
+      if (epoch === this.epoch)
+        this.update({
+          actionNotice: "电脑已收到停止请求，实际终态以运行状态为准。",
+        });
+    } catch (error) {
+      if (epoch === this.epoch)
+        this.update({
+          actionNotice:
+            "停止结果未确认或目标已失效。请核对回执与运行状态，不会自动重发。",
         });
       throw error;
     } finally {

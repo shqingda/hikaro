@@ -63,6 +63,9 @@ export class ClientConnection {
   get receipts() {
     return this.view.receipts;
   }
+  supports(method: RpcMethod): boolean {
+    return this.view.supports(method);
+  }
   subscribe(fn: () => void) {
     this.listeners.add(fn);
     return () => {
@@ -183,6 +186,7 @@ export class ClientConnection {
       "session.current",
       "command.receipt",
       "cancel",
+      "run.cancel",
       "approval.respond",
     ].includes(method);
     // A prompt acknowledgement can precede durable run completion. Refresh old

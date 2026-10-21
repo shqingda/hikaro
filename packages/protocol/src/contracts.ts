@@ -50,6 +50,7 @@ export const rpcMethods = [
   "prompt",
   "steer",
   "cancel",
+  "run.cancel",
   "approval.respond",
   "client.detach",
 ] as const;
@@ -108,6 +109,12 @@ export function rpcCapabilities(sharedHost = false) {
   };
 }
 const id = z.string().check(z.minLength(1)).check(z.maxLength(128));
+export const RunCancelParams = z.object({ sessionId: id, runId: id });
+/** Acceptance records a stop request; the run's terminal event proves its outcome. */
+export const RunCancelResult = z.object({
+  accepted: z.literal(true),
+  runId: id,
+});
 const sequence = z.int().check(z.gte(0)).check(z.lte(Number.MAX_SAFE_INTEGER));
 export const HelloResult = z.object({
   protocolVersion: z.literal(protocolVersion),

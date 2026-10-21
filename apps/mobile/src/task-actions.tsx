@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { View, Text } from "react-native";
+import { View, Text, Alert } from "react-native";
 import { useMobile } from "./provider";
 import { Action, Note } from "./ui";
 import { colors, readable } from "./theme";
@@ -21,8 +21,39 @@ export function TaskActions() {
     <View style={{ gap: 12 }}>
       {!canControl && (
         <Note>
-          当前仅可查看。审批需要电脑授予这项任务的控制权限，并保持连接。
+          当前仅可查看。审批和停止需要电脑授予这项任务的控制权限，并保持连接。
         </Note>
+      )}
+      {canControl && state.busy && state.runStatus === "running" && (
+        <View style={{ gap: 8 }}>
+          <Action
+            title="停止这次运行"
+            quiet
+            disabled={!state.canStopRun || !!state.actionPending}
+            onPress={() => {
+              const sessionId = state.session?.id,
+                runId = state.runId;
+              if (!sessionId || !runId) return;
+              Alert.alert(
+                "停止这次运行？",
+                "将请求停止当前任务的运行并清除该任务的待发消息。已经完成的文件修改不会撤销。",
+                [
+                  { text: "继续运行", style: "cancel" },
+                  {
+                    text: "停止",
+                    style: "destructive",
+                    onPress: () => {
+                      void controller.stopRun(sessionId, runId).catch(() => {});
+                    },
+                  },
+                ],
+              );
+            }}
+          />
+          {!state.canStopRun && (
+            <Note>请更新电脑上的 Hikaro 后，再从手机停止运行。</Note>
+          )}
+        </View>
       )}
       {state.approvals.map((approval) => (
         <View
@@ -101,10 +132,11 @@ export function TaskActions() {
             accessibilityRole="header"
             style={{ color: colors.label, fontSize: 16 }}
           >
-            本设备审批回执
+            本设备操作回执
           </Text>
           {state.receipts.slice(-8).map((receipt) => (
             <Note key={receipt.id}>
+              {receipt.method === "run.cancel" ? "停止" : "审批"} ·{" "}
               {receipts[receipt.status]} · {receipt.id}
             </Note>
           ))}

@@ -465,3 +465,11 @@ pnpm exec vitest run tests/pty.test.ts -t 'critical TUI workflows'
 - [x] 根目录及移动端类型检查、iOS／Android 生产 JS 导出通过。
 - [ ] 原生界面点击、真实 relay 与真机生命周期验收；发送、按运行身份停止与持久草稿仍待补齐。
 - [证据](docs/validation/mobile-approvals.md)。TUI 94%，移动端 40%，尚未到 95%。
+
+## 2026-10-21：移动端按运行停止
+
+- [x] 系统确认绑定任务/运行 ID，host 持久认领后复核目标；旧确认不能停止新运行，旧 host 不降级为宽泛取消。
+- [x] 实际共享 host 与 shell 验证进程退出和 cancelled 终态；丢失停止回复后只查回执，不重发。
+- [x] 32 项不同定向用例通过；根目录/移动类型检查、CLI 构建和移动双平台 JS 导出通过。
+- [ ] 原生确认框操作、真实 relay 和真机验收；补充消息、离线草稿仍待完成。
+- [证据](docs/validation/mobile-stop.md)。TUI 94%，移动端 45%，尚未到 95%。

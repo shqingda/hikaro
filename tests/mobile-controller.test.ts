@@ -27,6 +27,7 @@ function fixture(
   },
   content?: (params: any) => Promise<unknown>,
   snapshotPatch: Record<string, unknown> = {},
+  capabilities = rpcCapabilities(true),
 ) {
   const host = createIdentity(),
     device = createIdentity();
@@ -91,7 +92,7 @@ function fixture(
               : hooks
                 ? hooks.request(frame)
                 : frame.method === "hello"
-                  ? rpcCapabilities(true)
+                  ? capabilities
                   : frame.method === "session.current"
                     ? {
                         session: selected,
@@ -125,7 +126,9 @@ function fixture(
                           }
                         : frame.method === "session.resume"
                           ? (selected = session)
-                          : { receipt: null };
+                          : frame.method === "run.cancel"
+                            ? { accepted: true, runId: frame.params.runId }
+                            : { receipt: null };
           void Promise.resolve(rpcResult).then(
             (result) => {
               if (dropMethod === frame.method) {
@@ -246,6 +249,52 @@ it("requires current control authority for approvals and never sends expired or 
     app.dispose();
   }
 });
+it("stops only the confirmed current run and never falls back to legacy cancellation", async () => {
+  const snapshot = {
+    sessionRole: "control",
+    runId: "run-2",
+    runStatus: "running",
+    busy: true,
+  };
+  const f = fixture(undefined, undefined, snapshot);
+  const app = new MobileController(f.store, f.options);
+  const old = fixture(undefined, undefined, snapshot, {
+    ...rpcCapabilities(true),
+    methods: rpcCapabilities(true).methods.filter(
+      (method) => method !== "run.cancel",
+    ),
+  });
+  const legacy = new MobileController(old.store, old.options);
+  try {
+    app.review(f.uri());
+    await app.confirm();
+    await vi.waitFor(() => expect(app.state.phase).toBe("connected"));
+    expect(app.state.canStopRun).toBe(true);
+    await expect(app.stopRun("s1", "run-1")).rejects.toThrow(/expired/i);
+    await expect(app.stopRun("other", "run-2")).rejects.toThrow(/expired/i);
+    expect(f.sent.some((frame) => frame.method === "run.cancel")).toBe(false);
+    const stopping = app.stopRun("s1", "run-2");
+    await expect(app.stopRun("s1", "run-2")).rejects.toThrow(/pending/i);
+    await stopping;
+    expect(app.state.runStatus).toBe("running"); // A receipt cannot invent a terminal event.
+    expect(
+      f.sent.filter((frame) => frame.method === "run.cancel"),
+    ).toMatchObject([{ params: { sessionId: "s1", runId: "run-2" } }]);
+    legacy.review(old.uri());
+    await legacy.confirm();
+    await vi.waitFor(() => expect(legacy.state.phase).toBe("connected"));
+    expect(legacy.state.canStopRun).toBe(false);
+    await expect(legacy.stopRun("s1", "run-2")).rejects.toThrow(/support/i);
+    expect(
+      old.sent.some((frame) => ["run.cancel", "cancel"].includes(frame.method)),
+    ).toBe(false);
+    expect(legacy.state.actionNotice).toContain("更新电脑");
+  } finally {
+    app.dispose();
+    legacy.dispose();
+  }
+});
+
 it("clears full-message pages on close, selection and background, fencing late responses", async () => {
   let resolve!: (page: unknown) => void;
   let delayed = false;
@@ -515,7 +564,7 @@ it("restores the same granted host task after a lost selection acknowledgement, 
   }
 }, 20000);
 
-it("arbitrates mobile approval with a real host, reconciles a lost decision reply, and rejects revoked control", async () => {
+it("arbitrates approvals and run-specific stops with a real host, reconciling lost replies without replay", async () => {
   const home = await mkdtemp(join(tmpdir(), "hikaro-mobile-control-"));
   const cwd = join(home, "workspace");
   await mkdir(cwd);
@@ -591,6 +640,54 @@ it("arbitrates mobile approval with a real host, reconciles a lost decision repl
     });
     await vi.waitFor(() => expect(app.state.sessionRole).toBe("view"));
     await expect(app.respondApproval(next, true)).rejects.toThrow(/control/);
+    await expect(app.stopRun(session.id, "expired")).rejects.toThrow(/control/);
+    await local.request("session.access", {
+      deviceId: f.pairing.deviceId,
+      role: "control",
+    });
+    const running = local.request("tool.manual", {
+      command:
+        "printf '%s' $$ > shell.pid; printf started > started.txt; sleep 30",
+      unrestricted: true,
+    });
+    void running.catch(() => {}); // The assertion below still observes failures; cleanup may close the connection first.
+    await vi.waitFor(() => expect(app.state.approvals).toHaveLength(1));
+    await app.respondApproval(app.state.approvals[0]!.id, true);
+    await vi.waitFor(async () =>
+      expect(await readFile(join(cwd, "started.txt"), "utf8")).toBe("started"),
+    );
+    const shellPid = Number(await readFile(join(cwd, "shell.pid"), "utf8"));
+    expect(Number.isSafeInteger(shellPid) && shellPid > 1).toBe(true);
+    expect(() => process.kill(shellPid, 0)).not.toThrow();
+    const runId = app.state.runId!;
+    expect(app.state.canStopRun).toBe(true);
+    f.dropReply("run.cancel");
+    await expect(app.stopRun(session.id, runId)).rejects.toThrow(/unknown/i);
+    expect(await running).toMatchObject({ isError: true });
+    await vi.waitFor(() => expect(app.state.phase).toBe("connected"));
+    await vi.waitFor(() => expect(app.state.runStatus).toBe("cancelled"));
+    await vi.waitFor(() => expect(app.state.unknown).toBe(0));
+    expect(() => process.kill(shellPid, 0)).toThrow();
+    expect(
+      f.sent.filter((frame) => frame.method === "run.cancel"),
+    ).toHaveLength(1);
+    expect(
+      app.state.receipts.find((r) => r.method === "run.cancel"),
+    ).toMatchObject({ status: "completed", runId });
+    const following = command();
+    void following.catch(() => {});
+    await vi.waitFor(() => expect(app.state.approvals).toHaveLength(1));
+    const nextRun = app.state.runId!;
+    expect(nextRun).not.toBe(runId);
+    await expect(app.stopRun(session.id, runId)).rejects.toThrow(/expired/);
+    await expect(
+      local.request("run.cancel", { sessionId: session.id, runId }),
+    ).rejects.toThrow(/no longer active/);
+    expect(app.state.runStatus).toBe("running");
+    expect(app.state.approvals).toHaveLength(1);
+    await app.stopRun(session.id, nextRun);
+    expect(await following).toMatchObject({ isError: true });
+    await vi.waitFor(() => expect(app.state.runStatus).toBe("cancelled"));
   } finally {
     app.dispose();
     local.close();
