@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — mobile companion
+
+- Send requests from a native multiline editor and queue them while the computer is busy.
+- Save task drafts locally, including offline editing and reopening. Connection recovery never automatically sends drafts.
+- Preserve text and command identity until acceptance is confirmed; reconcile lost replies without replaying requests. Removing a pairing clears its drafts.
+- Controller integration with a real host and both platform exports passed. Native iOS multiline paste, explicit send, offline draft editing, background/process recovery and reconnection without replay passed in the existing simulator. Keyboard/IME, Android, physical devices and signed distribution remain unqualified.
+- `pnpm dev:sim` starts or reuses the simulator and preview without opening the system browser. Open the printed URL in Codex; `--open-browser` explicitly opts into the system browser.
+
 ## 0.1.0 — release candidate, not yet published
 
 Initial supported host: macOS arm64, Node 24.21 or later. The current distribution is an npm tarball; Node, npm and `rg` are external prerequisites. Other host platforms are not release-qualified. The mobile companion is tracked separately and is not part of this TUI release.

@@ -4,7 +4,9 @@
 
 ## 执行顺序
 
-下一轮实施移动端发送与离线草稿，完整契约见 `docs/specs/mobile-composer.md`：独立模块承接按身份/任务保存、离线重开、稳定发送 ID、未知结果只核对不重发；controller/原生编辑器/SQLite 同时接入。先定向测试，再唯一 mobile-controller 实际 host 集成场景，必要类型检查和双平台导出。不能用只有存储代码或仅能查看的 UI 代替可实际发送的闭环。
+模拟器预览误开系统 Chrome 已修复：默认不调用 macOS open，显式 `--open-browser` 才打开系统浏览器，5 项定向测试通过。已在 Codex 内置浏览器操作现有 iOS App，完成中文多行粘贴、显式发送、离线编辑、前后台及杀进程恢复、重连不发送和撤销清理。记录证据并审查后提交推送。
+
+移动端发送与离线草稿已实现，自动回归与上述原生 iOS 子集通过，见 `docs/validation/mobile-composer.md`。预览键盘事件尚未可靠送达，回车、软件键盘和 IME 不计通过；下一轮继续键盘路径与 steering 控制。生产 relay、Android、真机和签名验收继续保留，不将开发隧道、模拟器或 controller fixture 当作这些验收。
 
 当前轮对已通过 CI 的 cf57c46 同一 tarball（SHA 4fc18e9c33251a7540c6d9c2dea0e337db84b75df0d7757784f7d91d49f6338d）运行唯一 `check-live-release.mjs` 订阅 E2E。沿用正常 OAuth，不要求 API Key；通过后核对 SHA 并更新 draft 分发附件与记录，再下载校验。此轮不重复安装 E2E、全量检查或基准；随后切入移动端发送/持久草稿，保留完整成品目标。
 
