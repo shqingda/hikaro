@@ -6,4 +6,10 @@
 
 本机 macOS arm64 / Node 26.12.0 首次执行通过，包 SHA-256 `178737523dd991898cc70abbbc4e8894e539b81b99bed66150e18f55b5413d84`；本机 manifest 标记 dirty，因为打包时验收脚本与文档还未提交，不能冒充干净 CI 来源。新 helper 和入口语法检查通过，打包重新构建并执行安全门禁。没有增加依赖或运行其他 E2E、全量测试、性能基准。
 
-干净 macOS 最低 Node CI 待执行，成功后以其 manifest / 安装报告绑定正式候选的 SHA。此前 b08f160 分发草稿暂保持原样，不混用旧订阅报告证明新包通过。此检查使用 demo provider，不替代真实订阅或物理输入法；用户五项人工结果单独见[物理终端记录](physical-terminal.md)。
+## 干净机器结果
+
+[GitHub Actions 39594606808](https://github.com/shqingda/hikaro/actions/runs/39594606808) 全部通过：macOS arm64 新 VM、最低 Node 24.21.0、空 pnpm store。类型检查、工作区上下文和 steering 定向测试、发布/安全契约、打包审计、空 npm 缓存安装及上述包内恢复检查全部成功。没有额外启动其他 E2E。
+
+候选来自干净提交 `cf57c46d7e9da38bcbcca8c38e42668500543809`（manifest `dirty: false`），SHA-256 为 `4fc18e9c33251a7540c6d9c2dea0e337db84b75df0d7757784f7d91d49f6338d`。下载到本机 artifacts/ci-release-cf57c46 后 `shasum -a 256 -c` 通过；manifest 包含新增 `dist/pending-steering.mjs`，并与[CI 安装报告](release-recovery-install.json)的 SHA 相同。
+
+此前 b08f160 分发草稿暂保持原样，不混用旧订阅报告证明新包通过。下一步对本次 CI 的同一 tarball 进行订阅模型验收，再更新分发草稿。此检查使用 demo provider，不替代真实订阅或物理输入法；用户五项人工结果单独见[物理终端记录](physical-terminal.md)。

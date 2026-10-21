@@ -1,0 +1,35 @@
+{
+  "status": "passed",
+  "sha256": "4fc18e9c33251a7540c6d9c2dea0e337db84b75df0d7757784f7d91d49f6338d",
+  "artifact": "/Users/runner/work/hikaro/hikaro/artifacts/release/hikaro-0.1.0-darwin-arm64.tgz",
+  "platform": "darwin",
+  "arch": "arm64",
+  "node": "v24.21.0",
+  "nodeExecutable": "/Users/runner/hostedtoolcache/node/24.21.0/arm64/bin/node",
+  "emptyNpmCache": true,
+  "forge": {
+    "version": "1.4.0",
+    "rsaSha256": "447c5441cea1b125e23661d7e27a8b1759cc3400241c0013b2d034b4ee1dbf50",
+    "verifiedNodeFiles": 49
+  },
+  "checks": [
+    "artifact checksum",
+    "npm install --engine-strict",
+    "installed forge complete Node implementation matches source patch",
+    "installed forge accepts valid signatures and rejects malformed DigestAlgorithm (8 cases)",
+    "installed bin version",
+    "installed bin demo prompt",
+    "packaged native file helper read",
+    "installed node-pty TUI startup and clean exit",
+    "installed TUI immediate Ctrl+D flush and --continue multiline draft recovery",
+    "installed host SIGKILL and pending steering persistence",
+    "installed attached TUI explicit recovery confirmation without starting a task",
+    "installed provider receives confirmed steering once and leaves unconfirmed text pending"
+  ],
+  "limitations": [
+    "runner environment recorded by CI; local runs use the current developer machine",
+    "real provider and Keychain not exercised",
+    "not signed/notarized or publicly published"
+  ],
+  "finishedAt": "2026-10-21T11:48:54.500Z"
+}
