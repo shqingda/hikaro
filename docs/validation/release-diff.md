@@ -7,7 +7,15 @@
 - [CI 39620050563](https://github.com/shqingda/hikaro/actions/runs/39620050563) 通过：干净 macOS arm64、最低 Node 24.21.0、空 pnpm store、生产安全检查、空 npm 缓存安装及同一安装 E2E。
 - CI 来源 `e0fb56a958372703cd1ea72b78caeeeb1d594c2b`，manifest `dirty: false`。下载产物 SHA `01d0bd6c9fc45481bceb01a5db9e1472ad74a029436c347f1669fd8647dd7295`，与校验文件、manifest 和[安装报告](release-diff-install.json)全部一致。
 
-新候选尚未完成同包真实订阅复验，分发草稿继续保留已验证的 cf57c46；不得用旧订阅报告冒充新包证据。物理辅助技术与正式发布也仍待完成。发布准备估算保持 TUI 98%、移动端 65%。
+新候选随后完成下列同包订阅复验。物理辅助技术与正式发布仍待完成。发布准备估算保持 TUI 98%、移动端 65%。
+
+## 同包订阅与草稿更新
+
+对 CI 下载的同一 SHA 运行现有 `check-live-release.mjs`，正常订阅 OAuth 首次通过，无需 API Key。实际模型读文件、修改、执行测试与 diff 均成功；拒绝审批不产生目标文件，Ctrl+C 后真实 shell 退出且运行 cancelled；等待审批时 SIGKILL 后恢复为 unknown，未执行未批准命令，明确新请求能继续。
+
+仅测试进程内注入断网、429、实际流中断和挂起取消，四类故障均可见终止、不自动重发，各自后续明确订阅请求成功。[同包报告](release-diff-subscription.json)的 SHA 与 CI 安装报告一致。没有重跑安装 E2E、全量测试或性能基准。
+
+[分发草稿](https://github.com/shqingda/hikaro/releases/tag/untagged-21916d3e014efb690aca)更新到 e0fb56a，保持 draft。七份附件回下载后与已验证来源逐字节核对，tarball 校验和通过；旧候选和报告仍保留在本机原目录。完整成品待办没有随候选更新而关闭。
 
 ## 手机键盘环境
 
