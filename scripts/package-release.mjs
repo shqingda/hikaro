@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, cp, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createHash } from "node:crypto";
+import { auditDirectory } from "./release-audit.mjs";
 import { isMain } from "./bench-support.mjs";
 
 export function releaseManifest(source, platform, arch) {
@@ -70,6 +71,15 @@ await chmod(join(dirname(require.resolve('node-pty/package.json')), 'prebuilds',
       join(stage, "package-lock.json"),
       join(stage, "npm-shrinkwrap.json"),
     );
+    const audit = auditDirectory(stage);
+    await writeFile(
+      join(output, "package-audit.json"),
+      JSON.stringify(audit, null, 2) + "\n",
+    );
+    if (!audit.passed)
+      throw Error(
+        "Release blocked: high/critical production dependency vulnerabilities; see artifacts/release/package-audit.json",
+      );
     const packed = JSON.parse(
       execFileSync("npm", ["pack", "--json", "--pack-destination", output], {
         cwd: stage,

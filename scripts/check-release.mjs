@@ -17,6 +17,15 @@ import assert from "node:assert/strict";
 const exec = promisify(execFile);
 if (!process.argv[2])
   throw Error("Usage: node scripts/check-release.mjs ARTIFACT.tgz");
+// The bin shebang and npm must use the runtime being evaluated.
+const childNode = (
+  await exec("node", ["-p", "process.execPath"])
+).stdout.trim();
+assert.equal(
+  await realpath(childNode),
+  await realpath(process.execPath),
+  "PATH node differs from validation runtime",
+);
 const artifact = resolve(process.argv[2]);
 const expected = (await readFile(artifact + ".sha256", "utf8")).split(/\s/)[0];
 const sha256 = createHash("sha256")
@@ -126,6 +135,7 @@ try {
     platform: process.platform,
     arch: process.arch,
     node: process.version,
+    nodeExecutable: process.execPath,
     emptyNpmCache: true,
     checks: [
       "artifact checksum",

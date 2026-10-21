@@ -426,3 +426,10 @@ pnpm exec vitest run tests/pty.test.ts -t 'critical TUI workflows'
 - [x] 空 npm 缓存与独立目录安装后，离线任务、原生文件读取、真实 TUI 启停通过。
 - [ ] 最低 Node 版本/干净机器、真实模型/物理终端、依赖安全审计、签名/公证和公开分发仍待完成。
 - [验收证据](docs/validation/release-package.md)。TUI 92%，移动端 35%，未到 95%。
+
+## 2026-10-21：最低 Node 与生产依赖
+
+- [x] 官方校验过的 Node 24.21.0：实际候选包空缓存安装、离线任务、原生读取与 TUI 启停通过，子进程 Node 路径一致。
+- [x] 产物生产锁审计和打包前高危阻断门禁已验证；服务失败不能当作通过。
+- [ ] node-forge 高危 GHSA-86w9-cpqp-85rv 尚无发布修复；TUI 正式 release 被阻断。移动端另有 uuid/braces 公告，未伪称修复。
+- [验收记录](docs/validation/node-minimum-security.md)。TUI 92%，移动端 35%，未到 95%。

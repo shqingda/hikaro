@@ -4,7 +4,7 @@
 
 | 产品 | 发布完成度估算 | 本轮变化 |
 | --- | --- | --- |
-| TUI | **92%** | macOS arm64 候选分发包及空缓存安装通过；真实环境、签名/公开分发仍待完成 |
+| TUI | **92%** | 候选包及最低 Node 安装通过；生产依赖高危公告阻塞，真实环境与正式分发待完成 |
 | 移动端完整控制器 | **35%** | 本轮未修改或验收移动端，进度不变 |
 
 TUI 当前主要验收平台为 macOS。移动端 M0 只读功能不能代替 M1 审批、补充和停止闭环。仍未到 95%，没有完成真实模型、物理终端或真机发布验收。
@@ -35,3 +35,5 @@ TUI 当前主要验收平台为 macOS。移动端 M0 只读功能不能代替 M1
 2026-10-21：完整 30 分钟结果与局限见 [验收记录](validation/shared-memory-soak.md)。此前发现的 prompt completion / drain 收尾竞态现已修复，见 [定向验收](validation/queue-finalization.md)。
 
 候选包与空缓存安装证据：[分发包验收](validation/release-package.md)。尚未公开发布，不等同于所有环境可 release。
+
+最低 Node 24.21.0 安装运行已通过；node-forge 高危生产依赖尚无发布修复，当前阻断正式 release。见 [证据与门禁](validation/node-minimum-security.md)。进度保持 TUI 92%、移动端 35%。
