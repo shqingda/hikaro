@@ -257,7 +257,21 @@ it("restores an offline composer without authority or auto-send and erases draft
     expect(app.state.composer.record?.text).toBe("离线草稿");
     expect(app.state.canSend).toBe(false);
     await expect(app.sendDraft(session.id)).rejects.toThrow(/control/);
-    app.editDraft(session.id, "离线编辑\n第二行");
+    const edits: string[] = [];
+    const unsubscribe = app.subscribe(() => {
+      edits.push(app.state.composer.record?.text ?? "");
+    });
+    const sentBeforeEditing = f.sent.length;
+    try {
+      for (const text of ["离线编辑", "离线编辑\n", "离线编辑\n第二行"]) {
+        app.editDraft(session.id, text);
+        // Controlled native inputs need the new value synchronously, not on a later paint.
+        expect(edits.at(-1)).toBe(text);
+      }
+      expect(f.sent).toHaveLength(sentBeforeEditing);
+    } finally {
+      unsubscribe();
+    }
     await app.saveDraft();
     app.suspend();
     expect(app.state.composer.record).toBeNull();

@@ -58,6 +58,62 @@ function fixture() {
   app.bind("device-a");
   return { app, store, rows };
 }
+it.each([false, true])(
+  "keeps burst edits when an older in-flight save settles (failure=%s)",
+  async (failOldSave) => {
+    const { app, store, rows } = fixture();
+    const snapshots: string[] = [];
+    let releaseSave!: () => void;
+    let markStarted!: () => void;
+    const saving = new Promise<void>((resolve) => {
+      releaseSave = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const save = store.save;
+    const delayedStore: DraftStore = {
+      load: store.load,
+      save: vi.fn(async (scope, record) => {
+        if (record.text === "old") {
+          markStarted();
+          await saving;
+          if (failOldSave) throw Error("old write failed");
+        }
+        await save(scope, record);
+      }),
+    };
+    const editor = new MobileComposer(delayedStore, (state) => {
+      snapshots.push(state.record?.text ?? "");
+    });
+    editor.bind("device-a");
+    await editor.select(session);
+    editor.edit(session.id, "old");
+    await started;
+    const oldSave = editor.flush();
+    // Observe the rejected promise before releasing the delayed write.
+    const oldOutcome = oldSave.then(
+      () => "saved",
+      () => "failed",
+    );
+    for (const text of ["中文", "中文\n", "中文\n😀", "中文\n", "中文\n第二行"])
+      editor.edit(session.id, text);
+    const final = "中文\n第二行";
+    expect(editor.state.record?.text).toBe(final);
+    expect(editor.state.saving).toBe(true);
+    snapshots.length = 0;
+    releaseSave();
+    await editor.flush();
+    expect(await oldOutcome).toBe(failOldSave ? "failed" : "saved");
+    expect(snapshots.every((text) => text === final)).toBe(true);
+    expect(editor.state).toMatchObject({ saving: false, error: null });
+    expect(rows.get("device-aone")?.text).toBe(final);
+    expect(delayedStore.save).toHaveBeenCalledTimes(2);
+    // A fresh composer must see the durable final text, not only the UI snapshot.
+    await app.select(session);
+    expect(app.state.record?.text).toBe(final);
+  },
+);
 it("restores offline drafts after recreation and isolates device and task identities", async () => {
   const { app, store, rows } = fixture();
   const snapshot = { ...session, modelSelection: { provider: "demo" } };
