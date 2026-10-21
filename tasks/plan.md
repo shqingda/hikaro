@@ -4,7 +4,9 @@
 
 ## 执行顺序
 
-原生控制验收已补齐审批、停止、恢复确认、编辑/放弃和后台释放，见 docs/validation/mobile-native-controls.md。下一轮推进移动图片/diff 阅读；键盘/IME、Android、真机、辅助技术与正式分发仍须独立验收。当前 TUI 98%、移动端 60%，不表示完整待办清空。
+图片/diff 的实际 host 和原生 iOS 验收已通过并推送至 af4dafe，见 docs/validation/mobile-inspection.md。当前 TUI 98%、移动端 65%。本轮将新协议与共享 diff 纳入现有 check-release.mjs 安装验收：从持久记录读取多页 Unicode 差异，并在安装包 TUI 打开同一记录到末页。唯一自动 E2E 仍是该安装脚本；旧候选应拒绝缺失能力，新候选须在本机及最低 Node 干净 CI 通过。同包订阅另轮验证，不拿 cf57c46 的报告覆盖新包。
+
+模拟器日志再次确认 Device Hub 键盘缺少 macOS 辅助功能授权，已请求用户决定；不自行修改系统权限，不把粘贴计为键盘/IME。等待期间推进分发与其他完整待办，保留 Android、物理设备、辅助技术和正式发布范围。
 
 本轮 steering 自动回归和原生发送/置顶/删除/关闭释放通过，修复续期打断编辑，见 docs/validation/mobile-steering.md。下一步补齐原生审批、停止与编辑/恢复确认，再推进图片/diff 和通知；原生输入事件、Android、真机和分发继续保留待验，不能由 controller 测试代替。
 

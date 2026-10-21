@@ -3,6 +3,7 @@ import { spawn as spawnProcess } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 import { stripVTControlCharacters } from "node:util";
 import { SharedHostClient } from "../packages/host/src/client.ts";
+import { verifyReleaseDiff } from "./release-diff.mjs";
 
 // The source client is only the observer transport. Every app process uses bin
 // from the actual installation, including its worker and native dependencies.
@@ -195,6 +196,13 @@ export async function verifyReleaseRecovery({ bin, spawn, home, workspace }) {
     assert.equal(remaining.length, 1);
     assert.equal(remaining[0].title, "1. leave unconfirmed");
     assert.equal(remaining[0].state, "Recovered · confirmation required");
+    const diff = await verifyReleaseDiff({
+      client: observer,
+      terminal: attached,
+      session,
+      home,
+      workspace,
+    });
     attached.send("\x04");
     await attached.exited();
     return [
@@ -202,6 +210,7 @@ export async function verifyReleaseRecovery({ bin, spawn, home, workspace }) {
       "installed host SIGKILL and pending steering persistence",
       "installed attached TUI explicit recovery confirmation without starting a task",
       "installed provider receives confirmed steering once and leaves unconfirmed text pending",
+      ...diff,
     ];
   } finally {
     for (const item of terminals)
