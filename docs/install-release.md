@@ -2,7 +2,7 @@
 
 当前支持源码安装，并提供本地 macOS arm64 npm tarball 候选包流程；尚未公开发布或完成签名/公证。需要 Node 24.21+、pnpm 12.11.2、rg 和 Xcode Command Line Tools。浏览器功能另需 Playwright Chromium；离线 demo 不验证真实模型凭据。
 
-候选分发位于[仓库 Releases](https://github.com/shqingda/hikaro/releases)，访问遵循当前私有仓库权限；0.1.0 尚未正式发布。附件提供 tarball、校验和、来源 manifest、安全与安装/订阅报告。下载时核对各报告的 SHA 与 tarball 一致，具体源提交和验收环境以附件为准。五项物理终端结果及各候选验收记录见仓库 docs/validation。
+[0.1.0 自用预览版](https://github.com/shqingda/hikaro/releases/tag/v0.1.0)已发布，访问遵循当前私有仓库权限；它是 pre-release，完整稳定版及移动端仍待完成。[安装命令和已知缺项](releases/v0.1.0.md)。附件提供 tarball、校验和、来源 manifest、安全与安装/订阅报告。下载时核对各报告的 SHA 与 tarball 一致，具体源提交和验收环境以附件为准。五项物理终端结果及各候选验收记录见仓库 docs/validation。
 
 ## 安装
 
