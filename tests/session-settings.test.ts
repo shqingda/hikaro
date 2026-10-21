@@ -1,5 +1,13 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  writeFile,
+  rm,
+  realpath,
+  readdir,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Runtime } from "../packages/runtime/src/index.ts";
@@ -473,12 +481,27 @@ it("constructs real SDK request bodies with reasoning and speed settings, withou
 });
 
 it("deletes session history and outputs, preserves branches and refuses a live session", async () => {
-  const { runtime, home } = await fixture();
+  const { runtime, home, cwd } = await fixture();
   const session = await runtime.session();
   await runtime.store.append(session.id, "message", {
     message: { role: "user", text: "Delete only this session", timestamp: 1 },
   });
   const branch = await runtime.fork(session);
+  const file = join(await realpath(cwd), "recorded.txt");
+  await runtime.changes.update(
+    session.id,
+    file,
+    AbortSignal.timeout(10000),
+    () => "first",
+  );
+  await runtime.changes.update(
+    branch.id,
+    file,
+    AbortSignal.timeout(10000),
+    () => "branch",
+  );
+  await runtime.planning.setActive(session.id, true);
+  await runtime.planning.setActive(branch.id, true);
   await runtime.store.acquire(session.id, "running-owner");
   await expect(runtime.deleteSession(session.id)).rejects.toThrow(
     "Stop the active run",
@@ -488,6 +511,14 @@ it("deletes session history and outputs, preserves branches and refuses a live s
   await mkdir(folder, { recursive: true });
   await writeFile(join(folder, "sample.json"), "{}");
   await runtime.deleteSession(session.id);
+  expect(await runtime.changes.list(session.id)).toEqual([]);
+  expect(await runtime.changes.list(branch.id)).toHaveLength(1);
+  expect(await readdir(join(home, "changes"))).toHaveLength(1);
+  expect(await readdir(join(home, "plans"))).toHaveLength(1);
+  await runtime.planning.load(session.id);
+  expect(runtime.planning.get(session.id).active).toBe(false);
+  expect(runtime.planning.get(branch.id).active).toBe(true);
+  expect(await readFile(file, "utf8")).toBe("branch");
   expect(await runtime.store.session(session.id)).toBeUndefined();
   expect(await runtime.store.events(session.id)).toEqual([]);
   await expect(readFile(join(folder, "sample.json"))).rejects.toMatchObject({

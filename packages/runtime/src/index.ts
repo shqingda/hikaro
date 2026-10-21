@@ -1058,16 +1058,18 @@ export class Runtime {
     let cleanupError: string | undefined;
     if (/^[a-f0-9-]{36}$/i.test(session.id)) {
       try {
-        await Promise.all(
-          ["outputs", "artifacts"].map((folder) =>
+        await Promise.all([
+          this.changes.removeSession(session.id),
+          this.planning.removeSession(session.id),
+          ...["outputs", "artifacts"].map((folder) =>
             rm(join(this.options.home!, folder, session.id), {
               recursive: true,
               force: true,
             }),
           ),
-        );
+        ]);
       } catch (e) {
-        cleanupError = `Session deleted; could not remove all saved outputs: ${String(e)}`;
+        cleanupError = `Session deleted; could not remove all saved outputs, changes or plans: ${String(e)}`;
       }
     }
     return { id, cleanupError };

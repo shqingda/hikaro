@@ -59,6 +59,10 @@ export class Planning {
     if (!value) throw Error("Planning state not loaded");
     return structuredClone(value);
   }
+  async removeSession(session: string) {
+    this.states.delete(session);
+    await rm(this.path(session), { force: true });
+  }
   private async save(session: string, state: z.infer<typeof stateSchema>) {
     const path = this.path(session),
       temp = `${path}.${randomUUID()}.tmp`;

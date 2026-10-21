@@ -32,6 +32,10 @@ export class ChangeJournal {
   private folder(session: string) {
     return join(this.root ?? this.home, "changes", digest(session));
   }
+  async removeSession(session: string) {
+    await this.initialize();
+    await rm(this.folder(session), { recursive: true, force: true });
+  }
   private recordPath(session: string, id: string) {
     z.uuid().parse(id);
     return join(this.folder(session), `${id}.json`);
