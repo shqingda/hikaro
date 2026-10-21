@@ -14,6 +14,13 @@ import {
   isMain,
 } from "./bench-support.mjs";
 
+// RSS sums double-count shared mappings; retain them as diagnostics only.
+// See docs/specs/shared-memory-soak.md for the revised acceptance policy.
+export const SHARED_STARTUP_BUDGETS = {
+  startupP95Ms: STARTUP_BUDGETS.startupP95Ms,
+  inputP95Ms: STARTUP_BUDGETS.inputP95Ms,
+};
+
 export async function attachedSample() {
   return withBenchmarkHome(async (home) => {
     const entryPath = resolve("dist/hikaro.mjs");
@@ -135,7 +142,9 @@ export async function main() {
     ),
   };
   const report = {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    assessmentScope: "startup-timing",
+    memoryAssessment: "pending-platform-baseline",
     measuredAt: new Date().toISOString(),
     mode: "warm independent host; fresh data home and empty client V8 cache per launch",
     environment: before,
@@ -147,12 +156,12 @@ export async function main() {
     inputSamplesPerRun: 20,
     firstLaunch,
     ...metrics,
-    budget: evaluateBudgets(metrics, STARTUP_BUDGETS),
+    budget: evaluateBudgets(metrics, SHARED_STARTUP_BUDGETS),
     samples,
     limitations: [
       "Host reaches Runtime/SQLite readiness before the TUI timer starts. This measures attachment, not cold host startup.",
       "Ready marker is emitted only after hello, snapshot, initial session, history and local draft recovery. Input uses PTY echo, not physical pixels.",
-      "RSS gate is attached TUI RSS; host and combined process RSS are separately reported, not hidden or compared to the original single-process measurement.",
+      "RSS values are diagnostics, not release gates. Their sum can double-count shared mappings; no physical-memory acceptance is implied by budget.passed.",
       "Warm OS caches. Current workspace and user skills remain enabled at host. No network/provider or mobile device. No 30-minute soak.",
     ],
   };

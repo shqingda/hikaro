@@ -342,8 +342,8 @@ pnpm exec vitest run tests/pty.test.ts -t 'critical TUI workflows'
 | 启动到可输入       | p95 ≤200ms                             |
 | 输入到刷新         | p95 ≤16ms                              |
 | 流式增量到终端输出 | p95 ≤33ms，不含模型网络延迟            |
-| 空闲总 RSS         | ≤100MiB，含存储 worker 与一个 provider |
-| 稳态内存           | 预热后运行 30 分钟，增长 ≤10%          |
+| 内存成本 | 按平台 footprint/PSS 评估；旧 100 MiB 仅为历史目标，见 [修订口径](docs/specs/shared-memory-soak.md) |
+| 稳态内存 | 完整 30 分钟功能窗口与内存趋势分开验收；旧 RSS 增长 10% 不作为单独否决依据 |
 
 历史测量环境记为 M3 Pro / 18GiB、Node 24.21.0、30 次启动、热 OS 缓存、加载默认 Anthropic 目录但未请求模型；RSS 包含 SQLite worker，不含外部工具。原始 JSON 无测量日期或 commit，不能据此判定当前版本达标。验收文档原有 p50 121ms / p95 124ms 与现存原始数据不一致，现按原始数据修正；近期未复测。
 
@@ -401,3 +401,7 @@ pnpm exec vitest run tests/pty.test.ts -t 'critical TUI workflows'
 - [x] 5 个定向测试、类型检查和构建通过；保留性能失败/通过的完整样本。
 - [ ] 共享合计内存、真实模型闭环、物理终端/IME、长时稳定性和正式分发仍是发布工作。
 - [验收证据](docs/validation/release-performance-upgrade.md)。发布估算：TUI 87%，移动端 35%，未到 95%。
+
+## 2026-10-21：纠正内存发布口径
+
+按用户要求撤销未经论证的 RSS 合计 100 MiB 硬门槛。旧报告保留，不追改为通过；平台内存采集与预算待校准。见 [验收口径](docs/specs/shared-memory-soak.md)。TUI 87%，移动端 35%；口径修正不计作实现进度。
