@@ -172,7 +172,7 @@ export class ClientConnection {
     this.journalQueue = task;
     return task;
   }
-  request(
+  async request(
     method: RpcMethod,
     params: Record<string, unknown> = {},
   ): Promise<unknown> {
@@ -185,6 +185,26 @@ export class ClientConnection {
       "cancel",
       "approval.respond",
     ].includes(method);
+    // A prompt acknowledgement can precede durable run completion. Refresh old
+    // outcomes before admitting another mutation so completed runs release slots.
+    // Recovery commands remain available even while outcome queries are blocked.
+    if (
+      !recovery &&
+      !rpcReadMethods.has(method) &&
+      this.view.supports("command.receipt") &&
+      this.receipts.some(
+        (r) =>
+          !rpcReadMethods.has(r.method) &&
+          ["acknowledged", "unknown"].includes(r.status),
+      )
+    ) {
+      const epoch = this.epoch;
+      await this.reconcile();
+      if (!this.active || this.disposed || epoch !== this.epoch)
+        throw Error(
+          "Connection replaced before send; command was not replayed",
+        );
+    }
     if (this.pending.size >= (recovery ? 32 : 28))
       return Promise.reject(Error("Client request capacity exceeded"));
     let frame: ClientCommand;

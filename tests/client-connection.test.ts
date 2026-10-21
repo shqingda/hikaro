@@ -177,3 +177,71 @@ it("durably records intent before send and fences a delayed write across connect
   ).toBe("unknown");
   client.close();
 });
+
+it("reclaims durable terminal receipts across more than 64 sequential runs", async () => {
+  let receive!: (frame: unknown) => void;
+  let id = 0;
+  const durable = new Map<string, any>();
+  const prompts: string[] = [];
+  const client = new ClientConnection(
+    "device",
+    {
+      observe(fn) {
+        receive = fn;
+        return () => {};
+      },
+      send(frame) {
+        let result: unknown;
+        if (frame.method === "hello") result = rpcCapabilities();
+        else if (frame.method === "session.current")
+          result = {
+            session: null,
+            busy: false,
+            stream: "",
+            streamTruncated: false,
+            cursor: 0,
+            revision: 0,
+            approvals: [],
+          };
+        else if (frame.method === "prompt") {
+          prompts.push(frame.id);
+          durable.set(frame.id, {
+            id: frame.id,
+            scope: "device",
+            method: "prompt",
+            digest: "a".repeat(64),
+            hostInstanceId: "host",
+            sessionId: null,
+            status: "accepted",
+            createdAt: 1,
+            updatedAt: 1,
+          });
+          result = { accepted: true };
+        } else if (frame.method === "command.receipt") {
+          result = {
+            receipt: durable.get(String(frame.params.commandId)) ?? null,
+          };
+        }
+        queueMicrotask(() =>
+          receive({ type: "response", scope: "device", id: frame.id, result }),
+        );
+      },
+    },
+    { id: () => String(++id), schedule: () => () => {} },
+  );
+  try {
+    await client.connected();
+    for (let run = 0; run < 100; run++) {
+      await client.request("prompt", { text: `run-${run}` });
+      // The run finishes after the immediate acknowledgement receipt query.
+      const receipt = durable.get(prompts.at(-1)!);
+      receipt.status = run % 2 ? "failed" : "completed";
+      receipt.updatedAt = 2;
+    }
+    expect(prompts).toHaveLength(100);
+    expect(new Set(prompts).size).toBe(100);
+    expect(client.receipts.length).toBeLessThanOrEqual(64);
+  } finally {
+    client.close();
+  }
+});
