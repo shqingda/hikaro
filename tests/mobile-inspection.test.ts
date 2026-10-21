@@ -165,3 +165,49 @@ it("reads paged changes and Unicode-safe diff sections and rejects changed snaps
   expect(f.reader.state.changes).toBeNull();
   expect(f.reader.state.diff).toBeNull();
 });
+
+it("searches bounded session text and rejects stale results after switching tasks", async () => {
+  const f = fixture();
+  f.request.mockResolvedValueOnce({
+    items: [{ seq: 9, role: "user", snippet: "中文结果" }],
+    nextBefore: 9,
+  });
+  await f.reader.searchMessages("中文");
+  expect(f.request.mock.calls[0]![1]).toEqual({
+    sessionId: "one",
+    query: "中文",
+    before: undefined,
+    limit: 20,
+  });
+  expect(f.reader.state.search?.nextBefore).toBe(9);
+  let finish!: (value: unknown) => void;
+  f.request.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const pending = f.reader.searchMessages("中文", 9, [undefined]);
+  f.client.state.session = { id: "two" };
+  f.reader.bind(f.client);
+  finish({
+    items: [{ seq: 8, role: "user", snippet: "old task" }],
+    nextBefore: null,
+  });
+  await expect(pending).rejects.toThrow(/context changed/);
+  expect(f.reader.state.search).toBeNull();
+  expect(f.reader.state.loading).toBe(false);
+});
+
+it("refuses unsupported search and malformed non-advancing cursors", async () => {
+  const f = fixture();
+  f.request.mockResolvedValue({
+    items: [{ seq: 9, role: "user", snippet: "match" }],
+    nextBefore: 9,
+  });
+  await expect(f.reader.searchMessages("match", 9)).rejects.toThrow(/cursor/);
+  expect(f.reader.state.search).toBeNull();
+  f.reader.bind({ ...f.client, supports: () => false });
+  await expect(f.reader.searchMessages("match")).rejects.toThrow(/尚不支持/);
+  expect(f.request).toHaveBeenCalledTimes(1);
+});

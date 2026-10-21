@@ -59,6 +59,13 @@ export default function Task() {
               : "离线快照 · 状态可能已变化"}
           </Note>
           <TaskActions />
+          {online && state.inspection.canSearch && (
+            <Action
+              title="搜索消息"
+              quiet
+              onPress={() => router.push("./search")}
+            />
+          )}
           {online && (
             <Action
               title="查看文件修改"

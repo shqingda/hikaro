@@ -37,6 +37,14 @@ type InspectionConnection = Pick<ClientConnection, "request" | "supports"> & {
   state: { canAct: boolean; session: { id: string } | null };
 };
 export const emptyInspection = () => ({
+  canSearch: false,
+  search: null as {
+    query: string;
+    items: { seq: number; role: string; snippet: string }[];
+    nextBefore: number | null;
+    before?: number;
+    previous: (number | undefined)[];
+  } | null,
   canImages: false,
   canChanges: false,
   kind: null as "image" | "changes" | null,
@@ -82,6 +90,10 @@ export class MobileInspection {
     this.client = client;
     this.sessionId = sessionId;
     this.update({
+      canSearch:
+        !!sessionId &&
+        !!client?.supports("messages.search") &&
+        !!client?.supports("messages.content"),
       canImages: !!sessionId && !!client?.supports("messages.content"),
       canChanges:
         !!sessionId &&
@@ -91,10 +103,13 @@ export class MobileInspection {
   }
   close() {
     this.generation++;
-    const { canImages, canChanges } = this.state;
-    this.update({ ...emptyInspection(), canImages, canChanges });
+    const { canImages, canChanges, canSearch } = this.state;
+    this.update({ ...emptyInspection(), canImages, canChanges, canSearch });
   }
-  private begin(method: "messages.content" | "changes.list" | "changes.diff") {
+  private begin(
+    method:
+      "messages.content" | "messages.search" | "changes.list" | "changes.diff",
+  ) {
     const client = this.client,
       sessionId = this.sessionId;
     if (!client?.state.canAct || !sessionId || !client.supports(method))
@@ -110,6 +125,52 @@ export class MobileInspection {
         throw Error("Reading context changed");
     };
     return { client, sessionId, generation, guard };
+  }
+  async searchMessages(
+    query: string,
+    before?: number,
+    previous: (number | undefined)[] = [],
+  ) {
+    query = z.string().trim().min(1).max(256).parse(query);
+    const c = this.begin("messages.search");
+    this.update({ loading: true, error: null });
+    try {
+      const page = z
+        .object({
+          items: z
+            .array(
+              z.object({
+                seq: z.number().int().positive(),
+                role: z.string().max(100),
+                snippet: z.string().max(480),
+              }),
+            )
+            .max(20),
+          nextBefore: z.number().int().positive().nullable(),
+        })
+        .parse(
+          await c.client.request(
+            "messages.search",
+            { sessionId: c.sessionId, query, before, limit: 20 },
+            { beforeSend: c.guard },
+          ),
+        );
+      c.guard();
+      if (
+        page.nextBefore !== null &&
+        (!page.items.length ||
+          page.nextBefore !== page.items.at(-1)!.seq ||
+          (before !== undefined && page.nextBefore >= before))
+      )
+        throw Error("Invalid search cursor");
+      this.update({
+        loading: false,
+        search: { ...page, query, before, previous },
+      });
+    } catch (error) {
+      this.fail(c.generation, error);
+      throw error;
+    }
   }
   private fail(generation: number, error: unknown) {
     if (generation === this.generation)
