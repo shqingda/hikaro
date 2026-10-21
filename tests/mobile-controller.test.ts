@@ -172,7 +172,9 @@ function fixture(
                           ? (selected = session)
                           : frame.method === "run.cancel"
                             ? { accepted: true, runId: frame.params.runId }
-                            : { receipt: null };
+                            : frame.method === "push.register"
+                              ? { ok: true }
+                              : { receipt: null };
           void Promise.resolve(rpcResult).then(
             (result) => {
               if (dropMethod === frame.method) {
@@ -246,6 +248,35 @@ function fixture(
     },
   };
 }
+it("registers and clears push over the encrypted transport and rejects stale pairing identity", async () => {
+  const f = fixture(
+    undefined,
+    undefined,
+    {},
+    {
+      ...rpcCapabilities(true),
+      methods: [...rpcCapabilities(true).methods, "push.register"],
+    },
+  );
+  await f.store.write(JSON.stringify(f.pairing));
+  const app = new MobileController(f.store, f.options);
+  try {
+    await app.restore();
+    await vi.waitFor(() => expect(app.state.phase).toBe("connected"));
+    await app.configurePush("ExpoPushToken[test]");
+    await app.configurePush(null);
+    await expect(
+      app.configurePush("ExpoPushToken[test]", "old-pairing"),
+    ).rejects.toThrow("连接已变化");
+    expect(
+      f.sent
+        .filter((frame) => frame.method === "push.register")
+        .map((frame) => frame.params),
+    ).toEqual([{ token: "ExpoPushToken[test]" }, { token: null }]);
+  } finally {
+    app.dispose();
+  }
+});
 it("reopens cached task messages offline without sending and clears cache without losing drafts", async () => {
   const f = fixture();
   const scope = pairingScope(f.pairing);

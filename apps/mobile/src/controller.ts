@@ -98,6 +98,8 @@ const allowed = new Set([
   "session.current",
   "session.list",
   "messages.read",
+  "messages.search",
+  "push.register",
   "messages.content",
   "changes.list",
   "changes.diff",
@@ -1009,7 +1011,15 @@ export class MobileController {
       throw error;
     }
   }
-  async configurePush(token: string | null) {
+  get pushIdentity() {
+    return this.pairing && this.value.phase === "connected"
+      ? pairingScope(this.pairing)
+      : null;
+  }
+  matchesPushHost(hostId: unknown) {
+    return typeof hostId === "string" && this.pairing?.hostId === hostId;
+  }
+  async configurePush(token: string | null, identity = this.pushIdentity) {
     if (
       token !== null &&
       !/^(Expo|Exponent)PushToken\[[A-Za-z0-9_-]+\]$/.test(token)
@@ -1019,6 +1029,8 @@ export class MobileController {
       epoch = this.epoch;
     const current = () => {
       if (
+        !identity ||
+        identity !== this.pushIdentity ||
         !client ||
         client !== this.client ||
         epoch !== this.epoch ||

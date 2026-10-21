@@ -11,6 +11,7 @@ import { router } from "expo-router";
 import { useMobile } from "@/provider";
 import { Action, Note } from "@/ui";
 import { colors, readable } from "@/theme";
+import { NotificationSettings } from "@/notification-settings";
 export default function Tasks() {
   useColorScheme();
   const { controller, state } = useMobile();
@@ -95,6 +96,7 @@ export default function Tasks() {
       }
       ListFooterComponent={
         <View style={{ gap: 12, marginTop: 20 }}>
+          <NotificationSettings />
           {(state.offset > 0 || state.moreSessions) && (
             <View style={{ flexDirection: "row", gap: 12 }}>
               <Action
