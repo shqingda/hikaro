@@ -266,6 +266,10 @@ export class HikaroView {
           { name: "rename", description: "Rename this session" },
           { name: "attach", description: "Add a file or image: /attach PATH" },
           {
+            name: "paste-image",
+            description: "Attach a clipboard image (macOS)",
+          },
+          {
             name: "export",
             description: "Export the conversation as Markdown",
           },

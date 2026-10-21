@@ -507,6 +507,14 @@ export async function attachTui(options: {
           });
           return "Session access updated.";
         }
+        case "/paste-image": {
+          const { saveClipboardImage } =
+            await import("../../../packages/runtime/src/clipboard-image.ts");
+          view.editor.setText(
+            attachmentReference(await saveClipboardImage()) + " ",
+          );
+          return "Clipboard image attached. Add your question and press Enter. The private temporary file is retained for draft recovery.";
+        }
         case "/attach":
           view.editor.setText(attachmentReference(text.slice(7)));
           return;

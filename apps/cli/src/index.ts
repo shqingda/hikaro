@@ -672,6 +672,16 @@ async function main() {
         case "quit":
           exit();
           return;
+        case "paste-image": {
+          const { saveClipboardImage } =
+            await import("../../../packages/runtime/src/clipboard-image.ts");
+          const { attachmentReference } =
+            await import("../../../packages/runtime/src/attachments.ts");
+          view.editor.setText(
+            attachmentReference(await saveClipboardImage()) + " ",
+          );
+          return "Clipboard image attached. Add your question and press Enter. The private temporary file is retained for draft recovery.";
+        }
         case "attach": {
           if (!arg.trim())
             return 'Use /attach PATH, then add your question and send. You can also type @file or @"path with spaces" directly.';
