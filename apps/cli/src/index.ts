@@ -428,6 +428,7 @@ async function main() {
     onPreferences: (patch) => applyPreferences({ ...preferences, ...patch }),
     onDraftChange: (text) => drafts.update(draftSessionId, text),
     commands: [
+      { name: "search", description: "Search full messages in this session" },
       {
         name: "plan",
         description: "Read-only planning, questions and plan review",
@@ -560,6 +561,25 @@ async function main() {
           );
       };
       switch (command) {
+        case "search": {
+          const { openMessageSearch } =
+            await import("../../../packages/tui/src/message-search.ts");
+          const { libraryRequest } = await import("./rpc-library.ts");
+          const id = session.id;
+          await openMessageSearch(
+            view,
+            arg,
+            (query, before) => runtime.store.searchMessages(id, query, before),
+            async (seq, offset) =>
+              (await libraryRequest(
+                runtime,
+                "messages.content",
+                { seq, field: "text", offset, limit: 16000 },
+                () => runtime.session(id),
+              )) as import("../../../packages/tui/src/message-search.ts").SearchContent,
+          );
+          return;
+        }
         case "plan": {
           if (agent.busy)
             throw Error(
@@ -687,7 +707,7 @@ async function main() {
           return "Attachment added. Add your question and press Enter.";
         }
         case "help":
-          return '/plan [TASK] · Read-only exploration, questions and plan review\n/plan cancel · Leave without executing\n/tasks · Manage queued messages, background terminals and child agents\n/changes · Review and roll back recorded file edits\n/new  /sessions  /resume [ID]  /rename TITLE  /export\n/fork  /compact  /model provider/model\n/attach PATH · @file or @"path with spaces" attaches text/images\n/settings  /permissions [ask|auto|full]\n/context [default]  /thinking [default]  /speed [default]\n/status  /resources\n/steer instructions  /tools  /older  /newer  /latest  /quit\n![--unrestricted] COMMAND follows the current permission mode. Ctrl+C cancels. Ctrl+D exits. Shift+Enter adds a line.\nNew prompts queue while the agent works.';
+          return '/plan [TASK] · Read-only exploration, questions and plan review\n/plan cancel · Leave without executing\n/tasks · Manage queued messages, background terminals and child agents\n/search [TEXT] · Search this session and read matching messages\n/changes · Review and roll back recorded file edits\n/new  /sessions  /resume [ID]  /rename TITLE  /export\n/fork  /compact  /model provider/model\n/attach PATH · @file or @"path with spaces" attaches text/images\n/settings  /permissions [ask|auto|full]\n/context [default]  /thinking [default]  /speed [default]\n/status  /resources\n/steer instructions  /tools  /older  /newer  /latest  /quit\n![--unrestricted] COMMAND follows the current permission mode. Ctrl+C cancels. Ctrl+D exits. Shift+Enter adds a line.\nNew prompts queue while the agent works.';
         case "new":
           await bind(await runtime.session());
           return;

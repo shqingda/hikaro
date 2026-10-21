@@ -330,6 +330,7 @@ export async function attachTui(options: {
     onExit: leave,
     detachOnCtrlD: true,
     commands: [
+      { name: "search", description: "Search full messages in this session" },
       ...[
         "recovery",
         "export",
@@ -408,6 +409,33 @@ export async function attachTui(options: {
       const [command, ...parts] = text.trim().split(/\s+/);
       const rest = parts.join(" ");
       switch (command) {
+        case "/search": {
+          if (!client.supports("messages.search"))
+            throw Error("Upgrade the host to search message history.");
+          const { openMessageSearch } =
+            await import("../../../packages/tui/src/message-search.ts");
+          const sessionId = client.state.session?.id;
+          if (!sessionId) throw Error("No session selected");
+          await openMessageSearch(
+            view,
+            rest,
+            async (query, before) =>
+              (await client.request("messages.search", {
+                sessionId,
+                query,
+                before,
+              })) as import("../../../packages/protocol/src/contracts.ts").MessageSearchPage,
+            async (seq, offset) =>
+              (await client.request("messages.content", {
+                sessionId,
+                seq,
+                field: "text",
+                offset,
+                limit: 16000,
+              })) as import("../../../packages/tui/src/message-search.ts").SearchContent,
+          );
+          return;
+        }
         case "/changes":
         case "/tasks":
         case "/plan":
@@ -417,7 +445,7 @@ export async function attachTui(options: {
           leave();
           return;
         case "/help":
-          return "Shared host: /recovery, /export, /plugins, ![--unrestricted] COMMAND (host approvals apply), /changes, /tasks, /plan [TASK], /plan cancel · host workflows. /sessions [query], /resume ID, /new, /rename title, /compact, /fork, /steer text, /status, /access, /share DEVICE view|control|off, /model [PROVIDER/MODEL], /login, /settings, /permissions, /context [default], /thinking [default], /speed [default], /resources [query], /attach PATH. Ctrl+C stops the selected task; Ctrl+D detaches. Local files use the existing @ completion.";
+          return "Shared host: /recovery, /export, /plugins, ![--unrestricted] COMMAND (host approvals apply), /search [text], /changes, /tasks, /plan [TASK], /plan cancel · host workflows. /sessions [query], /resume ID, /new, /rename title, /compact, /fork, /steer text, /status, /access, /share DEVICE view|control|off, /model [PROVIDER/MODEL], /login, /settings, /permissions, /context [default], /thinking [default], /speed [default], /resources [query], /attach PATH. Ctrl+C stops the selected task; Ctrl+D detaches. Local files use the existing @ completion.";
         case "/status":
           return JSON.stringify(
             {

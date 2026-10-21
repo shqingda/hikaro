@@ -37,6 +37,16 @@ export async function libraryRequest(
   selected: () => Promise<Session>,
 ): Promise<unknown> {
   switch (method) {
+    case "messages.search": {
+      const session = await selected();
+      const query = z.string().min(1).max(256).parse(p.query);
+      return runtime.store.searchMessages(
+        session.id,
+        query,
+        p.before === undefined ? undefined : integer(p.before, 0),
+        Math.max(1, integer(p.limit, 20, 50)),
+      );
+    }
     case "workspace.current":
       return {
         id: createHash("sha256").update(runtime.options.cwd).digest("hex"),

@@ -712,6 +712,7 @@ export async function serveRpc(
         case "model.set":
         case "model.default":
         case "messages.content":
+        case "messages.search":
         case "artifact.read": {
           const { libraryRequest } = await import("./rpc-library.ts");
           result = await libraryRequest(runtime, command.method, p, selected);

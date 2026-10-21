@@ -45,6 +45,7 @@ export const rpcMethods = [
   "model.set",
   "model.default",
   "messages.read",
+  "messages.search",
   "messages.content",
   "artifact.read",
   "events.read",
@@ -78,10 +79,15 @@ export const rpcReadMethods: ReadonlySet<string> = new Set([
   "models.list",
   "model.read",
   "messages.read",
+  "messages.search",
   "messages.content",
   "artifact.read",
   "events.read",
 ]);
+export type MessageSearchPage = {
+  items: { seq: number; role: string; snippet: string }[];
+  nextBefore: number | null;
+};
 export const HelloParams = z.object({
   protocolVersions: z.optional(
     z

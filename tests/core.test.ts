@@ -710,6 +710,42 @@ describe("worker isolation and recovery boundaries", () => {
     expect(previous.items[0]?.message.text).toBe("5");
     expect(previous.hasNewer).toBe(true);
   });
+  it("searches full message bodies literally with bounded cursor pages", async () => {
+    const { store, session } = await fixture(simple);
+    for (let i = 0; i < 3; i++)
+      await store.append(session.id, "message", {
+        message: {
+          role: "user",
+          text: "x".repeat(21000) + "中文 100%_Needle " + i,
+          timestamp: i,
+          providerData: { secret: "private" },
+        },
+      });
+    const page = await store.searchMessages(
+      session.id,
+      "100%_needle",
+      undefined,
+      2,
+    );
+    expect(page.items).toHaveLength(2);
+    expect(page.nextBefore).toBe(page.items[1]!.seq);
+    expect(page.items[0]!.snippet).toContain("中文 100%_Needle");
+    expect(JSON.stringify(page).length).toBeLessThan(1200);
+    expect(JSON.stringify(page)).not.toContain("private");
+    const next = await store.searchMessages(
+      session.id,
+      "100%_needle",
+      page.nextBefore!,
+      2,
+    );
+    expect(next.items).toHaveLength(1);
+    expect(next.nextBefore).toBeNull();
+    expect(next.items[0]!.seq).toBeLessThan(page.items[1]!.seq);
+    expect((await store.searchMessages("unrelated", "Needle")).items).toEqual(
+      [],
+    );
+    await expect(store.searchMessages(session.id, " ")).rejects.toThrow();
+  });
   it("only claims jobs belonging to the active workspace", async () => {
     const { store, session } = await fixture(simple);
     await store.putJob({

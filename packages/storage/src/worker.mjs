@@ -528,6 +528,41 @@ const handlers = {
       "SELECT COALESCE(MAX(seq),0) AS seq FROM events WHERE sessionId=?",
     ).get(sessionId).seq;
   },
+  searchMessages({
+    sessionId,
+    query,
+    before = Number.MAX_SAFE_INTEGER,
+    limit = 20,
+  }) {
+    if (
+      typeof query !== "string" ||
+      !query.trim() ||
+      query.length > 256 ||
+      !Number.isSafeInteger(before) ||
+      before < 0 ||
+      !Number.isSafeInteger(limit) ||
+      limit < 1 ||
+      limit > 50
+    )
+      throw Error("Invalid message search");
+    // Literal substring matching: %, _ and regex syntax are ordinary text.
+    // Search the complete body in SQLite; only bounded excerpts cross the worker boundary.
+    const rows =
+      prepare(`SELECT seq, json_extract(data,'$.message.role') AS role,
+      substr(json_extract(data,'$.message.text'),
+        max(1, instr(lower(json_extract(data,'$.message.text')), lower(?)) - 80), 240) AS snippet
+      FROM events WHERE sessionId=? AND type='message' AND seq<?
+      AND instr(lower(json_extract(data,'$.message.text')), lower(?))>0
+      ORDER BY seq DESC LIMIT ?`).all(
+        query,
+        sessionId,
+        before,
+        query,
+        limit + 1,
+      );
+    const items = rows.slice(0, limit);
+    return { items, nextBefore: rows.length > limit ? items.at(-1).seq : null };
+  },
   messagePage({ sessionId, before, after, limit = 20, bounded = false }) {
     const ascending = after !== undefined;
     const rows = prepare(

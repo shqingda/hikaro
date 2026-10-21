@@ -81,3 +81,5 @@ e0fb56a 同一 CI 包的真实订阅及拒绝、取消、崩溃、四类网络�
 uuid 的限定升级、Xcode 兼容回归及 Expo forge 补丁解析核查通过；[依赖核查记录](validation/mobile-dependencies.md)。braces 按个人自用范围列为上游待修。
 
 个人自用推进：移动端增加有界离线历史缓存及清除入口，16 项 controller/真实 host 回归、类型检查及双平台导出通过；[验收边界](validation/mobile-offline-history.md)。原发布准备估算 TUI **98%**、移动端 **67%**；下一步优先自用安装及端到端操作。
+
+TUI 当前会话全文搜索交付，普通/附着构建产物均通过实际 PTY 搜索、原文分段及返回验收；[记录](validation/message-search.md)。以上历史百分比仅为发布准备估算，不代表完整功能完成率。移动端本轮未改；完整功能目标仍未完成，新搜索尚待更新分发候选。

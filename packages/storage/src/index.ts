@@ -4,6 +4,7 @@ import type { PendingSteering } from "../../core/src/steering-queue.ts";
 import type {
   DurableCommandReceipt,
   RpcMethod,
+  MessageSearchPage,
 } from "../../protocol/src/contracts.ts";
 import type { Chunk } from "../../tools/src/indexer.ts";
 import type { Job } from "../../core/src/jobs.ts";
@@ -252,6 +253,19 @@ export class SQLiteStore implements EventStore {
     } = {},
   ) {
     return this.request<MessagePage>("messagePage", { sessionId, ...options });
+  }
+  searchMessages(
+    sessionId: string,
+    query: string,
+    before?: number,
+    limit = 20,
+  ) {
+    return this.request<MessageSearchPage>("searchMessages", {
+      sessionId,
+      query,
+      before,
+      limit,
+    });
   }
   messageContent(
     sessionId: string,

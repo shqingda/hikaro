@@ -32,6 +32,15 @@ it("pages large history and images without provider payloads, and only reads sec
       },
     });
     const page = await runtime.store.messagePage(session.id, { bounded: true });
+    const matches = await invoke("messages.search", {
+      query: "中文",
+      limit: 2,
+    });
+    expect(matches.items.map((item: { seq: number }) => item.seq)).toEqual([
+      event.seq,
+    ]);
+    expect(JSON.stringify(matches)).not.toContain("signature");
+    expect(matches.items[0].snippet.length).toBeLessThanOrEqual(240);
     expect(page.items[0]!.message.text).toHaveLength(20000);
     expect(JSON.stringify(page)).not.toContain(image);
     expect(JSON.stringify(publicEvent(event))).not.toContain("signature");
