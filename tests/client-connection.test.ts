@@ -5,6 +5,97 @@ import { rpcCapabilities } from "../packages/protocol/src/contracts.ts";
 
 afterEach(() => vi.restoreAllMocks());
 
+it("uses a caller command ID and rechecks authority after the durable journal commits", async () => {
+  let receive!: (frame: unknown) => void;
+  const sent: any[] = [];
+  let release: (() => void) | undefined;
+  let next = 0;
+  const client = new ClientConnection(
+    "device",
+    {
+      observe(fn) {
+        receive = fn;
+        return () => {};
+      },
+      send(frame) {
+        sent.push(frame);
+        const result =
+          frame.method === "hello"
+            ? {
+                ...rpcCapabilities(),
+                methods: [
+                  "hello",
+                  "session.current",
+                  "approval.respond",
+                  "command.receipt",
+                ],
+              }
+            : frame.method === "approval.respond"
+              ? { saved: true }
+              : frame.method === "command.receipt"
+                ? { receipt: null }
+                : {
+                    session: null,
+                    busy: false,
+                    stream: "",
+                    streamTruncated: false,
+                    cursor: 0,
+                    revision: 0,
+                    approvals: [],
+                  };
+        queueMicrotask(() =>
+          receive({ type: "response", scope: "device", id: frame.id, result }),
+        );
+      },
+    },
+    {
+      id: () => String(++next),
+      schedule: () => () => {},
+      intents: {
+        load: async () => [],
+        save: () =>
+          new Promise<void>((resolve) => {
+            release = resolve;
+          }),
+      },
+    },
+  );
+  // No pending intents: the initial reconcile's journal flush still needs completing.
+  const connecting = client.connected();
+  await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+  release!();
+  await connecting;
+  release = undefined;
+  let allowed = true;
+  const guard = () => {
+    if (!allowed) throw Error("selection changed");
+  };
+  const blocked = client.request(
+    "approval.respond",
+    { text: "old" },
+    { id: "persisted-id", beforeSend: guard },
+  );
+  await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+  allowed = false;
+  release!();
+  await expect(blocked).rejects.toThrow("selection changed");
+  expect(sent.some((f) => f.id === "persisted-id")).toBe(false);
+  await expect(
+    client.request("approval.respond", {}, { id: "persisted-id" }),
+  ).rejects.toThrow(/already used/);
+  release = undefined;
+  const success = client.request(
+    "approval.respond",
+    { text: "new" },
+    { id: "new-id" },
+  );
+  await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+  release!();
+  await success;
+  expect(sent.find((f) => f.id === "new-id")?.params).toEqual({ text: "new" });
+  client.close();
+});
+
 it("does not turn a successful mutation into a failure when an older host lacks receipt queries", async () => {
   let receive!: (frame: unknown) => void;
   const methods: string[] = [];

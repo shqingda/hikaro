@@ -178,6 +178,7 @@ export class ClientConnection {
   async request(
     method: RpcMethod,
     params: Record<string, unknown> = {},
+    options: { id?: string; beforeSend?: () => void } = {},
   ): Promise<unknown> {
     if (!this.active || this.disposed)
       return Promise.reject(Error("Not connected"));
@@ -213,7 +214,11 @@ export class ClientConnection {
       return Promise.reject(Error("Client request capacity exceeded"));
     let frame: ClientCommand;
     try {
-      frame = this.view.command(this.options.id(), method, params);
+      frame = this.view.command(
+        options.id ?? this.options.id(),
+        method,
+        params,
+      );
     } catch (error) {
       return Promise.reject(error);
     }
@@ -240,6 +245,8 @@ export class ClientConnection {
           throw Error(
             "Connection replaced before send; command was not replayed",
           );
+        // Recheck view-specific authority after journal/reconciliation awaits.
+        options.beforeSend?.();
         return this.transport.send(frame);
       };
       try {
