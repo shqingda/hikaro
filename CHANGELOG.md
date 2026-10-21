@@ -3,7 +3,8 @@
 ## Unreleased — mobile companion
 
 - Add instructions for the next model turn and manage their queue: read, edit, move first, delete and explicitly confirm restored items. Management pauses dispatch until close; lost replies are reconciled without replay.
-- Keep queue lease renewal from interrupting the native editor. Host integration, native iOS submission/reordering/deletion/close-release, typechecks and both platform exports pass; native edit gestures and restore confirmation remain unqualified.
+- Keep queue lease renewal from interrupting the native editor. Host integration, native iOS submission/reordering/deletion/close-release, typechecks and both platform exports pass.
+- Native iOS approval/denial, stop confirmation and actual process termination, queue edit/save/discard, original-client restore confirmation and background release now pass in the existing simulator. Queue receipt messages no longer show an unrelated previous stop notice before a receipt query. Keyboard/IME, Android, physical devices and signed distribution remain unqualified.
 - Send requests from a native multiline editor and queue them while the computer is busy.
 - Save task drafts locally, including offline editing and reopening. Connection recovery never automatically sends drafts.
 - Preserve text and command identity until acceptance is confirmed; reconcile lost replies without replaying requests. Removing a pairing clears its drafts.

@@ -411,3 +411,7 @@ C0 is still not complete as a whole: remote raw transport wiring, remaining clie
 ## Mobile steering queue — 2026-10-21
 
 Next-turn instructions, queue editing/reordering/deletion, original-client recovery confirmation and receipt reconciliation are implemented. Sixteen distinct targeted cases, repository/mobile typechecks and iOS/Android Hermes exports passed. Native iOS submission, ordering, delete confirmation and release-on-close were verified in Codex's browser preview; automatic renewal no longer disables the editor. Native edit gestures, restore-confirmation interaction and physical-device distribution remain unqualified. See [the complete evidence and boundaries](validation/mobile-steering.md).
+
+## Native mobile control acceptance — 2026-10-21
+
+Native iOS approval/denial, stop confirmation with actual process termination, steering edit/save/discard, original-client recovery confirmation and background release now pass. A separate display correction prevents a previous stop notice appearing in queue details; repository/mobile typechecks and both platform exports pass. Keyboard/IME, Android and physical-device distribution remain open. See [native evidence, code versions and limitations](validation/mobile-native-controls.md).

@@ -4,6 +4,8 @@
 
 ## 执行顺序
 
+原生控制验收已补齐审批、停止、恢复确认、编辑/放弃和后台释放，见 docs/validation/mobile-native-controls.md。下一轮推进移动图片/diff 阅读；键盘/IME、Android、真机、辅助技术与正式分发仍须独立验收。当前 TUI 98%、移动端 60%，不表示完整待办清空。
+
 本轮 steering 自动回归和原生发送/置顶/删除/关闭释放通过，修复续期打断编辑，见 docs/validation/mobile-steering.md。下一步补齐原生审批、停止与编辑/恢复确认，再推进图片/diff 和通知；原生输入事件、Android、真机和分发继续保留待验，不能由 controller 测试代替。
 
 本轮接入移动 steering：沿用已有 steer / execution 协议和持久回执，在草稿中保存提交类型，添加独立队列管理模块及原生页面，支持查看全文、编辑、置顶、删除、恢复确认。管理页持有并续期 15 秒 host hold，退出/后台/换任务/失去权限释放或等待到期；异步晚到回复不得恢复旧页面。定向测试为 mobile-composer、mobile-steering 和 mobile-controller 中新增 steering 场景，后者是唯一实际 host E2E 文件；完成根/移动类型检查及双平台导出。开发预览只复用现有设备与 Codex 内置浏览器，不把导出当作原生验收。
