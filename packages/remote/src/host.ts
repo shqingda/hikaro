@@ -341,6 +341,17 @@ export async function serveRemote(options: {
           } else {
             activeScopes.add(id);
             response = await dispatchRemote(rpc, id, command);
+            // Push registration is implemented by this encrypted bridge, not
+            // the local RPC server. Advertise it only on the remote channel.
+            if (
+              command.method === "hello" &&
+              isRecord(response) &&
+              Array.isArray(response.methods)
+            )
+              response = {
+                ...response,
+                methods: [...new Set([...response.methods, "push.register"])],
+              };
           }
           send(id, { type: "response", id: command.id, result: response });
         } catch (error) {
