@@ -4,6 +4,7 @@ import { Host, TextInput, useNativeState } from "@expo/ui";
 import { useMobile } from "./provider";
 import { Action, Note } from "./ui";
 import { colors } from "./theme";
+import { router } from "expo-router";
 
 export function Composer() {
   const { controller, state } = useMobile();
@@ -126,10 +127,40 @@ export function Composer() {
             }}
           />
           {state.busy && <Note>这条要求将在当前运行结束后执行。</Note>}
+          {state.canSteer && (
+            <>
+              <Action
+                title="补充到下一模型轮"
+                quiet
+                disabled={
+                  !matches ||
+                  !record.text.trim() ||
+                  draft.loading ||
+                  !!draft.error
+                }
+                onPress={() => {
+                  void controller
+                    .sendDraft(record.session.id, "steer")
+                    .catch(() => {});
+                }}
+              />
+              <Note>补充指令用于下一次模型推理，本身不会启动新任务。</Note>
+            </>
+          )}
           {state.phase === "connected" && !state.canSend && (
             <Note>发送需要当前任务的控制权限及支持发送回执的电脑版本。</Note>
           )}
         </>
+      )}
+      {state.steering.available && (
+        <Action
+          title="补充指令队列"
+          quiet
+          onPress={() => {
+            void controller.steering.open(record.session.id).catch(() => {});
+            router.push("/steering");
+          }}
+        />
       )}
     </View>
   );

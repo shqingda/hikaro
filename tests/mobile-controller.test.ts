@@ -9,7 +9,14 @@ import {
   randomToken,
   SecureChannel,
 } from "../packages/crypto/src/index.ts";
-import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  writeFile,
+  readFile,
+  rm,
+  realpath,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { serveSharedHost } from "../apps/cli/src/shared-host.ts";
@@ -17,6 +24,7 @@ import { SharedHostClient } from "../packages/host/src/client.ts";
 import { ClientConnection } from "../packages/client-core/src/connection.ts";
 import { dispatchRemote } from "../packages/remote/src/host.ts";
 import { rpcCapabilities } from "../packages/protocol/src/contracts.ts";
+import { SQLiteStore } from "../packages/storage/src/index.ts";
 const clock = {
   id: randomToken,
   schedule: (fn: () => void, ms: number) => {
@@ -630,6 +638,146 @@ it("restores the same granted host task after a lost selection acknowledgement, 
     await vi.waitFor(() => expect(app.state.sessions).toEqual([]));
     expect(app.state.messages).toEqual([]);
     expect(app.state.content).toBeNull();
+  } finally {
+    app.dispose();
+    local.close();
+    wire.close();
+    bridge.close();
+    await host.close();
+    await rm(home, { recursive: true, force: true });
+  }
+}, 20000);
+
+it("manages mobile steering with a real host and confirms only the original identity without replay", async () => {
+  const home = await realpath(
+    await mkdtemp(join(tmpdir(), "hikaro-mobile-steering-")),
+  );
+  const cwd = join(home, "workspace");
+  await mkdir(cwd);
+  let bridge!: SharedHostClient;
+  const f = fixture({
+    request: (frame) => dispatchRemote(bridge, f.pairing.deviceId, frame),
+    subscribe: (fn) => bridge.subscribe(fn),
+  });
+  await writeFile(
+    join(home, "remote.json"),
+    JSON.stringify({
+      relay: f.pairing.relay,
+      hostId: f.pairing.hostId,
+      publicKey: f.host.publicKey,
+      devices: {
+        [f.pairing.deviceId]: { publicKey: f.pairing.identity.publicKey },
+      },
+    }),
+    { mode: 0o600 },
+  );
+  const store = await SQLiteStore.open(join(home, "sessions.sqlite"));
+  const session = await store.createSession(cwd);
+  await store.insertPendingSteering(session.id, {
+    id: "recovered-phone",
+    text: "手机恢复项",
+    scope: f.pairing.deviceId,
+  });
+  await store.insertPendingSteering(session.id, {
+    id: "recovered-other",
+    text: "其他身份恢复项",
+    scope: "another-device",
+  });
+  await store.close();
+  const host = await serveSharedHost({ home, cwd, demo: true });
+  const wire = await SharedHostClient.connect({ home, cwd, clientId: "owner" });
+  bridge = await SharedHostClient.connect({ home, cwd, mode: "bridge" });
+  const local = new ClientConnection(wire.scope, wire, clock);
+  let app = new MobileController(f.store, f.options);
+  try {
+    await local.connected();
+    await local.request("session.resume", { sessionId: session.id });
+    await local.request("session.access", {
+      deviceId: f.pairing.deviceId,
+      role: "control",
+    });
+    app.review(f.uri());
+    await app.confirm();
+    await vi.waitFor(() => expect(app.state.phase).toBe("connected"));
+    await app.select(session.id);
+    await vi.waitFor(() =>
+      expect(app.state.composer.record?.session.id).toBe(session.id),
+    );
+    await app.steering.open(session.id);
+    expect(app.state.steering.items).toHaveLength(2);
+    await app.steering.inspect("recovered-other");
+    await expect(app.steering.act("recovered-other", "resume")).rejects.toThrow(
+      /original client/,
+    );
+    await app.steering.inspect("recovered-phone");
+    await app.steering.act("recovered-phone", "resume");
+    expect(app.state.busy).toBe(false);
+    for (const text of ["手机第一条", "手机优先项", "手机删除项"]) {
+      app.editDraft(session.id, text);
+      await app.sendDraft(session.id, "steer");
+      expect(app.state.composer.record?.text).toBe("");
+    }
+    await app.steering.refresh();
+    const first = app.state.steering.items.find((i) =>
+      i.title.includes("手机第一条"),
+    )!;
+    const priority = app.state.steering.items.find((i) =>
+      i.title.includes("手机优先项"),
+    )!;
+    const removed = app.state.steering.items.find((i) =>
+      i.title.includes("手机删除项"),
+    )!;
+    await app.steering.inspect(first.id);
+    app.steering.edit("手机修改后");
+    await app.steering.act(first.id, "edit");
+    await app.steering.inspect(priority.id);
+    await app.steering.act(priority.id, "first");
+    await app.steering.inspect(removed.id);
+    await app.steering.act(removed.id, "remove");
+    expect(app.state.steering.items[0]?.id).toBe(priority.id);
+    expect(app.state.steering.items.some((i) => i.id === removed.id)).toBe(
+      false,
+    );
+    await app.steering.close();
+    app.editDraft(session.id, "丢回执补充项");
+    f.dropReply("steer");
+    await expect(app.sendDraft(session.id, "steer")).rejects.toThrow(
+      /unknown/i,
+    );
+    app.dispose();
+    app = new MobileController(f.store, f.options);
+    await app.restore();
+    await vi.waitFor(() => expect(app.state.phase).toBe("connected"));
+    await vi.waitFor(async () => {
+      await app.reconcileDraft();
+      expect(app.state.composer.record?.text).toBe("");
+    });
+    expect(f.sent.filter((f) => f.method === "steer")).toHaveLength(4);
+    expect(f.sent.filter((f) => f.method === "prompt")).toHaveLength(0);
+    expect(app.state.busy).toBe(false);
+    await app.steering.open(session.id);
+    await app.steering.close();
+    app.editDraft(session.id, "明确开始任务");
+    await app.sendDraft(session.id);
+    await vi.waitFor(() => expect(app.state.runStatus).toBe("completed"));
+    await app.history();
+    expect(
+      app.state.messages
+        .filter((m) => m.message.role === "user")
+        .map((m) => m.message.text),
+    ).toEqual([
+      "明确开始任务",
+      "手机优先项",
+      "手机恢复项",
+      "手机修改后",
+      "丢回执补充项",
+    ]);
+    await local.request("session.access", {
+      deviceId: f.pairing.deviceId,
+      role: "view",
+    });
+    await vi.waitFor(() => expect(app.state.canSteer).toBe(false));
+    await expect(app.steering.open(session.id)).rejects.toThrow(/control/);
   } finally {
     app.dispose();
     local.close();

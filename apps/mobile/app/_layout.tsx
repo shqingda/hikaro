@@ -16,6 +16,7 @@ export default function Layout() {
         />
         <Stack.Screen name="task" options={{ title: "任务详情" }} />
         <Stack.Screen name="message" options={{ title: "消息正文" }} />
+        <Stack.Screen name="steering" options={{ title: "补充指令队列" }} />
         <Stack.Screen
           name="scan"
           options={{ title: "扫描配对码", presentation: "modal" }}

@@ -1,5 +1,10 @@
 import * as z from "zod";
 import {
+  MobileSteering,
+  emptySteering,
+  type SteeringState,
+} from "./steering.ts";
+import {
   MobileComposer,
   emptyComposer,
   type ComposerState,
@@ -10,6 +15,7 @@ import {
   CommandReceiptResult,
   RunCancelResult,
   type Permission,
+  type RpcMethod,
 } from "../../../packages/protocol/src/contracts.ts";
 import type {
   CommandReceipt,
@@ -82,6 +88,11 @@ const allowed = new Set([
   "approval.respond",
   "run.cancel",
   "prompt",
+  "steer",
+  "execution.hold",
+  "execution.release",
+  "execution.read",
+  "execution.action",
 ]);
 export type MobileState = {
   phase:
@@ -121,6 +132,8 @@ export type MobileState = {
   sessionRole: ExecutionState["sessionRole"];
   canStopRun: boolean;
   canSend: boolean;
+  canSteer: boolean;
+  steering: SteeringState;
   composer: ComposerState;
   approvals: Permission[];
   receipts: CommandReceipt[];
@@ -158,6 +171,8 @@ const empty = (phase: MobileState["phase"]): MobileState => ({
   sessionRole: null,
   canStopRun: false,
   canSend: false,
+  canSteer: false,
+  steering: emptySteering(),
   composer: emptyComposer(),
   approvals: [],
   receipts: [],
@@ -187,10 +202,14 @@ export class MobileController {
   private paint?: () => void;
   private draftIdentity = 0;
   private composer: MobileComposer;
+  readonly steering: MobileSteering;
   constructor(
     private storage: MobileStorage,
     private options: MobileOptions,
   ) {
+    this.steering = new MobileSteering((steering) => {
+      if (!this.disposed) this.update({ steering });
+    }, options.schedule);
     this.composer = new MobileComposer(
       {
         load: (scope, id) =>
@@ -241,6 +260,7 @@ export class MobileController {
     return task;
   }
   private stop() {
+    this.steering.bind(null);
     this.composer.hide();
     this.contentEpoch++;
     this.value = {
@@ -252,6 +272,7 @@ export class MobileController {
       sessionRole: null,
       canStopRun: false,
       canSend: false,
+      canSteer: false,
       actionPending: null,
       actionNotice: null,
     };
@@ -412,6 +433,22 @@ export class MobileController {
         }
         selected = current;
         ready = s.canAct;
+        const control =
+          s.canAct &&
+          !!s.session &&
+          ["owner", "control"].includes(s.sessionRole ?? "");
+        this.steering.bind(
+          control &&
+            [
+              "execution.hold",
+              "execution.release",
+              "execution.read",
+              "execution.action",
+              "command.receipt",
+            ].every((method) => client.supports(method as RpcMethod))
+            ? client
+            : null,
+        );
         this.update(
           {
             phase: s.canAct
@@ -439,9 +476,19 @@ export class MobileController {
               client.supports("command.receipt") &&
               !!s.session &&
               ["owner", "control"].includes(s.sessionRole ?? ""),
+            canSteer:
+              control &&
+              client.supports("steer") &&
+              client.supports("command.receipt"),
             approvals: s.canAct ? s.approvals : [],
             receipts: client.receipts.filter((r) =>
-              ["approval.respond", "run.cancel", "prompt"].includes(r.method),
+              [
+                "approval.respond",
+                "run.cancel",
+                "prompt",
+                "steer",
+                "execution.action",
+              ].includes(r.method),
             ),
             error: null,
             unknown: client.receipts.filter(
@@ -600,7 +647,7 @@ export class MobileController {
   restoreDraft(sessionId: string) {
     return this.composer.restoreDraft(sessionId);
   }
-  async sendDraft(sessionId: string) {
+  async sendDraft(sessionId: string, method: "prompt" | "steer" = "prompt") {
     const client = this.client,
       epoch = this.epoch;
     const guard = () => {
@@ -610,7 +657,7 @@ export class MobileController {
         !client?.state.canAct ||
         client.state.session?.id !== sessionId ||
         !["owner", "control"].includes(client.state.sessionRole ?? "") ||
-        !client.supports("prompt") ||
+        !client.supports(method) ||
         !client.supports("command.receipt")
       )
         throw Error(
@@ -619,19 +666,25 @@ export class MobileController {
     };
     guard();
     const id = this.options.id();
-    await this.composer.send(sessionId, id, (text) => {
-      guard();
-      return client!.request(
-        "prompt",
-        { sessionId, text },
-        { id, beforeSend: guard },
-      );
-    });
+    await this.composer.send(
+      sessionId,
+      id,
+      (text) => {
+        guard();
+        return client!.request(
+          method,
+          { sessionId, text },
+          { id, beforeSend: guard },
+        );
+      },
+      method,
+    );
   }
   async reconcileDraft() {
     const client = this.client,
       epoch = this.epoch;
     if (!client?.state.canAct || !client.supports("command.receipt")) return;
+    const method = this.composer.state.record?.submission?.method ?? "prompt";
     await this.composer.reconcile(async (id) => {
       const result = await client.request("command.receipt", { commandId: id });
       if (epoch !== this.epoch) throw Error("Connection changed");
@@ -639,7 +692,7 @@ export class MobileController {
       if (!receipt) return "unknown";
       if (
         receipt.id !== id ||
-        receipt.method !== "prompt" ||
+        receipt.method !== method ||
         receipt.scope !== client.scope
       )
         throw Error("Receipt identity mismatch");

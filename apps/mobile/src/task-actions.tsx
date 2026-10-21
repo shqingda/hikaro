@@ -140,7 +140,11 @@ export function TaskActions() {
                 ? "停止"
                 : receipt.method === "prompt"
                   ? "发送"
-                  : "审批"}{" "}
+                  : receipt.method === "steer"
+                    ? "补充指令"
+                    : receipt.method === "execution.action"
+                      ? "队列修改"
+                      : "审批"}{" "}
               · {receipts[receipt.status]} · {receipt.id}
             </Note>
           ))}
