@@ -12,4 +12,18 @@
 
 Runtime 现将会话实际 cwd 作为 JSON 字符串提供给模型，并说明相对路径归属；不更改外部访问审批。新增两个定向回归先在旧代码失败、修复后通过，包括带引号/换行的目录。类型检查、构建通过。工作区专用验收阶段遇到意外审批会立即报告，不再一直等结束；没有扩大权限或延长超时。
 
-修复后的远程候选包及同包真实订阅结果待下轮记录。此时不把首次 CI 的安装通过等同最新版本完整通过。
+## 修复后的同包验收：b08f160
+
+[GitHub Actions 39590723969](https://github.com/shqingda/hikaro/actions/runs/39590723969) 全部通过，另包含上述 2 项工作区上下文回归。候选来自干净工作树 `b08f160dd8c047d9f41857222d6478afc2ed78e4`，SHA-256：`288294efffbdd42aaae6356602172b13cdcf0fa5f1bbeca6a7a67a4c5a6b6a1d`。
+
+- macOS 14.8.9 arm64 / Node 24.21.0 的[空缓存安装与包内 TUI 记录](release-ci-install.json)通过。
+- 将同一 tarball 取回 macOS 27.0.1 / Node 26.12.0，再从空缓存安装，执行[实际订阅完整记录](release-ci-subscription.json)：读/改/测/diff、拒绝、取消、host SIGKILL、4 类网络故障与明确继续全部通过。
+- 首次模型猜错路径的失败记录保留。没有放宽审批、断言、超时，也没有用源码调用替代候选包调用。
+
+## 分发草稿
+
+[Hikaro TUI 0.1.0 候选草稿](https://github.com/shqingda/hikaro/releases/tag/untagged-4371281ef7909238a911) 已创建于现有私有仓库，目标为 b08f160，仍为 draft。包含 tarball、SHA-256、生产审计、manifest、CI 安装和真实订阅验收报告。GitHub 记录的 tarball 摘要与上述测试对象一致。
+
+通过 `gh release download v0.1.0` 重新下载附件，`shasum -a 256 -c` 通过；本机保留于 artifacts/release-download-b08f160。正式渠道取回的字节与已安装实测的候选一致，没有为重复字节再跑一次相同模型测试。
+
+正式发布仍待人工草稿复验、辅助技术和最终发布确认。没有更改仓库可见性，也没有发布正式版本。当前发布准备估算 TUI **97%**、移动端 **45%**；完整功能目标仍按 tasks/todo.md 推进。

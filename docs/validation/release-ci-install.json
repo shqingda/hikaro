@@ -1,0 +1,31 @@
+{
+  "status": "passed",
+  "sha256": "288294efffbdd42aaae6356602172b13cdcf0fa5f1bbeca6a7a67a4c5a6b6a1d",
+  "artifact": "/Users/runner/work/hikaro/hikaro/artifacts/release/hikaro-0.1.0-darwin-arm64.tgz",
+  "platform": "darwin",
+  "arch": "arm64",
+  "node": "v24.21.0",
+  "nodeExecutable": "/Users/runner/hostedtoolcache/node/24.21.0/arm64/bin/node",
+  "emptyNpmCache": true,
+  "forge": {
+    "version": "1.4.0",
+    "rsaSha256": "447c5441cea1b125e23661d7e27a8b1759cc3400241c0013b2d034b4ee1dbf50",
+    "verifiedNodeFiles": 49
+  },
+  "checks": [
+    "artifact checksum",
+    "npm install --engine-strict",
+    "installed forge complete Node implementation matches source patch",
+    "installed forge accepts valid signatures and rejects malformed DigestAlgorithm (8 cases)",
+    "installed bin version",
+    "installed bin demo prompt",
+    "packaged native file helper read",
+    "installed node-pty TUI startup and clean exit"
+  ],
+  "limitations": [
+    "current macOS developer machine",
+    "real provider and Keychain not exercised",
+    "not signed/notarized or publicly published"
+  ],
+  "finishedAt": "2026-10-21T11:17:40.222Z"
+}

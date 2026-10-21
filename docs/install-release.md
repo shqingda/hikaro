@@ -2,6 +2,8 @@
 
 当前支持源码安装，并提供本地 macOS arm64 npm tarball 候选包流程；尚未公开发布或完成签名/公证。需要 Node 24.21+、pnpm 12.11.2、rg 和 Xcode Command Line Tools。浏览器功能另需 Playwright Chromium；离线 demo 不验证真实模型凭据。
 
+已准备 [0.1.0 候选分发草稿](https://github.com/shqingda/hikaro/releases/tag/untagged-4371281ef7909238a911)，访问遵循当前私有仓库权限。附件包含 tarball、校验和与验收报告；仍为 draft。该候选在干净 macOS 14.8.9 / Node 24.21.0 完成构建、审计和安装，并在 macOS 27.0.1 / Node 26.12.0 对同一 SHA 完成真实订阅与异常恢复。详细范围见 [CI 与同包验收](validation/release-ci.md)。
+
 ## 安装
 
 在所选版本的源码目录运行：
