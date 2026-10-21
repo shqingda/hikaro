@@ -14,7 +14,7 @@ const INPUT = "com.apple.coredevice.dtuhidd.active";
 const LOG_DIR = join(tmpdir(), "hikaro-dev-sim");
 
 // Keep orchestration testable without touching the owner's simulator or processes.
-export async function launchSimulator(io) {
+export async function launchSimulator(io, { openBrowser = false } = {}) {
   const simctl = (...args) => io.run("xcrun", ["simctl", ...args]);
   async function waitFor(label, check, attempts = 60) {
     for (let attempt = 0; attempt < attempts; attempt++) {
@@ -151,9 +151,9 @@ export async function launchSimulator(io) {
       DEVICE,
       `hikaro-companion://expo-development-client/?url=${encodeURIComponent(METRO)}`,
     );
-  await io.run("open", ["http://localhost:3200/"]);
+  if (openBrowser) await io.run("open", ["http://localhost:3200/"]);
   io.log(
-    `已复用 iPhone 模拟器并打开：http://localhost:3200/\n服务在后台运行，无需 DeviceHub 窗口。日志：${LOG_DIR}`,
+    `已复用 iPhone 模拟器，预览已就绪：http://localhost:3200/\n在 Codex 内置浏览器打开此地址；--open-browser 可显式打开系统默认浏览器。\n服务在后台运行，无需 DeviceHub 窗口。日志：${LOG_DIR}`,
   );
 }
 
@@ -166,7 +166,7 @@ async function main() {
   for (const name of ["metro", "preview"])
     logs[name] = await open(join(LOG_DIR, `${name}.log`), "a");
   try {
-    await launchSimulator({
+    const io = {
       log: console.log,
       pause: () => new Promise((done) => setTimeout(done, 1000)),
       async run(command, args, allowFailure = false) {
@@ -187,7 +187,10 @@ async function main() {
       start(command, args, name) {
         const child = spawn(command, args, {
           cwd: ROOT,
-          env: { ...process.env, REACT_NATIVE_PACKAGER_HOSTNAME: "127.0.0.1" },
+          env: {
+            ...process.env,
+            REACT_NATIVE_PACKAGER_HOSTNAME: "127.0.0.1",
+          },
           detached: true,
           stdio: ["ignore", logs[name].fd, logs[name].fd],
         });
@@ -226,6 +229,9 @@ async function main() {
           throw error;
         }
       },
+    };
+    await launchSimulator(io, {
+      openBrowser: process.argv.includes("--open-browser"),
     });
   } finally {
     await Promise.all(Object.values(logs).map((file) => file.close()));

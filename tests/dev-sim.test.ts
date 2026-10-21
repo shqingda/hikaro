@@ -34,7 +34,7 @@ function fixture(owner = true, device = DEVICE, available = true) {
   };
   return io;
 }
-it("reuses the original simulator and opens only the browser without creating or changing devices", async () => {
+it("reuses the original simulator without launching the system browser or changing devices", async () => {
   const io = fixture();
   await launchSimulator(io);
   expect(io.start).not.toHaveBeenCalled();
@@ -58,6 +58,13 @@ it("reuses the original simulator and opens only the browser without creating or
       ),
     ),
   ).toBe(true);
+  expect(io.run.mock.calls.filter(([command]) => command === "open")).toEqual(
+    [],
+  );
+});
+it("opens the system browser only when explicitly requested", async () => {
+  const io = fixture();
+  await launchSimulator(io, { openBrowser: true });
   expect(io.run.mock.calls.filter(([command]) => command === "open")).toEqual([
     ["open", ["http://localhost:3200/"]],
   ]);

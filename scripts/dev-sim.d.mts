@@ -11,4 +11,7 @@ export interface SimulatorIO {
   fetchText(url: string): Promise<string | null>;
   readPreview(): Promise<{ device: string; port: number; pid: number } | null>;
 }
-export function launchSimulator(io: SimulatorIO): Promise<void>;
+export function launchSimulator(
+  io: SimulatorIO,
+  options?: { openBrowser?: boolean },
+): Promise<void>;
