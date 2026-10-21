@@ -42,7 +42,7 @@ pnpm dev:sim
 
 `dev:sim` 使用固定开发依赖 `serve-sim@0.1.48`，在 [Simulator Preview](http://localhost:3200/) 显示原生模拟器，并传递触控、拖动和键盘输入。默认复用本机 iPhone 18 Pro（`498E27B7-5192-48CE-9B13-F4A27F10F806`），可用 `HIKARO_SIM_DEVICE=<UDID> pnpm dev:sim` 指定已有设备；不会创建、抹掉或覆盖安装。它检查 Metro 所属仓库、预览 PID 和设备，遇到未知端口占用会报错。Metro 使用 LAN 模式避免 IPv4／IPv6 不匹配，预览固定绑定回环地址；不要将预览暴露到公网。重复执行会复用服务，日志位于系统临时目录 `hikaro-dev-sim/`。
 
-检测到 DeviceHub 接管输入时，脚本调用 `serve-sim repair-input`，等待 SpringBoard 稳定后重建该设备的预览；运行中的 App 会短暂关闭，数据保留。macOS 辅助功能权限不足时，键盘可能退回旧通道；不会自动修改系统权限。停止指定设备的预览：`pnpm exec serve-sim --kill <UDID>`。不要同时运行多份启动脚本。
+检测到 DeviceHub 接管输入时，脚本调用 `serve-sim repair-input`，等待 SpringBoard 稳定后重建该设备的预览；运行中的 App 会短暂关闭，数据保留。macOS 的 Accessibility 控制权限不足时，键盘可能退回旧通道；macOS 27 的权限界面可能显示为 Device Control and Data Access（设备控制与数据访问），不是完全磁盘访问权限。授权对象是启动 serve-sim 的应用，以系统归属为准；本机当前归属 ChatGPT.app（bundle ID com.openai.codex）。不会自动修改系统权限。停止指定设备的预览：`pnpm exec serve-sim --kill <UDID>`。不要同时运行多份启动脚本。
 
 ## 配对与授权
 
