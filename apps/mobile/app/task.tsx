@@ -59,6 +59,20 @@ export default function Task() {
               : "离线快照 · 状态可能已变化"}
           </Note>
           <TaskActions />
+          {online && (
+            <Action
+              title="查看文件修改"
+              quiet
+              disabled={!state.inspection.canChanges}
+              onPress={() => {
+                void controller.inspection.listChanges().catch(() => {});
+                router.push("/changes");
+              }}
+            />
+          )}
+          {online && !state.inspection.canChanges && (
+            <Note>电脑版本尚不支持手机差异阅读，请升级电脑端。</Note>
+          )}
           {state.unknown > 0 && (
             <Note>
               有未确认的操作。当前内容以电脑返回的状态为准，没有重新发送操作。
@@ -99,9 +113,17 @@ export default function Task() {
             {readable(item.message.text)}
           </Text>
           {!!item.message.imageCount && (
-            <Note>
-              包含 {item.message.imageCount} 张图片，图片浏览将在后续阶段开放。
-            </Note>
+            <Action
+              title={`查看 ${item.message.imageCount} 张图片`}
+              quiet
+              disabled={!online || !state.inspection.canImages}
+              onPress={() => {
+                void controller.inspection
+                  .readImage(item.seq, 0, item.message.imageCount!)
+                  .catch(() => {});
+                router.push("/image");
+              }}
+            />
           )}
           {item.message.textLength !== undefined &&
             item.message.textLength > item.message.text.length && (

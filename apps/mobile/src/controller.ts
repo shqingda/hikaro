@@ -1,5 +1,10 @@
 import * as z from "zod";
 import {
+  MobileInspection,
+  emptyInspection,
+  type InspectionState,
+} from "./inspection.ts";
+import {
   MobileSteering,
   emptySteering,
   type SteeringState,
@@ -83,6 +88,8 @@ const allowed = new Set([
   "session.list",
   "messages.read",
   "messages.content",
+  "changes.list",
+  "changes.diff",
   "session.resume",
   "command.receipt",
   "approval.respond",
@@ -133,6 +140,7 @@ export type MobileState = {
   canStopRun: boolean;
   canSend: boolean;
   canSteer: boolean;
+  inspection: InspectionState;
   steering: SteeringState;
   composer: ComposerState;
   approvals: Permission[];
@@ -172,6 +180,7 @@ const empty = (phase: MobileState["phase"]): MobileState => ({
   canStopRun: false,
   canSend: false,
   canSteer: false,
+  inspection: emptyInspection(),
   steering: emptySteering(),
   composer: emptyComposer(),
   approvals: [],
@@ -203,10 +212,14 @@ export class MobileController {
   private draftIdentity = 0;
   private composer: MobileComposer;
   readonly steering: MobileSteering;
+  readonly inspection: MobileInspection;
   constructor(
     private storage: MobileStorage,
     private options: MobileOptions,
   ) {
+    this.inspection = new MobileInspection((inspection) => {
+      if (!this.disposed) this.update({ inspection });
+    });
     this.steering = new MobileSteering((steering) => {
       if (!this.disposed) this.update({ steering });
     }, options.schedule);
@@ -260,6 +273,7 @@ export class MobileController {
     return task;
   }
   private stop() {
+    this.inspection.bind(null);
     this.steering.bind(null);
     this.composer.hide();
     this.contentEpoch++;
@@ -433,6 +447,7 @@ export class MobileController {
         }
         selected = current;
         ready = s.canAct;
+        this.inspection.bind(s.canAct && s.session ? client : null);
         const control =
           s.canAct &&
           !!s.session &&
