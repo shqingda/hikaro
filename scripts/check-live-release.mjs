@@ -37,6 +37,7 @@ const directory = await realpath(
 const cwd = join(directory, "workspace");
 const prefix = join(directory, "installed");
 const cache = join(directory, "empty-cache");
+const faultFile = join(directory, "network-mode");
 // Keep the normal credential namespace so the installed app performs OAuth and
 // persists token refresh itself. Only a newly created workspace/session is used.
 const home = join(homedir(), ".hikaro");
@@ -104,6 +105,7 @@ const alive = (pid) => {
 };
 try {
   await mkdir(cwd);
+  await writeFile(faultFile, "online", { mode: 0o600 });
   await writeFile(join(directory, "npmrc"), "");
   await exec(
     "npm",
@@ -165,8 +167,11 @@ try {
   });
   const startHost = async () => {
     const child = spawnProcess(
-      bin,
+      process.execPath,
       [
+        "--import",
+        join(root, "scripts/release-network-preload.mjs"),
+        bin,
         "--host",
         "--cwd",
         cwd,
@@ -178,7 +183,11 @@ try {
         "grok-4.7",
         "--trust",
       ],
-      { cwd, env, stdio: ["ignore", "pipe", "pipe"] },
+      {
+        cwd,
+        env: { ...env, HIKARO_ACCEPTANCE_FAULT_FILE: faultFile },
+        stdio: ["ignore", "pipe", "pipe"],
+      },
     );
     let ready = false;
     const host = {
@@ -389,6 +398,98 @@ try {
   report.checks.push(
     "SIGKILL during real model approval recovers unknown without executing command; explicit new TUI prompt succeeds",
   );
+  const trace = async () =>
+    (await readFile(faultFile + ".trace", "utf8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+  report.networkFaults = [];
+  for (const mode of ["offline", "rate-limit", "disconnect", "hang"]) {
+    step = "network " + mode;
+    const traceStart = (await trace()).length;
+    const eventStart = events.length;
+    await writeFile(faultFile, mode);
+    const screenStart = submit(
+      mode === "disconnect"
+        ? "No tools. Write 100 short numbered lines, starting with RELEASE-PARTIAL. This is a stream interruption check."
+        : "No tools. Reply RELEASE-NETWORK-CHECK.",
+    );
+    await wait(
+      async () =>
+        (await trace())
+          .slice(traceStart)
+          .some((e) => e.mode === mode && e.event === "request"),
+      "fault reaches model transport",
+    );
+    if (mode === "hang") terminal.write("\x03");
+    await wait(() => endAfter(eventStart), "fault terminal state", 30000);
+    const status = mode === "hang" ? "cancelled" : "failed";
+    assert.equal(endAfter(eventStart).data.status, status);
+    const failed = await client.request("session.current");
+    assert.equal(failed.busy, false);
+    assert.equal(failed.runStatus, status);
+    const marker = {
+      offline: "Connection error",
+      "rate-limit": "HIKARO_ACCEPTANCE_RATE_LIMIT",
+      disconnect: "HIKARO_ACCEPTANCE_DISCONNECT",
+      hang: "Stopped",
+    }[mode];
+    await waitText(marker, screenStart);
+    const faultTrace = (await trace()).slice(traceStart);
+    assert.equal(
+      faultTrace.filter((e) => e.event === "request").length,
+      1,
+      "Failed request was automatically retried",
+    );
+    if (mode === "disconnect")
+      assert.ok(
+        faultTrace.some((e) => e.event === "cut-after-text"),
+        "Did not interrupt real provider text",
+      );
+    if (mode === "hang")
+      assert.ok(
+        faultTrace.some((e) => e.event === "aborted"),
+        "Transport did not observe cancellation",
+      );
+    assert.equal(
+      events.slice(eventStart).filter((e) => e.type === "tool.start").length,
+      0,
+    );
+    // Explicit user input is the only action that starts the next request.
+    await writeFile(faultFile, "online");
+    const continued = events.length;
+    const continuationOffset = submit(
+      "Do not repeat previous tasks. No tools. Reply exactly RELEASE-NETWORK-RECOVERED.",
+    );
+    await wait(
+      () => endAfter(continued),
+      "real subscription recovery after " + mode,
+      120000,
+    );
+    assert.equal(endAfter(continued).data.status, "completed");
+    await waitText("RELEASE-NETWORK-RECOVERED", continuationOffset);
+    assert.equal(
+      events.slice(eventStart).filter((e) => e.type === "run.start").length,
+      2,
+    );
+    assert.equal(
+      events.slice(eventStart).filter((e) => e.type === "tool.start").length,
+      0,
+    );
+    report.networkFaults.push({
+      mode,
+      status,
+      injectedRequests: 1,
+      explicitContinuation: "completed",
+      trace: faultTrace,
+    });
+    console.log(
+      "Network " + mode + " and real subscription continuation passed",
+    );
+  }
+  report.checks.push(
+    "process-local offline/429/real-stream-cut/hang faults fail or cancel visibly with no automatic retry; each explicit subscription continuation succeeds",
+  );
   terminal.write("\x04");
   assert.equal(await terminalExit, 0);
   terminal = undefined;
@@ -428,7 +529,7 @@ try {
   report.limitations = [
     "current macOS arm64 machine",
     "physical IME not exercised",
-    "provider rate limiting/network failure not injected",
+    "network failures are process-local injections, not an actual provider outage or account rate limit",
     "not publicly published",
   ];
   await writeFile(

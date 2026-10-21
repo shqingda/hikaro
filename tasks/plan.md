@@ -4,6 +4,8 @@
 
 ## 执行顺序
 
+当前轮：在同一 `check-live-release.mjs` 中增加仅对验收 host 的 xAI Responses POST 生效的 fetch 故障注入，分别验证请求前断网、429、实际回复中途断流、挂起连接取消，以及每项后的明确新请求恢复。注入模块单测只检验隔离边界和中断语义，唯一 E2E 仍为已安装 tarball 流程；重新打包包含 Ctrl+D 修复的代码。不得截取/记录令牌、改系统网络或把注入结果描述为外部服务真实故障。
+
 当前优先收尾 TUI：增加 `scripts/check-live-release.mjs`，从实际 tarball 空缓存安装，以正常订阅凭据运行独立工作区的 host，通过安装目录的 PTY/TUI 发送真实模型任务；核对读取、修改、测试、diff、拒绝、取消与 host 重启恢复。报告绑定包的 SHA，不把源码 Runtime、故障注入或 PTY 输入混称为物理 IME。运行单个对应 E2E，必要类型检查及构建；随后更新发布材料并提交推送。移动端待办保留，暂不推进新功能。
 
 用户反馈后优先修复独立 TUI 的 Ctrl+D：保留未发送文字退出，`--demo --continue` 回到同一会话恢复。定向验证为 `tests/tui-interactions.test.ts -t Ctrl.D` 与唯一受影响 E2E `tests/draft-recovery-pty.test.ts`；保留原有 SIGKILL、提交清理断言，增加退出前尚未到自动保存间隔的草稿。类型检查、构建通过后供用户复验第 5 项。用户已实测第 1–4 项正常。
