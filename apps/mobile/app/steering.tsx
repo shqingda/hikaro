@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Alert, ScrollView, View, Text } from "react-native";
 import { Host, TextInput, useNativeState } from "@expo/ui";
 import { router, useNavigation, usePreventRemove } from "expo-router";
@@ -20,6 +20,10 @@ export default function Steering() {
     item = queue.detail;
   const navigation = useNavigation();
   const input = useNativeState(queue.editText);
+  const [checkingReceipts, setCheckingReceipts] = useState(false);
+  useEffect(() => {
+    setCheckingReceipts(false);
+  }, [item?.id, queue.error]);
   const dirty = !!item && queue.editText !== (item.editText ?? "");
   useEffect(() => {
     if (input.value !== queue.editText) input.value = queue.editText;
@@ -173,11 +177,14 @@ export default function Steering() {
               quiet
               disabled={state.phase !== "connected" || !!state.actionPending}
               onPress={() => {
+                setCheckingReceipts(true);
                 void controller.reconcileActions().catch(() => {});
               }}
             />
           )}
-          {state.actionNotice && <Note>{state.actionNotice}</Note>}
+          {queue.error && checkingReceipts && state.actionNotice && (
+            <Note>{state.actionNotice}</Note>
+          )}
           {queue.error && (
             <Action
               title="重新读取这条指令"
