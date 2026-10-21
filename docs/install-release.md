@@ -1,5 +1,7 @@
 # TUI 源码安装与升级
 
+当前最新版为 [v0.2.1 自用预览补丁](https://github.com/shqingda/hikaro/releases/tag/v0.2.1)，补齐会话数据清理及异步剪贴板草稿保护。请使用 [0.2.1 安装说明](releases/v0.2.1.md)。
+
 [0.2.0 自用预览版](https://github.com/shqingda/hikaro/releases/tag/v0.2.0)现已发布，新增 redo、附着模式模型参数和 macOS 剪贴板图片。使用[0.2.0 安装及登录说明](releases/v0.2.0.md)下载新包；下文 0.1.0 路径保留为历史示例。
 
 当前支持源码安装，并提供本地 macOS arm64 npm tarball 候选包流程；尚未公开发布或完成签名/公证。需要 Node 24.21+、pnpm 12.11.2、rg 和 Xcode Command Line Tools。浏览器功能另需 Playwright Chromium；离线 demo 不验证真实模型凭据。
