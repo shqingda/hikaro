@@ -16,7 +16,7 @@ import {
   type DraftStore,
 } from "./composer.ts";
 import {
-  rpcReadMethods,
+  rpcTransientMethods,
   CommandReceiptResult,
   RunCancelResult,
   type Permission,
@@ -556,7 +556,8 @@ export class MobileController {
             ),
             error: null,
             unknown: client.receipts.filter(
-              (r) => r.status === "unknown" && !rpcReadMethods.has(r.method),
+              (r) =>
+                r.status === "unknown" && !rpcTransientMethods.has(r.method),
             ).length,
           },
           false,
@@ -1007,6 +1008,40 @@ export class MobileController {
         this.update({ loading: false, error: "无法恢复任务内容，请重试。" });
       throw error;
     }
+  }
+  async configurePush(token: string | null) {
+    if (
+      token !== null &&
+      !/^(Expo|Exponent)PushToken\[[A-Za-z0-9_-]+\]$/.test(token)
+    )
+      throw Error("Invalid push token");
+    const client = this.client,
+      epoch = this.epoch;
+    const current = () => {
+      if (
+        !client ||
+        client !== this.client ||
+        epoch !== this.epoch ||
+        this.value.phase !== "connected"
+      )
+        throw Error("通知连接已变化，请重新操作。");
+    };
+    current();
+    if (!client!.supports("push.register"))
+      throw Error("电脑端尚不支持通知设置，请升级后重试。");
+    const result = await client!.request(
+      "push.register",
+      { token },
+      { beforeSend: current },
+    );
+    current();
+    if (
+      !result ||
+      typeof result !== "object" ||
+      !("ok" in result) ||
+      result.ok !== true
+    )
+      throw Error("通知设置未确认，请重试。");
   }
   async clearHistoryCache() {
     const pairing = this.pairing;

@@ -11,7 +11,7 @@ import {
   type ScopedFrame,
   type Permission,
   rpcMethods,
-  rpcReadMethods as reads,
+  rpcTransientMethods as transient,
 } from "../../protocol/src/contracts.ts";
 
 const MAX_RECEIPTS = 64;
@@ -117,7 +117,7 @@ export class ClientState {
         !intent.id ||
         intent.id.length > 128 ||
         !rpcMethods.includes(intent.method) ||
-        reads.has(intent.method) ||
+        transient.has(intent.method) ||
         seen.has(intent.id)
       )
         throw Error("Invalid intent journal");
@@ -199,10 +199,10 @@ export class ClientState {
     if (utf8Bytes(JSON.stringify(frame)) > MAX_FRAME)
       throw Error("Command capacity exceeded");
     if (
-      !reads.has(method) &&
+      !transient.has(method) &&
       [...this.commands.values()].filter(
         (command) =>
-          !reads.has(command.method) &&
+          !transient.has(command.method) &&
           command.status !== "completed" &&
           command.status !== "failed",
       ).length >=
@@ -224,7 +224,7 @@ export class ClientState {
         (c) =>
           c.status === "completed" ||
           c.status === "failed" ||
-          (c.status !== "pending" && reads.has(c.method)),
+          (c.status !== "pending" && transient.has(c.method)),
       );
       if (!removable)
         throw Error(
@@ -337,6 +337,7 @@ export class ClientState {
       command.error = frame.error;
       return;
     }
+    if (command.method === "push.register") command.status = "completed";
     if (command.method === "hello" && frame.id === this.helloId) {
       const hello = HelloResult.parse(frame.result);
       if (

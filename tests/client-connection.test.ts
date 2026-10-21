@@ -347,3 +347,80 @@ it("reclaims durable terminal receipts across more than 64 sequential runs", asy
     client.close();
   }
 });
+
+it("keeps device push settings out of task receipts and never replays a lost registration", async () => {
+  let receive!: (frame: unknown) => void;
+  let next = 0;
+  let drop = false;
+  const sent: any[] = [];
+  const saves: any[] = [];
+  const client = new ClientConnection(
+    "device",
+    {
+      observe(fn) {
+        receive = fn;
+        return () => {};
+      },
+      send(frame) {
+        sent.push(frame);
+        if (drop && frame.method === "push.register") return;
+        const result =
+          frame.method === "hello"
+            ? {
+                ...rpcCapabilities(),
+                methods: [...rpcCapabilities().methods, "push.register"],
+              }
+            : frame.method === "push.register"
+              ? { ok: true }
+              : frame.method === "command.receipt"
+                ? { receipt: null }
+                : {
+                    session: null,
+                    busy: false,
+                    stream: "",
+                    streamTruncated: false,
+                    cursor: 0,
+                    revision: 0,
+                    approvals: [],
+                  };
+        queueMicrotask(() =>
+          receive({ type: "response", scope: "device", id: frame.id, result }),
+        );
+      },
+    },
+    {
+      id: () => String(++next),
+      schedule: () => () => {},
+      intents: {
+        load: async () => [],
+        save: async (value) => {
+          saves.push(value);
+        },
+      },
+    },
+  );
+  try {
+    expect(rpcCapabilities(true).methods).not.toContain("push.register");
+    await client.connected();
+    expect(client.supports("push.register")).toBe(true);
+    await expect(
+      client.request("push.register", { token: "ExpoPushToken[test]" }),
+    ).resolves.toEqual({ ok: true });
+    drop = true;
+    const lost = client.request("push.register", { token: null });
+    const rejected = expect(lost).rejects.toThrow();
+    client.disconnected();
+    await rejected;
+    drop = false;
+    await client.connected();
+    expect(sent.filter((f) => f.method === "push.register")).toHaveLength(2);
+    expect(saves.flat()).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ method: "push.register" }),
+      ]),
+    );
+    expect(JSON.stringify(saves)).not.toContain("ExpoPushToken");
+  } finally {
+    client.close();
+  }
+});

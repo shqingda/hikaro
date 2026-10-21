@@ -7,3 +7,5 @@
 通知功能尚未完整交付：手机客户端还缺原生通知模块、用户明确启用/关闭、token 获取及注册、点击后重新核对任务状态；还需 Expo 项目/平台推送凭据，以及真机后台和撤销验收。不能把此协议修复或 relay 已有接口写成通知可用。此变更不包含在 v0.1.0 已发布包中。
 
 关闭链路补充：加密 bridge 的 push.register 接受显式 token=null，经 host 身份清除 relay 中该设备的 push token。设备身份仍由加密连接注入，不能指定其他设备。relay Miniflare 集成验证注册成功、设备 bearer 直接清除被拒、host 清除成功、后续内部通知返回 skipped；不发送真实 Expo 通知。已在途的外部投递不承诺撤回。根/relay 类型检查及 CLI 构建通过，手机开关仍未接入。
+
+客户端注册补充：增加 bridge-only 方法的客户端识别；本地 hello 明确不宣告 push.register。通知设置属于非任务操作，不进入持久 intent、任务回执查询或任务未知结果计数；断线不自动重发。MobileController.configurePush 校验 token、已协商能力、连接身份和成功回执。客户端六项检查通过，新增用例确认注册回执丢失后不重发、不持久化 token。根/移动类型检查及 CLI 构建通过；系统通知权限、token 获取和手机开关界面仍待完成。

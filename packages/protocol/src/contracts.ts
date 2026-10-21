@@ -56,6 +56,7 @@ export const rpcMethods = [
   "run.cancel",
   "approval.respond",
   "client.detach",
+  "push.register",
 ] as const;
 export type RpcMethod = (typeof rpcMethods)[number];
 export const rpcReadMethods: ReadonlySet<string> = new Set([
@@ -89,6 +90,11 @@ export type MessageSearchPage = {
   items: { seq: number; role: string; snippet: string }[];
   nextBefore: number | null;
 };
+/** Device push settings have no task receipt and are never automatically replayed. */
+export const rpcTransientMethods: ReadonlySet<string> = new Set([
+  ...rpcReadMethods,
+  "push.register",
+]);
 export const HelloParams = z.object({
   protocolVersions: z.optional(
     z
@@ -103,8 +109,9 @@ export function rpcCapabilities(sharedHost = false) {
     supportedProtocolVersions: [protocolVersion],
     methods: rpcMethods.filter(
       (method) =>
-        sharedHost ||
-        !["session.access", "session.access.read"].includes(method),
+        method !== "push.register" &&
+        (sharedHost ||
+          !["session.access", "session.access.read"].includes(method)),
     ),
     snapshotMethod: "session.current" as const,
     eventSequence: "global-monotonic-filtered-by-session" as const,

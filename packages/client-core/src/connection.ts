@@ -1,6 +1,6 @@
 import { ClientState, type ExecutionState } from "./index.ts";
 import {
-  rpcReadMethods,
+  rpcTransientMethods,
   type RpcMethod,
 } from "../../protocol/src/contracts.ts";
 
@@ -153,7 +153,7 @@ export class ClientConnection {
       throw Error("Host does not support durable receipt queries");
     for (const receipt of this.receipts.filter(
       (r) =>
-        !rpcReadMethods.has(r.method) &&
+        !rpcTransientMethods.has(r.method) &&
         ["unknown", "acknowledged"].includes(r.status),
     ))
       await this.request("command.receipt", { commandId: receipt.id });
@@ -166,7 +166,7 @@ export class ClientConnection {
         this.receipts
           .filter(
             (r) =>
-              !rpcReadMethods.has(r.method) &&
+              !rpcTransientMethods.has(r.method) &&
               !["completed", "failed"].includes(r.status),
           )
           .map((r) => ({ id: r.id, method: r.method })),
@@ -195,11 +195,11 @@ export class ClientConnection {
     // Recovery commands remain available even while outcome queries are blocked.
     if (
       !recovery &&
-      !rpcReadMethods.has(method) &&
+      !rpcTransientMethods.has(method) &&
       this.view.supports("command.receipt") &&
       this.receipts.some(
         (r) =>
-          !rpcReadMethods.has(r.method) &&
+          !rpcTransientMethods.has(r.method) &&
           ["acknowledged", "unknown"].includes(r.status),
       )
     ) {
@@ -250,7 +250,7 @@ export class ClientConnection {
         return this.transport.send(frame);
       };
       try {
-        if (!rpcReadMethods.has(method) && this.options.intents)
+        if (!rpcTransientMethods.has(method) && this.options.intents)
           void this.persistIntents().then(send).catch(failed);
         else Promise.resolve(send()).catch(failed);
       } catch (error) {
@@ -261,7 +261,7 @@ export class ClientConnection {
       if (!recovery && this.active && this.view.needsSynchronization)
         await this.synchronize();
       if (
-        !rpcReadMethods.has(method) &&
+        !rpcTransientMethods.has(method) &&
         this.active &&
         this.view.supports("command.receipt")
       )
