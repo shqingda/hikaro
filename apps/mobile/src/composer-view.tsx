@@ -1,6 +1,4 @@
-import { useEffect } from "react";
-import { View, Text, Alert } from "react-native";
-import { Host, TextInput, useNativeState } from "@expo/ui";
+import { View, Text, Alert, TextInput } from "react-native";
 import { useMobile } from "./provider";
 import { Action, Note } from "./ui";
 import { colors } from "./theme";
@@ -10,10 +8,6 @@ export function Composer() {
   const { controller, state } = useMobile();
   const draft = state.composer;
   const record = draft.record;
-  const input = useNativeState(record?.text ?? "");
-  useEffect(() => {
-    if (input.value !== (record?.text ?? "")) input.value = record?.text ?? "";
-  }, [input, record?.text]);
   if (!record) return draft.loading ? <Note>正在读取草稿…</Note> : null;
   const matches = record.session.id === state.session?.id;
   const editable = matches && !draft.loading && !record.submission;
@@ -26,32 +20,36 @@ export function Composer() {
         你的要求
       </Text>
       {!matches && <Note>下方是切换前尚未保存的草稿，请先重试保存。</Note>}
-      <Host matchContents={{ vertical: true }} style={{ width: "100%" }}>
-        <TextInput
-          key={record.session.id}
-          testID="task-composer"
-          value={input}
-          multiline
-          numberOfLines={5}
-          editable={editable}
-          maxLength={100000}
-          placeholder="输入要求，回车换行"
-          onChangeText={(text) => {
-            if (!editable) return;
-            try {
-              controller.editDraft(record.session.id, text);
-            } catch {
-              input.value = record.text;
-            }
-          }}
-          style={{
-            padding: 16,
-            borderRadius: 14,
-            backgroundColor: colors.panel,
-            height: 160,
-          }}
-        />
-      </Host>
+      {/* Expo UI currently wraps a SwiftUI TextField whose Return ends editing. */}
+      <TextInput
+        key={record.session.id}
+        testID="task-composer"
+        value={record.text}
+        multiline
+        submitBehavior="newline"
+        textAlignVertical="top"
+        placeholderTextColor={colors.secondary}
+        numberOfLines={5}
+        editable={editable}
+        maxLength={100000}
+        placeholder="输入要求，回车换行"
+        onChangeText={(text) => {
+          if (!editable) return;
+          try {
+            controller.editDraft(record.session.id, text);
+          } catch {
+            // Keep the controller value when editing is no longer allowed.
+          }
+        }}
+        style={{
+          padding: 16,
+          borderRadius: 14,
+          backgroundColor: colors.panel,
+          color: colors.label,
+          fontSize: 17,
+          height: 160,
+        }}
+      />
       <Note>
         {draft.saving
           ? "正在保存草稿…"

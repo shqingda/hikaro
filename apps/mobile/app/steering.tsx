@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import { Alert, ScrollView, View, Text } from "react-native";
-import { Host, TextInput, useNativeState } from "@expo/ui";
+import { Alert, ScrollView, View, Text, TextInput } from "react-native";
 import { router, useNavigation, usePreventRemove } from "expo-router";
 import { useMobile } from "@/provider";
 import { Action, Note } from "@/ui";
@@ -19,15 +18,11 @@ export default function Steering() {
     queue = state.steering,
     item = queue.detail;
   const navigation = useNavigation();
-  const input = useNativeState(queue.editText);
   const [checkingReceipts, setCheckingReceipts] = useState(false);
   useEffect(() => {
     setCheckingReceipts(false);
   }, [item?.id, queue.error]);
   const dirty = !!item && queue.editText !== (item.editText ?? "");
-  useEffect(() => {
-    if (input.value !== queue.editText) input.value = queue.editText;
-  }, [input, queue.editText]);
   useEffect(() => {
     const release = navigation.addListener("removed", () => {
       void manager.close();
@@ -130,30 +125,34 @@ export default function Steering() {
               ? "中断后恢复 · 需要原设备确认"
               : "等待下一模型轮"}
           </Note>
-          <Host matchContents={{ vertical: true }} style={{ width: "100%" }}>
-            <TextInput
-              key={item.id}
-              testID="steering-editor"
-              value={input}
-              multiline
-              numberOfLines={6}
-              maxLength={100000}
-              editable={!busy}
-              onChangeText={(text) => {
-                try {
-                  manager.edit(text);
-                } catch {
-                  input.value = queue.editText;
-                }
-              }}
-              style={{
-                height: 220,
-                padding: 16,
-                borderRadius: 14,
-                backgroundColor: colors.panel,
-              }}
-            />
-          </Host>
+          {/* Expo UI currently wraps a SwiftUI TextField whose Return ends editing. */}
+          <TextInput
+            key={item.id}
+            testID="steering-editor"
+            value={queue.editText}
+            multiline
+            submitBehavior="newline"
+            textAlignVertical="top"
+            placeholderTextColor={colors.secondary}
+            numberOfLines={6}
+            maxLength={100000}
+            editable={!busy}
+            onChangeText={(text) => {
+              try {
+                manager.edit(text);
+              } catch {
+                // Keep the controller value when editing is no longer allowed.
+              }
+            }}
+            style={{
+              height: 220,
+              padding: 16,
+              borderRadius: 14,
+              backgroundColor: colors.panel,
+              color: colors.label,
+              fontSize: 17,
+            }}
+          />
           <Note>编辑尚未自动保存，点击“保存修改”后才更新电脑队列。</Note>
           {(["edit", "first", "remove", "resume"] as const)
             .filter((action) => item.actions.some((a) => a.value === action))
