@@ -5,7 +5,7 @@ import {
   randomToken,
   SecureChannel,
 } from "../packages/crypto/src/index.ts";
-import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { serveSharedHost } from "../apps/cli/src/shared-host.ts";
@@ -26,6 +26,7 @@ function fixture(
     subscribe(fn: (frame: any) => void): () => void;
   },
   content?: (params: any) => Promise<unknown>,
+  snapshotPatch: Record<string, unknown> = {},
 ) {
   const host = createIdentity(),
     device = createIdentity();
@@ -41,7 +42,7 @@ function fixture(
   };
   let credential: string | null = null,
     active: any,
-    dropResume = false;
+    dropMethod = "";
   const intents: any[] = [];
   const sent: any[] = [];
   const session = {
@@ -103,6 +104,7 @@ function fixture(
                         runId: "run1",
                         runStatus: "completed",
                         approvals: [],
+                        ...snapshotPatch,
                       }
                     : frame.method === "session.list"
                       ? [session]
@@ -126,8 +128,8 @@ function fixture(
                           : { receipt: null };
           void Promise.resolve(rpcResult).then(
             (result) => {
-              if (dropResume && frame.method === "session.resume") {
-                dropResume = false;
+              if (dropMethod === frame.method) {
+                dropMethod = "";
                 ws.close(1006);
                 return;
               }
@@ -186,7 +188,10 @@ function fixture(
     },
     uri: () => "hikaro://pair#" + encodeURIComponent(JSON.stringify(pairing)),
     dropResume: () => {
-      dropResume = true;
+      dropMethod = "session.resume";
+    },
+    dropReply: (method: string) => {
+      dropMethod = method;
     },
     close: (code: number) => active.close(code),
     get credential() {
@@ -194,6 +199,53 @@ function fixture(
     },
   };
 }
+it("requires current control authority for approvals and never sends expired or repeated decisions", async () => {
+  const approval = {
+    id: "approval1",
+    sessionId: "s1",
+    tool: "shell",
+    reason: "Run a command",
+    arguments: { command: "echo hello" },
+  };
+  const snapshot = { sessionRole: "view", approvals: [approval] };
+  const f = fixture(undefined, undefined, snapshot);
+  const app = new MobileController(f.store, f.options);
+  try {
+    app.review(f.uri());
+    await app.confirm();
+    await vi.waitFor(() => expect(app.state.phase).toBe("connected"));
+    await expect(app.respondApproval(approval.id, true)).rejects.toThrow(
+      /control/i,
+    );
+    expect(app.state.actionNotice).toContain("控制权限");
+    expect(f.sent.filter((f) => f.method === "approval.respond")).toHaveLength(
+      0,
+    );
+    snapshot.sessionRole = "control";
+    await app.restore();
+    await vi.waitFor(() => expect(app.state.sessionRole).toBe("control"));
+    await expect(app.respondApproval("expired", true)).rejects.toThrow(
+      /expired/i,
+    );
+    expect(app.state.actionNotice).toContain("已失效");
+    const response = app.respondApproval(approval.id, false);
+    await expect(app.respondApproval(approval.id, true)).rejects.toThrow(
+      /pending/i,
+    );
+    await response;
+    expect(app.state.actionNotice).toContain("电脑已收到决定");
+    expect(f.sent.filter((f) => f.method === "approval.respond")).toMatchObject(
+      [{ params: { id: approval.id, allow: false, sessionId: "s1" } }],
+    );
+    app.suspend();
+    expect(app.state.approvals).toEqual([]);
+    await expect(app.respondApproval(approval.id, true)).rejects.toThrow();
+    await expect(app.reconcileActions()).rejects.toThrow(/connected/i);
+    expect(app.state.actionNotice).toContain("恢复连接");
+  } finally {
+    app.dispose();
+  }
+});
 it("clears full-message pages on close, selection and background, fencing late responses", async () => {
   let resolve!: (page: unknown) => void;
   let delayed = false;
@@ -453,6 +505,92 @@ it("restores the same granted host task after a lost selection acknowledgement, 
     await vi.waitFor(() => expect(app.state.sessions).toEqual([]));
     expect(app.state.messages).toEqual([]);
     expect(app.state.content).toBeNull();
+  } finally {
+    app.dispose();
+    local.close();
+    wire.close();
+    bridge.close();
+    await host.close();
+    await rm(home, { recursive: true, force: true });
+  }
+}, 20000);
+
+it("arbitrates mobile approval with a real host, reconciles a lost decision reply, and rejects revoked control", async () => {
+  const home = await mkdtemp(join(tmpdir(), "hikaro-mobile-control-"));
+  const cwd = join(home, "workspace");
+  await mkdir(cwd);
+  let bridge: SharedHostClient;
+  const f = fixture({
+    request: (frame) => dispatchRemote(bridge, f.pairing.deviceId, frame),
+    subscribe: (fn) => bridge.subscribe(fn),
+  });
+  await writeFile(
+    join(home, "remote.json"),
+    JSON.stringify({
+      relay: f.pairing.relay,
+      hostId: f.pairing.hostId,
+      publicKey: f.host.publicKey,
+      devices: {
+        [f.pairing.deviceId]: { publicKey: f.pairing.identity.publicKey },
+      },
+    }),
+    { mode: 0o600 },
+  );
+  const host = await serveSharedHost({ home, cwd, demo: true });
+  const wire = await SharedHostClient.connect({ home, cwd, clientId: "owner" });
+  bridge = await SharedHostClient.connect({ home, cwd, mode: "bridge" });
+  const local = new ClientConnection(wire.scope, wire, clock);
+  const app = new MobileController(f.store, f.options);
+  try {
+    await local.connected();
+    const session = (await local.request("session.create")) as any;
+    await local.request("session.access", {
+      deviceId: f.pairing.deviceId,
+      role: "control",
+    });
+    app.review(f.uri());
+    await app.confirm();
+    await vi.waitFor(() => expect(app.state.phase).toBe("connected"));
+    await app.select(session.id);
+    await vi.waitFor(() => expect(app.state.sessionRole).toBe("control"));
+    const command = () =>
+      local.request("tool.manual", {
+        command: "printf approved > approved.txt",
+        unrestricted: true,
+      });
+    const first = command();
+    await vi.waitFor(() => expect(app.state.approvals).toHaveLength(1));
+    const id = app.state.approvals[0]!.id;
+    expect(app.state.approvals[0]!.arguments).toMatchObject({
+      command: "printf approved > approved.txt",
+    });
+    const race = await Promise.allSettled([
+      app.respondApproval(id, true),
+      local.request("approval.respond", { id, allow: true }),
+    ]);
+    expect(race.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    await first;
+    expect(await readFile(join(cwd, "approved.txt"), "utf8")).toBe("approved");
+    await vi.waitFor(() => expect(app.state.approvals).toHaveLength(0));
+    await expect(app.respondApproval(id, true)).rejects.toThrow(/expired/);
+    const second = command();
+    await vi.waitFor(() => expect(app.state.approvals).toHaveLength(1));
+    const next = app.state.approvals[0]!.id;
+    const count = f.sent.filter((f) => f.method === "approval.respond").length;
+    f.dropReply("approval.respond");
+    await expect(app.respondApproval(next, false)).rejects.toThrow(/unknown/i);
+    expect(await second).toMatchObject({ isError: true });
+    await vi.waitFor(() => expect(app.state.phase).toBe("connected"));
+    await vi.waitFor(() => expect(app.state.unknown).toBe(0));
+    expect(f.sent.filter((f) => f.method === "approval.respond")).toHaveLength(
+      count + 1,
+    );
+    await local.request("session.access", {
+      deviceId: f.pairing.deviceId,
+      role: "view",
+    });
+    await vi.waitFor(() => expect(app.state.sessionRole).toBe("view"));
+    await expect(app.respondApproval(next, true)).rejects.toThrow(/control/);
   } finally {
     app.dispose();
     local.close();

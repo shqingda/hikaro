@@ -457,3 +457,11 @@ pnpm exec vitest run tests/pty.test.ts -t 'critical TUI workflows'
 - [x] 保留首次运行的沙箱拒绝与模型恢复证据；修正 fixture 缺少 package.json 后正常路径通过。
 - [ ] IME 等待人工结果；打包 CLI 订阅与真实异常恢复场景、正式分发仍待验收。
 - [证据](docs/validation/live-model-ime.md)。TUI 94%，移动端 35%，尚未到 95%。
+
+## 2026-10-21：移动端审批与回执首切片
+
+- [x] 手机查看完整审批详情，当前 control 权限门禁，明确允许/拒绝、重复操作保护、失效及失败提示。
+- [x] 实际共享 host 验证多端竞争、旧审批拒绝、控制权撤销、丢失回执后查询恢复且不重发；7 项 controller 定向测试通过。
+- [x] 根目录及移动端类型检查、iOS／Android 生产 JS 导出通过。
+- [ ] 原生界面点击、真实 relay 与真机生命周期验收；发送、按运行身份停止与持久草稿仍待补齐。
+- [证据](docs/validation/mobile-approvals.md)。TUI 94%，移动端 40%，尚未到 95%。

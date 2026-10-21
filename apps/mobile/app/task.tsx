@@ -10,6 +10,7 @@ import { router } from "expo-router";
 import { useMobile } from "@/provider";
 import { Action, Note } from "@/ui";
 import { colors, readable } from "@/theme";
+import { TaskActions } from "@/task-actions";
 const status: Record<string, string> = {
   idle: "尚未运行",
   running: "电脑正在执行",
@@ -53,10 +54,10 @@ export default function Task() {
               ? (status[state.runStatus] ?? "状态待确认")
               : "离线快照 · 状态可能已变化"}
           </Note>
-          <Note>本页只读。发送、停止和审批请回到电脑。</Note>
+          <TaskActions />
           {state.unknown > 0 && (
             <Note>
-              有未确认的会话切换记录。当前内容以电脑返回的状态为准，没有重新发送操作。
+              有未确认的操作。当前内容以电脑返回的状态为准，没有重新发送操作。
             </Note>
           )}
           {state.error && <Note error>{state.error}</Note>}

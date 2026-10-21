@@ -1,5 +1,13 @@
 import * as z from "zod";
 import {
+  rpcReadMethods,
+  type Permission,
+} from "../../../packages/protocol/src/contracts.ts";
+import type {
+  CommandReceipt,
+  ExecutionState,
+} from "../../../packages/client-core/src/index.ts";
+import {
   contentPage,
   contentRequestOffset,
   type ContentPage,
@@ -62,6 +70,7 @@ const allowed = new Set([
   "messages.content",
   "session.resume",
   "command.receipt",
+  "approval.respond",
 ]);
 export type MobileState = {
   phase:
@@ -98,6 +107,11 @@ export type MobileState = {
   loading: boolean;
   error: string | null;
   unknown: number;
+  sessionRole: ExecutionState["sessionRole"];
+  approvals: Permission[];
+  receipts: CommandReceipt[];
+  actionPending: string | null;
+  actionNotice: string | null;
   content: {
     sessionId: string;
     seq: number;
@@ -127,11 +141,16 @@ const empty = (phase: MobileState["phase"]): MobileState => ({
   loading: false,
   error: null,
   unknown: 0,
+  sessionRole: null,
+  approvals: [],
+  receipts: [],
+  actionPending: null,
+  actionNotice: null,
   content: null,
   contentLoading: false,
   contentError: null,
 });
-/** A read-only view. No public escape hatch exposes mutation-capable transport. */
+/** Only explicit, authority-checked operations expose mutation-capable transport. */
 export class MobileController {
   private value = empty("unpaired");
   private listeners = new Set<() => void>();
@@ -186,6 +205,10 @@ export class MobileController {
       content: null,
       contentLoading: false,
       contentError: null,
+      approvals: [],
+      sessionRole: null,
+      actionPending: null,
+      actionNotice: null,
     };
     this.paint?.();
     this.paint = undefined;
@@ -289,7 +312,7 @@ export class MobileController {
         observe: (fn) => transport.observe(fn),
         send: (frame) => {
           if (!allowed.has(frame.method))
-            throw Error("M0 allows read-only operations");
+            throw Error("Mobile operation is not supported");
           return transport.send(frame);
         },
       },
@@ -331,7 +354,12 @@ export class MobileController {
         if (restored || selected !== current) this.closeMessage();
         if (selected !== current) {
           this.historyEpoch++;
-          this.update({ messages: [], hasOlder: false, hasNewer: false });
+          this.update({
+            messages: [],
+            hasOlder: false,
+            hasNewer: false,
+            actionNotice: null,
+          });
         }
         selected = current;
         ready = s.canAct;
@@ -348,9 +376,15 @@ export class MobileController {
             streamTruncated: s.streamTruncated,
             runId: s.runId,
             runStatus: s.runStatus,
+            sessionRole: s.sessionRole,
+            approvals: s.canAct ? s.approvals : [],
+            receipts: client.receipts.filter(
+              (r) => r.method === "approval.respond",
+            ),
             error: null,
-            unknown: client.receipts.filter((r) => r.status === "unknown")
-              .length,
+            unknown: client.receipts.filter(
+              (r) => r.status === "unknown" && !rpcReadMethods.has(r.method),
+            ).length,
           },
           false,
         );
@@ -459,6 +493,7 @@ export class MobileController {
     }
   }
   async select(sessionId: string) {
+    if (this.value.actionPending) throw Error("A decision is pending");
     if (!this.client?.state.canAct) throw Error("Not connected");
     this.closeMessage();
     const epoch = this.epoch;
@@ -473,6 +508,87 @@ export class MobileController {
       throw error;
     } finally {
       if (epoch === this.epoch) this.update({ loading: false });
+    }
+  }
+  async respondApproval(id: string, allow: boolean) {
+    const client = this.client,
+      epoch = this.epoch;
+    const state = client?.state;
+    if (
+      !client ||
+      !state?.canAct ||
+      !state.session ||
+      !["owner", "control"].includes(state.sessionRole ?? "")
+    ) {
+      this.update({
+        actionNotice: "请先恢复连接，并确认电脑已授予当前任务的控制权限。",
+      });
+      throw Error("Current session control permission required");
+    }
+    if (this.value.actionPending) {
+      this.update({ actionNotice: "上一项操作仍在等待回执，请先核对结果。" });
+      throw Error("A decision is pending");
+    }
+    if (
+      !state.approvals.some(
+        (a) =>
+          a.id === id &&
+          (a.authoritySessionId ?? a.sessionId) === state.session!.id,
+      )
+    ) {
+      this.update({
+        actionNotice: "这项审批已失效或不属于当前任务，请查看最新请求。",
+      });
+      throw Error("Approval expired or belongs to another task");
+    }
+    this.update({ actionPending: id, actionNotice: null });
+    try {
+      await client.request("approval.respond", {
+        id,
+        allow,
+        sessionId: state.session.id,
+      });
+      if (epoch === this.epoch)
+        this.update({
+          actionNotice: "电脑已收到决定，工具结果以任务记录为准。",
+        });
+    } catch (error) {
+      if (epoch === this.epoch)
+        this.update({
+          actionNotice:
+            "决定未确认或已失效。请核对回执与电脑状态，不会自动重发。",
+        });
+      throw error;
+    } finally {
+      if (epoch === this.epoch) this.update({ actionPending: null });
+    }
+  }
+  async reconcileActions() {
+    const client = this.client,
+      epoch = this.epoch;
+    if (!client?.state.canAct) {
+      this.update({ actionNotice: "请先恢复连接，再核对操作回执。" });
+      throw Error("Not connected");
+    }
+    if (this.value.actionPending) throw Error("A decision is pending");
+    this.update({
+      actionPending: "receipts",
+      actionNotice: "正在核对操作回执…",
+    });
+    try {
+      await client.reconcile();
+      if (epoch === this.epoch)
+        this.update({
+          actionNotice: "回执已核对。仍显示结果未知的操作不会自动重发。",
+        });
+    } catch (error) {
+      if (epoch === this.epoch)
+        this.update({
+          actionNotice: "暂时无法核对回执，请恢复连接后重试核对。",
+        });
+      throw error;
+    } finally {
+      if (epoch === this.epoch) this.update({ actionPending: null });
     }
   }
   closeMessage() {
