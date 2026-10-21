@@ -673,13 +673,17 @@ async function main() {
           exit();
           return;
         case "paste-image": {
+          const target = session.id;
+          const draft = view.editor.getExpandedText();
           const { saveClipboardImage } =
             await import("../../../packages/runtime/src/clipboard-image.ts");
           const { attachmentReference } =
             await import("../../../packages/runtime/src/attachments.ts");
-          view.editor.setText(
-            attachmentReference(await saveClipboardImage()) + " ",
-          );
+          const path = await saveClipboardImage();
+          if (exiting) return;
+          if (session.id !== target || view.editor.getExpandedText() !== draft)
+            return `Input changed; clipboard image saved at ${path}. Use /attach PATH to add it when ready.`;
+          view.editor.setText(attachmentReference(path) + " ");
           return "Clipboard image attached. Add your question and press Enter. The private temporary file is retained for draft recovery.";
         }
         case "attach": {

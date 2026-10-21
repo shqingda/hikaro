@@ -508,11 +508,19 @@ export async function attachTui(options: {
           return "Session access updated.";
         }
         case "/paste-image": {
+          const target = client.state.session?.id;
+          const draft = view.editor.getExpandedText();
           const { saveClipboardImage } =
             await import("../../../packages/runtime/src/clipboard-image.ts");
-          view.editor.setText(
-            attachmentReference(await saveClipboardImage()) + " ",
-          );
+          const path = await saveClipboardImage();
+          if (exiting) return;
+          if (
+            !client.state.canAct ||
+            client.state.session?.id !== target ||
+            view.editor.getExpandedText() !== draft
+          )
+            return `Input or connection changed; clipboard image saved at ${path}. Use /attach PATH to add it when ready.`;
+          view.editor.setText(attachmentReference(path) + " ");
           return "Clipboard image attached. Add your question and press Enter. The private temporary file is retained for draft recovery.";
         }
         case "/attach":
