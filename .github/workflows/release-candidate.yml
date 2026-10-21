@@ -41,6 +41,7 @@ jobs:
       - name: Check types and release security contracts
         run: |
           pnpm typecheck
+          pnpm exec vitest run tests/runtime-lifecycle.test.ts -t 'workspace directory'
           node --test scripts/package-release.test.mjs scripts/release-audit.test.mjs scripts/forge-patch.test.mjs
       - name: Build and audit candidate
         run: pnpm release:pack

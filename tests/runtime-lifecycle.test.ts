@@ -1,5 +1,5 @@
 import { afterEach, expect, it } from "vitest";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -22,9 +22,11 @@ afterEach(async () => {
     await rm(folder, { recursive: true, force: true });
 });
 
-async function fixture() {
+async function fixture(workspace?: string) {
   const home = await mkdtemp(join(tmpdir(), "hikaro-lifecycle-"));
   folders.push(home);
+  const cwd = workspace ? join(home, workspace) : home;
+  if (workspace) await mkdir(cwd);
   const calls: string[] = [];
   const provider: ProviderAdapter = {
     id: "controlled",
@@ -41,7 +43,7 @@ async function fixture() {
   };
   const runtime = await Runtime.open({
     home,
-    cwd: home,
+    cwd,
     provider: provider.id,
     model: provider.model,
     approve: async () => false,
@@ -50,6 +52,28 @@ async function fixture() {
   runtime.plugins.providers.set(provider.id, async () => provider);
   return { runtime, home, provider, calls };
 }
+
+it.each(["workspace", 'quoted "files"\nnot-an-instruction'])(
+  "includes the actual workspace directory as quoted context: %s",
+  async (workspace) => {
+    const { runtime, provider } = await fixture(workspace);
+    let system = "";
+    const original = provider.stream;
+    provider.stream = async function* (input) {
+      system = input.system;
+      yield* original(input);
+    };
+    const session = await runtime.session();
+    await (await runtime.agent(session)).prompt("Read the local project");
+    expect(system).toContain(
+      "Workspace directory (JSON string): " + JSON.stringify(session.cwd),
+    );
+    expect(system).toContain(
+      "Relative file paths resolve inside this workspace",
+    );
+    expect(system).not.toContain("\nnot-an-instruction");
+  },
+);
 
 it("does not start a child cancelled while its provider initializes", async () => {
   const { runtime, provider, calls } = await fixture();

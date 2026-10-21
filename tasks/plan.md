@@ -4,6 +4,8 @@
 
 ## 执行顺序
 
+CI 同包订阅验收暴露工作区上下文缺失：模型猜测外部绝对路径，被审批正确拦截。新增 `tests/runtime-lifecycle.test.ts -t 'workspace directory'`，验证真实会话 cwd 进入系统上下文，含引号/换行的路径保持 JSON 字符串边界；修复后类型检查、构建，再由 CI 重建并跑同一分发 E2E。验收脚本对仅限工作区阶段的意外审批立即报错，不延长超时、不自动批准。
+
 干净机器这一轮：单独的 `release-candidate.yml` 在 GitHub 标准 macos-14 arm64 新 VM 上安装最低 Node 24.21.0，以空 pnpm store 构建/审计候选包，再由唯一 `check-release.mjs` E2E 使用空 npm 缓存安装并运行。只调用发布/安全定向单测，不触发既有全量 check；只读仓库权限，Actions 固定 commit，校验通过才上传 tarball/校验和/报告。工作流修改的 push 会运行一次，普通产品 push 不自动运行。先做本地 YAML 格式/差异检查，再推送取得实际远程结果。
 
 当前轮：在同一 `check-live-release.mjs` 中增加仅对验收 host 的 xAI Responses POST 生效的 fetch 故障注入，分别验证请求前断网、429、实际回复中途断流、挂起连接取消，以及每项后的明确新请求恢复。注入模块单测只检验隔离边界和中断语义，唯一 E2E 仍为已安装 tarball 流程；重新打包包含 Ctrl+D 修复的代码。不得截取/记录令牌、改系统网络或把注入结果描述为外部服务真实故障。

@@ -223,6 +223,8 @@ try {
   report.sessionId = session.id;
   client.subscribe((frame) => {
     if (frame.type === "event") events.push(frame.event);
+    if (frame.type === "approval" && step === "real model read/edit/test/diff")
+      report.unexpectedApproval = { tool: frame.request.tool };
   });
   terminal = require("node-pty").spawn(
     bin,
@@ -253,7 +255,18 @@ try {
   submit(
     "Release acceptance in this disposable workspace. Use read_file to read sum.cjs and sum.test.cjs, then edit_file or write_file to fix sum.cjs so it adds correctly. Do not modify the tests or package.json. Use shell to run exactly node --test sum.test.cjs and use git_diff to inspect the change. Finish with a brief description of what changed and the actual test result, including RELEASE-TOOLS-PASSED. Do not read outside this workspace, use network tools, install packages or delegate.",
   );
-  await wait(() => endAfter(start), "real model completion", 120000);
+  await wait(
+    () => {
+      assert.equal(
+        report.unexpectedApproval,
+        undefined,
+        "Unexpected approval during workspace-only acceptance",
+      );
+      return endAfter(start);
+    },
+    "real model completion",
+    120000,
+  );
   assert.equal(endAfter(start).data.status, "completed");
   const successful = events
     .slice(start)
