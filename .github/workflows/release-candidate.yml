@@ -47,7 +47,10 @@ jobs:
       - name: Build and audit candidate
         run: pnpm release:pack
       - name: Install candidate with empty npm cache and exercise installed TUI
-        run: pnpm check:release artifacts/release/hikaro-0.1.0-darwin-arm64.tgz
+        run: |
+          candidates=(artifacts/release/*.tgz)
+          (( ${#candidates} == 1 ))
+          pnpm check:release "${candidates[1]}"
       - name: Retain verified candidate and reports
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
