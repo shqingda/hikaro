@@ -1,11 +1,12 @@
 import { spawn as spawnProcess } from "node:child_process";
 import { spawn } from "node-pty";
 import { expect, it, vi } from "vitest";
-import { mkdtemp, mkdir, rm, realpath } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, realpath, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { stripVTControlCharacters } from "node:util";
 import { SQLiteStore } from "../packages/storage/src/index.ts";
+import { SharedHostClient } from "../packages/host/src/client.ts";
 
 it.each([false, true])(
   "searches and reads full messages in TUI (attached=%s)",
@@ -20,7 +21,13 @@ it.each([false, true])(
     let hostExit: Promise<unknown> | undefined;
     let terminal: ReturnType<typeof spawn> | undefined;
     let terminalExit: Promise<number> | undefined;
-    const args = [resolve("dist/hikaro.mjs"), "--home", home, "--cwd", cwd];
+    const args = [
+      resolve(process.env.HIKARO_TEST_BIN ?? "dist/hikaro.mjs"),
+      "--home",
+      home,
+      "--cwd",
+      cwd,
+    ];
     try {
       const session = await store.createSession(
         cwd,
@@ -40,6 +47,12 @@ it.each([false, true])(
             "ordinary line\n".repeat(1700) +
             "FULLTEXT-NEEDLE",
           timestamp: 1,
+          images: [
+            {
+              mimeType: "image/png",
+              data: Buffer.alloc(100003, 73).toString("base64"),
+            },
+          ],
         },
       });
       if (attached) {
@@ -51,6 +64,26 @@ it.each([false, true])(
         await vi.waitFor(() => expect(output).toContain("shared host ready"), {
           timeout: 10000,
         });
+        const client = await SharedHostClient.connect({
+          home,
+          cwd,
+          clientId: "export-check",
+        });
+        try {
+          await client.request("hello");
+          await client.request("session.resume", { sessionId: session.id });
+          const exported = (await client.request("session.export.file", {
+            sessionId: session.id,
+          })) as { path: string };
+          const markdown = await readFile(exported.path, "utf8");
+          const relative = markdown.match(/!\[Image 1\]\(([^)]+)\)/)![1]!;
+          expect(relative.startsWith("/")).toBe(false);
+          expect(
+            await readFile(join(dirname(exported.path), relative)),
+          ).toEqual(Buffer.alloc(100003, 73));
+        } finally {
+          await client.close();
+        }
       }
       let output = "";
       terminal = spawn(
