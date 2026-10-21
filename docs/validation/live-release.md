@@ -1,5 +1,7 @@
 # 实际分发包的订阅模型与恢复验收 · 2026-10-21
 
+后续状态：用户已明确反馈修复版“草稿恢复正常”，[五项物理终端检查](physical-terminal.md)均通过。下文保留此前包与修复时的历史记录，不把旧 SHA 当成新候选包验收结果。
+
 通过对象是 `db64b8102df3d576d30e3c276c9e985835d98337` 的 macOS arm64 候选包，版本 0.1.0，Node v26.12.0。SHA-256：`ca314cd01f7937411cd781b64be691dfee96277ebbe5415f384f837f40f9daad`。完整机器记录见 [JSON](live-release.json)。
 
 运行 `node --import tsx scripts/check-live-release.mjs artifacts/release/hikaro-0.1.0-darwin-arm64.tgz`。脚本空缓存安装 tarball，校验 49 个 node-forge Node 源文件及 8 组签名回归；从安装目录加载 node-pty，实际运行安装的 host 与 TUI。源码 SharedHostClient 仅作为观察连接，模型/provider/tool 实现来自安装包。

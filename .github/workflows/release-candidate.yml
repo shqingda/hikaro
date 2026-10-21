@@ -42,6 +42,7 @@ jobs:
         run: |
           pnpm typecheck
           pnpm exec vitest run tests/runtime-lifecycle.test.ts -t 'workspace directory'
+          pnpm exec vitest run tests/steering-recovery.test.ts tests/steering-queue.test.ts
           node --test scripts/package-release.test.mjs scripts/release-audit.test.mjs scripts/forge-patch.test.mjs
       - name: Build and audit candidate
         run: pnpm release:pack

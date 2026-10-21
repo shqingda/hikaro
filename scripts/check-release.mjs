@@ -14,10 +14,10 @@ import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
 import { verifyForge } from "./forge-patch.mjs";
+import { verifyReleaseRecovery } from "./release-recovery.mjs";
 
 const exec = promisify(execFile);
-if (!process.argv[2])
-  throw Error("Usage: node scripts/check-release.mjs ARTIFACT.tgz");
+if (!process.argv[2]) throw Error("Usage: pnpm check:release ARTIFACT.tgz");
 // The bin shebang and npm must use the runtime being evaluated.
 const childNode = (
   await exec("node", ["-p", "process.execPath"])
@@ -148,6 +148,7 @@ try {
       else reject(Error(`Installed TUI exit=${exitCode}, ready=${ready}`));
     });
   });
+  const recovery = await verifyReleaseRecovery({ bin, spawn, home, workspace });
   const report = {
     status: "passed",
     sha256,
@@ -167,9 +168,10 @@ try {
       "installed bin demo prompt",
       "packaged native file helper read",
       "installed node-pty TUI startup and clean exit",
+      ...recovery,
     ],
     limitations: [
-      "current macOS developer machine",
+      "runner environment recorded by CI; local runs use the current developer machine",
       "real provider and Keychain not exercised",
       "not signed/notarized or publicly published",
     ],

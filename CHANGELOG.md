@@ -18,7 +18,7 @@ Stop all writers and back up the complete data directory before upgrading. Keep 
 
 ### Remaining release acceptance
 
-The user passed Chinese input, mixed-character editing, multiline paste and resize checks. Ctrl+D draft recovery has an automated fix awaiting physical retest. Process-local network/rate-limit/stream failures and cancellation recover through real subscription requests. Assistive-technology results, distribution on a clean machine and the final public channel remain open. The current engineering record is [release readiness](docs/release-readiness.md); a candidate build is not a completed public release.
+The user passed Chinese input, mixed-character editing, multiline paste, resize and the fixed Ctrl+D draft recovery checks. Process-local network/rate-limit/stream failures and cancellation recover through real subscription requests. The previous candidate passed clean-machine distribution; the latest steering changes require a new candidate validation. Assistive-technology results and the final public channel remain open. The current engineering record is [release readiness](docs/release-readiness.md); a candidate build is not a completed public release.
 
 ### Known boundaries
 

@@ -64,7 +64,7 @@ npm install --engine-strict --prefix "$HOME/.local/share/hikaro-app" ./hikaro-0.
 
 需要 Node 24.21+ 和 npm、rg；最低版本验收使用 Node 24.21.0。若 npm 提示安装脚本审批，检查并按其提示批准需要的原生依赖脚本。未覆盖的 Node 版本、无开发工具的全新机器、Gatekeeper 隔离属性及签名/公证尚需验收。SHA-256 用于检测内容变化，不提供发布者身份认证；只使用可信渠道获得的包与校验值。
 
-运行 `pnpm check:release artifacts/release/hikaro-0.1.0-darwin-arm64.tgz` 验收实际 tarball：独立安装前缀、空 npm 缓存、校验和、实际 bin 离线任务、已打包原生 helper 读取、由安装目录自己的 node-pty 启动 TUI 并正常退出。输出同名 `.validation.json`，不复用工作区 node_modules，不接触用户 home。构建或 README 改变后需重新打包并验收对应 SHA，旧验证不能覆盖新包。
+运行 `pnpm check:release artifacts/release/hikaro-0.1.0-darwin-arm64.tgz` 验收实际 tarball：独立安装前缀、空 npm 缓存、校验和、实际 bin 离线任务、已打包原生 helper 读取、由安装目录自己的 node-pty 启动 TUI 并正常退出。另验证立即 Ctrl+D 的多行草稿保存/重开，以及 SIGKILL host 后补充指令经原身份确认才在下一轮生效，未确认项保留。输出同名 `.validation.json`；应用及依赖全部来自安装包，源码 SharedHostClient 仅作为观察传输，通过现有 tsx 运行。不接触用户 home。构建或 README 改变后需重新打包并验收对应 SHA，旧验证不能覆盖新包。
 
 升级先停止所有写入者并备份数据，再将新包安装到另一个目录验证；回退切回保留的旧安装目录并恢复升级前数据备份。删除安装目录不会自动删除用户数据；切勿将数据 home 放在安装目录内。
 
