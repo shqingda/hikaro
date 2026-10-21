@@ -16,7 +16,7 @@ pnpm --filter @hikaro/mobile exec expo run:android --device
 
 这是开发构建，使用 Metro；不等于独立运行的 Release APK。保持 USB 连接，必要时用 `adb reverse tcp:8081 tcp:8081` 连接本机开发服务。手机与电脑仍通过已配对的 relay 通信，Metro 只提供开发代码。
 
-当前尚未完成 Android 原生安装与任务流程验收，也未提供经过验收的独立 Android 安装包。
+已生成带 JS 的 ARM64 自用 Release APK（开发签名），路径与安装命令见 [Android 构建记录](validation/mobile-android-build.md)。当前尚未完成 Android 原生安装与任务流程验收，不将编译成功视为手机可用性验收。
 
 ## iPhone 真机 Release 安装
 

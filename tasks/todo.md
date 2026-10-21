@@ -24,6 +24,7 @@
 - [ ] 移动通知入口、缓存原生重开与辅助技术；图片/diff 的 Android 和真机验收。
 - [ ] 移动生产依赖安全、iOS/Android 原生及签名构建、真实设备网络/扫码/生命周期/性能。
 - [x] 最新移动端 iOS 模拟器原生编译、安装及 Codex 预览启动通过（包含新增原生通知模块）；独立 Release 包、Android 及真机范围仍未完成。
+- [x] Android ARM64 自用 Release APK 构建成功，签名及内置 Hermes/JS 检查通过；使用开发签名，真机安装与运行仍未验收，见 docs/validation/mobile-android-build.md。
 - [x] TUI 实际分发包 + 订阅：读/改/测/diff、拒绝、Ctrl+C 取消真实 shell、等待审批时 SIGKILL 后明确继续。
 - [x] 用户物理终端检查 1–5：输入法回车、中文/英文/emoji 编辑、两行粘贴、窗口缩放，以及修复后的 Ctrl+D 草稿恢复。
 - [x] TUI 包内实际 provider 的断网/429/断流/挂起故障注入，明确订阅恢复与不重发核对。
