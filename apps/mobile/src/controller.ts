@@ -1,6 +1,13 @@
 import * as z from "zod";
 import {
+  MobileComposer,
+  emptyComposer,
+  type ComposerState,
+  type DraftStore,
+} from "./composer.ts";
+import {
   rpcReadMethods,
+  CommandReceiptResult,
   RunCancelResult,
   type Permission,
 } from "../../../packages/protocol/src/contracts.ts";
@@ -56,6 +63,7 @@ export interface MobileStorage {
   erase(): Promise<void>;
   journal(scope: string): IntentStore;
   clear(scope: string): Promise<void>;
+  drafts: DraftStore;
 }
 export type MobileOptions = Omit<ConnectionOptions, "intents"> & {
   probe(pairing: Pairing): Promise<"ready" | "pending" | "offline" | "revoked">;
@@ -73,6 +81,7 @@ const allowed = new Set([
   "command.receipt",
   "approval.respond",
   "run.cancel",
+  "prompt",
 ]);
 export type MobileState = {
   phase:
@@ -111,6 +120,8 @@ export type MobileState = {
   unknown: number;
   sessionRole: ExecutionState["sessionRole"];
   canStopRun: boolean;
+  canSend: boolean;
+  composer: ComposerState;
   approvals: Permission[];
   receipts: CommandReceipt[];
   actionPending: string | null;
@@ -146,6 +157,8 @@ const empty = (phase: MobileState["phase"]): MobileState => ({
   unknown: 0,
   sessionRole: null,
   canStopRun: false,
+  canSend: false,
+  composer: emptyComposer(),
   approvals: [],
   receipts: [],
   actionPending: null,
@@ -172,10 +185,35 @@ export class MobileController {
   private refresh?: Promise<void>;
   private refreshAgain = false;
   private paint?: () => void;
+  private draftIdentity = 0;
+  private composer: MobileComposer;
   constructor(
     private storage: MobileStorage,
     private options: MobileOptions,
-  ) {}
+  ) {
+    this.composer = new MobileComposer(
+      {
+        load: (scope, id) =>
+          this.credentials(() => this.storage.drafts.load(scope, id)),
+        save: (scope, record) => {
+          const identity = this.draftIdentity;
+          return this.credentials(async () => {
+            if (identity === this.draftIdentity)
+              await this.storage.drafts.save(scope, record);
+          });
+        },
+      },
+      (composer) => {
+        if (
+          !this.disposed &&
+          !["background", "blocked", "revoked", "unpaired"].includes(
+            this.value.phase,
+          )
+        )
+          this.update({ composer });
+      },
+    );
+  }
   get state(): MobileState {
     return this.value;
   }
@@ -203,6 +241,7 @@ export class MobileController {
     return task;
   }
   private stop() {
+    this.composer.hide();
     this.contentEpoch++;
     this.value = {
       ...this.value,
@@ -212,6 +251,7 @@ export class MobileController {
       approvals: [],
       sessionRole: null,
       canStopRun: false,
+      canSend: false,
       actionPending: null,
       actionNotice: null,
     };
@@ -289,13 +329,14 @@ export class MobileController {
     } catch {
       if (epoch === this.epoch)
         this.update({
-          ...empty("error"),
+          phase: "error",
           error: "无法读取或验证连接。请重试，或移除后重新配对。",
         });
     }
   }
   private async connect(p: Pairing, epoch: number) {
     this.pairing = p;
+    this.composer.bind(pairingScope(p));
     this.update({
       phase: "connecting",
       review: null,
@@ -303,6 +344,9 @@ export class MobileController {
       relay: validateRelay(p.relay),
       error: null,
     });
+    await this.composer.select();
+    if (epoch !== this.epoch || this.disposed) return;
+    this.update({ session: this.composer.state.record?.session ?? null });
     const probe = await this.options.probe(p);
     if (epoch !== this.epoch || this.disposed) return;
     if (probe === "revoked") {
@@ -375,7 +419,7 @@ export class MobileController {
               : s.connection === "offline"
                 ? "offline"
                 : "connecting",
-            session: s.session,
+            session: s.canAct || s.session ? s.session : this.value.session,
             stream: s.stream,
             busy: s.busy,
             streamTruncated: s.streamTruncated,
@@ -389,9 +433,15 @@ export class MobileController {
               s.runStatus === "running" &&
               !!s.runId &&
               ["owner", "control"].includes(s.sessionRole ?? ""),
+            canSend:
+              s.canAct &&
+              client.supports("prompt") &&
+              client.supports("command.receipt") &&
+              !!s.session &&
+              ["owner", "control"].includes(s.sessionRole ?? ""),
             approvals: s.canAct ? s.approvals : [],
             receipts: client.receipts.filter((r) =>
-              ["approval.respond", "run.cancel"].includes(r.method),
+              ["approval.respond", "run.cancel", "prompt"].includes(r.method),
             ),
             error: null,
             unknown: client.receipts.filter(
@@ -400,7 +450,14 @@ export class MobileController {
           },
           false,
         );
-        if (restored) void this.reload(epoch);
+        if (restored) {
+          void this.reload(epoch);
+          void (async () => {
+            if (this.composer.state.record?.session.id !== current)
+              await this.composer.select(s.session);
+            if (epoch === this.epoch) await this.reconcileDraft();
+          })().catch(() => {});
+        }
       }),
     );
     this.releases.push(
@@ -507,6 +564,8 @@ export class MobileController {
   async select(sessionId: string) {
     if (this.value.actionPending) throw Error("A decision is pending");
     if (!this.client?.state.canAct) throw Error("Not connected");
+    await this.composer.flush();
+    if (!this.client?.state.canAct) throw Error("Not connected");
     this.closeMessage();
     const epoch = this.epoch;
     this.update({ loading: true, error: null });
@@ -521,6 +580,73 @@ export class MobileController {
     } finally {
       if (epoch === this.epoch) this.update({ loading: false });
     }
+  }
+  editDraft(sessionId: string, text: string) {
+    if (
+      this.disposed ||
+      !this.pairing ||
+      !["connected", "offline", "connecting", "error"].includes(
+        this.value.phase,
+      )
+    )
+      throw Error("Draft unavailable");
+    if (this.value.session?.id !== sessionId)
+      throw Error("Draft selection changed");
+    this.composer.edit(sessionId, text);
+  }
+  saveDraft() {
+    return this.composer.retrySave();
+  }
+  restoreDraft(sessionId: string) {
+    return this.composer.restoreDraft(sessionId);
+  }
+  async sendDraft(sessionId: string) {
+    const client = this.client,
+      epoch = this.epoch;
+    const guard = () => {
+      if (
+        epoch !== this.epoch ||
+        client !== this.client ||
+        !client?.state.canAct ||
+        client.state.session?.id !== sessionId ||
+        !["owner", "control"].includes(client.state.sessionRole ?? "") ||
+        !client.supports("prompt") ||
+        !client.supports("command.receipt")
+      )
+        throw Error(
+          "Current session control permission required; selection changed or offline",
+        );
+    };
+    guard();
+    const id = this.options.id();
+    await this.composer.send(sessionId, id, (text) => {
+      guard();
+      return client!.request(
+        "prompt",
+        { sessionId, text },
+        { id, beforeSend: guard },
+      );
+    });
+  }
+  async reconcileDraft() {
+    const client = this.client,
+      epoch = this.epoch;
+    if (!client?.state.canAct || !client.supports("command.receipt")) return;
+    await this.composer.reconcile(async (id) => {
+      const result = await client.request("command.receipt", { commandId: id });
+      if (epoch !== this.epoch) throw Error("Connection changed");
+      const receipt = CommandReceiptResult.parse(result).receipt;
+      if (!receipt) return "unknown";
+      if (
+        receipt.id !== id ||
+        receipt.method !== "prompt" ||
+        receipt.scope !== client.scope
+      )
+        throw Error("Receipt identity mismatch");
+      // The durable claim precedes enqueueing. Only an RPC acknowledgement or
+      // completed receipt proves acceptance; an accepted claim alone retains text.
+      return receipt.status === "accepted" ? "pending" : receipt.status;
+    });
   }
   async respondApproval(id: string, allow: boolean) {
     const client = this.client,
@@ -745,6 +871,8 @@ export class MobileController {
     if (epoch !== this.epoch) return;
     epoch = ++this.epoch;
     const p = this.pairing;
+    this.draftIdentity++;
+    this.composer.bind(null);
     this.stop();
     this.update({ ...empty("blocked"), error: "正在移除失效的设备连接…" });
     try {
@@ -777,6 +905,8 @@ export class MobileController {
   async forget() {
     const epoch = ++this.epoch,
       p = this.pairing;
+    this.draftIdentity++;
+    this.composer.bind(null);
     this.stop();
     this.pendingPairing = undefined;
     this.update({ ...empty("blocked"), error: "正在移除连接…" });

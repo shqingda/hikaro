@@ -21,7 +21,7 @@ export function TaskActions() {
     <View style={{ gap: 12 }}>
       {!canControl && (
         <Note>
-          当前仅可查看。审批和停止需要电脑授予这项任务的控制权限，并保持连接。
+          当前可以查看和编辑本机草稿。发送、审批和停止需要电脑授予这项任务的控制权限，并保持连接。
         </Note>
       )}
       {canControl && state.busy && state.runStatus === "running" && (
@@ -136,8 +136,12 @@ export function TaskActions() {
           </Text>
           {state.receipts.slice(-8).map((receipt) => (
             <Note key={receipt.id}>
-              {receipt.method === "run.cancel" ? "停止" : "审批"} ·{" "}
-              {receipts[receipt.status]} · {receipt.id}
+              {receipt.method === "run.cancel"
+                ? "停止"
+                : receipt.method === "prompt"
+                  ? "发送"
+                  : "审批"}{" "}
+              · {receipts[receipt.status]} · {receipt.id}
             </Note>
           ))}
           <Action

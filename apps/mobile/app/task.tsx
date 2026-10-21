@@ -11,6 +11,7 @@ import { useMobile } from "@/provider";
 import { Action, Note } from "@/ui";
 import { colors, readable } from "@/theme";
 import { TaskActions } from "@/task-actions";
+import { Composer } from "@/composer-view";
 const status: Record<string, string> = {
   idle: "尚未运行",
   running: "电脑正在执行",
@@ -31,6 +32,9 @@ export default function Task() {
   return (
     <FlatList
       contentInsetAdjustmentBehavior="automatic"
+      automaticallyAdjustKeyboardInsets
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="interactive"
       contentContainerStyle={{ padding: 24, gap: 24, paddingBottom: 48 }}
       style={{ backgroundColor: colors.background }}
       data={state.messages}
@@ -127,6 +131,7 @@ export default function Task() {
       }
       ListFooterComponent={
         <View style={{ gap: 18, marginTop: 16 }}>
+          <Composer />
           {state.stream && !state.hasNewer && (
             <>
               <Text style={{ fontSize: 12, color: colors.secondary }}>

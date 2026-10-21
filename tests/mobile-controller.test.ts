@@ -1,5 +1,9 @@
 import { it, expect, vi } from "vitest";
-import { MobileController } from "../apps/mobile/src/controller.ts";
+import {
+  MobileController,
+  pairingScope,
+} from "../apps/mobile/src/controller.ts";
+import type { DraftRecord, DraftStore } from "../apps/mobile/src/composer.ts";
 import {
   createIdentity,
   randomToken,
@@ -45,6 +49,21 @@ function fixture(
     active: any,
     dropMethod = "";
   const intents: any[] = [];
+  const draftRows = new Map<string, DraftRecord>();
+  const drafts: DraftStore = {
+    load: vi.fn(async (scope, id) =>
+      structuredClone(
+        id
+          ? (draftRows.get(scope + id) ?? null)
+          : ([...draftRows.entries()]
+              .filter(([key]) => key.startsWith(scope))
+              .at(-1)?.[1] ?? null),
+      ),
+    ),
+    save: vi.fn(async (scope, record) => {
+      draftRows.set(scope + record.session.id, structuredClone(record));
+    }),
+  };
   const sent: any[] = [];
   const session = {
     id: "s1",
@@ -55,12 +74,14 @@ function fixture(
   let selected: any = session,
     revision = 0;
   const store = {
+    drafts,
     read: vi.fn(async () => credential),
     write: vi.fn(async (value: string) => {
       credential = value;
     }),
     erase: vi.fn(async () => {
       credential = null;
+      draftRows.clear();
     }),
     journal: () => ({
       load: async () => intents.slice(),
@@ -70,6 +91,7 @@ function fixture(
     }),
     clear: vi.fn(async () => {
       intents.length = 0;
+      draftRows.clear();
     }),
   };
   const socket = () => {
@@ -202,6 +224,60 @@ function fixture(
     },
   };
 }
+it("restores an offline composer without authority or auto-send and erases drafts after pending saves", async () => {
+  const f = fixture();
+  const session = {
+    id: "s1",
+    title: "上次任务",
+    cwd: "/workspace",
+    createdAt: 1,
+  };
+  await f.store.write(JSON.stringify(f.pairing));
+  await f.store.drafts.save(pairingScope(f.pairing), {
+    session,
+    text: "离线草稿",
+  });
+  const app = new MobileController(f.store, {
+    ...f.options,
+    probe: async () => {
+      throw Error("offline");
+    },
+  });
+  try {
+    await app.restore();
+    expect(app.state.session?.id).toBe(session.id);
+    expect(app.state.composer.record?.text).toBe("离线草稿");
+    expect(app.state.canSend).toBe(false);
+    await expect(app.sendDraft(session.id)).rejects.toThrow(/control/);
+    app.editDraft(session.id, "离线编辑\n第二行");
+    await app.saveDraft();
+    app.suspend();
+    expect(app.state.composer.record).toBeNull();
+    await app.restore();
+    expect(app.state.composer.record?.text).toBe("离线编辑\n第二行");
+    const save = f.store.drafts.save;
+    let release!: () => void;
+    vi.mocked(save).mockImplementationOnce(
+      (scope, record) =>
+        new Promise<void>((resolve) => {
+          release = () => {
+            void save(scope, record).then(resolve);
+          };
+        }),
+    );
+    app.editDraft(session.id, "正在保存");
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    const forget = app.forget();
+    release();
+    await forget;
+    expect(app.state.phase).toBe("unpaired");
+    expect(await f.store.drafts.load(pairingScope(f.pairing))).toBeNull();
+    expect(f.sent.filter((f) => f.method === "prompt")).toHaveLength(0);
+  } finally {
+    app.dispose();
+  }
+});
+
 it("requires current control authority for approvals and never sends expired or repeated decisions", async () => {
   const approval = {
     id: "approval1",
@@ -554,6 +630,123 @@ it("restores the same granted host task after a lost selection acknowledgement, 
     await vi.waitFor(() => expect(app.state.sessions).toEqual([]));
     expect(app.state.messages).toEqual([]);
     expect(app.state.content).toBeNull();
+  } finally {
+    app.dispose();
+    local.close();
+    wire.close();
+    bridge.close();
+    await host.close();
+    await rm(home, { recursive: true, force: true });
+  }
+}, 20000);
+
+it("sends mobile drafts through a real host, queues while busy, and recovers a lost prompt reply without replay", async () => {
+  const home = await mkdtemp(join(tmpdir(), "hikaro-mobile-composer-"));
+  const cwd = join(home, "workspace");
+  await mkdir(cwd);
+  let bridge: SharedHostClient;
+  const f = fixture({
+    request: (frame) => dispatchRemote(bridge, f.pairing.deviceId, frame),
+    subscribe: (fn) => bridge.subscribe(fn),
+  });
+  await writeFile(
+    join(home, "remote.json"),
+    JSON.stringify({
+      relay: f.pairing.relay,
+      hostId: f.pairing.hostId,
+      publicKey: f.host.publicKey,
+      devices: {
+        [f.pairing.deviceId]: { publicKey: f.pairing.identity.publicKey },
+      },
+    }),
+    { mode: 0o600 },
+  );
+  const host = await serveSharedHost({ home, cwd, demo: true });
+  const wire = await SharedHostClient.connect({ home, cwd, clientId: "owner" });
+  bridge = await SharedHostClient.connect({ home, cwd, mode: "bridge" });
+  const local = new ClientConnection(wire.scope, wire, clock);
+  let app = new MobileController(f.store, f.options);
+  try {
+    await local.connected();
+    const session = (await local.request("session.create")) as any;
+    await local.request("session.access", {
+      deviceId: f.pairing.deviceId,
+      role: "control",
+    });
+    app.review(f.uri());
+    await app.confirm();
+    await vi.waitFor(() => expect(app.state.phase).toBe("connected"));
+    await app.select(session.id);
+    await vi.waitFor(() =>
+      expect(app.state.composer.record?.session.id).toBe(session.id),
+    );
+    expect(app.state.canSend).toBe(true);
+    app.editDraft(session.id, "来自手机的第一条要求");
+    await app.sendDraft(session.id);
+    expect(app.state.composer.record?.text).toBe("");
+    await vi.waitFor(() => expect(app.state.runStatus).toBe("completed"));
+    const running = local.request("tool.manual", {
+      command:
+        "printf ready > ready.txt; while [ ! -f release.txt ]; do sleep 0.05; done",
+      unrestricted: true,
+    });
+    void running.catch(() => {});
+    await vi.waitFor(() => expect(app.state.approvals).toHaveLength(1));
+    await app.respondApproval(app.state.approvals[0]!.id, true);
+    await vi.waitFor(async () =>
+      expect(await readFile(join(cwd, "ready.txt"), "utf8")).toBe("ready"),
+    );
+    expect(app.state.busy).toBe(true);
+    app.editDraft(session.id, "手机排队的第二条要求");
+    await app.sendDraft(session.id);
+    expect(app.state.composer.record?.text).toBe("");
+    await app.history();
+    expect(
+      app.state.messages.some((m) => m.message.text === "手机排队的第二条要求"),
+    ).toBe(false);
+    await writeFile(join(cwd, "release.txt"), "go");
+    await running;
+    await vi.waitFor(async () => {
+      await app.history();
+      expect(
+        app.state.messages.filter(
+          (m) => m.message.text === "手机排队的第二条要求",
+        ),
+      ).toHaveLength(1);
+      expect(app.state.runStatus).toBe("completed");
+    });
+    app.editDraft(session.id, "丢回执也只执行一次");
+    f.dropReply("prompt");
+    await expect(app.sendDraft(session.id)).rejects.toThrow(/unknown/i);
+    app.dispose();
+    app = new MobileController(f.store, f.options);
+    await app.restore();
+    await vi.waitFor(() => expect(app.state.phase).toBe("connected"));
+    await vi.waitFor(async () => {
+      await app.reconcileDraft();
+      expect(app.state.composer.record?.text).toBe("");
+    });
+    await app.history();
+    for (const text of [
+      "来自手机的第一条要求",
+      "手机排队的第二条要求",
+      "丢回执也只执行一次",
+    ])
+      expect(
+        app.state.messages.filter(
+          (m) => m.message.role === "user" && m.message.text === text,
+        ),
+      ).toHaveLength(1);
+    expect(f.sent.filter((f) => f.method === "prompt")).toHaveLength(3);
+    await local.request("session.access", {
+      deviceId: f.pairing.deviceId,
+      role: "view",
+    });
+    await vi.waitFor(() => expect(app.state.canSend).toBe(false));
+    app.editDraft(session.id, "无权限时保留草稿");
+    await expect(app.sendDraft(session.id)).rejects.toThrow(/control/);
+    expect(app.state.composer.record?.text).toBe("无权限时保留草稿");
+    expect(f.sent.filter((f) => f.method === "prompt")).toHaveLength(3);
   } finally {
     app.dispose();
     local.close();

@@ -60,7 +60,7 @@ export default function Connect() {
           {"任务留在电脑，\n进展随你同行。"}
         </Text>
         <Note>
-          连接你自己的电脑，查看同一个任务与最新输出。当前移动端为只读模式。
+          连接你自己的电脑，查看任务与输出。获得控制权限后，可以发送要求、审批和停止运行；离线时保留草稿。
         </Note>
       </View>
       {pending && (
@@ -124,6 +124,14 @@ export default function Connect() {
         </View>
       )}
       {(error || state.error) && <Note error>{error ?? state.error}</Note>}
+      {state.phase !== "connected" &&
+        state.session &&
+        state.composer.record && (
+          <Action
+            title="继续编辑本机草稿"
+            onPress={() => router.push("/task")}
+          />
+        )}
       {!pending && !state.review && (
         <View style={{ gap: 16 }}>
           {["offline", "error", "blocked"].includes(state.phase) && (

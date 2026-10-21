@@ -31,7 +31,7 @@ export default function Tasks() {
           <Text
             style={{ fontSize: 13, fontWeight: "600", color: colors.secondary }}
           >
-            {online ? "已连接 · 只读" : "连接已断开 · 以下是上次内容"}
+            {online ? "已连接" : "连接已断开 · 以下是上次内容"}
           </Text>
           {state.relay && <Note>{state.relay}</Note>}
           {state.error && <Note error>{state.error}</Note>}
