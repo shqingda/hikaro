@@ -12,4 +12,14 @@
 
 候选来自干净提交 `cf57c46d7e9da38bcbcca8c38e42668500543809`（manifest `dirty: false`），SHA-256 为 `4fc18e9c33251a7540c6d9c2dea0e337db84b75df0d7757784f7d91d49f6338d`。下载到本机 artifacts/ci-release-cf57c46 后 `shasum -a 256 -c` 通过；manifest 包含新增 `dist/pending-steering.mjs`，并与[CI 安装报告](release-recovery-install.json)的 SHA 相同。
 
-此前 b08f160 分发草稿暂保持原样，不混用旧订阅报告证明新包通过。下一步对本次 CI 的同一 tarball 进行订阅模型验收，再更新分发草稿。此检查使用 demo provider，不替代真实订阅或物理输入法；用户五项人工结果单独见[物理终端记录](physical-terminal.md)。
+安装阶段使用 demo provider，不替代真实订阅或物理输入法；用户五项人工结果单独见[物理终端记录](physical-terminal.md)。
+
+## 同包订阅和分发更新
+
+对上述相同 SHA 运行唯一 `node --import tsx scripts/check-live-release.mjs artifacts/ci-release-cf57c46/hikaro-0.1.0-darwin-arm64.tgz`，首次执行全部通过，见[本次订阅报告](release-recovery-subscription.json)。使用正常订阅 OAuth 登录，应用自己读取/刷新凭据，不要求 API Key、不复制或输出令牌。
+
+真实模型完成读文件、修改、执行测试与 diff；脚本独立核对测试通过且无额外修改。拒绝审批未产生文件，Ctrl+C 后运行 cancelled 且真实 shell PID 消失。等待审批时 SIGKILL host，恢复后原 runId 为 unknown，未批准的命令未执行；明确新请求能继续。进程内断网、429、真实流中途截断、挂起取消四类故障均可见终止、不自动重发，各自后续订阅请求成功。没有修改系统网络、延长超时或重复跑安装 E2E/基准。
+
+[0.1.0 分发草稿](https://github.com/shqingda/hikaro/releases/tag/untagged-21916d3e014efb690aca) 已更新到 cf57c46，仍为 draft，未更改仓库可见性。七个附件包括 tarball、校验和、manifest、原始生产审计、包内安全评估、最低 Node 安装报告及本次同包订阅报告。重新下载全部附件到 artifacts/release-download-cf57c46，七份文件逐字节与上传来源一致，tarball SHA 校验通过；旧包的订阅证据未冒充新包证据。
+
+辅助技术与最终发布仍待完成，完整 TUI/移动端功能目标仍按 TODO 推进。本轮发布估算保持 TUI 98%、移动端 45%。

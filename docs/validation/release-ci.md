@@ -22,10 +22,10 @@ Runtime 现将会话实际 cwd 作为 JSON 字符串提供给模型，并说明�
 
 ## 分发草稿
 
-[Hikaro TUI 0.1.0 候选草稿](https://github.com/shqingda/hikaro/releases/tag/untagged-4371281ef7909238a911) 已创建于现有私有仓库，目标为 b08f160，仍为 draft。包含 tarball、SHA-256、生产审计、manifest、CI 安装和真实订阅验收报告。GitHub 记录的 tarball 摘要与上述测试对象一致。
+[Hikaro TUI 0.1.0 候选草稿](https://github.com/shqingda/hikaro/releases) 当时创建于现有私有仓库，目标为 b08f160，仍为 draft。包含 tarball、SHA-256、生产审计、manifest、CI 安装和真实订阅验收报告。GitHub 当时记录的 tarball 摘要与上述测试对象一致。
 
 通过 `gh release download v0.1.0` 重新下载附件，`shasum -a 256 -c` 通过；本机保留于 artifacts/release-download-b08f160。正式渠道取回的字节与已安装实测的候选一致，没有为重复字节再跑一次相同模型测试。
 
 当时正式发布仍待人工草稿复验、辅助技术和最终发布确认。没有更改仓库可见性，也没有发布正式版本。当时发布准备估算 TUI **97%**、移动端 **45%**；完整功能目标仍按 tasks/todo.md 推进。
 
-后续：用户已经确认五项物理终端检查全部通过；[cf57c46 新候选](release-recovery.md)又通过了干净最低 Node 安装、草稿及 steering 恢复，等待对该新 SHA 的订阅复验。上述 b08f160 草稿及其报告仍按原来源保留，未以新包替换旧包却继续沿用旧订阅报告。
+后续：用户已经确认五项物理终端检查全部通过；[cf57c46 新候选](release-recovery.md)又通过了干净最低 Node 安装、草稿及 steering 恢复，并对该新 SHA 完成实际订阅复验。分发草稿与七个附件已更新到 cf57c46，下载后字节一致；b08f160 的历史报告仍保留在本记录中，没有用它证明新包通过。

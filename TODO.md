@@ -502,5 +502,6 @@ pnpm exec vitest run tests/pty.test.ts -t 'critical TUI workflows'
 - [x] 用户明确反馈修复后“草稿恢复正常”，五项物理输入检查全部通过，见[人工记录](docs/validation/physical-terminal.md)。精确终端/输入法版本未提供；未扩大为辅助技术通过。
 - [x] 本机新候选包通过唯一安装 E2E：包内立即 Ctrl+D 草稿保存/重开、SIGKILL host 后 steering 保留、原身份明确确认、不自动启动和未确认项不发送。构建与生产依赖安全门禁通过。
 - [x] 新候选通过干净 macOS arm64 / Node 24.21.0 CI，安装包恢复验收全部成功，下载 SHA 校验一致，见[分发恢复记录](docs/validation/release-recovery.md)。
-- [ ] cf57c46 同包订阅复验、辅助技术与最终正式发布。
+- [x] cf57c46 同包订阅、拒绝/取消、host 崩溃及四类网络恢复通过；草稿七份附件更新并下载字节核对一致。
+- [ ] 辅助技术与最终正式发布；完整功能待办不随候选包验收而关闭。
 - 发布准备估算 TUI **98%**、移动端 **45%**；完整成品目标及其他未完成能力继续保留。

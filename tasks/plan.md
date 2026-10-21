@@ -4,6 +4,10 @@
 
 ## 执行顺序
 
+下一轮实施移动端发送与离线草稿，完整契约见 `docs/specs/mobile-composer.md`：独立模块承接按身份/任务保存、离线重开、稳定发送 ID、未知结果只核对不重发；controller/原生编辑器/SQLite 同时接入。先定向测试，再唯一 mobile-controller 实际 host 集成场景，必要类型检查和双平台导出。不能用只有存储代码或仅能查看的 UI 代替可实际发送的闭环。
+
+当前轮对已通过 CI 的 cf57c46 同一 tarball（SHA 4fc18e9c33251a7540c6d9c2dea0e337db84b75df0d7757784f7d91d49f6338d）运行唯一 `check-live-release.mjs` 订阅 E2E。沿用正常 OAuth，不要求 API Key；通过后核对 SHA 并更新 draft 分发附件与记录，再下载校验。此轮不重复安装 E2E、全量检查或基准；随后切入移动端发送/持久草稿，保留完整成品目标。
+
 当前轮记录用户第 5 项“草稿恢复正常”，完成五项物理输入检查。将最新 steering 恢复纳入分发验收：扩展唯一 `scripts/check-release.mjs` E2E，直接从空缓存安装的 bin 验证 Ctrl+D 草稿重开、host SIGKILL 后补充指令原文保留、显式确认及未确认项不发送；独立 helper 管理进程和终端清理。沿用现有 pnpm/tsx 工具链，CI 加入 steering 定向核心测试，不启动其他 E2E 或基准。先本地新包通过，再推送到干净 macOS 最低 Node CI 复验，记录同一产物 SHA；不拿旧候选包证据覆盖新代码。
 
 当前轮补齐 steering 跨 host 恢复：新增独立 pending steering 存储契约及 SQLite worker 模块，Agent 沿用队列串行器；接收、编辑、排序、删除先持久化，消费与 user message 写入同一租约事务。恢复项须原身份确认，只加入下一模型轮，不自动启动任务；取消/撤销阻止写入竞态与失败后的自动消费。修改 core/storage/runtime、CLI/RPC 和执行面板；先加恢复/事务/取消失败定向测试，再实现，唯一 E2E 扩展 steering-queue-pty，最后类型检查、构建、审查、提交推送。1–4 项物理 IME 已通过，第 5 项等待修复版复验。
