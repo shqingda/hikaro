@@ -142,6 +142,29 @@ it("authenticates the local Cloudflare relay, forwards encrypted frames, and rev
     const cipher = deviceMessages.shift()!;
     expect(cipher).not.toContain("private payload");
     expect(d.receive(cipher).data).toEqual({ text: "private payload" });
+    expect(
+      (
+        await post("push", hostToken, {
+          deviceId,
+          token: "ExpoPushToken[test_token]",
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (await post("push", deviceToken, { deviceId, token: null })).status,
+    ).toBe(401);
+    expect(
+      (await post("push", hostToken, { deviceId, token: null })).status,
+    ).toBe(200);
+    const namespace = await mf.getDurableObjectNamespace("HOSTS");
+    const notice = await namespace
+      .get(namespace.idFromName(hostId))
+      .fetch("https://internal/internal/notify", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${bootstrap}` },
+        body: JSON.stringify({ hostId, deviceId, id: "disabled-notice" }),
+      });
+    expect(await notice.json()).toEqual({ skipped: true });
     expect((await post("revoke", hostToken, { id: deviceId })).status).toBe(
       200,
     );

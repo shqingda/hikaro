@@ -327,10 +327,11 @@ export async function serveRemote(options: {
           if (command.method === "push.register") {
             if (
               !isRecord(command.params) ||
-              typeof command.params.token !== "string" ||
-              !/^(Expo|Exponent)PushToken\[[A-Za-z0-9_-]+\]$/.test(
-                command.params.token,
-              )
+              (command.params.token !== null &&
+                (typeof command.params.token !== "string" ||
+                  !/^(Expo|Exponent)PushToken\[[A-Za-z0-9_-]+\]$/.test(
+                    command.params.token,
+                  )))
             )
               throw Error("Invalid push registration");
             await post(config, "push", secret.token, {

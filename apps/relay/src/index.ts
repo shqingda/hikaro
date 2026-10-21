@@ -244,6 +244,10 @@ export class HostRelay {
       if (!device || device.expires !== undefined)
         return json({ error: "Device not active" }, 409);
       if (operation === "push") {
+        if (value.token === null) {
+          await this.state.storage.delete("push:" + value.deviceId);
+          return json({ ok: true });
+        }
         if (
           typeof value.token !== "string" ||
           value.token.length > 256 ||
