@@ -1,4 +1,24 @@
-# iPhone 自用安装
+# 移动端本地安装
+
+当前用户只有 Android 真机，iOS 先用现有模拟器。下面区分开发安装与真机 Release 安装；有命令不等于已经完成该设备的验收。
+
+## iOS 模拟器
+
+在仓库根目录执行 `pnpm mobile:ios`，选择已有模拟器；不需要 Apple 签名团队。更新原生依赖后必须重新构建安装，仅刷新 Metro 不会加入原生模块。安装后执行 `pnpm dev:sim`，在 Codex 内置浏览器打开 `http://localhost:3200/`。
+
+## Android 开发安装
+
+连接 Android 手机，在手机开发者选项中启用 USB 调试并确认自己的 Mac。先用 Android SDK 的 `adb devices` 确认设备为 `device`（不能是 `unauthorized`），然后在仓库根目录运行：
+
+```sh
+pnpm --filter @hikaro/mobile exec expo run:android --device
+```
+
+这是开发构建，使用 Metro；不等于独立运行的 Release APK。保持 USB 连接，必要时用 `adb reverse tcp:8081 tcp:8081` 连接本机开发服务。手机与电脑仍通过已配对的 relay 通信，Metro 只提供开发代码。
+
+当前尚未完成 Android 原生安装与任务流程验收，也未提供经过验收的独立 Android 安装包。
+
+## iPhone 真机 Release 安装
 
 先将 iPhone 接到 Mac、解锁并信任电脑，在手机上开启开发者模式，并在 Xcode 登录有该设备签名权限的 Apple 开发账号。
 
