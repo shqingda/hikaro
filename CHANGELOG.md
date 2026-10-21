@@ -2,6 +2,7 @@
 
 ## Unreleased — mobile companion
 
+- Read task images on demand with previous/next and zoom controls; browse recorded file changes and Unicode-safe, paged diffs. A negotiated read-only `changes.diff` method shares the TUI diff implementation. Reading clears on context loss and does not resume automatically. View-only host integration and native iOS image/diff/lifecycle acceptance pass.
 - Add instructions for the next model turn and manage their queue: read, edit, move first, delete and explicitly confirm restored items. Management pauses dispatch until close; lost replies are reconciled without replay.
 - Keep queue lease renewal from interrupting the native editor. Host integration, native iOS submission/reordering/deletion/close-release, typechecks and both platform exports pass.
 - Native iOS approval/denial, stop confirmation and actual process termination, queue edit/save/discard, original-client restore confirmation and background release now pass in the existing simulator. Queue receipt messages no longer show an unrelated previous stop notice before a receipt query. Keyboard/IME, Android, physical devices and signed distribution remain unqualified.
