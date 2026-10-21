@@ -1,5 +1,6 @@
 import type { PendingQuestion } from "../../runtime/src/pending-questions.ts";
 import type { PendingPrompt } from "../../core/src/pending-prompts.ts";
+import type { PendingSteering } from "../../core/src/steering-queue.ts";
 import type {
   DurableCommandReceipt,
   RpcMethod,
@@ -91,6 +92,28 @@ export class SQLiteStore implements EventStore {
   }
   pendingPrompts(sessionId: string) {
     return this.request<PendingPrompt[]>("pendingPrompts", { sessionId });
+  }
+  pendingSteering(sessionId: string) {
+    return this.request<PendingSteering[]>("pendingSteering", { sessionId });
+  }
+  insertPendingSteering(sessionId: string, item: PendingSteering) {
+    return this.request<void>("insertPendingSteering", { sessionId, item });
+  }
+  updatePendingSteering(sessionId: string, id: string, text: string) {
+    return this.request<void>("updatePendingSteering", { sessionId, id, text });
+  }
+  prioritizePendingSteering(sessionId: string, id: string) {
+    return this.request<void>("prioritizePendingSteering", { sessionId, id });
+  }
+  takePendingSteering(sessionId: string, id: string) {
+    return this.request<boolean>("takePendingSteering", { sessionId, id });
+  }
+  consumePendingSteering(sessionId: string, id: string, lease: SessionLease) {
+    return this.request<AgentEvent | undefined>("consumePendingSteering", {
+      sessionId,
+      id,
+      lease,
+    });
   }
   insertPendingPrompt(sessionId: string, item: PendingPrompt) {
     return this.request<void>("insertPendingPrompt", { sessionId, item });

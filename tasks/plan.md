@@ -4,6 +4,8 @@
 
 ## 执行顺序
 
+当前轮补齐 steering 跨 host 恢复：新增独立 pending steering 存储契约及 SQLite worker 模块，Agent 沿用队列串行器；接收、编辑、排序、删除先持久化，消费与 user message 写入同一租约事务。恢复项须原身份确认，只加入下一模型轮，不自动启动任务；取消/撤销阻止写入竞态与失败后的自动消费。修改 core/storage/runtime、CLI/RPC 和执行面板；先加恢复/事务/取消失败定向测试，再实现，唯一 E2E 扩展 steering-queue-pty，最后类型检查、构建、审查、提交推送。1–4 项物理 IME 已通过，第 5 项等待修复版复验。
+
 CI 同包订阅验收暴露工作区上下文缺失：模型猜测外部绝对路径，被审批正确拦截。新增 `tests/runtime-lifecycle.test.ts -t 'workspace directory'`，验证真实会话 cwd 进入系统上下文，含引号/换行的路径保持 JSON 字符串边界；修复后类型检查、构建，再由 CI 重建并跑同一分发 E2E。验收脚本对仅限工作区阶段的意外审批立即报错，不延长超时、不自动批准。
 
 干净机器这一轮：单独的 `release-candidate.yml` 在 GitHub 标准 macos-14 arm64 新 VM 上安装最低 Node 24.21.0，以空 pnpm store 构建/审计候选包，再由唯一 `check-release.mjs` E2E 使用空 npm 缓存安装并运行。只调用发布/安全定向单测，不触发既有全量 check；只读仓库权限，Actions 固定 commit，校验通过才上传 tarball/校验和/报告。工作流修改的 push 会运行一次，普通产品 push 不自动运行。先做本地 YAML 格式/差异检查，再推送取得实际远程结果。

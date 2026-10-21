@@ -7,6 +7,10 @@ await mkdir("dist", { recursive: true });
 const result = await build(cliBuildOptions());
 await copyFile("packages/storage/src/worker.mjs", "dist/worker.mjs");
 await copyFile(
+  "packages/storage/src/pending-steering.mjs",
+  "dist/pending-steering.mjs",
+);
+await copyFile(
   "packages/storage/src/statement-cache.mjs",
   "dist/statement-cache.mjs",
 );

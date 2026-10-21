@@ -221,9 +221,13 @@ export class RpcWorkflows {
         } else if (kind === "steering") {
           this.renew(scope, session.id, p.token);
           if (action === "edit")
-            agent.updateSteering(id, z.string().max(100000).parse(p.text));
-          else if (action === "first") agent.prioritizeSteering(id);
-          else if (action === "remove") agent.removeSteering(id);
+            await agent.updateSteering(
+              id,
+              z.string().max(100000).parse(p.text),
+            );
+          else if (action === "first") await agent.prioritizeSteering(id);
+          else if (action === "remove") await agent.removeSteering(id);
+          else if (action === "resume") await agent.resumeSteering(id, scope);
           else throw Error("Invalid steering action");
         } else if (kind === "terminals") {
           if (action === "send") {

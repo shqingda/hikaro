@@ -208,7 +208,7 @@ export interface EventStore {
 export interface AgentBackend {
   prompt(text: string, images?: ImageInput[]): Promise<void>;
   cancel(): void;
-  steer(text: string): void;
+  steer(text: string): void | Promise<void>;
   subscribe(fn: (event: AgentEvent) => void): () => void;
 }
 export interface Plugin {

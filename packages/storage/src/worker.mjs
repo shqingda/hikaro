@@ -1,4 +1,5 @@
 import { createStatementCache } from "./statement-cache.mjs";
+import { steeringHandlers } from "./pending-steering.mjs";
 import { parentPort, workerData } from "node:worker_threads";
 import { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "node:crypto";
@@ -32,6 +33,8 @@ CREATE TABLE IF NOT EXISTS pending_questions(id TEXT PRIMARY KEY,sessionId TEXT 
 CREATE INDEX IF NOT EXISTS pending_question_scope ON pending_questions(sessionId,scope,status);
 CREATE TABLE IF NOT EXISTS pending_prompts(sessionId TEXT NOT NULL,id TEXT PRIMARY KEY,data TEXT NOT NULL,position INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS pending_prompt_order ON pending_prompts(sessionId,position);
+CREATE TABLE IF NOT EXISTS pending_steering(sessionId TEXT NOT NULL,id TEXT PRIMARY KEY,data TEXT NOT NULL,position INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS pending_steering_order ON pending_steering(sessionId,position);
 CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY,title TEXT NOT NULL,cwd TEXT NOT NULL,createdAt INTEGER NOT NULL,parentId TEXT);
 CREATE TABLE IF NOT EXISTS session_models(sessionId TEXT PRIMARY KEY,data TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS workspace_state(cwd TEXT PRIMARY KEY,sessionId TEXT NOT NULL);
@@ -119,6 +122,7 @@ function insertSession({ cwd, title, parentId, modelSelection }) {
   return { ...session, ...(modelSelection ? { modelSelection } : {}) };
 }
 const handlers = {
+  ...steeringHandlers(db, prepare, assertLease),
   claimHost({ workspace, instanceId }) {
     db.exec("BEGIN IMMEDIATE");
     try {
@@ -410,6 +414,7 @@ const handlers = {
         "jobs",
         "context_checkpoints",
         "pending_prompts",
+        "pending_steering",
         "pending_questions",
         "session_access",
         "client_views",

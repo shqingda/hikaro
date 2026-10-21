@@ -960,7 +960,10 @@ export async function serveRpc(
         }
         case "steer":
           if (!state.agent) throw Error("No session selected");
-          state.agent.steer(z.string().min(1).max(100000).parse(p.text), scope);
+          await state.agent.steer(
+            z.string().min(1).max(100000).parse(p.text),
+            scope,
+          );
           result = {};
           break;
         case "cancel":

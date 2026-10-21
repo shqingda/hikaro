@@ -15,9 +15,10 @@ it("manages a queued message through the panel and resumes dispatch on close", a
       holdQueue: () => release,
       pendingPrompts: () => queue,
       pendingSteering: () => [],
-      updateSteering: () => {},
-      prioritizeSteering: () => {},
-      removeSteering: () => {},
+      updateSteering: async () => {},
+      prioritizeSteering: async () => {},
+      removeSteering: async () => {},
+      resumeSteering: async () => {},
       updatePending: async (_id: string, text: string) => {
         queue[0]!.text = text;
       },

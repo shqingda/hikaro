@@ -8,7 +8,7 @@ Initial supported host: macOS arm64, Node 24.21 or later. The current distributi
 
 - Fullscreen TUI with persistent sessions, model selection, subscription sign-in, file/image references, bounded history reading and unsent-draft recovery.
 - Workspace file and shell tools with permissions, explicit approval, visible failure and cancellation outcomes. File changes can be reviewed and individually rolled back with conflict checks.
-- Shared host and attached TUI, durable command receipts, explicit recovery of queued prompts and unanswered host questions, recent execution history and steering queue controls.
+- Shared host and attached TUI, durable command receipts, explicit recovery of queued prompts, steering and unanswered host questions, recent execution history and steering queue controls. Restored steering requires confirmation from its original client and applies at the next model turn.
 - Read-only planning, structured questions and reviewed execution; optional MCP, skills, plugins and Pi integration within documented compatibility limits.
 - macOS arm64 packaging with a production dependency lock, SHA-256 checks, empty-cache install validation and a verified node-forge security backport.
 
@@ -22,4 +22,4 @@ The user passed Chinese input, mixed-character editing, multiline paste and resi
 
 ### Known boundaries
 
-Steering instructions and usage budgets are not restored across host restarts. Unknown work is not automatically retried. Full history search, clipboard-image capture, portable attachment export, batch rollback/redo, nested task trees and complete third-party plugin compatibility remain outstanding. Closing a plugin result panel does not cancel plugin code. See [the complete backlog](TODO.md).
+Usage budgets are not restored across host restarts. Unknown work is not automatically retried. The existing distribution draft targets b08f160 and predates durable steering; rebuild and validate the candidate before publication. Full history search, clipboard-image capture, portable attachment export, batch rollback/redo, nested task trees and complete third-party plugin compatibility remain outstanding. Closing a plugin result panel does not cancel plugin code. See [the complete backlog](TODO.md).

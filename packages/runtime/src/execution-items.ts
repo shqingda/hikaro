@@ -41,12 +41,21 @@ export function executionItems(
     return agent.pendingSteering().map((q, i) => ({
       id: q.id,
       title: `${i + 1}. ${q.text}`,
-      state: "Pending next model turn · memory only",
+      state: q.recovered
+        ? "Recovered · confirmation required"
+        : "Pending next model turn",
       editText: q.text,
       detail:
         q.text +
-        "\n\nApplies to the next model turn. Consumption is paused while this manager is open. Not saved across host restart.",
+        "\n\nApplies to the next model turn. Consumption is paused while this manager is open." +
+        (q.recovered
+          ? "\nRecovered after interruption. Confirm from the original client to apply at the next model turn; confirmation does not start a task."
+          : "") +
+        (q.error ? `\n${q.error}` : ""),
       actions: [
+        ...(q.recovered
+          ? [{ value: "resume", label: "Apply recovered steering…" }]
+          : []),
         { value: "edit", label: "Edit message" },
         { value: "first", label: "Move to front" },
         { value: "remove", label: "Remove message" },

@@ -783,6 +783,7 @@ export class Runtime {
       session,
       store: this.store,
       pendingStore: this.store,
+      steeringStore: this.store,
       provider,
       tools: this.tools,
       approve: (request, signal) => this.approve(request, signal),

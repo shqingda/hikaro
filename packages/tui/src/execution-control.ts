@@ -20,6 +20,7 @@ type LocalSource = {
     | "updateSteering"
     | "prioritizeSteering"
     | "removeSteering"
+    | "resumeSteering"
   >;
   runtime: Pick<
     Runtime,
@@ -62,9 +63,10 @@ export function localExecutionSource(source: LocalSource): ExecutionSource {
         else if (action === "resume") await source.agent.resumePending(id);
         else throw Error("Unknown queue action");
       } else if (kind === "steering") {
-        if (action === "edit") source.agent.updateSteering(id, text!);
-        else if (action === "first") source.agent.prioritizeSteering(id);
-        else if (action === "remove") source.agent.removeSteering(id);
+        if (action === "edit") await source.agent.updateSteering(id, text!);
+        else if (action === "first") await source.agent.prioritizeSteering(id);
+        else if (action === "remove") await source.agent.removeSteering(id);
+        else if (action === "resume") await source.agent.resumeSteering(id);
         else throw Error("Unknown steering action");
       } else if (kind === "terminals") {
         if (action === "send")
@@ -241,10 +243,20 @@ export async function openExecutionControl(
               await source.act(kind, item.id, "remove");
               message = "Message removed; it will not be sent.";
             } else if (action.value === "resume") {
-              if (!(await confirm("Resume recovered message?", item.detail)))
+              if (
+                !(await confirm(
+                  kind === "steering"
+                    ? "Apply recovered steering?"
+                    : "Resume recovered message?",
+                  item.detail,
+                ))
+              )
                 continue;
               await source.act(kind, item.id, "resume");
-              message = "Message restored to queue. Close the manager to send.";
+              message =
+                kind === "steering"
+                  ? "Steering confirmed for the next model turn. No new task was started."
+                  : "Message restored to queue. Close the manager to send.";
             } else if (action.value === "send") {
               const text = await panel.prompt(
                 "Send a line to terminal",

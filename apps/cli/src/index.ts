@@ -166,7 +166,7 @@ async function main() {
           return;
         }
         if (text.startsWith("/steer ")) {
-          backend.steer(text.slice(7));
+          await backend.steer(text.slice(7));
           return;
         }
         if (text.startsWith("/permissions"))
@@ -734,7 +734,7 @@ async function main() {
           await bind(await runtime.fork(session));
           return;
         case "steer":
-          agent.steer(arg);
+          await agent.steer(arg);
           return "Instructions queued for the next model turn.";
         case "login":
         case "model": {

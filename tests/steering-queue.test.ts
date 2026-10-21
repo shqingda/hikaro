@@ -34,14 +34,14 @@ it("holds steering until management closes, applies edits in order and rejects c
   try {
     const run = agent.prompt("start");
     await vi.waitFor(() => expect(inputs).toHaveLength(1));
-    agent.steer("one", "owner");
-    agent.steer("two", "owner");
-    agent.steer("remove", "other");
+    await agent.steer("one", "owner");
+    await agent.steer("two", "owner");
+    await agent.steer("remove", "other");
     const release = agent.holdQueue();
     const [a, b, c] = agent.pendingSteering();
-    agent.updateSteering(a!.id, "edited");
-    agent.prioritizeSteering(b!.id);
-    agent.removeSteering(c!.id);
+    await agent.updateSteering(a!.id, "edited");
+    await agent.prioritizeSteering(b!.id);
+    await agent.removeSteering(c!.id);
     finishFirst();
     await vi.waitFor(async () =>
       expect(
@@ -65,9 +65,12 @@ it("holds steering until management closes, applies edits in order and rejects c
     await run;
     expect(inputs).toEqual([["start"], ["start", "two", "edited"]]);
     expect(agent.pendingSteering()).toEqual([]);
-    expect(() => agent.updateSteering(a!.id, "late")).toThrow(/no longer/);
-    agent.steer("scoped", "other");
+    await expect(agent.updateSteering(a!.id, "late")).rejects.toThrow(
+      /no longer/,
+    );
+    await agent.steer("scoped", "other");
     agent.cancelScope("other");
+    await agent.queueSettled();
     expect(agent.pendingSteering()).toEqual([]);
   } finally {
     finishFirst();
@@ -108,7 +111,7 @@ it("cancels a run waiting for steering management without another provider call"
     const run = agent.prompt("start").catch((error) => error.name);
     await vi.waitFor(() => expect(calls).toBe(1));
     const release = agent.holdQueue();
-    agent.steer("pending");
+    await agent.steer("pending");
     finish();
     await vi.waitFor(async () =>
       expect(

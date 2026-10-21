@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { stripVTControlCharacters } from "node:util";
 import { SharedHostClient } from "../packages/host/src/client.ts";
+import type { AgentEvent } from "../packages/core/src/types.ts";
 
 it("edits, prioritizes and removes steering through attached TUI before the next model turn", async () => {
   const home = await mkdtemp(join(tmpdir(), "hikaro-steering-pty-")),
@@ -157,6 +158,191 @@ it("edits, prioritizes and removes steering through attached TUI before the next
     await hostExit;
     server.closeAllConnections();
     await new Promise<void>((done) => server.close(() => done()));
+    await rm(home, { recursive: true, force: true });
+  }
+}, 35000);
+
+it("restores steering after SIGKILL in the built TUI and applies only the explicitly confirmed item", async () => {
+  const home = await mkdtemp(join(tmpdir(), "hikaro-steering-restart-"));
+  const cwd = join(home, "workspace"),
+    cli = resolve("dist/hikaro.mjs");
+  await mkdir(cwd);
+  const hosts: Array<{
+    process: ReturnType<typeof spawnProcess>;
+    exited: Promise<void>;
+  }> = [];
+  let client: SharedHostClient | undefined,
+    observer: SharedHostClient | undefined;
+  let terminal: ReturnType<typeof spawn> | undefined,
+    terminalExit: Promise<number> | undefined;
+  const startHost = async () => {
+    const process = spawnProcess(globalThis.process.execPath, [
+      cli,
+      "--host",
+      "--demo",
+      "--home",
+      home,
+      "--cwd",
+      cwd,
+    ]);
+    let output = "";
+    process.stdout!.on("data", (chunk) => {
+      output += chunk;
+    });
+    process.stderr!.on("data", (chunk) => {
+      output += chunk;
+    });
+    const host = {
+      process,
+      exited: new Promise<void>((done) => process.on("exit", () => done())),
+    };
+    hosts.push(host);
+    await vi.waitFor(() => expect(output).toContain("shared host ready"), {
+      timeout: 8000,
+    });
+    return host;
+  };
+  try {
+    const first = await startHost();
+    client = await SharedHostClient.connect({
+      home,
+      cwd,
+      clientId: "recovery-owner",
+    });
+    await client.request("hello");
+    const session = (await client.request("session.create")) as { id: string };
+    await client.request("steer", {
+      sessionId: session.id,
+      text: "recover first",
+    });
+    await client.request("steer", {
+      sessionId: session.id,
+      text: "leave unconfirmed",
+    });
+    first.process.kill("SIGKILL");
+    await first.exited;
+    await client.close();
+    client = undefined;
+    await startHost();
+    observer = await SharedHostClient.connect({
+      home,
+      cwd,
+      clientId: "recovery-observer",
+    });
+    await observer.request("hello");
+    await observer.request("session.resume", { sessionId: session.id });
+    const events = async () =>
+      (await observer!.request("events.read", {
+        sessionId: session.id,
+      })) as AgentEvent[];
+    expect(
+      (await events()).filter((event) => event.type === "run.start"),
+    ).toEqual([]);
+    let output = "";
+    terminal = spawn(
+      process.execPath,
+      [
+        cli,
+        "--attach",
+        "--client-id",
+        "recovery-owner",
+        "--session",
+        session.id,
+        "--home",
+        home,
+        "--cwd",
+        cwd,
+      ],
+      {
+        cols: 110,
+        rows: 38,
+        env: { ...process.env, TERM: "xterm-256color" },
+      },
+    );
+    terminal.onData((chunk) => {
+      output += chunk;
+    });
+    terminalExit = new Promise<number>((done) =>
+      terminal!.onExit(({ exitCode }) => done(exitCode)),
+    );
+    const send = (text: string) => {
+      const offset = output.length;
+      terminal!.write(text);
+      return offset;
+    };
+    const wait = (text: string, offset = 0) =>
+      vi.waitFor(
+        () =>
+          expect(stripVTControlCharacters(output.slice(offset))).toContain(
+            text,
+          ),
+        { timeout: 8000 },
+      );
+    await wait("Attached to shared host");
+    await wait("Execution manager", send("/tasks\r"));
+    await wait("Steering messages · page 1", send("\x1b[B".repeat(3) + "\r"));
+    await wait("Apply recovered steering", send("\r"));
+    await wait("Apply recovered steering?", send("\x1b[B\r"));
+    await wait("Steering messages · page 1", send("\x1b[B\r"));
+    await wait("Execution manager", send("\x1b"));
+    await wait("Enter send", send("\x1b"));
+    expect(
+      (await events()).filter((event) => event.type === "run.start"),
+    ).toEqual([]);
+    send("apply now\r");
+    await vi.waitFor(
+      async () =>
+        expect(
+          (await events()).filter((event) => event.type === "run.end").at(-1)
+            ?.data.status,
+          stripVTControlCharacters(output).slice(-3000),
+        ).toBe("completed"),
+      { timeout: 8000 },
+    );
+    const users = (await events())
+      .filter((event) => event.type === "message")
+      .map((event) => event.data.message as { role: string; text: string })
+      .filter((message) => message.role === "user");
+    expect(users.map((message) => message.text)).toEqual([
+      "apply now",
+      "recover first",
+    ]);
+    const remaining = (await observer.request("execution.read", {
+      sessionId: session.id,
+      kind: "steering",
+    })) as Array<{ id: string; state: string; title: string }>;
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]).toMatchObject({
+      title: "1. leave unconfirmed",
+      state: "Recovered · confirmation required",
+    });
+    const hold = (await observer.request("execution.hold", {
+      sessionId: session.id,
+    })) as { token: string };
+    await expect(
+      observer.request("execution.action", {
+        sessionId: session.id,
+        kind: "steering",
+        id: remaining[0]!.id,
+        action: "resume",
+        token: hold.token,
+      }),
+    ).rejects.toThrow(/original client identity/);
+    await observer.request("execution.release", {
+      sessionId: session.id,
+      token: hold.token,
+    });
+    send("\x04");
+    expect(await terminalExit).toBe(0);
+  } finally {
+    terminal?.kill();
+    await terminalExit;
+    await client?.close();
+    await observer?.close();
+    for (const host of hosts) {
+      host.process.kill("SIGTERM");
+      await host.exited;
+    }
     await rm(home, { recursive: true, force: true });
   }
 }, 35000);

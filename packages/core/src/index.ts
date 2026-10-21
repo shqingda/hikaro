@@ -1,4 +1,5 @@
 import type { PendingPrompt, PendingPromptStore } from "./pending-prompts.ts";
+import { SteeringQueue, type PendingSteeringStore } from "./steering-queue.ts";
 import { randomUUID } from "node:crypto";
 import * as z from "zod";
 import { checkpointMessage, fitContext, summarizeHistory } from "./context.ts";
@@ -130,7 +131,7 @@ export class PluginHost {
 export class Agent implements AgentBackend {
   private listeners = new Set<(e: AgentEvent) => void>();
   private controller?: AbortController;
-  private steering: Array<{ id: string; text: string; scope?: string }> = [];
+  private steering: SteeringQueue;
   private queueWaiters = new Set<() => void>();
   private compacting = false;
   private origin?: { scope?: string; commandId?: string };
@@ -239,6 +240,7 @@ export class Agent implements AgentBackend {
       session: Session;
       store: EventStore;
       pendingStore?: PendingPromptStore;
+      steeringStore?: PendingSteeringStore;
       provider: ProviderAdapter;
       tools: ToolRegistry;
       system?: string;
@@ -257,6 +259,10 @@ export class Agent implements AgentBackend {
       saveArtifact?: (callId: string, result: ToolResult) => Promise<string>;
     },
   ) {
+    this.steering = new SteeringQueue(
+      options.session.id,
+      options.steeringStore,
+    );
     this.budget = options.budget ?? {
       usage: { input: 0, output: 0, cost: 0 },
       maxCost: options.maxCost ?? 10,
@@ -391,6 +397,7 @@ export class Agent implements AgentBackend {
   }
   async restorePending() {
     await this.queueOperation(async () => {
+      await this.steering.restore();
       const items =
         (await this.options.pendingStore?.pendingPrompts(
           this.options.session.id,
@@ -484,33 +491,66 @@ export class Agent implements AgentBackend {
     });
   }
   steer(text: string, scope?: string) {
-    if (!text.trim()) throw Error("Steering message cannot be empty");
-    if (this.steering.length >= 16) throw Error("Steering queue is full");
-    this.steering.push({ id: randomUUID(), text, scope });
+    const epoch = this.cancelEpoch,
+      scopeEpoch = scope ? this.scopeEpochs.get(scope) : undefined;
+    const cancelled = () =>
+      epoch !== this.cancelEpoch ||
+      (scope !== undefined && scopeEpoch !== this.scopeEpochs.get(scope));
+    return this.queueOperation(async () => {
+      if (cancelled()) throw new DOMException("Cancelled", "AbortError");
+      const id = await this.steering.add(text, scope);
+      if (cancelled()) {
+        this.steering.block((item) => item.id === id);
+        throw new DOMException("Cancelled", "AbortError");
+      }
+    });
   }
   pendingSteering() {
-    return this.steering.map(({ id, text }) => ({ id, text }));
-  }
-  private steeringIndex(id: string) {
-    const index = this.steering.findIndex((item) => item.id === id);
-    if (index < 0)
-      throw Error("Steering message is no longer pending; refresh the list.");
-    return index;
+    return this.steering.pending();
   }
   updateSteering(id: string, text: string) {
-    const item = this.steering[this.steeringIndex(id)]!;
-    if (!text.trim()) throw Error("Steering message cannot be empty");
-    item.text = text;
+    return this.queueOperation(() => this.steering.update(id, text));
   }
   prioritizeSteering(id: string) {
-    const [item] = this.steering.splice(this.steeringIndex(id), 1);
-    this.steering.unshift(item!);
+    return this.queueOperation(() => this.steering.prioritize(id));
   }
   removeSteering(id: string) {
-    this.steering.splice(this.steeringIndex(id), 1);
+    return this.queueOperation(() => this.steering.remove(id));
+  }
+  resumeSteering(id: string, scope?: string) {
+    return this.queueOperation(async () => this.steering.resume(id, scope));
+  }
+  private discardSteering(matches: Parameters<SteeringQueue["discard"]>[0]) {
+    this.steering.block(matches);
+    void this.queueOperation(() => this.steering.discard(matches)).catch(
+      (error) => {
+        console.error(
+          `Could not persist steering cancellation: ${String(error)}`,
+        );
+      },
+    );
+  }
+  private async applySteering(signal: AbortSignal) {
+    for (;;) {
+      await this.waitForSteeringRelease(signal);
+      const state = await this.queueOperation(async () => {
+        signal.throwIfAborted();
+        if (this.queueHolds && this.steering.ready) return "held";
+        return (await this.steering.consume(
+          this.activeLease,
+          (event) => {
+            this.publish(event);
+          },
+          (text) => this.message({ role: "user", text, timestamp: Date.now() }),
+        ))
+          ? "applied"
+          : "empty";
+      });
+      if (state === "empty") return;
+    }
   }
   private async waitForSteeringRelease(signal: AbortSignal) {
-    while (this.queueHolds && this.steering.length) {
+    while (this.queueHolds && this.steering.ready) {
       signal.throwIfAborted();
       await new Promise<void>((resolve, reject) => {
         const cleanup = () => {
@@ -537,7 +577,7 @@ export class Agent implements AgentBackend {
     if (this.origin?.scope === scope && !this.compacting)
       this.controller?.abort();
     void this.discardPending((item) => item.origin?.scope === scope);
-    this.steering = this.steering.filter((item) => item.scope !== scope);
+    this.discardSteering((item) => item.scope === scope);
   }
   private cancelEpoch = 0;
   private scopeEpochs = new Map<string, number>();
@@ -566,7 +606,7 @@ export class Agent implements AgentBackend {
     this.cancelEpoch++;
     this.controller?.abort();
     void this.discardPending((item) => !preserveRecovered || !item.recovered);
-    this.steering = [];
+    this.discardSteering((item) => !preserveRecovered || !item.recovered);
   }
   private async drain() {
     if (
@@ -1040,9 +1080,7 @@ export class Agent implements AgentBackend {
           throw Error("Session cost budget reached");
         if (this.budget.modelCallsLeft <= 0)
           throw Error("Shared model-call budget exhausted");
-        await this.waitForSteeringRelease(signal);
-        for (const { text } of this.steering.splice(0))
-          await this.message({ role: "user", text, timestamp: Date.now() });
+        await this.applySteering(signal);
         const { system, tools, context } = await this.requestContext(
           user.seq,
           signal,
@@ -1098,8 +1136,9 @@ export class Agent implements AgentBackend {
         await this.message(final);
         if (!final.toolCalls?.length) {
           signal.throwIfAborted();
+          await this.queueSettled();
           await this.waitForSteeringRelease(signal);
-          if (this.steering.length) continue;
+          if (this.steering.ready) continue;
           await this.emit("run.end", {
             runId,
             status: "completed",
