@@ -716,7 +716,7 @@ async function main() {
           session = await runtime.renameSession(session.id, arg);
           return "Session renamed.";
         case "export":
-          return `Exported: ${await runtime.exportSession(session.id, preferences.showThinking)}`;
+          return `Exported: ${await runtime.exportSession(session.id, preferences.showThinking)}\nIf an .assets folder is present beside the Markdown, copy it together with the file.`;
         case "resume":
           if (arg) {
             await bind(await runtime.session(arg));

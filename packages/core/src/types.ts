@@ -124,7 +124,7 @@ export type AgentEvent = {
   timestamp: number;
 };
 export type MessagePage = {
-  items: Array<{ seq: number; message: Message }>;
+  items: Array<{ seq: number; message: Message & { imageCount?: number } }>;
   hasOlder: boolean;
   hasNewer: boolean;
 };

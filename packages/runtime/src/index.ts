@@ -1,5 +1,5 @@
 import { executionHistory } from "./execution-history.ts";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { homedir } from "node:os";
 import {
@@ -938,8 +938,9 @@ export class Runtime {
     const session = await this.session(id);
     const folder = join(this.options.home!, "exports");
     await mkdir(folder, { recursive: true, mode: 0o700 });
-    const path = join(folder, `${id}-${Date.now()}.md`),
+    const path = join(folder, `${id}-${Date.now()}-${randomUUID()}.md`),
       temp = path + ".tmp";
+    const assets = path + ".assets";
     const file = await openFile(temp, "w", 0o600);
     try {
       await file.write(
@@ -956,6 +957,73 @@ export class Runtime {
           await file.write(
             `## ${m.role}${m.name ? " · " + m.name : ""}\n\n${includeThinking && m.thinking ? "### Thinking\n\n" + m.thinking + "\n\n" : ""}${m.text}\n\n`,
           );
+          for (let index = 0; index < (m.imageCount ?? 0); index++) {
+            const first = await this.store.messageContent(
+              id,
+              row.seq,
+              "image",
+              0,
+              65536,
+              index,
+            );
+            const extension = (
+              {
+                "image/png": "png",
+                "image/jpeg": "jpg",
+                "image/webp": "webp",
+                "image/gif": "gif",
+              } as Record<string, string>
+            )[first.mimeType ?? ""];
+            if (!extension) {
+              await file.write(
+                `[Image ${index + 1} unavailable: unsupported media type]\n\n`,
+              );
+              continue;
+            }
+            await mkdir(assets, { recursive: true, mode: 0o700 });
+            const name = `${row.seq}-${index + 1}.${extension}`;
+            const image = await openFile(join(assets, name), "wx", 0o600);
+            try {
+              let part = first;
+              let offset = 0;
+              for (;;) {
+                if (
+                  part.encoding !== "base64" ||
+                  part.data.length % 4 ||
+                  !/^[A-Za-z0-9+/]*={0,2}$/.test(part.data) ||
+                  part.total !== first.total ||
+                  part.mimeType !== first.mimeType
+                )
+                  throw Error("Invalid stored image during export");
+                await image.write(Buffer.from(part.data, "base64"));
+                offset += part.data.length;
+                if (part.nextOffset === null) {
+                  if (offset !== first.total)
+                    throw Error("Incomplete stored image during export");
+                  break;
+                }
+                if (
+                  !part.data.length ||
+                  part.nextOffset !== offset ||
+                  part.data.includes("=")
+                )
+                  throw Error("Invalid image cursor during export");
+                part = await this.store.messageContent(
+                  id,
+                  row.seq,
+                  "image",
+                  offset,
+                  65536,
+                  index,
+                );
+              }
+            } finally {
+              await image.close();
+            }
+            await file.write(
+              `![Image ${index + 1}](${basename(assets)}/${name})\n\n`,
+            );
+          }
         }
         after = rows.at(-1)!.seq;
         if (after >= end || !page.hasNewer) break;
@@ -966,6 +1034,7 @@ export class Runtime {
     } catch (e) {
       await file.close().catch(() => {});
       await rm(temp, { force: true });
+      await rm(assets, { recursive: true, force: true });
       throw e;
     }
   }

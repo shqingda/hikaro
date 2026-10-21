@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { Runtime } from "../packages/runtime/src/index.ts";
 import { selectInitialSession } from "../apps/cli/src/startup.ts";
 import { openModelControl } from "../packages/tui/src/model-settings.ts";
@@ -639,6 +639,28 @@ it("exports all message pages without including hidden thinking by default", asy
   expect(text).toContain("Export row 0");
   expect(text).toContain("Export row 100");
   expect(text).not.toContain("Hidden thinking");
+});
+
+it("exports image bytes in portable relative files without provider secrets", async () => {
+  const { runtime } = await fixture();
+  const session = await runtime.session();
+  const pixels = Buffer.alloc(100003, 73);
+  await runtime.store.append(session.id, "message", {
+    message: {
+      role: "user",
+      text: "A picture",
+      timestamp: 1,
+      images: [{ mimeType: "image/png", data: pixels.toString("base64") }],
+      providerData: { secret: "PRIVATE-PROVIDER-DATA" },
+    },
+  });
+  const path = await runtime.exportSession(session.id);
+  const text = await readFile(path, "utf8");
+  const relative = text.match(/!\[Image 1\]\(([^)]+)\)/)![1]!;
+  expect(relative.startsWith("/")).toBe(false);
+  expect(await readFile(join(dirname(path), relative))).toEqual(pixels);
+  expect(text).not.toContain("PRIVATE-PROVIDER-DATA");
+  expect(text).not.toContain(pixels.toString("base64"));
 });
 
 it("paginates sessions and exposes rename in the session picker", async () => {

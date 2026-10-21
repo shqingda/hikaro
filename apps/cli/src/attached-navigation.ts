@@ -204,7 +204,9 @@ export class AttachedNavigation {
         "session.export.file",
         { sessionId: id, includeThinking: this.preferences.showThinking },
       );
-      this.view.notice(`Exported: ${result.path}`);
+      this.view.notice(
+        `Exported: ${result.path}\nIf an .assets folder is present beside the Markdown, copy it together with the file.`,
+      );
       return;
     }
     if (command === "/plugins") {
