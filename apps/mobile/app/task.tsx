@@ -190,6 +190,15 @@ export default function Task() {
               ).catch(() => {});
             }}
           />
+          <Note>本机仅缓存最近查看的一页消息；图片和完整附件不缓存。</Note>
+          <Action
+            title="清除本机历史缓存"
+            quiet
+            onPress={() => {
+              void controller.clearHistoryCache().catch(() => {});
+            }}
+          />
+          <Note>清除缓存保留未发送草稿和电脑上的任务记录。</Note>
         </View>
       }
     />

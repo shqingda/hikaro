@@ -58,6 +58,7 @@ function fixture(
     dropMethod = "";
   const intents: any[] = [];
   const draftRows = new Map<string, DraftRecord>();
+  const snapshots = new Map<string, unknown>();
   const drafts: DraftStore = {
     load: vi.fn(async (scope, id) =>
       structuredClone(
@@ -83,6 +84,17 @@ function fixture(
     revision = 0;
   const store = {
     drafts,
+    snapshots: {
+      load: vi.fn(async (scope: string) =>
+        structuredClone(snapshots.get(scope) ?? null),
+      ),
+      save: vi.fn(async (scope: string, value: unknown) => {
+        snapshots.set(scope, structuredClone(value));
+      }),
+      clear: vi.fn(async (scope: string) => {
+        snapshots.delete(scope);
+      }),
+    },
     read: vi.fn(async () => credential),
     write: vi.fn(async (value: string) => {
       credential = value;
@@ -90,6 +102,7 @@ function fixture(
     erase: vi.fn(async () => {
       credential = null;
       draftRows.clear();
+      snapshots.clear();
     }),
     journal: () => ({
       load: async () => intents.slice(),
@@ -100,6 +113,7 @@ function fixture(
     clear: vi.fn(async () => {
       intents.length = 0;
       draftRows.clear();
+      snapshots.clear();
     }),
   };
   const socket = () => {
@@ -232,6 +246,132 @@ function fixture(
     },
   };
 }
+it("reopens cached task messages offline without sending and clears cache without losing drafts", async () => {
+  const f = fixture();
+  const scope = pairingScope(f.pairing);
+  const session = {
+    id: "s1",
+    title: "共享任务",
+    cwd: "/workspace",
+    createdAt: 1,
+  };
+  const items = [
+    {
+      seq: 2,
+      message: { role: "assistant", text: "上次结果\n第二行", timestamp: 1 },
+    },
+  ];
+  await f.store.write(JSON.stringify(f.pairing));
+  await f.store.snapshots.save(scope, { session, items, savedAt: 1 });
+  await f.store.drafts.save(scope, { session, text: "未发送草稿" });
+  const app = new MobileController(f.store, {
+    ...f.options,
+    probe: async () => {
+      throw Error("offline");
+    },
+  });
+  try {
+    await app.restore();
+    expect(app.state.messages).toEqual(items);
+    expect(app.state.canSend).toBe(false);
+    expect(app.state.canSteer).toBe(false);
+    expect(f.sent).toEqual([]);
+    await app.clearHistoryCache();
+    expect(await f.store.snapshots.load(scope)).toBeNull();
+    expect(app.state.messages).toEqual([]);
+    expect(app.state.composer.record?.text).toBe("未发送草稿");
+    await app.forget();
+    expect(await f.store.drafts.load(scope, session.id)).toBeNull();
+  } finally {
+    app.dispose();
+  }
+});
+
+it.each(["other-device", "other-task", "oversized"])(
+  "does not restore an invalid or unrelated offline snapshot (%s)",
+  async (scenario) => {
+    const f = fixture();
+    const scope = pairingScope(f.pairing);
+    const session = {
+      id: "s1",
+      title: "任务",
+      cwd: "/workspace",
+      createdAt: 1,
+    };
+    await f.store.write(JSON.stringify(f.pairing));
+    await f.store.drafts.save(scope, { session, text: "草稿" });
+    await f.store.snapshots.save(
+      scenario === "other-device" ? "another-identity" : scope,
+      {
+        session: { ...session, id: scenario === "other-task" ? "s2" : "s1" },
+        items: [
+          {
+            seq: 2,
+            message: {
+              role: "assistant",
+              timestamp: 1,
+              text: scenario === "oversized" ? "x".repeat(20001) : "另一份内容",
+            },
+          },
+        ],
+        savedAt: 1,
+      },
+    );
+    const app = new MobileController(f.store, {
+      ...f.options,
+      probe: async () => {
+        throw Error("offline");
+      },
+    });
+    try {
+      await app.restore();
+      expect(app.state.messages).toEqual([]);
+      expect(app.state.session?.id).toBe("s1");
+      expect(app.state.composer.record?.text).toBe("草稿");
+      expect(f.sent).toEqual([]);
+    } finally {
+      app.dispose();
+    }
+  },
+);
+
+it("serializes cache deletion after an in-flight save when forgetting the device", async () => {
+  const f = fixture();
+  const scope = pairingScope(f.pairing);
+  await f.store.write(JSON.stringify(f.pairing));
+  const app = new MobileController(f.store, f.options);
+  try {
+    await app.restore();
+    await vi.waitFor(async () =>
+      expect(await f.store.snapshots.load(scope)).not.toBeNull(),
+    );
+    let release!: () => void;
+    let started!: () => void;
+    const began = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const save = f.store.snapshots.save.getMockImplementation()!;
+    f.store.snapshots.save.mockImplementationOnce(async (scope, snapshot) => {
+      started();
+      await gate;
+      await save(scope, snapshot);
+    });
+    const reading = app.history("latest");
+    await began;
+    const forgetting = app.forget();
+    release();
+    await Promise.all([reading, forgetting]);
+    expect(await f.store.snapshots.load(scope)).toBeNull();
+    expect(app.state.messages).toEqual([]);
+    expect(app.state.phase).toBe("unpaired");
+  } finally {
+    app.dispose();
+  }
+});
+
 it("restores an offline composer without authority or auto-send and erases drafts after pending saves", async () => {
   const f = fixture();
   const session = {
@@ -624,9 +764,10 @@ it("restores the same granted host task after a lost selection acknowledgement, 
     app.dispose();
     app = new MobileController(f.store, f.options);
     await app.restore();
-    await vi.waitFor(() =>
-      expect(app.state.messages.map((m) => m.message.text)).toEqual(text),
-    );
+    await vi.waitFor(() => {
+      expect(app.state.phase).toBe("connected");
+      expect(app.state.messages.map((m) => m.message.text)).toEqual(text);
+    });
     app.suspend();
     local.close();
     wire.close();
@@ -638,9 +779,10 @@ it("restores the same granted host task after a lost selection acknowledgement, 
     local = new ClientConnection(wire.scope, wire, clock);
     await local.connected();
     await app.restore();
-    await vi.waitFor(() =>
-      expect(app.state.messages.map((m) => m.message.text)).toEqual(text),
-    );
+    await vi.waitFor(() => {
+      expect(app.state.phase).toBe("connected");
+      expect(app.state.messages.map((m) => m.message.text)).toEqual(text);
+    });
     expect(app.state.session?.id).toBe(session.id);
     expect(f.sent.filter((f) => f.method === "session.resume")).toHaveLength(1);
     await app.readMessage(user.seq);
@@ -652,6 +794,9 @@ it("restores the same granted host task after a lost selection acknowledgement, 
     await vi.waitFor(() => expect(app.state.sessions).toEqual([]));
     expect(app.state.messages).toEqual([]);
     expect(app.state.content).toBeNull();
+    await vi.waitFor(async () =>
+      expect(await f.store.snapshots.load(pairingScope(f.pairing))).toBeNull(),
+    );
   } finally {
     app.dispose();
     local.close();

@@ -66,6 +66,12 @@ const pageSchema = z.object({
   hasOlder: z.boolean(),
   hasNewer: z.boolean(),
 });
+const snapshotSchema = z.object({
+  session: sessionSchema,
+  items: z.array(itemSchema).max(20),
+  savedAt: z.number().finite().nonnegative(),
+});
+export type MobileSnapshot = z.infer<typeof snapshotSchema>;
 export type MobileMessage = z.infer<typeof itemSchema>;
 export type MobileSession = z.infer<typeof sessionSchema>;
 export interface MobileStorage {
@@ -75,6 +81,11 @@ export interface MobileStorage {
   journal(scope: string): IntentStore;
   clear(scope: string): Promise<void>;
   drafts: DraftStore;
+  snapshots: {
+    load(scope: string): Promise<unknown>;
+    save(scope: string, snapshot: MobileSnapshot): Promise<void>;
+    clear(scope: string): Promise<void>;
+  };
 }
 export type MobileOptions = Omit<ConnectionOptions, "intents"> & {
   probe(pairing: Pairing): Promise<"ready" | "pending" | "offline" | "revoked">;
@@ -210,6 +221,7 @@ export class MobileController {
   private refreshAgain = false;
   private paint?: () => void;
   private draftIdentity = 0;
+  private cacheVersion = 0;
   private composer: MobileComposer;
   readonly steering: MobileSteering;
   readonly inspection: MobileInspection;
@@ -382,6 +394,26 @@ export class MobileController {
     await this.composer.select();
     if (epoch !== this.epoch || this.disposed) return;
     this.update({ session: this.composer.state.record?.session ?? null });
+    try {
+      const saved = await this.credentials(() =>
+        this.storage.snapshots.load(pairingScope(p)),
+      );
+      if (epoch !== this.epoch || this.disposed) return;
+      if (saved !== null) {
+        const cached = snapshotSchema.parse(saved);
+        if (
+          !this.value.session ||
+          this.value.session.id === cached.session.id
+        ) {
+          if (!this.composer.state.record)
+            await this.composer.select(cached.session);
+          if (epoch !== this.epoch || this.disposed) return;
+          this.update({ session: cached.session, messages: cached.items });
+        }
+      }
+    } catch {
+      // Cached display data is optional; a corrupt cache must not block reconnecting.
+    }
     const probe = await this.options.probe(p);
     if (epoch !== this.epoch || this.disposed) return;
     if (probe === "revoked") {
@@ -435,6 +467,23 @@ export class MobileController {
         }
         const current = s.session?.id;
         const restored = s.canAct && (!ready || selected !== current);
+        if (
+          s.canAct &&
+          this.value.session &&
+          this.value.session.id !== current
+        ) {
+          // An authoritative selection/access change invalidates the old offline copy.
+          this.cacheVersion++;
+          void this.credentials(async () => {
+            if (epoch === this.epoch)
+              await this.storage.snapshots.clear(pairingScope(p));
+          }).catch(() => {
+            if (epoch === this.epoch)
+              this.update({
+                error: "未能清除旧任务的本机缓存，请移除连接后重试。",
+              });
+          });
+        }
         if (restored || selected !== current) this.closeMessage();
         if (selected !== current) {
           this.historyEpoch++;
@@ -900,7 +949,8 @@ export class MobileController {
     const client = this.client,
       epoch = this.epoch,
       sessionId = client?.state.session?.id,
-      history = ++this.historyEpoch;
+      history = ++this.historyEpoch,
+      cacheVersion = this.cacheVersion;
     if (!client || !client.state.canAct) return;
     if (!sessionId) {
       this.update({ messages: [], hasOlder: false, hasNewer: false });
@@ -922,16 +972,56 @@ export class MobileController {
         epoch === this.epoch &&
         history === this.historyEpoch &&
         sessionId === client.state.session?.id
-      )
+      ) {
         this.update({
           messages: page.items,
           hasOlder: page.hasOlder,
           hasNewer: page.hasNewer,
           loading: false,
         });
+        const pairing = this.pairing;
+        const session = this.value.session;
+        if (pairing && session?.id === sessionId) {
+          try {
+            await this.credentials(async () => {
+              if (
+                epoch !== this.epoch ||
+                history !== this.historyEpoch ||
+                cacheVersion !== this.cacheVersion
+              )
+                return;
+              await this.storage.snapshots.save(pairingScope(pairing), {
+                session,
+                items: page.items,
+                savedAt: Date.now(),
+              });
+            });
+          } catch {
+            if (epoch === this.epoch && history === this.historyEpoch)
+              this.update({ error: "内容已读取，但未能保存本机历史缓存。" });
+          }
+        }
+      }
     } catch (error) {
       if (epoch === this.epoch && history === this.historyEpoch)
         this.update({ loading: false, error: "无法恢复任务内容，请重试。" });
+      throw error;
+    }
+  }
+  async clearHistoryCache() {
+    const pairing = this.pairing;
+    if (!pairing) return;
+    const epoch = this.epoch;
+    this.cacheVersion++;
+    try {
+      await this.credentials(() =>
+        this.storage.snapshots.clear(pairingScope(pairing)),
+      );
+      if (epoch === this.epoch && this.value.phase !== "connected")
+        this.update({ messages: [], hasOlder: false, hasNewer: false });
+    } catch (error) {
+      if (epoch === this.epoch)
+        this.update({ error: "未能清除本机历史缓存，请重试。" });
       throw error;
     }
   }

@@ -128,7 +128,9 @@ export default function Connect() {
         state.session &&
         state.composer.record && (
           <Action
-            title="继续编辑本机草稿"
+            title={
+              state.messages.length ? "查看上次任务与草稿" : "继续编辑本机草稿"
+            }
             onPress={() => router.push("/task")}
           />
         )}

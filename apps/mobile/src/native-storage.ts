@@ -16,6 +16,9 @@ export function nativeStorage(): MobileStorage {
       await value.execAsync(
         "PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; CREATE TABLE IF NOT EXISTS installation(id INTEGER PRIMARY KEY); CREATE TABLE IF NOT EXISTS intents(scope TEXT PRIMARY KEY, data TEXT NOT NULL); CREATE TABLE IF NOT EXISTS mobile_drafts(scope TEXT NOT NULL, sessionId TEXT NOT NULL, data TEXT NOT NULL, updatedAt INTEGER NOT NULL, PRIMARY KEY(scope, sessionId));",
       );
+      await value.execAsync(
+        "CREATE TABLE IF NOT EXISTS mobile_snapshots(scope TEXT PRIMARY KEY, data TEXT NOT NULL)",
+      );
       // Keychain can survive iOS uninstall. A new app installation does not silently
       // reuse an identity left by an old installation or a restored backup.
       if (
@@ -40,12 +43,46 @@ export function nativeStorage(): MobileStorage {
       await SecureStore.deleteItemAsync(key, options);
       await value.runAsync("DELETE FROM intents");
       await value.runAsync("DELETE FROM mobile_drafts");
+      await value.runAsync("DELETE FROM mobile_snapshots");
     },
     async clear(scope) {
       await (await db()).runAsync("DELETE FROM intents WHERE scope=?", scope);
       await (
         await db()
       ).runAsync("DELETE FROM mobile_drafts WHERE scope=?", scope);
+      await (
+        await db()
+      ).runAsync("DELETE FROM mobile_snapshots WHERE scope=?", scope);
+    },
+    snapshots: {
+      async load(scope) {
+        const row = await (
+          await db()
+        ).getFirstAsync<{ data: string }>(
+          "SELECT data FROM mobile_snapshots WHERE scope=?",
+          scope,
+        );
+        if (!row) return null;
+        if (row.data.length > 2000000)
+          throw Error("Snapshot capacity exceeded");
+        return JSON.parse(row.data);
+      },
+      async save(scope, snapshot) {
+        const data = JSON.stringify(snapshot);
+        if (data.length > 2000000) throw Error("Snapshot capacity exceeded");
+        await (
+          await db()
+        ).runAsync(
+          "INSERT INTO mobile_snapshots(scope,data) VALUES(?,?) ON CONFLICT(scope) DO UPDATE SET data=excluded.data",
+          scope,
+          data,
+        );
+      },
+      async clear(scope) {
+        await (
+          await db()
+        ).runAsync("DELETE FROM mobile_snapshots WHERE scope=?", scope);
+      },
     },
     drafts: {
       async load(scope, sessionId) {
