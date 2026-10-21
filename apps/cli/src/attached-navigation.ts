@@ -13,7 +13,10 @@ import {
 } from "../../../packages/protocol/src/contracts.ts";
 import { openSessions } from "../../../packages/tui/src/sessions.ts";
 import { openModelPicker } from "../../../packages/tui/src/model-picker.ts";
-import { openModelControl } from "../../../packages/tui/src/model-settings.ts";
+import {
+  openModelControl,
+  parseModelControl,
+} from "../../../packages/tui/src/model-settings.ts";
 import { openGeneralSettings } from "../../../packages/tui/src/general-settings.ts";
 import { openPermissions } from "../../../packages/tui/src/permissions.ts";
 import {
@@ -350,13 +353,30 @@ export class AttachedNavigation {
       command === "/thinking" ||
       command === "/speed"
     ) {
-      if (arg && arg !== "default" && arg !== "active")
-        throw Error(`Use ${command} [active|default] to choose a value`);
+      const field = command.slice(1) as "context" | "thinking" | "speed";
+      const parsed = parseModelControl(field, arg);
       const state = await this.request<{
         current: ModelSelection;
         default: ModelSelection;
       }>("model.read", { sessionId: id });
       this.selected(id);
+      if (parsed.supplied) {
+        const selection =
+          parsed.scope === "active" ? state.current : state.default;
+        await this.request(
+          parsed.scope === "active" ? "model.set" : "model.default",
+          {
+            sessionId: id,
+            provider: selection.provider,
+            model: selection.model,
+            settings: { ...selection.settings, [parsed.key]: parsed.value },
+          },
+        );
+        this.view.notice(
+          `${command}: ${parsed.scope === "active" ? "applied to this session" : "saved for new sessions"}.`,
+        );
+        return;
+      }
       await openModelControl(
         this.view,
         {
@@ -384,7 +404,7 @@ export class AttachedNavigation {
             settings: selection.settings,
           });
         },
-        arg === "default" ? "default" : "active",
+        parsed.scope,
       );
       return;
     }

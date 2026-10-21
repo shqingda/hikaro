@@ -504,41 +504,15 @@ async function main() {
           throw Error(
             "Finish or cancel the run before changing model settings.",
           );
-        const { openModelControl } =
+        const { openModelControl, parseModelControl } =
           await import("../../../packages/tui/src/model-settings.ts");
-        const tokens = arg.trim().split(/\s+/).filter(Boolean);
-        const scope = tokens.includes("default") ? "default" : "active";
-        const raw = tokens.filter((t) => t !== "active" && t !== "default");
-        if (raw.length > 1)
-          throw Error(`Use /${field} [VALUE] [active|default]`);
+        const { scope, supplied, key, value } = parseModelControl(field, arg);
         const active = agent.options.session.modelSelection!;
         const defaults =
           (await runtime.providerCatalog().readDefault()) ??
           runtime.defaultSelection();
-        if (raw.length) {
+        if (supplied) {
           const selected = scope === "active" ? active : defaults;
-          let value: string | number | undefined = raw[0];
-          if (value === "auto") value = undefined;
-          else if (field === "context") {
-            const match = /^(\d+)(k|m)?$/i.exec(value!);
-            if (!match)
-              throw Error(
-                "Use /context auto, /context 128k, or /context 1000000",
-              );
-            value =
-              Number(match[1]) *
-              (match[2]?.toLowerCase() === "m"
-                ? 1000000
-                : match[2]?.toLowerCase() === "k"
-                  ? 1000
-                  : 1);
-          }
-          const key =
-            field === "context"
-              ? "contextWindow"
-              : field === "thinking"
-                ? "reasoning"
-                : "speed";
           const settings = {
             ...selected.settings,
             [key]: value,

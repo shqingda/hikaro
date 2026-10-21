@@ -6,6 +6,33 @@ import {
 import { authenticationUrl } from "../packages/tui/src/auth-browser.ts";
 import { MessageComponent } from "../packages/tui/src/index.ts";
 import type { Model, Api } from "@earendil-works/pi-ai";
+import { parseModelControl } from "../packages/tui/src/model-settings.ts";
+it("parses direct model controls consistently and rejects ambiguous or unsafe sizes", () => {
+  expect(parseModelControl("context", "128k default")).toEqual({
+    scope: "default",
+    supplied: true,
+    key: "contextWindow",
+    value: 128000,
+  });
+  expect(parseModelControl("context", "1M").value).toBe(1000000);
+  expect(parseModelControl("thinking", "high active").value).toBe("high");
+  expect(parseModelControl("speed", "auto")).toMatchObject({
+    supplied: true,
+    value: undefined,
+  });
+  expect(parseModelControl("context", "default")).toMatchObject({
+    scope: "default",
+    supplied: false,
+  });
+  for (const value of [
+    "0",
+    "-1",
+    "9007199254740992",
+    "128k extra",
+    "active default",
+  ])
+    expect(() => parseModelControl("context", value)).toThrow();
+});
 const model: Model<Api> = {
   id: "test",
   name: "test",

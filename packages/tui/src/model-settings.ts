@@ -2,6 +2,37 @@ import type { HikaroView } from "./index.ts";
 import type { ProviderCatalog } from "../../provider-pi/src/catalog.ts";
 import type { ModelSelection, ModelSettings } from "../../core/src/types.ts";
 export type ModelControl = "context" | "thinking" | "speed";
+export function parseModelControl(field: ModelControl, argument: string) {
+  const tokens = argument.trim().split(/\s+/).filter(Boolean);
+  const scopes = tokens.filter((t) => t === "active" || t === "default");
+  const raw = tokens.filter((t) => t !== "active" && t !== "default");
+  if (raw.length > 1 || scopes.length > 1)
+    throw Error(`Use /${field} [VALUE] [active|default]`);
+  const scope = scopes[0] === "default" ? "default" : "active";
+  let value: string | number | undefined = raw[0];
+  if (value === "auto") value = undefined;
+  else if (field === "context" && value !== undefined) {
+    const match = /^(\d+)(k|m)?$/i.exec(value);
+    if (!match)
+      throw Error("Use /context auto, /context 128k, or /context 1000000");
+    value =
+      Number(match[1]) *
+      (match[2]?.toLowerCase() === "m"
+        ? 1000000
+        : match[2]?.toLowerCase() === "k"
+          ? 1000
+          : 1);
+    if (!Number.isSafeInteger(value) || value <= 0)
+      throw Error("Context size must be a positive safe integer");
+  }
+  const key =
+    field === "context"
+      ? "contextWindow"
+      : field === "thinking"
+        ? "reasoning"
+        : "speed";
+  return { scope, supplied: raw.length > 0, key, value } as const;
+}
 export async function openModelControl(
   view: HikaroView,
   catalog: Pick<ProviderCatalog, "capabilities">,
