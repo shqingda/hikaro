@@ -569,7 +569,11 @@ export class Agent implements AgentBackend {
     this.steering = [];
   }
   private async drain() {
-    if (this.draining) return;
+    if (
+      this.draining ||
+      (this.queueWrites === 0 && !this.queue.some((item) => !item.recovered))
+    )
+      return;
     this.draining = true;
     try {
       for (;;) {
@@ -614,6 +618,14 @@ export class Agent implements AgentBackend {
         } catch (e) {
           item.reject(e);
         }
+        // Settle the final item and release ownership in the same microtask.
+        // An awaited empty dequeue otherwise leaves completion observers busy.
+        // Pending queue writes must finish before we can decide it is empty.
+        if (
+          this.queueWrites === 0 &&
+          (this.queueHolds || !this.queue.some((queued) => !queued.recovered))
+        )
+          break;
       }
     } finally {
       this.draining = false;

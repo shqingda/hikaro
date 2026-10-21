@@ -410,5 +410,12 @@ pnpm exec vitest run tests/pty.test.ts -t 'critical TUI workflows'
 
 - [x] 前轮优化：48 项定向检查、根项目/移动端类型检查、构建通过。完整 PTY 30.002 分钟、94 条任务、正常退出，构建指纹一致。
 - [x] 建立 macOS footprint 基线：起点 83.10、终点 92.75、峰值 98.57 MiB，最后窗口自然回落；不替代平台预算或长期无泄漏结论。
-- [ ] 已有队列收尾竞态：prompt completion 早于 drain 清理，紧接手动工具调用可能报 busy；候选与 HEAD 均复现，存储补充检查 14 通过、1 失败。
+- [x] 队列收尾竞态已修复：空队列不再异步占用 busy；历史失败及本轮修复见 [验收记录](docs/validation/queue-finalization.md)。
 - [验收证据](docs/validation/shared-memory-soak.md)。TUI 89%，移动端 35%，未到 95%。
+
+## 2026-10-21：队列收尾与连续操作
+
+- [x] prompt 完成后可立即执行手动工具和 compact；存在后续任务仍保持执行独占。
+- [x] 17 项定向检查、单个真实 PTY E2E、类型检查和构建通过。
+- [ ] 下一项：正式分发产物/安装验证；真实模型、物理终端/IME 与移动端真机验收仍需完成。
+- [验收记录](docs/validation/queue-finalization.md)。TUI 90%，移动端 35%，未到 95%。
