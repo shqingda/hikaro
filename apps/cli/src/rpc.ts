@@ -524,6 +524,7 @@ export async function serveRpc(
 
         case "changes.list":
         case "changes.detail":
+        case "changes.diff":
         case "changes.rollback":
         case "execution.hold":
         case "execution.release":

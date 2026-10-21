@@ -4,6 +4,7 @@ import type { Runtime } from "../../../packages/runtime/src/index.ts";
 import type { Agent, Session } from "../../../packages/core/src/index.ts";
 import type { Questions } from "../../../packages/runtime/src/planning.ts";
 import { executionItems } from "../../../packages/runtime/src/execution-items.ts";
+import { changeDiff } from "../../../packages/core/src/change-diff.ts";
 const kindSchema = z.enum([
   "queue",
   "terminals",
@@ -143,6 +144,33 @@ export class RpcWorkflows {
         if (offset < entries.length && !items.length)
           throw Error("Change record exceeds response limit");
         return { items, more: offset + items.length < entries.length };
+      }
+      case "changes.diff": {
+        const detail = await this.runtime.changes.detail(
+          session.id,
+          z.string().uuid().parse(p.id),
+        );
+        const offset = z
+          .number()
+          .int()
+          .min(0)
+          .max(128 * 1024 * 1024)
+          .parse(p.offset ?? 0);
+        const limit = z
+          .number()
+          .int()
+          .min(1)
+          .max(16000)
+          .parse(p.limit ?? 8192);
+        const text = changeDiff(detail.entry.path, detail.before, detail.after);
+        const end = Math.min(text.length, offset + limit);
+        return {
+          entry: detail.entry,
+          data: text.slice(offset, end),
+          total: text.length,
+          encoding: "utf16",
+          nextOffset: end < text.length ? end : null,
+        };
       }
       case "changes.detail": {
         const detail = await this.runtime.changes.detail(
