@@ -143,7 +143,7 @@ export class SharedHostClient {
       );
       socket.on("data", (chunk) => {
         try {
-          parser.push(chunk);
+          parser.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
         } catch (e) {
           socket.destroy(e as Error);
         }

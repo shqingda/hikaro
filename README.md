@@ -4,7 +4,7 @@ Independent TypeScript coding agent. Current executable clients: fullscreen TUI 
 
 ## Run
 
-Requires **Node 24.21+**, **pnpm 12.11.2**, and `rg`. macOS is the initial supported host.
+Requires **Node 26.12.1+**, **pnpm 12.14.0**, and `rg`. macOS is the initial supported host.
 
 Installing or building from source also requires a C11 compiler: Xcode Command Line Tools on macOS, or `build-essential` on Linux. Installation and build compile the small file-operation helper; the built CLI includes that executable. After pulling native helper changes, run `pnpm build` or `pnpm install` before using either `pnpm dev` or `pnpm start`. File tools refuse to run if it is unavailable.
 

@@ -26,7 +26,7 @@ A fullscreen TUI for an 18–36 row terminal; keyboard-first navigation; approva
 
 ## Capabilities and Constraints
 
-Node 24.21+, pnpm 12.11.2, `rg`, and a C11 compiler are required to run from source. macOS is the initial supported host. No cloud execution, no central account, no cloud history backup. Command execution is sandboxed with no network by default. TypeScript and SQLite are implementation facts, not brand claims. No pricing, customer logos, benchmarks, or availability claims exist to reuse.
+Node 26.12.1+, pnpm 12.14.0, `rg`, and a C11 compiler are required to run from source. macOS is the initial supported host. No cloud execution, no central account, no cloud history backup. Command execution is sandboxed with no network by default. TypeScript and SQLite are implementation facts, not brand claims. No pricing, customer logos, benchmarks, or availability claims exist to reuse.
 
 ## Brand Commitments
 

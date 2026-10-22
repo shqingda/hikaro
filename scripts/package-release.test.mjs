@@ -6,7 +6,7 @@ test("release package has explicit platform, executable and production-only depe
     {
       name: "hikaro",
       version: "0.1.0",
-      engines: { node: ">=24.21.0" },
+      engines: { node: ">=26.12.1" },
       dependencies: { foo: "1.2.3" },
       devDependencies: { bar: "9" },
       scripts: { postinstall: "compile source" },

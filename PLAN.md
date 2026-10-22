@@ -26,7 +26,7 @@
 
 ## 构建与运行
 
-依赖 Node 24.21+、pnpm 12.11.2、rg 和 C11 编译器。安装 pnpm install，构建 pnpm build，启动 pnpm start --new。具体操作由当前学习步骤给出；完整使用说明见 README.md。
+依赖 Node 26.12.1+、pnpm 12.14.0、rg 和 C11 编译器。安装 pnpm install，构建 pnpm build，启动 pnpm start --new。具体操作由当前学习步骤给出；完整使用说明见 README.md。
 
 ## 授权交互决策（2026-10-17）
 

@@ -4,7 +4,7 @@
 
 [0.2.0 自用预览版](https://github.com/shqingda/hikaro/releases/tag/v0.2.0)现已发布，新增 redo、附着模式模型参数和 macOS 剪贴板图片。使用[0.2.0 安装及登录说明](releases/v0.2.0.md)下载新包；下文 0.1.0 路径保留为历史示例。
 
-当前支持源码安装，并提供本地 macOS arm64 npm tarball 候选包流程；尚未公开发布或完成签名/公证。需要 Node 24.21+、pnpm 12.11.2、rg 和 Xcode Command Line Tools。浏览器功能另需 Playwright Chromium；离线 demo 不验证真实模型凭据。
+当前支持源码安装，并提供本地 macOS arm64 npm tarball 候选包流程；尚未公开发布或完成签名/公证。需要 Node 26.12.1+、pnpm 12.14.0、rg 和 Xcode Command Line Tools。浏览器功能另需 Playwright Chromium；离线 demo 不验证真实模型凭据。
 
 [0.1.0 自用预览版](https://github.com/shqingda/hikaro/releases/tag/v0.1.0)已发布，访问遵循当前私有仓库权限；它是 pre-release，完整稳定版及移动端仍待完成。[安装命令和已知缺项](releases/v0.1.0.md)。附件提供 tarball、校验和、来源 manifest、安全与安装/订阅报告。下载时核对各报告的 SHA 与 tarball 一致，具体源提交和验收环境以附件为准。五项物理终端结果及各候选验收记录见仓库 docs/validation。
 
@@ -66,7 +66,7 @@ npm install --engine-strict --prefix "$HOME/.local/share/hikaro-app" ./hikaro-0.
 "$HOME/.local/share/hikaro-app/node_modules/.bin/hikaro" --demo
 ```
 
-需要 Node 24.21+ 和 npm、rg；最低版本验收使用 Node 24.21.0。若 npm 提示安装脚本审批，检查并按其提示批准需要的原生依赖脚本。未覆盖的 Node 版本、无开发工具的全新机器、Gatekeeper 隔离属性及签名/公证尚需验收。SHA-256 用于检测内容变化，不提供发布者身份认证；只使用可信渠道获得的包与校验值。
+需要 Node 26.12.1+ 和 npm、rg；最低版本验收使用 Node 26.12.1。若 npm 提示安装脚本审批，检查并按其提示批准需要的原生依赖脚本。未覆盖的 Node 版本、无开发工具的全新机器、Gatekeeper 隔离属性及签名/公证尚需验收。SHA-256 用于检测内容变化，不提供发布者身份认证；只使用可信渠道获得的包与校验值。
 
 运行 `pnpm check:release artifacts/release/hikaro-0.1.0-darwin-arm64.tgz` 验收实际 tarball：独立安装前缀、空 npm 缓存、校验和、实际 bin 离线任务、已打包原生 helper 读取、由安装目录自己的 node-pty 启动 TUI 并正常退出。另验证立即 Ctrl+D 的多行草稿保存/重开，以及 SIGKILL host 后补充指令经原身份确认才在下一轮生效，未确认项保留。输出同名 `.validation.json`；应用及依赖全部来自安装包，源码 SharedHostClient 仅作为观察传输，通过现有 tsx 运行。不接触用户 home。构建或 README 改变后需重新打包并验收对应 SHA，旧验证不能覆盖新包。
 

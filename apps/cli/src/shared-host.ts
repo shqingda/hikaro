@@ -149,7 +149,7 @@ export async function serveSharedHost(
     });
     socket.on("data", (chunk) => {
       try {
-        parser.push(chunk);
+        parser.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
       } catch {
         socket.destroy();
       }
