@@ -288,7 +288,15 @@ const handlers = {
       .all(sessionId, scope)
       .map((row) => JSON.parse(row.data));
   },
-  settleQuestion({ id, sessionId, scope, hostInstanceId, answers, workspace }) {
+  settleQuestion({
+    id,
+    sessionId,
+    scope,
+    hostInstanceId,
+    answers,
+    workspace,
+    recover,
+  }) {
     db.exec("BEGIN IMMEDIATE");
     try {
       const row = prepare(
@@ -310,7 +318,8 @@ const handlers = {
         }
       }
       const question = JSON.parse(row.data);
-      const recovered = question.hostInstanceId !== hostInstanceId;
+      const recovered =
+        question.hostInstanceId !== hostInstanceId || recover === true;
       if (
         answers &&
         (Object.keys(answers).length !== question.questions.length ||

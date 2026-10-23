@@ -15,6 +15,91 @@ import { RpcWorkflows } from "../apps/cli/src/rpc-workflows.ts";
 import { serveSharedHost } from "../apps/cli/src/shared-host.ts";
 import { SharedHostClient } from "../packages/host/src/client.ts";
 import { ClientConnection } from "../packages/client-core/src/connection.ts";
+import { AttachedWorkflows } from "../apps/cli/src/attached-workflows.ts";
+import { ModelPanel } from "../packages/tui/src/model-panel.ts";
+import type { HikaroView } from "../packages/tui/src/index.ts";
+import { stripVTControlCharacters } from "node:util";
+
+it.each(["poll", "response"] as const)(
+  "shows same-question recovery through the %s without claiming the old run resumed",
+  async (transition) => {
+    vi.useFakeTimers();
+    let recovered = false,
+      pending = true;
+    let panel: ModelPanel, controller: AbortController;
+    const notice = vi.fn();
+    const request = vi.fn(async (method: string) => {
+      if (method === "questions.read")
+        return pending
+          ? {
+              id: "same-question",
+              questions: [{ id: "q", question: "Choose", options: ["A"] }],
+              recovered,
+            }
+          : null;
+      if (method === "questions.respond") {
+        pending = false;
+        return { completed: true, recovered };
+      }
+      return { active: true };
+    });
+    const client = {
+      state: {
+        canAct: true,
+        session: { id: "session" },
+        sessionRole: "owner",
+        busy: true,
+      },
+      request,
+    } as unknown as ClientConnection;
+    const view = {
+      openModelPanel() {
+        const current = new AbortController();
+        controller = current;
+        panel = new ModelPanel(current.signal, () => {});
+        return { panel, signal: current.signal, close: () => current.abort() };
+      },
+      closeModelPanel: () => controller?.abort(),
+      notice,
+      setError: vi.fn(),
+      setPermissionLabel: vi.fn(),
+    } as unknown as HikaroView;
+    const workflows = new AttachedWorkflows(client, view, "/tmp");
+    const screen = () => stripVTControlCharacters(panel.render(110).join("\n"));
+    try {
+      await vi.advanceTimersByTimeAsync(750);
+      expect(screen()).toContain("Question 1/1");
+      const previous = controller!;
+      recovered = true;
+      if (transition === "poll") {
+        await vi.advanceTimersByTimeAsync(1500);
+        expect(previous.signal.aborted).toBe(true);
+        expect(screen()).toContain("Recovered question 1/1");
+        expect(
+          request.mock.calls.filter(
+            ([method]) => method === "questions.respond",
+          ),
+        ).toEqual([]);
+      }
+      panel!.handleInput("\x1b[B");
+      panel!.handleInput("\r");
+      await vi.advanceTimersByTimeAsync(0);
+      expect(screen()).toContain("Review answers");
+      panel!.handleInput("\x1b[B");
+      panel!.handleInput("\r");
+      await vi.advanceTimersByTimeAsync(0);
+      expect(notice).toHaveBeenCalledWith(
+        expect.stringContaining("Recovered answers saved"),
+      );
+      expect(
+        request.mock.calls.filter(([method]) => method === "questions.respond"),
+      ).toHaveLength(1);
+    } finally {
+      workflows.close();
+      vi.useRealTimers();
+    }
+  },
+);
 
 it("chunks snapshots, scopes pending questions, and expires abandoned queue holds", async () => {
   const home = await realpath(

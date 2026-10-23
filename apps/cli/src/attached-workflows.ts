@@ -16,7 +16,7 @@ import type {
 import type { ExecutionItem } from "../../../packages/runtime/src/execution-items.ts";
 export class AttachedWorkflows {
   private modal?: string;
-  private question?: { id: string; abort: AbortController };
+  private question?: { id: string; recovered: boolean; abort: AbortController };
   private seenPlans = new Set<string>();
   private polling = false;
   private stopped = false;
@@ -97,12 +97,16 @@ export class AttachedWorkflows {
         recovered?: boolean;
       } | null>("questions.read", id);
       if (this.modal === "menu") return;
-      if (this.question && this.question.id !== q?.id)
+      if (
+        this.question &&
+        (this.question.id !== q?.id ||
+          this.question.recovered !== !!q?.recovered)
+      )
         this.question.abort.abort();
       if (q && !this.question) {
         this.view.closeModelPanel();
         const abort = new AbortController();
-        this.question = { id: q.id, abort };
+        this.question = { id: q.id, recovered: !!q.recovered, abort };
         this.modal = "questions";
         void answerQuestion(this.view, q, abort.signal, (answers) =>
           this.request("questions.respond", id, {
@@ -112,7 +116,7 @@ export class AttachedWorkflows {
         )
           .catch((error) => this.view.setError(String(error)))
           .finally(() => {
-            if (this.question?.id === q.id) {
+            if (this.question?.abort === abort) {
               this.question = undefined;
               this.modal = undefined;
             }

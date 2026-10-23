@@ -80,9 +80,15 @@ export async function answerQuestion(
   );
   while (!signal.aborted) {
     try {
-      await submit(answers);
+      const result = await submit(answers);
       if (signal.aborted) return;
-      if (question.recovered)
+      const recovered =
+        question.recovered ||
+        (result &&
+          typeof result === "object" &&
+          "recovered" in result &&
+          result.recovered === true);
+      if (recovered)
         view.notice(
           answers
             ? "Recovered answers saved. Send a new message to continue; no operation was resumed."

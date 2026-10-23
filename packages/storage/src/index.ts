@@ -88,6 +88,8 @@ export class SQLiteStore implements EventStore {
     hostInstanceId: string;
     answers?: Record<string, string>;
     workspace?: string;
+    /** Trusted lifecycle state: the original waiter ended after cancellation could not be saved. */
+    recover?: boolean;
   }) {
     return this.request<{ recovered: boolean }>("settleQuestion", input);
   }

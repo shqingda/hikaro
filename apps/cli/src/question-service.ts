@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import * as z from "zod";
 import type { Runtime } from "../../../packages/runtime/src/index.ts";
 import type { Questions } from "../../../packages/runtime/src/planning.ts";
+import type { PendingQuestion } from "../../../packages/runtime/src/pending-questions.ts";
 export type QuestionView = {
   id: string;
   questions: Questions;
@@ -15,7 +16,16 @@ export class QuestionService {
       id: string;
       sessionId: string;
       questions: Questions;
+      cancelling?: boolean;
       finish: (answers: Record<string, string> | undefined) => void;
+    }
+  >();
+  private interrupted = new Map<
+    string,
+    {
+      sessionId: string;
+      executionSessionId: string;
+      scope: string;
     }
   >();
   private writes = new Set<Promise<unknown>>();
@@ -32,6 +42,15 @@ export class QuestionService {
     this.writes.add(work);
     void work.finally(() => this.writes.delete(work)).catch(() => {});
     return work;
+  }
+  private isInterrupted(question: PendingQuestion) {
+    const interrupted = this.interrupted.get(question.id);
+    return (
+      question.hostInstanceId === this.hostInstanceId &&
+      interrupted?.sessionId === question.sessionId &&
+      interrupted?.executionSessionId === question.executionSessionId &&
+      interrupted?.scope === question.scope
+    );
   }
   ask(
     questions: Questions,
@@ -62,18 +81,28 @@ export class QuestionService {
       };
       const abort = () => {
         if (this.closing) return finish(undefined);
+        const pending = this.questions.get(id);
+        if (pending) pending.cancelling = true;
+        let persisted = false;
         void this.writing(
-          saved.then(() =>
-            this.runtime.store.settleQuestion({
+          saved.then(() => {
+            persisted = true;
+            return this.runtime.store.settleQuestion({
               id,
               sessionId,
               scope,
               hostInstanceId: this.hostInstanceId,
-            }),
-          ),
+            });
+          }),
         ).then(
           () => finish(undefined),
           (error) => {
+            if (persisted && !this.closing)
+              this.interrupted.set(id, {
+                sessionId,
+                executionSessionId,
+                scope,
+              });
             finish(undefined);
             console.error(
               `Question cancellation could not be saved: ${String(error)}`,
@@ -102,7 +131,8 @@ export class QuestionService {
       ? {
           id: q.id,
           questions: q.questions,
-          recovered: q.hostInstanceId !== this.hostInstanceId,
+          recovered:
+            q.hostInstanceId !== this.hostInstanceId || this.isInterrupted(q),
         }
       : null;
   }
@@ -114,17 +144,24 @@ export class QuestionService {
   ) {
     if (this.closing) throw Error("Questions are closing");
     signal?.throwIfAborted();
-    await this.ready();
     const id = z.string().uuid().parse(p.id);
+    // Keep the waiter reference across reads: cancellation may finish and remove
+    // it, but an answer begun before that cancellation is still stale.
+    const originalWaiter = this.questions.get(id);
+    await this.ready();
     const q = (
       await this.runtime.store.pendingQuestions(sessionId, scope)
     ).find((q) => q.id === id);
     if (this.closing) throw Error("Questions are closing");
     signal?.throwIfAborted();
-    if (
-      !q ||
-      (q.hostInstanceId === this.hostInstanceId && !this.questions.has(id))
-    )
+    if (!q) throw Error("Question expired or answered elsewhere");
+    const live = this.questions.get(id);
+    if (originalWaiter?.cancelling || live?.cancelling)
+      throw Error(
+        "Question was cancelled; reopen it to inspect its current state",
+      );
+    const interrupted = this.isInterrupted(q);
+    if (q.hostInstanceId === this.hostInstanceId && !live && !interrupted)
       throw Error("Question expired or answered elsewhere");
     let answers: Record<string, string> | undefined;
     if (p.cancelled !== true) {
@@ -144,14 +181,17 @@ export class QuestionService {
         scope,
         hostInstanceId: this.hostInstanceId,
         answers,
+        ...(interrupted ? { recover: true } : {}),
         ...(this.enforceAccess ? { workspace: this.runtime.options.cwd } : {}),
       }),
     );
-    this.questions.get(id)?.finish(answers);
+    this.interrupted.delete(id);
+    if (!result.recovered) this.questions.get(id)?.finish(answers);
     return { completed: true, recovered: result.recovered };
   }
   close() {
     this.closing = true;
+    this.interrupted.clear();
     for (const q of this.questions.values()) q.finish(undefined);
   }
 }

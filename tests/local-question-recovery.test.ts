@@ -82,6 +82,43 @@ const questions = [
   },
 ];
 
+it("reopens a cancelled question after its cancellation write fails without reconnecting the old waiter", async () => {
+  const f = await fixture();
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    await f.runtime.setPlanning(f.session, true);
+    const abort = new AbortController();
+    const answer = f.local.ask(questions, abort.signal, f.session.id);
+    await f.wait("Question 1/1");
+    vi.spyOn(f.runtime.store, "settleQuestion").mockRejectedValueOnce(
+      Error("Temporary cancellation failure"),
+    );
+    abort.abort();
+    expect(await answer).toBeUndefined();
+    const opened = f.local.open();
+    await f.wait("Recovered question 1/1");
+    f.input("\x1b[B");
+    f.input("\r");
+    await f.wait("Review answers");
+    f.input("\x1b[B");
+    f.input("\r");
+    await opened;
+    expect(await answer).toBeUndefined();
+    expect((await f.runtime.store.messages(f.session.id))[0]!.text).toContain(
+      "Small",
+    );
+    expect(
+      (await f.runtime.store.events(f.session.id)).filter(
+        (e) => e.type === "run.start",
+      ),
+    ).toEqual([]);
+    expect(f.runtime.planning.get(f.session.id).active).toBe(true);
+  } finally {
+    log.mockRestore();
+    await f.close();
+  }
+});
+
 it("keeps a live answer available after a failed save and resumes only after explicit retry", async () => {
   const f = await fixture();
   try {
