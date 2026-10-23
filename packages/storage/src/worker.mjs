@@ -338,7 +338,7 @@ const handlers = {
       );
       if (recovered && answers) {
         const text =
-          "Answers to questions recovered after host interruption. No previous operation was resumed.\n\n" +
+          "Answers to questions recovered after execution interruption. No previous operation was resumed.\n\n" +
           question.questions
             .map((q) => q.question + "\n" + answers[q.id])
             .join("\n\n");

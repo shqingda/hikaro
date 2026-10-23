@@ -1,3 +1,4 @@
+import { QuestionService } from "./question-service.ts";
 import { randomUUID } from "node:crypto";
 import * as z from "zod";
 import type { Runtime } from "../../../packages/runtime/src/index.ts";
@@ -22,29 +23,20 @@ export class RpcWorkflows {
       timer: ReturnType<typeof setTimeout>;
     }
   >();
-  private questions = new Map<
-    string,
-    {
-      id: string;
-      sessionId: string;
-      questions: Questions;
-      finish: (answers: Record<string, string> | undefined) => void;
-    }
-  >();
-  private writes = new Set<Promise<unknown>>();
-  private closing = false;
+  private questionService: QuestionService;
   constructor(
     private runtime: Runtime,
-    private hostInstanceId: string = randomUUID(),
-    private enforceAccess = false,
-  ) {}
-  async ready() {
-    await Promise.all([...this.writes]);
+    hostInstanceId: string = randomUUID(),
+    enforceAccess = false,
+  ) {
+    this.questionService = new QuestionService(
+      runtime,
+      hostInstanceId,
+      enforceAccess,
+    );
   }
-  private writing<T>(work: Promise<T>) {
-    this.writes.add(work);
-    void work.finally(() => this.writes.delete(work)).catch(() => {});
-    return work;
+  ready() {
+    return this.questionService.ready();
   }
   private release(scope: string) {
     const held = this.holds.get(scope);
@@ -67,55 +59,13 @@ export class RpcWorkflows {
     signal: AbortSignal,
     executionSessionId: string,
     scope = "default",
-  ): Promise<Record<string, string> | undefined> {
-    signal.throwIfAborted();
-    const id = randomUUID();
-    const sessionId = this.runtime.approvalAuthority(executionSessionId);
-    const saved = this.writing(
-      this.runtime.store.saveQuestion({
-        id,
-        sessionId,
-        executionSessionId,
-        scope,
-        hostInstanceId: this.hostInstanceId,
-        questions,
-      }),
+  ) {
+    return this.questionService.ask(
+      questions,
+      signal,
+      executionSessionId,
+      scope,
     );
-    return new Promise((resolve, reject) => {
-      const finish = (answers: Record<string, string> | undefined) => {
-        signal.removeEventListener("abort", abort);
-        this.questions.delete(id);
-        resolve(answers);
-      };
-      const abort = () => {
-        if (this.closing) return finish(undefined);
-        void this.writing(
-          saved.then(() =>
-            this.runtime.store.settleQuestion({
-              id,
-              sessionId,
-              scope,
-              hostInstanceId: this.hostInstanceId,
-            }),
-          ),
-        ).then(
-          () => finish(undefined),
-          (error) => {
-            finish(undefined);
-            console.error(
-              `Question cancellation could not be saved: ${String(error)}`,
-            );
-          },
-        );
-      };
-      this.questions.set(id, { id, sessionId, questions, finish });
-      signal.addEventListener("abort", abort, { once: true });
-      void saved.catch((error) => {
-        signal.removeEventListener("abort", abort);
-        this.questions.delete(id);
-        reject(error);
-      });
-    });
   }
   async handle(
     method: string,
@@ -293,61 +243,16 @@ export class RpcWorkflows {
       case "plan.set":
         await this.runtime.setPlanning(session, z.boolean().parse(p.active));
         return this.runtime.planning.get(session.id);
-      case "questions.read": {
-        await this.ready();
-        const q = (
-          await this.runtime.store.pendingQuestions(session.id, scope)
-        )[0];
-        return q
-          ? {
-              id: q.id,
-              questions: q.questions,
-              recovered: q.hostInstanceId !== this.hostInstanceId,
-            }
-          : null;
-      }
-      case "questions.respond": {
-        await this.ready();
-        const id = z.string().uuid().parse(p.id);
-        const q = (
-          await this.runtime.store.pendingQuestions(session.id, scope)
-        ).find((q) => q.id === id);
-        if (
-          !q ||
-          (q.hostInstanceId === this.hostInstanceId && !this.questions.has(id))
-        )
-          throw Error("Question expired or answered elsewhere");
-        let answers: Record<string, string> | undefined;
-        if (p.cancelled !== true) {
-          answers = z
-            .record(z.string(), z.string().min(1).max(100000))
-            .parse(p.answers);
-          if (
-            Object.keys(answers).length !== q.questions.length ||
-            q.questions.some((question) => !answers![question.id]?.trim())
-          )
-            throw Error("Answer every question explicitly");
-        }
-        const result = await this.runtime.store.settleQuestion({
-          id,
-          sessionId: session.id,
-          scope,
-          hostInstanceId: this.hostInstanceId,
-          answers,
-          ...(this.enforceAccess
-            ? { workspace: this.runtime.options.cwd }
-            : {}),
-        });
-        this.questions.get(id)?.finish(answers);
-        return { completed: true, recovered: result.recovered };
-      }
+      case "questions.read":
+        return this.questionService.read(session.id, scope);
+      case "questions.respond":
+        return this.questionService.respond(session.id, scope, p);
       default:
         throw Error("Unsupported workflow method");
     }
   }
   close() {
-    this.closing = true;
     for (const scope of this.holds.keys()) this.release(scope);
-    for (const q of this.questions.values()) q.finish(undefined);
+    this.questionService.close();
   }
 }

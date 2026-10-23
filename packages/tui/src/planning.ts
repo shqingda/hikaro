@@ -33,7 +33,7 @@ export async function askQuestions(
       const choice = await panel.readDocument(
         `${recovered ? "Recovered question" : "Question"} ${index + 1}/${questions.length}`,
         (recovered
-          ? "Host interrupted. Answers will be saved to this session; send a new message to continue. No previous operation will run automatically.\n\n"
+          ? "Previous execution interrupted. Answers will be saved to this session; send a new message to continue. No previous operation will run automatically.\n\n"
           : "") + q.question,
         [
           ...(q.options ?? []).map((label, i) => ({ value: String(i), label })),
@@ -63,6 +63,51 @@ export async function askQuestions(
   } finally {
     runSignal.removeEventListener("abort", close);
     close();
+  }
+}
+/** A detached panel preserves the pending question; only an explicit answer or dismissal settles it. */
+export async function answerQuestion(
+  view: HikaroView,
+  question: { questions: Questions; recovered?: boolean },
+  signal: AbortSignal,
+  submit: (answers: Record<string, string> | undefined) => Promise<unknown>,
+) {
+  const answers = await askQuestions(
+    view,
+    question.questions,
+    signal,
+    question.recovered,
+  );
+  while (!signal.aborted) {
+    try {
+      await submit(answers);
+      if (signal.aborted) return;
+      if (question.recovered)
+        view.notice(
+          answers
+            ? "Recovered answers saved. Send a new message to continue; no operation was resumed."
+            : "Recovered questions dismissed. No answers were inferred.",
+        );
+      return;
+    } catch (error) {
+      if (signal.aborted) return;
+      const { panel, signal: panelSignal, close } = view.openModelPanel();
+      signal.addEventListener("abort", close, { once: true });
+      try {
+        const choice = await panel.readDocument(
+          "Answers not saved",
+          `${String(error)}\n\nYour answers are retained here.${question.recovered ? " A previous execution lease can take up to 30 seconds to expire. Retry when the session is idle." : " Retry saving when ready."}`,
+          [{ value: "retry", label: "Retry saving answers" }],
+        );
+        if (choice.value !== "retry") return;
+      } catch (error) {
+        if (!signal.aborted && !panelSignal.aborted) throw error;
+        return;
+      } finally {
+        signal.removeEventListener("abort", close);
+        close();
+      }
+    }
   }
 }
 export async function reviewPlan(

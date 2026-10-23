@@ -4,7 +4,7 @@ import type { RpcMethod } from "../../../packages/protocol/src/contracts.ts";
 import { openChangeReview } from "../../../packages/tui/src/change-review.ts";
 import { openExecutionControl } from "../../../packages/tui/src/execution-control.ts";
 import {
-  askQuestions,
+  answerQuestion,
   reviewPlan,
   browsePlanHistory,
 } from "../../../packages/tui/src/planning.ts";
@@ -104,39 +104,12 @@ export class AttachedWorkflows {
         const abort = new AbortController();
         this.question = { id: q.id, abort };
         this.modal = "questions";
-        void askQuestions(this.view, q.questions, abort.signal, q.recovered)
-          .then(async (answers) => {
-            while (!abort.signal.aborted) {
-              try {
-                await this.request("questions.respond", id, {
-                  id: q.id,
-                  ...(answers ? { answers } : { cancelled: true }),
-                });
-                if (q.recovered)
-                  this.view.notice(
-                    answers
-                      ? "Recovered answers saved. Send a new message to continue; no operation was resumed."
-                      : "Recovered questions dismissed. No answers were inferred.",
-                  );
-                return;
-              } catch (error) {
-                if (!q.recovered || abort.signal.aborted) throw error;
-                const { panel, close } = this.view.openModelPanel();
-                abort.signal.addEventListener("abort", close, { once: true });
-                try {
-                  const choice = await panel.readDocument(
-                    "Answers not saved",
-                    `${String(error)}\n\nYour answers are retained here. A previous execution lease can take up to 30 seconds to expire. Retry when the session is idle.`,
-                    [{ value: "retry", label: "Retry saving answers" }],
-                  );
-                  if (choice.value !== "retry") return;
-                } finally {
-                  abort.signal.removeEventListener("abort", close);
-                  close();
-                }
-              }
-            }
-          })
+        void answerQuestion(this.view, q, abort.signal, (answers) =>
+          this.request("questions.respond", id, {
+            id: q.id,
+            ...(answers ? { answers } : { cancelled: true }),
+          }),
+        )
           .catch((error) => this.view.setError(String(error)))
           .finally(() => {
             if (this.question?.id === q.id) {

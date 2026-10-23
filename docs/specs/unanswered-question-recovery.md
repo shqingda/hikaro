@@ -9,3 +9,5 @@
 验证：新增 question-recovery 定向测试，已有 attached-workflows 问答用例，一个独立 host SIGKILL + 附着 TUI PTY 脚本。覆盖错误身份/会话、重复提交、旧租约保护、恢复答案留存及 Plan 只读；最后类型检查与构建。
 
 实现与验证记录见 [问题恢复验收](../validation/question-recovery.md)。附着界面在租约保护导致提交失败时保留当前答案，供用户手动重试；退出该重试面板不代表已经保存。
+
+后续普通非 host TUI 的独立范围与验证见 [普通问题恢复](local-question-recovery.md)。上述原切片范围保持不变。

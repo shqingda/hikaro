@@ -236,11 +236,8 @@ async function main() {
         ...options,
         permissionMode,
         approve: (r, s) => view.approve(r, s),
-        askUser: async (questions, signal) => {
-          const { askQuestions } =
-            await import("../../../packages/tui/src/planning.ts");
-          return askQuestions(view, questions, signal);
-        },
+        askUser: (questions, signal, executionSessionId, scope) =>
+          localQuestions.ask(questions, signal, executionSessionId, scope),
       },
       startupStore,
     ).catch(async (error) => {
@@ -250,6 +247,8 @@ async function main() {
   );
   const { createTerminal, HikaroView } = ui;
   const tui = createTerminal();
+  const { LocalQuestions } = await import("./local-questions.ts");
+  const localQuestions = new LocalQuestions(runtime, () => view);
   const { loadTuiPreferences, saveTuiPreferences } =
     await import("../../../packages/tui/src/preferences.ts");
   let preferences = await loadTuiPreferences(runtime.options.home!);
@@ -291,13 +290,18 @@ async function main() {
   const exit = () => {
     if (exiting) return;
     exiting = true;
+    // Preserve pending questions before disposing panels or cancelling tools.
+    localQuestions.close();
+    agent.cancel(true);
     view.dispose();
     tui.stop({ preserveScreen: true });
     console.log(`\nContinue: pnpm start · New session: pnpm start --new`);
     drafts.update(draftSessionId, view.editor.getExpandedText());
-    void drafts
-      .flush()
-      .finally(() => runtime.close())
+    const savedDraft = drafts.flush();
+    void runtime
+      .close(async () => {
+        await Promise.all([savedDraft, localQuestions.ready()]);
+      })
       .then(
         () => {
           process.exitCode = 0;
@@ -380,6 +384,8 @@ async function main() {
   };
   const bind = async (next: typeof session) => {
     if (agent.busy) throw Error("Cancel the active run first");
+    // Fence slow /questions reads before any part of the visible session changes.
+    localQuestions.invalidate();
     if (await runtime.store.session(draftSessionId))
       drafts.update(draftSessionId, view.editor.getExpandedText());
     await drafts.flush();
@@ -404,6 +410,7 @@ async function main() {
       draftSessionId = next.id;
       view.editor.setText(savedDraft);
     }
+    await localQuestions.select(next.id);
   };
   const applyPreferences = async (next: typeof preferences) => {
     preferences = await saveTuiPreferences(runtime.options.home!, next);
@@ -429,6 +436,7 @@ async function main() {
     onDraftChange: (text) => drafts.update(draftSessionId, text),
     commands: [
       { name: "search", description: "Search full messages in this session" },
+      { name: "questions", description: "Answer or dismiss saved questions" },
       {
         name: "plan",
         description: "Read-only planning, questions and plan review",
@@ -535,6 +543,10 @@ async function main() {
           );
       };
       switch (command) {
+        case "questions": {
+          await localQuestions.open();
+          return;
+        }
         case "search": {
           const { openMessageSearch } =
             await import("../../../packages/tui/src/message-search.ts");
@@ -709,7 +721,7 @@ async function main() {
           return "Attachment added. Add your question and press Enter.";
         }
         case "help":
-          return '/plan [TASK] · Read-only exploration, questions and plan review\n/plan cancel · Leave without executing\n/plan history · Read saved plan versions\n/tasks · Manage queued messages, background terminals and child agents\n/search [TEXT] · Search this session and read matching messages\n/changes · Review and roll back recorded file edits\n/new  /sessions  /resume [ID]  /rename TITLE  /export\n/fork  /compact  /model provider/model\n/attach PATH · @file or @"path with spaces" attaches text/images\n/settings  /permissions [ask|auto|full]\n/context [default]  /thinking [default]  /speed [default]\n/status  /resources\n/steer instructions  /tools  /older  /newer  /latest  /quit\n![--unrestricted] COMMAND follows the current permission mode. Ctrl+C cancels. Ctrl+D exits. Shift+Enter adds a line.\nNew prompts queue while the agent works.';
+          return '/plan [TASK] · Read-only exploration, questions and plan review\n/plan cancel · Leave without executing\n/plan history · Read saved plan versions\n/questions · Answer or dismiss saved questions\n/tasks · Manage queued messages, background terminals and child agents\n/search [TEXT] · Search this session and read matching messages\n/changes · Review and roll back recorded file edits\n/new  /sessions  /resume [ID]  /rename TITLE  /export\n/fork  /compact  /model provider/model\n/attach PATH · @file or @"path with spaces" attaches text/images\n/settings  /permissions [ask|auto|full]\n/context [default]  /thinking [default]  /speed [default]\n/status  /resources\n/steer instructions  /tools  /older  /newer  /latest  /quit\n![--unrestricted] COMMAND follows the current permission mode. Ctrl+C cancels. Ctrl+D exits. Shift+Enter adds a line.\nNew prompts queue while the agent works.';
         case "new":
           await bind(await runtime.session());
           return;
@@ -862,6 +874,7 @@ async function main() {
   // The editor, saved draft, history and permissions are ready. Paint them
   // immediately; advisory Git metadata can update after this first frame.
   tui.requestRender(true);
+  await localQuestions.select(session.id);
   setImmediate(refreshGitStatus);
   view.startTheme();
   runtime.startJobs();
