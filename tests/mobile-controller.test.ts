@@ -318,6 +318,7 @@ it("reopens cached task messages offline without sending and clears cache withou
     expect(app.state.canSteer).toBe(false);
     expect(f.sent).toEqual([]);
     await app.clearHistoryCache();
+    expect(app.state.cacheClear).toBe("cleared");
     expect(await f.store.snapshots.load(scope)).toBeNull();
     expect(app.state.messages).toEqual([]);
     expect(app.state.composer.record?.text).toBe("未发送草稿");
@@ -327,6 +328,161 @@ it("reopens cached task messages offline without sending and clears cache withou
     app.dispose();
   }
 });
+
+it("removes a failed cache-clear notice after a successful offline retry", async () => {
+  const f = fixture();
+  await f.store.write(JSON.stringify(f.pairing));
+  const app = new MobileController(f.store, {
+    ...f.options,
+    probe: async () => {
+      throw Error("offline");
+    },
+  });
+  try {
+    await app.restore();
+    const connectionError = app.state.error;
+    f.store.snapshots.clear.mockRejectedValueOnce(Error("storage unavailable"));
+    await expect(app.clearHistoryCache()).rejects.toThrow(
+      "storage unavailable",
+    );
+    expect(app.state.cacheClear).toBe("failed");
+    expect(app.state.error).toBe(connectionError);
+    await app.clearHistoryCache();
+    expect(app.state.cacheClear).toBe("cleared");
+    expect(app.state.error).toBe(connectionError);
+  } finally {
+    app.dispose();
+  }
+});
+
+it("clears an online snapshot once while preserving messages and allowing later reads to cache again", async () => {
+  const f = fixture();
+  const scope = pairingScope(f.pairing);
+  await f.store.write(JSON.stringify(f.pairing));
+  const app = new MobileController(f.store, f.options);
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const clear = f.store.snapshots.clear.getMockImplementation()!;
+  try {
+    await app.restore();
+    await vi.waitFor(() => expect(app.state.phase).toBe("connected"));
+    await app.history();
+    const messages = app.state.messages;
+    expect(messages).not.toEqual([]);
+    f.store.snapshots.clear.mockImplementationOnce(async (value) => {
+      await gate;
+      await clear(value);
+    });
+    const clearing = app.clearHistoryCache();
+    expect(app.state.cacheClear).toBe("clearing");
+    await app.clearHistoryCache();
+    expect(f.store.snapshots.clear).toHaveBeenCalledTimes(1);
+    expect(await f.store.snapshots.load(scope)).not.toBeNull();
+    release();
+    await clearing;
+    expect(app.state.cacheClear).toBe("cleared");
+    expect(await f.store.snapshots.load(scope)).toBeNull();
+    expect(app.state.messages).toEqual(messages);
+    await app.history();
+    expect(await f.store.snapshots.load(scope)).not.toBeNull();
+    expect(app.state.cacheClear).toBe("cleared");
+  } finally {
+    release();
+    app.dispose();
+  }
+});
+
+it("does not run an old queued cache clear after reconnecting the same pairing", async () => {
+  const f = fixture();
+  const scope = pairingScope(f.pairing);
+  const snapshot = {
+    session: { id: "s1", title: "任务", cwd: "/workspace", createdAt: 1 },
+    items: [
+      { seq: 2, message: { role: "assistant", text: "缓存", timestamp: 1 } },
+    ],
+    savedAt: 1,
+  };
+  await f.store.write(JSON.stringify(f.pairing));
+  await f.store.snapshots.save(scope, snapshot);
+  const app = new MobileController(f.store, {
+    ...f.options,
+    probe: async () => {
+      throw Error("offline");
+    },
+  });
+  try {
+    await app.restore();
+    const clearing = app.clearHistoryCache();
+    const restoring = app.restore();
+    await Promise.all([clearing, restoring]);
+    expect(f.store.snapshots.clear).not.toHaveBeenCalled();
+    expect(await f.store.snapshots.load(scope)).toEqual(snapshot);
+    expect(app.state.messages).toEqual(snapshot.items);
+    expect(app.state.cacheClear).toBe("idle");
+  } finally {
+    app.dispose();
+  }
+});
+
+it.each(["success", "failure"])(
+  "ignores a cache-clear %s after the pairing is removed and replaced",
+  async (outcome) => {
+    const f = fixture();
+    await f.store.write(JSON.stringify(f.pairing));
+    const app = new MobileController(f.store, {
+      ...f.options,
+      probe: async () => {
+        throw Error("offline");
+      },
+    });
+    let release!: () => void;
+    let began!: () => void;
+    const started = new Promise<void>((resolve) => {
+      began = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    try {
+      await app.restore();
+      f.store.snapshots.clear.mockImplementationOnce(async () => {
+        began();
+        await gate;
+        if (outcome === "failure") throw Error("old clear failed");
+      });
+      const clearing = app.clearHistoryCache().catch(() => {});
+      await started;
+      const statuses: string[] = [];
+      const unsubscribe = app.subscribe(() => {
+        statuses.push(app.state.cacheClear);
+      });
+      const removing = app.forget();
+      expect(app.state.cacheClear).toBe("idle");
+      release();
+      await Promise.all([clearing, removing]);
+      unsubscribe();
+      expect(statuses).not.toContain("cleared");
+      expect(statuses).not.toContain("failed");
+      expect(app.state.phase).toBe("unpaired");
+      expect(app.state.cacheClear).toBe("idle");
+      const replacement = fixture();
+      app.review(replacement.uri());
+      await app.confirm().catch(() => {});
+      expect(app.state.deviceId).toBe(replacement.pairing.deviceId);
+      expect(app.state.cacheClear).toBe("idle");
+      await app.clearHistoryCache();
+      expect(app.state.cacheClear).toBe("cleared");
+      expect(f.store.snapshots.clear).toHaveBeenLastCalledWith(
+        pairingScope(replacement.pairing),
+      );
+    } finally {
+      release();
+      app.dispose();
+    }
+  },
+);
 
 it.each(["other-device", "other-task", "oversized"])(
   "does not restore an invalid or unrelated offline snapshot (%s)",

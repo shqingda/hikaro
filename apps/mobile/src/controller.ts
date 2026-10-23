@@ -148,6 +148,7 @@ export type MobileState = {
   runStatus: string;
   loading: boolean;
   error: string | null;
+  cacheClear: "idle" | "clearing" | "cleared" | "failed";
   unknown: number;
   sessionRole: ExecutionState["sessionRole"];
   canStopRun: boolean;
@@ -188,6 +189,7 @@ const empty = (phase: MobileState["phase"]): MobileState => ({
   runStatus: "idle",
   loading: false,
   error: null,
+  cacheClear: "idle",
   unknown: 0,
   sessionRole: null,
   canStopRun: false,
@@ -225,6 +227,7 @@ export class MobileController {
   private paint?: () => void;
   private draftIdentity = 0;
   private cacheVersion = 0;
+  private cacheClearEpoch = 0;
   private composer: MobileComposer;
   readonly steering: MobileSteering;
   readonly inspection: MobileInspection;
@@ -1091,18 +1094,38 @@ export class MobileController {
   }
   async clearHistoryCache() {
     const pairing = this.pairing;
-    if (!pairing) return;
-    const epoch = this.epoch;
+    if (
+      !pairing ||
+      this.disposed ||
+      this.value.cacheClear === "clearing" ||
+      !["connected", "offline", "connecting", "error"].includes(
+        this.value.phase,
+      )
+    )
+      return;
+    const epoch = this.epoch,
+      request = ++this.cacheClearEpoch;
+    const current = () =>
+      !this.disposed &&
+      epoch === this.epoch &&
+      pairing === this.pairing &&
+      request === this.cacheClearEpoch;
     this.cacheVersion++;
+    this.update({ cacheClear: "clearing" });
     try {
-      await this.credentials(() =>
-        this.storage.snapshots.clear(pairingScope(pairing)),
-      );
-      if (epoch === this.epoch && this.value.phase !== "connected")
-        this.update({ messages: [], hasOlder: false, hasNewer: false });
+      await this.credentials(async () => {
+        if (current())
+          await this.storage.snapshots.clear(pairingScope(pairing));
+      });
+      if (current())
+        this.update({
+          cacheClear: "cleared",
+          ...(this.value.phase !== "connected"
+            ? { messages: [], hasOlder: false, hasNewer: false }
+            : {}),
+        });
     } catch (error) {
-      if (epoch === this.epoch)
-        this.update({ error: "未能清除本机历史缓存，请重试。" });
+      if (current()) this.update({ cacheClear: "failed" });
       throw error;
     }
   }

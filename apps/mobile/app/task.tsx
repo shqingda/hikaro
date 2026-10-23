@@ -199,13 +199,30 @@ export default function Task() {
           />
           <Note>本机仅缓存最近查看的一页消息；图片和完整附件不缓存。</Note>
           <Action
-            title="清除本机历史缓存"
+            title={
+              state.cacheClear === "clearing"
+                ? "正在清除本机历史缓存…"
+                : state.cacheClear === "failed"
+                  ? "重试清除本机历史缓存"
+                  : "清除本机历史缓存"
+            }
             quiet
+            disabled={state.cacheClear === "clearing"}
             onPress={() => {
               void controller.clearHistoryCache().catch(() => {});
             }}
           />
-          <Note>清除缓存保留未发送草稿和电脑上的任务记录。</Note>
+          {state.cacheClear === "cleared" && (
+            <View accessible accessibilityLiveRegion="polite">
+              <Note>已清除本机历史缓存。</Note>
+            </View>
+          )}
+          {state.cacheClear === "failed" && (
+            <Note error>未能清除本机历史缓存，请重试。</Note>
+          )}
+          <Note>
+            清除缓存保留未发送草稿和电脑上的任务记录；继续读取任务会重新缓存。
+          </Note>
         </View>
       }
     />
