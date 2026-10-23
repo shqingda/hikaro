@@ -1,11 +1,9 @@
 /** Lazy client library APIs. This module is not on the TUI startup path. */
 import * as z from "zod";
 import { createHash } from "node:crypto";
-import { join, dirname, basename, relative } from "node:path";
-import { realpath } from "node:fs/promises";
 import type { Runtime } from "../../../packages/runtime/src/index.ts";
 import type { Session } from "../../../packages/core/src/types.ts";
-import { readFileBytes } from "../../../packages/tools/src/secure-files.ts";
+import { readSessionArtifact } from "../../../packages/runtime/src/session-artifacts.ts";
 import { publicSession } from "../../../packages/protocol/src/index.ts";
 
 const integer = (
@@ -214,24 +212,11 @@ export async function libraryRequest(
       );
       const path = ref.data;
       // Only a host-authored tool.end reference in this session can select a file.
-      if (
-        ![
-          join(runtime.options.home!, "artifacts", session.id),
-          join(runtime.options.home!, "outputs", session.id),
-        ].includes(dirname(path)) ||
-        !/^(?:[a-f0-9]{64}\.json|[a-f0-9-]{36}\.log)$/.test(basename(path))
-      )
-        throw Error("Artifact is not an authorized session output");
-      // Canonicalize the trusted home only. Every remaining directory and the
-      // file itself still pass the helper's no-symlink walk.
-      const securePath = join(
-        await realpath(runtime.options.home!),
-        relative(runtime.options.home!, path),
-      );
-      const bytes = await readFileBytes(
-        securePath,
+      const bytes = await readSessionArtifact(
+        runtime.options.home!,
+        session.id,
+        path,
         AbortSignal.timeout(5000),
-        16 * 1024 * 1024,
       );
       const digest = createHash("sha256").update(bytes).digest("hex");
       if (p.digest !== undefined && p.digest !== digest)

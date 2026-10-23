@@ -661,6 +661,55 @@ const handlers = {
       ).get(sessionId, items.at(-1).seq);
     return { items, hasOlder, hasNewer };
   },
+  toolArtifactPage({ sessionId, after, through, limit = 100 }) {
+    if (
+      ![after, through, limit].every(Number.isSafeInteger) ||
+      after < 0 ||
+      through < after ||
+      limit < 1
+    )
+      throw Error("Invalid tool artifact range");
+    limit = Math.min(limit, 100);
+    // Project only known references, never the potentially large/private result.
+    const rows = prepare(`SELECT seq,
+      substr(CASE WHEN json_type(data,'$.name')='text' THEN json_extract(data,'$.name') ELSE '' END,1,256) AS name,
+      substr(CASE WHEN json_type(data,'$.callId')='text' THEN json_extract(data,'$.callId') ELSE '' END,1,128) AS callId,
+      json_type(data,'$.result.data.artifact') AS artifactType,
+      CASE WHEN json_type(data,'$.result.data.artifact')='text'
+        AND length(CAST(json_extract(data,'$.result.data.artifact') AS BLOB)) BETWEEN 1 AND 16384
+        AND instr(json_extract(data,'$.result.data.artifact'),char(0))=0
+        AND length(json_extract(data,'$.result.data.artifact'))<=4096
+        THEN json_extract(data,'$.result.data.artifact') END AS artifact,
+      json_type(data,'$.result.data.process.artifact') AS processType,
+      CASE WHEN json_type(data,'$.result.data.process.artifact')='text'
+        AND length(CAST(json_extract(data,'$.result.data.process.artifact') AS BLOB)) BETWEEN 1 AND 16384
+        AND instr(json_extract(data,'$.result.data.process.artifact'),char(0))=0
+        AND length(json_extract(data,'$.result.data.process.artifact'))<=4096
+        THEN json_extract(data,'$.result.data.process.artifact') END AS processArtifact
+      FROM events WHERE sessionId=? AND type='tool.end' AND seq>? AND seq<=? ORDER BY seq LIMIT ?`).all(
+      sessionId,
+      after,
+      through,
+      limit + 1,
+    );
+    const scanned = rows.slice(0, limit);
+    return {
+      items: scanned.flatMap((row) => {
+        const references = [];
+        for (const [type, path] of [
+          [row.artifactType, row.artifact],
+          [row.processType, row.processArtifact],
+        ])
+          if (type !== null)
+            references.push(path === null ? { invalid: true } : { path });
+        return references.length
+          ? [{ seq: row.seq, name: row.name, callId: row.callId, references }]
+          : [];
+      }),
+      after: scanned.at(-1)?.seq ?? after,
+      hasMore: rows.length > limit,
+    };
+  },
   messageContent({ sessionId, seq, field, offset, limit, image }) {
     const row = prepare(
       "SELECT type,data FROM events WHERE sessionId=? AND seq=?",

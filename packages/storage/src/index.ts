@@ -32,6 +32,16 @@ export type RunHistoryRecord = {
   start?: AgentEvent;
   end?: AgentEvent;
 };
+export type ToolArtifactPage = {
+  items: Array<{
+    seq: number;
+    name: string;
+    callId: string;
+    references: Array<{ path: string } | { invalid: true }>;
+  }>;
+  after: number;
+  hasMore: boolean;
+};
 export class SQLiteStore implements EventStore {
   private pending = new Map<
     number,
@@ -312,6 +322,15 @@ export class SQLiteStore implements EventStore {
       encoding: string;
       mimeType?: string;
     }>("messageContent", { sessionId, seq, field, offset, limit, image });
+  }
+  toolArtifactPage(
+    sessionId: string,
+    options: { after: number; through: number; limit?: number },
+  ) {
+    return this.request<ToolArtifactPage>("toolArtifactPage", {
+      sessionId,
+      ...options,
+    });
   }
   latestSeq(sessionId: string) {
     return this.request<number>("latestSeq", { sessionId });

@@ -43,6 +43,29 @@ it("navigates sessions, model/defaults, settings, resources and login from the a
   });
   const target = await seed.session();
   await seed.renameSession(target.id, "Target oldest");
+  const artifactFolder = join(home, "artifacts", target.id);
+  const outputFolder = join(home, "outputs", target.id);
+  await mkdir(artifactFolder, { recursive: true });
+  await mkdir(outputFolder, { recursive: true });
+  const logPath = join(
+    outputFolder,
+    "11111111-1111-4111-8111-111111111111.log",
+  );
+  await writeFile(logPath, "PORTABLE-TOOL-LOG 中文\n");
+  const resultPath = join(artifactFolder, "a".repeat(64) + ".json");
+  await writeFile(
+    resultPath,
+    JSON.stringify({
+      text: "Portable visible tool result",
+      providerData: "PRIVATE-TOOL-FIELD",
+      data: { artifact: logPath },
+    }),
+  );
+  await seed.store.append(target.id, "tool.end", {
+    callId: "portable-artifact-fixture",
+    name: "artifact_fixture",
+    result: { text: "Result preview", data: { artifact: resultPath } },
+  });
   for (let i = 0; i < 52; i++) await seed.session();
   await seed.close();
   const host = processSpawn(process.execPath, [
@@ -184,6 +207,18 @@ it("navigates sessions, model/defaults, settings, resources and login from the a
     expect(document).toContain("manual-ui-proof");
     expect(document).toContain("PLUGIN-COMMAND:direct");
     expect(document).toContain("PLUGIN-VIEW:ready");
+    expect(document).toContain("Saved tool artifacts");
+    const logReference = document.match(/\[tool-\d+\.log\]\(([^)]+)\)/)?.[1];
+    expect(logReference).toBeTruthy();
+    expect(logReference!.startsWith("/")).toBe(false);
+    expect(await readFile(join(home, "exports", logReference!), "utf8")).toBe(
+      "PORTABLE-TOOL-LOG 中文\n",
+    );
+    const jsonReference = document.match(/\[tool-\d+\.json\]\(([^)]+)\)/)?.[1];
+    expect(
+      JSON.parse(await readFile(join(home, "exports", jsonReference!), "utf8")),
+    ).toEqual({ text: "Portable visible tool result" });
+    expect(document).not.toContain("PRIVATE-TOOL-FIELD");
     await wait("Recovery · operation receipts", send("/recovery\r"));
     await wait("plugins.invoke · completed", send("plugins.invoke"));
     await wait("Operation outcome", send("\r"));

@@ -1050,7 +1050,20 @@ export class Runtime {
         after = rows.at(-1)!.seq;
         if (after >= end || !page.hasNewer) break;
       }
+      const { exportToolArtifacts } =
+        await import("./export-tool-artifacts.ts");
+      await exportToolArtifacts({
+        store: this.store,
+        home: this.options.home!,
+        sessionId: id,
+        through: end,
+        assets,
+        file,
+        signal: this.lifecycle.signal,
+      });
       await file.close();
+      // Publishing starts only after the final asynchronous write/close is complete.
+      this.lifecycle.signal.throwIfAborted();
       await rename(temp, path);
       return path;
     } catch (e) {
