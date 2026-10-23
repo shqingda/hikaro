@@ -67,6 +67,8 @@ pnpm exec vitest run tests/local-question-recovery-pty.test.ts tests/question-re
 
 ## 边界
 
+补充：提交 `f4c52a8` 的 `pnpm check:install` 已通过。隔离目录从已跟踪源码重新安装锁定依赖，类型检查、原生 helper/CLI 构建、实际构建 TUI 启动及正常退出均成功，日志 `/tmp/hikaro-install-20261023-answer-drafts.log`。没有安装到用户全局环境，也不替代新分发 tarball 的升级回退验收。当前源码的 [启动与输入复测](tui-performance-20261023.md)也满足原门槛。
+
 - 强制终止、断线或面板失效前最后约 300 ms，以及尚未完成或失败的写入，仍可能丢失；正常退出会尝试排空冻结后的最后输入，不承诺断电零丢失。
 - 真实 PTY 验证的是实际 CLI/host/SQLite 与程序化按键输入；模型为本地 SSE fixture，不是外部真实模型，也不是物理终端输入法验收。
 - 旧 host 没有草稿 capability 时沿用原问答功能，不承诺持久恢复；旧客户端不传 `draftRevision` 的兼容路径仍保留。

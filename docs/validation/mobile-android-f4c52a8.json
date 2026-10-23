@@ -1,0 +1,244 @@
+{
+  "baseline": "f4c52a8",
+  "commit": "f4c52a8f15eb37ca36495ea9f7d20d85d790b23d",
+  "verifiedAt": "2026-10-23T10:41:53.215185+00:00",
+  "artifact": "artifacts/mobile-android-f4c52a8/hikaro-mobile-0.1.0-preview-arm64.apk",
+  "bytes": 41796361,
+  "sha256": "9cba076837fef478cbbba9c2db841e6279cb2e5f727bdf0cf66643ff4d4ce5ee",
+  "files": [
+    "apps/mobile/app/_layout.tsx",
+    "apps/mobile/app/changes.tsx",
+    "apps/mobile/app/image.tsx",
+    "apps/mobile/app/index.tsx",
+    "apps/mobile/app/message.tsx",
+    "apps/mobile/app/scan.tsx",
+    "apps/mobile/app/search.tsx",
+    "apps/mobile/app/steering.tsx",
+    "apps/mobile/app/task.tsx",
+    "apps/mobile/app/tasks.tsx",
+    "apps/mobile/src/composer-view.tsx",
+    "apps/mobile/src/composer.ts",
+    "apps/mobile/src/connection-removal.ts",
+    "apps/mobile/src/content.ts",
+    "apps/mobile/src/controller.ts",
+    "apps/mobile/src/inspection-view.ts",
+    "apps/mobile/src/inspection.ts",
+    "apps/mobile/src/lifecycle.ts",
+    "apps/mobile/src/native-runtime.ts",
+    "apps/mobile/src/native-storage.ts",
+    "apps/mobile/src/notification-response.ts",
+    "apps/mobile/src/notification-responses.tsx",
+    "apps/mobile/src/notification-settings.tsx",
+    "apps/mobile/src/provider.tsx",
+    "apps/mobile/src/steering.ts",
+    "apps/mobile/src/task-actions.tsx",
+    "apps/mobile/src/task-continuation.ts",
+    "apps/mobile/src/theme.ts",
+    "apps/mobile/src/ui.tsx",
+    "packages/client-core/src/connection.ts",
+    "packages/client-core/src/index.ts",
+    "packages/crypto/src/index.ts",
+    "packages/protocol/src/contracts.ts",
+    "packages/remote/src/client.ts"
+  ],
+  "firstPartySourceCount": 34,
+  "firstPartySourcesMatchBaseline": true,
+  "sourceChecks": [
+    {
+      "path": "apps/mobile/app/_layout.tsx",
+      "bytes": 1463,
+      "sha256": "28d54be1975647b79606a7cd9c91716a842e15e85c195aba850f28237d5b0af8"
+    },
+    {
+      "path": "apps/mobile/app/changes.tsx",
+      "bytes": 5943,
+      "sha256": "dda763f656d09abf4cc9cf5cf6917600db22316e37fa5ef792da5261b99419ae"
+    },
+    {
+      "path": "apps/mobile/app/image.tsx",
+      "bytes": 4895,
+      "sha256": "2dbce10f58268b455158470101d5b55cff5dcf82d3ebfea5852037fa2781e7ba"
+    },
+    {
+      "path": "apps/mobile/app/index.tsx",
+      "bytes": 6534,
+      "sha256": "5c6e5f256872a202190e91ae3fc194bda0c46aad8f29c321e1e0c3dd2929f18e"
+    },
+    {
+      "path": "apps/mobile/app/message.tsx",
+      "bytes": 4435,
+      "sha256": "2e64733c3ed801c555a4b429b44dbbdc9e634a6d2f31776e3c2b4db635a50558"
+    },
+    {
+      "path": "apps/mobile/app/scan.tsx",
+      "bytes": 3668,
+      "sha256": "2f243941d3a270fbe4d618ac5a4aa0d9226e82de315569a7d7bf8d7917476f4b"
+    },
+    {
+      "path": "apps/mobile/app/search.tsx",
+      "bytes": 5071,
+      "sha256": "7284f45b1ebb3ad165a56661c330681a09bb9c91397d40fab2c2d74b3bdbbe4c"
+    },
+    {
+      "path": "apps/mobile/app/steering.tsx",
+      "bytes": 8387,
+      "sha256": "78c8f1f76219ccee04a901c424f1496781a795c41f775b70e7224f111b692093"
+    },
+    {
+      "path": "apps/mobile/app/task.tsx",
+      "bytes": 7962,
+      "sha256": "5b157c0c633a734b1c1eac1e2b40454ebf7b6d58e466c5cf9ed7c33995d30f76"
+    },
+    {
+      "path": "apps/mobile/app/tasks.tsx",
+      "bytes": 5357,
+      "sha256": "f2e97ab08301270b1ef1e0fd326a60979b07b313f1a341a9ba251690051847b9"
+    },
+    {
+      "path": "apps/mobile/src/composer-view.tsx",
+      "bytes": 5579,
+      "sha256": "fa5bdf0c43fdcf6bdf7d340ac49d3b90b3ca80c8ef7682b39aea6a52c587c06a"
+    },
+    {
+      "path": "apps/mobile/src/composer.ts",
+      "bytes": 9116,
+      "sha256": "dd9bb027e21628b1f752dc8321b948cb90ca15f17c87f501fa5b709b64957952"
+    },
+    {
+      "path": "apps/mobile/src/connection-removal.ts",
+      "bytes": 759,
+      "sha256": "696e8e0e3625b3b69a9ac33cbd67e9c36fbfaf243445e97cf648e2c2b0efd7b3"
+    },
+    {
+      "path": "apps/mobile/src/content.ts",
+      "bytes": 1807,
+      "sha256": "b4ae78e64c4ac3f460685f89814f3c061a07d35a22dc54200dc2d0c72cfc0dd5"
+    },
+    {
+      "path": "apps/mobile/src/controller.ts",
+      "bytes": 37479,
+      "sha256": "5243ff936a9665fc80e48c132937c136ed9266183f66bc139d51f03a96b7c2e2"
+    },
+    {
+      "path": "apps/mobile/src/inspection-view.ts",
+      "bytes": 868,
+      "sha256": "e0947d8b97130ce470c500242d4d478c336bd3ac8b5c5ee73ca17b60637d3237"
+    },
+    {
+      "path": "apps/mobile/src/inspection.ts",
+      "bytes": 10122,
+      "sha256": "3c599aa3928baab8f2d2c9a7fbec02e243559e414eade4735be8a5b1edba97f2"
+    },
+    {
+      "path": "apps/mobile/src/lifecycle.ts",
+      "bytes": 564,
+      "sha256": "d74cbfd1d1b5a2857a786852bbb44645e33f335570879800b17022ebf5c0b56e"
+    },
+    {
+      "path": "apps/mobile/src/native-runtime.ts",
+      "bytes": 2443,
+      "sha256": "026d715487c596cf4bf5940ea3afc659cffb450aaab8fb842f80160f925a52d2"
+    },
+    {
+      "path": "apps/mobile/src/native-storage.ts",
+      "bytes": 6404,
+      "sha256": "df0d295c21c06b81bcfedb54ce8782f9e70dc22f53d817f677196bdbdcf42587"
+    },
+    {
+      "path": "apps/mobile/src/notification-response.ts",
+      "bytes": 5141,
+      "sha256": "4c9343c83365ad63548953b1f2a5047b955bbbbbfa4d8bc5a6c97d5d0dc52162"
+    },
+    {
+      "path": "apps/mobile/src/notification-responses.tsx",
+      "bytes": 751,
+      "sha256": "9a6b8e52b7d2b48c649be64469d4614fa2be88bc6527063fd54afaa05a77d8d6"
+    },
+    {
+      "path": "apps/mobile/src/notification-settings.tsx",
+      "bytes": 3039,
+      "sha256": "e674f61295d04b8698adb39f8707ff391ef859009ac93ea617e98bb71890a49c"
+    },
+    {
+      "path": "apps/mobile/src/provider.tsx",
+      "bytes": 1746,
+      "sha256": "43d562e719a162efaaee4410fba12bc64812f4c5563da988831d11291e7235b4"
+    },
+    {
+      "path": "apps/mobile/src/steering.ts",
+      "bytes": 9718,
+      "sha256": "246abe07bc705c7ab46a19cbb3e29ccbf944cdc0de687c67291ab56074b4aae4"
+    },
+    {
+      "path": "apps/mobile/src/task-actions.tsx",
+      "bytes": 5579,
+      "sha256": "cec76801aa19df6b098c58ca2230ef9a3a447abb4c3c918c94fea3d94566f05c"
+    },
+    {
+      "path": "apps/mobile/src/task-continuation.ts",
+      "bytes": 417,
+      "sha256": "d6594b023b34e7962dc0844d8acfd6e40994f48a6b595f0b14cf76f95df3fb32"
+    },
+    {
+      "path": "apps/mobile/src/theme.ts",
+      "bytes": 1037,
+      "sha256": "70582e3b6205f8b656295586370cfce885409afdafd0914d431b20cbc8f19632"
+    },
+    {
+      "path": "apps/mobile/src/ui.tsx",
+      "bytes": 2636,
+      "sha256": "dfa07de6bb822897b7e7853b716f645a506d2e19cfea9d06dcac53c2620f7aad"
+    },
+    {
+      "path": "packages/client-core/src/connection.ts",
+      "bytes": 10240,
+      "sha256": "69f5ad06633b114c6d7d1341d935bb866f458d8bf839323ccad7ab6d0a830fb1"
+    },
+    {
+      "path": "packages/client-core/src/index.ts",
+      "bytes": 16013,
+      "sha256": "767feb1b0887a4320184f6e0087f0b6356976eb99efadc70741020384ae6e993"
+    },
+    {
+      "path": "packages/crypto/src/index.ts",
+      "bytes": 7693,
+      "sha256": "00341f070e7eaf69598ddb24b4f790caa418d0731e51417eede62f42e6e863db"
+    },
+    {
+      "path": "packages/protocol/src/contracts.ts",
+      "bytes": 8704,
+      "sha256": "8ad0b65a8142b27c4e55ce893a7153af3fcca71b08ff1a4cf0b64281fb0e5903"
+    },
+    {
+      "path": "packages/remote/src/client.ts",
+      "bytes": 11532,
+      "sha256": "20bfc006581a5d7013571e53bb802a6657770b2b50901e9b02580d2491ae4d7a"
+    }
+  ],
+  "sourceMapSha256": "81e86d663b0a7982803a96e3aa6afa9495afcde3b3aa0d81c353bc47497eba40",
+  "generatedRouteContextSources": [
+    "/apps/mobile/app?ctx=f5d9e791d457250edfb6132a1ae4b69b5ae248c5"
+  ],
+  "apkBundleMatchesBuild": true,
+  "bundleSha256": "3cff8c07c7a0ff4e95f256b209c63c5c090503224ab34937ad611894c291eebb",
+  "bundleBytes": 3577636,
+  "abis": ["arm64-v8a"],
+  "signatureVerified": true,
+  "signerCertificateSha256": "fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c",
+  "signingPurpose": "Android Debug development certificate; personal preview only",
+  "packageMetadata": {
+    "packageName": "dev.hikaro.mobile",
+    "versionCode": 1,
+    "versionName": "0.1.0",
+    "minSdk": 24,
+    "targetSdk": 36
+  },
+  "buildCommand": "ANDROID_HOME=/Users/shqingda/Library/Android/sdk ./gradlew :app:assembleRelease -PreactNativeArchitectures=arm64-v8a --console=plain",
+  "buildWorkingDirectory": "apps/mobile/android",
+  "verificationCommands": [
+    "apksigner verify --verbose --print-certs <apk>",
+    "aapt dump badging <apk>",
+    "python3 artifacts/mobile-android-f4c52a8/verify.py"
+  ],
+  "installedOrExecuted": false
+}
