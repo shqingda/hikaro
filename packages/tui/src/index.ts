@@ -57,28 +57,50 @@ export class MessageComponent implements Component {
   private text: string;
   private page = 0;
   private dirty = true;
+  private readGeneration = 0;
+  private loadedPage?: { page: number; text: string };
   private body = new Container();
   static userBackground = "\x1b[48;2;244;225;219m";
   static userForeground = "\x1b[38;2;41;39;37m";
   readonly streaming: boolean;
   constructor(
     readonly number: number,
-    readonly role: "user" | "assistant",
+    readonly role: "user" | "assistant" | "tool",
     text: string,
     streaming = false,
+    private options: {
+      label?: string;
+      textLength?: number;
+      read?: (offset: number, limit: number) => Promise<string>;
+    } = {},
   ) {
-    this.text = text;
+    this.text = role === "tool" ? sanitize(text) : text;
     this.streaming = streaming;
   }
   setText(text: string) {
-    this.text = text;
+    this.text = this.role === "tool" ? sanitize(text) : text;
     this.dirty = true;
   }
   get pages() {
-    return Math.max(1, Math.ceil(this.text.length / MESSAGE_PAGE_CHARS));
+    return Math.max(
+      1,
+      Math.ceil(
+        (this.options.textLength ?? this.text.length) / MESSAGE_PAGE_CHARS,
+      ),
+    );
   }
-  selectPage(page: number) {
-    this.page = Math.min(this.pages - 1, Math.max(0, page));
+  async selectPage(page: number) {
+    const next = Math.min(this.pages - 1, Math.max(0, page));
+    const generation = ++this.readGeneration;
+    if (this.options.read) {
+      const text = await this.options.read(
+        next * MESSAGE_PAGE_CHARS,
+        MESSAGE_PAGE_CHARS,
+      );
+      if (generation !== this.readGeneration) return;
+      this.loadedPage = { page: next, text: sanitize(text) };
+    }
+    this.page = next;
     this.dirty = true;
   }
   render(width: number) {
@@ -87,11 +109,19 @@ export class MessageComponent implements Component {
 
       const text = this.streaming
         ? this.text.slice(-MESSAGE_PAGE_CHARS)
-        : this.text.slice(
-            this.page * MESSAGE_PAGE_CHARS,
-            (this.page + 1) * MESSAGE_PAGE_CHARS,
-          );
-      this.body.addChild(new Markdown(sanitize(text), 1, 1, theme));
+        : this.loadedPage?.page === this.page
+          ? this.loadedPage.text
+          : this.text.slice(
+              this.page * MESSAGE_PAGE_CHARS,
+              (this.page + 1) * MESSAGE_PAGE_CHARS,
+            );
+      if (this.options.label)
+        this.body.addChild(new Text(muted(sanitize(this.options.label)), 1, 0));
+      this.body.addChild(
+        this.role === "tool"
+          ? new Text(muted(text), 1, 1)
+          : new Markdown(sanitize(text), 1, 1, theme),
+      );
       if (this.streaming && this.text.length > MESSAGE_PAGE_CHARS) {
         this.body.addChild(
           new Text(
@@ -220,6 +250,11 @@ export class HikaroView {
       /** Shared-host views can detach while an approval or unsent draft is open. */
       detachOnCtrlD?: boolean;
       onHistory?: (direction: HistoryDirection) => Promise<HistoryPage>;
+      onReadMessage?: (
+        message: Message,
+        offset: number,
+        limit: number,
+      ) => Promise<string>;
       onPreferences?: (patch: Partial<TuiPreferences>) => Promise<void>;
       onDraftChange?: (text: string) => void;
       commands?: Array<{ name: string; description: string }>;
@@ -379,8 +414,10 @@ export class HikaroView {
             "Use /read MESSAGE PART with the numbers shown below a long message.",
           );
         else {
-          message.selectPage(Number(part) - 1);
-          this.tui.requestRender();
+          void message
+            .selectPage(Number(part) - 1)
+            .then(() => this.tui.requestRender())
+            .catch((error) => this.setError(String(error)));
         }
         return;
       }
@@ -672,10 +709,28 @@ export class HikaroView {
           : "",
     );
   }
-  private showMessage(message: Message) {
+  private messageComponent(
+    message: Message & { textLength?: number },
+    number = this.nextMessage++,
+  ) {
+    const read = this.options.onReadMessage;
+    return new MessageComponent(number, message.role, message.text, false, {
+      label:
+        message.role === "tool"
+          ? `${message.name ?? "tool"}${message.isError ? " failed" : ""}`
+          : undefined,
+      textLength: message.textLength,
+      read:
+        read && (message.textLength ?? 0) > message.text.length
+          ? (offset, limit) => read(message, offset, limit)
+          : undefined,
+    });
+  }
+  private showMessage(message: Message, hideThinking = false) {
     if (
       message.role === "assistant" &&
       message.thinking &&
+      !hideThinking &&
       this.preferences.showThinking
     )
       this.append(
@@ -685,29 +740,16 @@ export class HikaroView {
           1,
         ),
       );
-    if (message.role === "tool" && this.detail && message.source !== "manual") {
-      this.append(
-        new Text(
-          muted(
-            `${sanitize(message.name ?? "tool")}\n${sanitize(message.text.slice(0, 3000))}`,
-          ),
-          1,
-          1,
-        ),
-      );
-      return;
-    }
-    if (message.role === "tool" && message.source === "manual") {
-      this.append(new Text(sanitize(message.text), 1, 1));
+    if (message.role === "tool") {
+      if (this.detail || message.source === "manual")
+        this.append(this.messageComponent(message));
       return;
     }
     if (
       (message.role === "user" || message.role === "assistant") &&
       message.text
     )
-      this.append(
-        new MessageComponent(this.nextMessage++, message.role, message.text),
-      );
+      this.append(this.messageComponent(message));
   }
 
   event(event: AgentEvent) {
@@ -793,16 +835,12 @@ export class HikaroView {
         if (this.draft) {
           const index = this.content.children.indexOf(this.draft);
           if (index >= 0)
-            this.content.children[index] = new MessageComponent(
+            this.content.children[index] = this.messageComponent(
+              message,
               this.draft.number,
-              "assistant",
-              message.text,
             );
           else this.showMessage(message);
-        } else
-          this.showMessage(
-            this.thinkingDraft ? { ...message, thinking: undefined } : message,
-          );
+        } else this.showMessage(message, Boolean(this.thinkingDraft));
         this.draft = undefined;
         this.draftText = "";
         this.thinkingDraft = undefined;
@@ -817,13 +855,24 @@ export class HikaroView {
     } else if (event.type === "tool.end") {
       this.activity = "Working";
       const result = event.data.result as
-        { text?: string; isError?: boolean } | undefined;
+        | { text?: string; isError?: boolean; data?: { artifact?: string } }
+        | undefined;
       if (result?.isError && !this.detail)
         this.setError(`${event.data.name}: ${result.text ?? "Tool failed"}`);
-      if (this.detail)
-        this.notice(
-          `${event.data.name}${result?.isError ? " failed" : ""}\n${(result?.text ?? "").slice(0, 3000)}`,
-        );
+      if (this.detail) {
+        const artifact = result?.data?.artifact;
+        const text = result?.text ?? "";
+        this.showMessage({
+          role: "tool",
+          name: String(event.data.name),
+          text:
+            artifact && !text.includes(artifact)
+              ? `${text}\n[Complete result: ${artifact}]`
+              : text,
+          isError: result?.isError,
+          timestamp: event.timestamp,
+        });
+      }
     } else if (event.type === "run.end") {
       this.busy = false;
       if (event.data.status === "failed")

@@ -113,6 +113,15 @@ export async function attachTui(options: {
     lastEvent = 0;
   let sessionId: string | undefined;
   let historyRows: Array<{ seq: number; message: Message }> = [];
+  const messageSources = new WeakMap<
+    Message,
+    { sessionId: string; seq: number }
+  >();
+  const rememberMessages = (page: MessagePage, sessionId: string) => {
+    for (const row of page.items)
+      messageSources.set(row.message, { sessionId, seq: row.seq });
+    return page.items.map((row) => row.message);
+  };
   let buffer: AgentEvent[] = [];
   let bufferBytes = 0;
   const listeners = new Set<(event: AgentEvent) => void>();
@@ -174,7 +183,7 @@ export async function attachTui(options: {
       p.after = historyRows.at(-1)!.seq;
     const page = (await client.request("messages.read", p)) as MessagePage;
     historyRows = page.items;
-    return { ...page, messages: page.items.map((row) => row.message) };
+    return { ...page, messages: rememberMessages(page, p.sessionId as string) };
   }
   async function refresh() {
     const epoch = ++loadEpoch;
@@ -207,10 +216,7 @@ export async function attachTui(options: {
       )
         return;
       historyRows = page.items;
-      view.showMessages(
-        page.items.map((row) => row.message),
-        page,
-      );
+      view.showMessages(rememberMessages(page, next), page);
       lastEvent = page.items.at(-1)?.seq ?? 0;
       for (const event of buffer)
         if (event.seq > lastEvent) {
@@ -260,6 +266,11 @@ export async function attachTui(options: {
     const state = client.state;
     if (!state.canAct || frame.event.sessionId !== state.session?.id) return;
     const event = frame.event as AgentEvent;
+    if (event.type === "message")
+      messageSources.set(event.data.message as Message, {
+        sessionId: event.sessionId,
+        seq: event.seq,
+      });
     if (loading) {
       const bytes = Buffer.byteLength(JSON.stringify(event));
       if (buffer.length >= 128 || bufferBytes + bytes > 1_048_576) {
@@ -405,6 +416,33 @@ export async function attachTui(options: {
       }
     },
     onHistory: history,
+    onReadMessage: async (message, offset, limit) => {
+      const source = messageSources.get(message);
+      const epoch = loadEpoch;
+      if (
+        !source ||
+        !client.state.canAct ||
+        source.sessionId !== client.state.session?.id
+      )
+        throw Error(
+          "Message is no longer in the selected session. Reload history.",
+        );
+      const content = (await client.request("messages.content", {
+        ...source,
+        field: "text",
+        offset,
+        limit,
+      })) as { data: string };
+      if (
+        epoch !== loadEpoch ||
+        !client.state.canAct ||
+        source.sessionId !== client.state.session?.id
+      )
+        throw Error(
+          "Session or connection changed while reading. Reload history.",
+        );
+      return content.data;
+    },
     onCommand: async (text) => {
       const [command, ...parts] = text.trim().split(/\s+/);
       const rest = parts.join(" ");
