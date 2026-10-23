@@ -25,6 +25,8 @@ export const isControlMethod = (method: string) =>
     "questions.respond",
     "questions.draft.read",
     "questions.draft.save",
+    "execution.history",
+    "execution.history.detail",
     "client.detach",
     "session.current",
     "steer",

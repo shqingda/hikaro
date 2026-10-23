@@ -530,6 +530,8 @@ export async function serveRpc(
         case "execution.hold":
         case "execution.release":
         case "execution.read":
+        case "execution.history":
+        case "execution.history.detail":
         case "execution.action":
         case "plan.history":
         case "plan.version":

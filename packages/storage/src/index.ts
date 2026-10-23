@@ -26,6 +26,12 @@ import type {
   ContextCheckpointInput,
   ContextHistory,
 } from "../../core/src/types.ts";
+export type RunHistoryRecord = {
+  id: string;
+  /** Metadata is bounded for display; output remains in the session transcript. */
+  start?: AgentEvent;
+  end?: AgentEvent;
+};
 export class SQLiteStore implements EventStore {
   private pending = new Map<
     number,
@@ -431,6 +437,23 @@ export class SQLiteStore implements EventStore {
   }
   recentRunEvents(sessionId: string) {
     return this.request<AgentEvent[]>("recentRunEvents", { sessionId });
+  }
+  runHistoryPage(
+    sessionId: string,
+    cursor: { snapshot?: number; before?: number } = {},
+  ) {
+    return this.request<{
+      items: RunHistoryRecord[];
+      snapshot: number;
+      nextBefore: number | null;
+    }>("runHistoryPage", { sessionId, ...cursor });
+  }
+  runHistoryDetail(sessionId: string, id: string, snapshot?: number) {
+    return this.request<RunHistoryRecord | null>("runHistoryDetail", {
+      sessionId,
+      id,
+      snapshot,
+    });
   }
   latestRunEvent(sessionId: string) {
     return this.request<AgentEvent | undefined>("latestRunEvent", {

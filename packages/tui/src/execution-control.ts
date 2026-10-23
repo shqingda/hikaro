@@ -1,6 +1,10 @@
 import type { Agent } from "../../core/src/index.ts";
 import type { Runtime } from "../../runtime/src/index.ts";
 import type { HikaroView } from "./index.ts";
+import {
+  readExecutionHistory,
+  type ExecutionHistorySource,
+} from "./execution-history.ts";
 
 import {
   executionItems,
@@ -24,11 +28,17 @@ type LocalSource = {
   >;
   runtime: Pick<
     Runtime,
-    "terminals" | "childTasks" | "stopChild" | "executionHistory"
+    | "terminals"
+    | "childTasks"
+    | "stopChild"
+    | "executionHistory"
+    | "executionHistoryPage"
+    | "executionHistoryDetail"
   >;
   session: string;
 };
 export type ExecutionSource = {
+  history?: ExecutionHistorySource;
   hold(): Promise<() => Promise<void>>;
   list(kind: Kind): Promise<Item[]>;
   detail(kind: Kind, id: string): Promise<Item>;
@@ -36,6 +46,12 @@ export type ExecutionSource = {
 };
 export function localExecutionSource(source: LocalSource): ExecutionSource {
   return {
+    history: {
+      list: (cursor) =>
+        source.runtime.executionHistoryPage(source.session, cursor),
+      detail: (id, snapshot) =>
+        source.runtime.executionHistoryDetail(source.session, id, snapshot),
+    },
     async hold() {
       const release = source.agent.holdQueue();
       return async () => release();
@@ -83,18 +99,21 @@ export function localExecutionSource(source: LocalSource): ExecutionSource {
 export async function openExecutionControl(
   view: HikaroView,
   input: ExecutionSource | LocalSource,
+  selectionSignal?: AbortSignal,
 ) {
+  if (selectionSignal?.aborted) return;
   const source = "agent" in input ? localExecutionSource(input) : input;
   const { panel, signal, close } = view.openModelPanel({
     yieldToApproval: true,
   });
+  selectionSignal?.addEventListener("abort", close, { once: true });
   let release: (() => Promise<void>) | undefined;
   const names = {
     queue: "Pending messages",
     terminals: "Background terminals",
     children: "Child agents",
     steering: "Steering messages",
-    history: "Execution history",
+    history: source.history ? "Execution history" : "Recent execution history",
   };
   let message =
     "Prompt dispatch and steering consumption are paused while this manager is open. Close to resume.";
@@ -132,6 +151,16 @@ export async function openExecutionControl(
       );
       if (category.value === "close") return;
       const kind = category.value as Kind;
+      if (kind === "history" && source.history) {
+        await readExecutionHistory(
+          panel,
+          signal,
+          source.history,
+          undefined,
+          "Back to manager",
+        );
+        continue;
+      }
       let page = 0;
       for (;;) {
         panel.progress(`Loading ${names[kind].toLowerCase()}…`);
@@ -154,7 +183,9 @@ export async function openExecutionControl(
             { value: "back", label: "Back to manager" },
           ],
           all.length
-            ? message
+            ? kind === "history"
+              ? "Recent history only: latest 200 run events, up to 100 runs. Upgrade the host for complete saved history."
+              : message
             : `No ${names[kind].toLowerCase()} in this session.`,
           undefined,
           { search: false, cancelValue: "back" },
@@ -297,6 +328,7 @@ export async function openExecutionControl(
     if (!signal.aborted)
       view.setError(error instanceof Error ? error.message : String(error));
   } finally {
+    selectionSignal?.removeEventListener("abort", close);
     close();
     await release?.().catch((error) => view.setError(String(error)));
   }

@@ -382,35 +382,43 @@ async function main() {
       return;
     }
   };
+  const executionReaders = new Set<AbortController>();
+  let sessionTransitions = 0;
   const bind = async (next: typeof session) => {
     if (agent.busy) throw Error("Cancel the active run first");
-    // Fence slow /questions reads before any part of the visible session changes.
-    localQuestions.invalidate();
-    if (await runtime.store.session(draftSessionId))
-      drafts.update(draftSessionId, view.editor.getExpandedText());
-    await drafts.flush();
-    session = next;
-    await runtime.store.rememberSession(next.id);
-    agent = await runtime.agent(next);
-    view.bind(agent);
-    view.setModel(
-      agent.options.provider.id + "/" + agent.options.provider.model,
-    );
-    removeStatus();
-    removeStatus = agent.subscribe((event) => {
-      if (event.type === "run.end") updateStatus();
-    });
-    updateStatus();
-    const page = await history("latest");
-    view.showMessages(page.messages, page);
-    const savedDraft = await drafts.restore(draftSessionId, next.id, (id) =>
-      runtime.store.draft(id),
-    );
-    if (savedDraft !== undefined) {
-      draftSessionId = next.id;
-      view.editor.setText(savedDraft);
+    sessionTransitions++;
+    for (const reader of executionReaders) reader.abort();
+    try {
+      // Fence slow /questions reads before any part of the visible session changes.
+      localQuestions.invalidate();
+      if (await runtime.store.session(draftSessionId))
+        drafts.update(draftSessionId, view.editor.getExpandedText());
+      await drafts.flush();
+      session = next;
+      await runtime.store.rememberSession(next.id);
+      agent = await runtime.agent(next);
+      view.bind(agent);
+      view.setModel(
+        agent.options.provider.id + "/" + agent.options.provider.model,
+      );
+      removeStatus();
+      removeStatus = agent.subscribe((event) => {
+        if (event.type === "run.end") updateStatus();
+      });
+      updateStatus();
+      const page = await history("latest");
+      view.showMessages(page.messages, page);
+      const savedDraft = await drafts.restore(draftSessionId, next.id, (id) =>
+        runtime.store.draft(id),
+      );
+      if (savedDraft !== undefined) {
+        draftSessionId = next.id;
+        view.editor.setText(savedDraft);
+      }
+      await localQuestions.select(next.id);
+    } finally {
+      sessionTransitions--;
     }
-    await localQuestions.select(next.id);
   };
   const applyPreferences = async (next: typeof preferences) => {
     preferences = await saveTuiPreferences(runtime.options.home!, next);
@@ -623,14 +631,47 @@ async function main() {
           return;
         }
         case "tasks": {
-          const { openExecutionControl } =
-            await import("../../../packages/tui/src/execution-control.ts");
-          await openExecutionControl(view, {
-            agent,
-            runtime,
-            session: session.id,
-          });
-          return;
+          if (sessionTransitions)
+            throw Error(
+              "Session is changing; reopen the execution reader when it finishes.",
+            );
+          // Register before dynamic imports: a concurrent bind must invalidate
+          // both an open panel and a reader that has not opened its panel yet.
+          const reader = new AbortController();
+          executionReaders.add(reader);
+          try {
+            const history = /^history(?:\s+(.+))?$/u.exec(arg.trim());
+            if (history) {
+              const { browseExecutionHistory } =
+                await import("../../../packages/tui/src/execution-history.ts");
+              const id = session.id;
+              await browseExecutionHistory(
+                view,
+                {
+                  list: (cursor) => runtime.executionHistoryPage(id, cursor),
+                  detail: (runId, snapshot) =>
+                    runtime.executionHistoryDetail(id, runId, snapshot),
+                },
+                history[1],
+                reader.signal,
+              );
+              return;
+            }
+            const { openExecutionControl } =
+              await import("../../../packages/tui/src/execution-control.ts");
+            await openExecutionControl(
+              view,
+              {
+                agent,
+                runtime,
+                session: session.id,
+              },
+              reader.signal,
+            );
+            return;
+          } finally {
+            executionReaders.delete(reader);
+          }
         }
         case "changes": {
           // run.end reaches the view before lease release and queue cleanup.
@@ -721,7 +762,7 @@ async function main() {
           return "Attachment added. Add your question and press Enter.";
         }
         case "help":
-          return '/plan [TASK] · Read-only exploration, questions and plan review\n/plan cancel · Leave without executing\n/plan history · Read saved plan versions\n/questions · Answer or dismiss saved questions\n/tasks · Manage queued messages, background terminals and child agents\n/search [TEXT] · Search this session and read matching messages\n/changes · Review and roll back recorded file edits\n/new  /sessions  /resume [ID]  /rename TITLE  /export\n/fork  /compact  /model provider/model\n/attach PATH · @file or @"path with spaces" attaches text/images\n/settings  /permissions [ask|auto|full]\n/context [default]  /thinking [default]  /speed [default]\n/status  /resources\n/steer instructions  /tools  /older  /newer  /latest  /quit\n![--unrestricted] COMMAND follows the current permission mode. Ctrl+C cancels. Ctrl+D exits. Shift+Enter adds a line.\nNew prompts queue while the agent works.';
+          return '/plan [TASK] · Read-only exploration, questions and plan review\n/plan cancel · Leave without executing\n/plan history · Read saved plan versions\n/questions · Answer or dismiss saved questions\n/tasks · Manage queued messages, background terminals and child agents\n/tasks history [RUN_ID] · Read saved runs without pausing the queue\n/search [TEXT] · Search this session and read matching messages\n/changes · Review and roll back recorded file edits\n/new  /sessions  /resume [ID]  /rename TITLE  /export\n/fork  /compact  /model provider/model\n/attach PATH · @file or @"path with spaces" attaches text/images\n/settings  /permissions [ask|auto|full]\n/context [default]  /thinking [default]  /speed [default]\n/status  /resources\n/steer instructions  /tools  /older  /newer  /latest  /quit\n![--unrestricted] COMMAND follows the current permission mode. Ctrl+C cancels. Ctrl+D exits. Shift+Enter adds a line.\nNew prompts queue while the agent works.';
         case "new":
           await bind(await runtime.session());
           return;

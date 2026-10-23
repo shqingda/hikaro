@@ -1,0 +1,56 @@
+{
+  "measuredAt": "2026-10-23T10:58:14.635Z",
+  "workload": "Synthetic existing database; concurrent repository tests may run. Timings are one observation, not an idle baseline or performance gate.",
+  "totalEvents": 100000,
+  "runEvents": 20000,
+  "runs": 10000,
+  "bytesBefore": 37486592,
+  "upgradeAndFirstTwoPagesMs": 98.63795800000003,
+  "exactOldDetailMs": 0.7235000000000582,
+  "subsequentPageMs": 1.9844580000000178,
+  "concurrentFirstPages": [
+    {
+      "count": 20,
+      "first": "migration-9999",
+      "last": "migration-9980",
+      "snapshot": 99992,
+      "nextBefore": 99802,
+      "jsonBytes": 2487
+    },
+    {
+      "count": 20,
+      "first": "migration-9999",
+      "last": "migration-9980",
+      "snapshot": 99992,
+      "nextBefore": 99802,
+      "jsonBytes": 2487
+    }
+  ],
+  "nextPage": {
+    "count": 20,
+    "first": "migration-9979",
+    "last": "migration-9960"
+  },
+  "exactOldDetail": {
+    "id": "migration-0",
+    "state": "completed",
+    "pairedStart": true
+  },
+  "indexCreated": true,
+  "rangePlan": [
+    {
+      "id": 5,
+      "parent": 0,
+      "notused": 50,
+      "detail": "SEARCH events USING INDEX session_run_events (sessionId=? AND seq<?)"
+    }
+  ],
+  "pairPlan": [
+    {
+      "id": 9,
+      "parent": 0,
+      "notused": 49,
+      "detail": "SEARCH events USING INDEX session_run_identity (sessionId=? AND <expr>=? AND type=? AND seq<?)"
+    }
+  ]
+}

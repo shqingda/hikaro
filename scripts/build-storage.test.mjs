@@ -8,7 +8,7 @@ import { Worker } from "node:worker_threads";
 import { copyStorageWorker } from "./build-storage.mjs";
 
 test(
-  "copied storage worker starts without the source tree and persists question drafts",
+  "copied storage worker starts without the source tree and reads drafts and execution history",
   { timeout: 5000 },
   async (t) => {
     const directory = await mkdtemp(join(tmpdir(), "hikaro-storage-build-"));
@@ -67,6 +67,23 @@ test(
       { revision: 1, draft },
     );
     assert.equal((await request("pendingQuestions", identity)).length, 1);
+    await request("append", {
+      sessionId: session.id,
+      type: "run.start",
+      data: { runId: "built-history" },
+    });
+    const history = await request("runHistoryPage", { sessionId: session.id });
+    assert.equal(history.items[0].id, "built-history");
+    assert.equal(history.nextBefore, null);
+    assert.equal(
+      (
+        await request("runHistoryDetail", {
+          sessionId: session.id,
+          id: "built-history",
+        })
+      ).id,
+      "built-history",
+    );
     await request("close");
   },
 );

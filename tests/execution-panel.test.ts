@@ -33,6 +33,14 @@ it("manages a queued message through the panel and resumes dispatch on close", a
       childTasks: () => [],
       stopChild: () => {},
       executionHistory: async () => [],
+      executionHistoryPage: async () => ({
+        items: [],
+        snapshot: 0,
+        nextBefore: null,
+      }),
+      executionHistoryDetail: async () => {
+        throw Error("No run");
+      },
     },
     session: "s",
   };

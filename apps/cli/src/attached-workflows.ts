@@ -9,6 +9,10 @@ import { QuestionDraftSaver } from "../../../packages/tui/src/question-drafts.ts
 import { openChangeReview } from "../../../packages/tui/src/change-review.ts";
 import { openExecutionControl } from "../../../packages/tui/src/execution-control.ts";
 import {
+  browseExecutionHistory,
+  type ExecutionHistorySource,
+} from "../../../packages/tui/src/execution-history.ts";
+import {
   answerQuestion,
   reviewPlan,
   browsePlanHistory,
@@ -369,11 +373,36 @@ export class AttachedWorkflows {
             : undefined,
         });
       } else {
+        const history: ExecutionHistorySource | undefined =
+          this.client.supports("execution.history") &&
+          this.client.supports("execution.history.detail")
+            ? {
+                list: (cursor, signal) =>
+                  this.request("execution.history", id, cursor, signal),
+                detail: (runId, snapshot, signal) =>
+                  this.request(
+                    "execution.history.detail",
+                    id,
+                    { id: runId, snapshot },
+                    signal,
+                  ),
+              }
+            : undefined;
+        const requested = /^history(?:\s+(.+))?$/u.exec(arg.trim());
+        if (requested) {
+          if (!history)
+            throw Error(
+              "Upgrade the host for complete saved history. /tasks still provides recent execution history.",
+            );
+          await browseExecutionHistory(this.view, history, requested[1]);
+          return;
+        }
         let token: string | undefined;
         let renewal: ReturnType<typeof setInterval> | undefined;
         let renewing = false;
         let holding = false;
         await openExecutionControl(this.view, {
+          history,
           hold: async () => {
             token = (
               await this.request<{ token: string }>("execution.hold", id)

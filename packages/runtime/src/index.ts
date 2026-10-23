@@ -1,4 +1,9 @@
-import { executionHistory } from "./execution-history.ts";
+import {
+  executionHistory,
+  executionHistoryPage,
+  executionHistoryDetail,
+  type ExecutionHistoryCursor,
+} from "./execution-history.ts";
 import { basename, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { homedir } from "node:os";
@@ -158,6 +163,12 @@ export class Runtime {
   }
   executionHistory(sessionId: string) {
     return executionHistory(this.store, sessionId);
+  }
+  executionHistoryPage(sessionId: string, cursor: ExecutionHistoryCursor = {}) {
+    return executionHistoryPage(this.store, sessionId, cursor);
+  }
+  executionHistoryDetail(sessionId: string, id: string, snapshot?: number) {
+    return executionHistoryDetail(this.store, sessionId, id, snapshot);
   }
   readonly terminals = new TerminalManager();
   private children = new Map<

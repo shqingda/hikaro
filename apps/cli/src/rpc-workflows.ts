@@ -180,6 +180,25 @@ export class RpcWorkflows {
           editText: undefined,
         }));
       }
+      case "execution.history":
+        return this.runtime.executionHistoryPage(session.id, {
+          snapshot:
+            p.snapshot === undefined
+              ? undefined
+              : z.number().int().nonnegative().safe().parse(p.snapshot),
+          before:
+            p.before === undefined
+              ? undefined
+              : z.number().int().positive().safe().parse(p.before),
+        });
+      case "execution.history.detail":
+        return this.runtime.executionHistoryDetail(
+          session.id,
+          z.string().min(1).max(128).parse(p.id),
+          p.snapshot === undefined
+            ? undefined
+            : z.number().int().nonnegative().safe().parse(p.snapshot),
+        );
       case "execution.action": {
         const kind = kindSchema.parse(p.kind),
           id = z.string().parse(p.id),

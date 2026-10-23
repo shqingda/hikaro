@@ -1,5 +1,6 @@
 import { createStatementCache } from "./statement-cache.mjs";
 import { steeringHandlers } from "./pending-steering.mjs";
+import { executionHistoryHandlers } from "./execution-history.mjs";
 import {
   questionDraftHandlers,
   assertDraftRevision,
@@ -53,6 +54,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(id UNINDEXED,text);
 CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,sessionId TEXT NOT NULL,task TEXT NOT NULL,runAt INTEGER NOT NULL,state TEXT NOT NULL,owner TEXT,leaseUntil INTEGER,error TEXT);
 CREATE TABLE IF NOT EXISTS leases(sessionId TEXT PRIMARY KEY,owner TEXT NOT NULL,expires INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS session_run_events ON events(sessionId,seq) WHERE type IN ('run.start','run.end');
+CREATE INDEX IF NOT EXISTS session_run_identity ON events(sessionId,json_extract(data,'$.runId'),type,seq) WHERE type IN ('run.start','run.end');
 CREATE TABLE IF NOT EXISTS rpc_commands(workspace TEXT NOT NULL,scope TEXT NOT NULL,id TEXT NOT NULL,method TEXT NOT NULL,digest TEXT NOT NULL,hostInstanceId TEXT NOT NULL,sessionId TEXT,status TEXT NOT NULL,runId TEXT,operationId TEXT,error TEXT,createdAt INTEGER NOT NULL,updatedAt INTEGER NOT NULL,PRIMARY KEY(workspace,scope,id)) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS commands(id TEXT PRIMARY KEY,sessionId TEXT NOT NULL,createdAt INTEGER NOT NULL);`);
   db.exec(`CREATE TABLE IF NOT EXISTS shared_hosts(workspace TEXT PRIMARY KEY,instanceId TEXT NOT NULL,pid INTEGER NOT NULL);
@@ -150,6 +152,7 @@ function pendingQuestion({ id, sessionId, scope, workspace }) {
 }
 const handlers = {
   ...steeringHandlers(db, prepare, assertLease),
+  ...executionHistoryHandlers(db, prepare),
   ...questionDraftHandlers(db, prepare, pendingQuestion),
   claimHost({ workspace, instanceId }) {
     db.exec("BEGIN IMMEDIATE");
