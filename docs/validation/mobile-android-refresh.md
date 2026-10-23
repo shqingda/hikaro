@@ -1,5 +1,20 @@
 # Android 自用包更新 · 2026-10-23
 
+## 最新候选 · `a087594`
+
+最终缓存清理反馈之后再次增量构建成功，用时 20 秒，826 项任务：27 项执行，799 项复用。该包包含存储初始化重试、连接移除确认与后台恢复、扫码错误恢复和标题对比度、缓存清理反馈，以及前轮通知点击与生命周期修改。
+
+- 产物：`artifacts/mobile-android-a087594/hikaro-mobile-0.1.0-preview-arm64.apk`。
+- 大小：41,795,549 字节，架构仅 `arm64-v8a`。
+- SHA-256：`9b236e2fe2db326338971e4afda16e4430bff8473bfaee6ca56f33f58960cd67`。
+- `apksigner verify --print-certs` 通过，开发证书 SHA-256 与下方旧候选相同。包名、versionName/versionCode、minSdk/targetSdk 也未变化。
+- sourcemap 的 33 个第一方源码逐字匹配 `a087594`。APK 内 `assets/index.android.bundle` 又与该次构建生成的 Hermes bundle 逐字相同：3,576,824 字节，SHA-256 `d2f0f048166a1e6e02167eb9f1b70bf9f8f4037ed8ed44ca02248c1b11383d2a`。完整核验清单见 [源码与包证据](mobile-android-a087594.json)。
+- 同版本 `pnpm check` 的 100 个应用测试文件、504 项测试与 14 项脚本检查通过；根/移动类型检查、CLI 构建及双平台 Hermes 导出通过。`pnpm check:install` 从已跟踪源码复制到隔离目录，冻结依赖安装、类型检查、构建及实际 TUI 启动/干净退出通过，不复用开发目录的 node_modules 或构建产物。
+
+构建、集成、导出和隔离安装日志保存在产物同目录。最终再次检查 `adb devices -l` 仍没有设备；该包尚未安装运行。它是开发签名的自用候选，不是商店签名或真机性能证据。旧候选与其验证记录继续保留，避免把新源码证据写回旧包。
+
+## 前一候选 · `f7ef2aa`
+
 上一轮启动的构建已完成，未因等待期间无输出而重启。`assembleRelease` 成功，用时 16 分 12 秒，826 项任务：76 项执行，750 项复用。保留 Gradle/Kotlin 上游弃用提示，没有关闭 Lint 或放宽构建检查。
 
 源码基线 `f7ef2aa`。构建 sourcemap 中 32 个第一方源码文件逐字与该 Git 基线相同；其中包含通知点击复核、inactive/background 生命周期和输入读屏标签。此包**不包含**随后开始的本机存储初始化重试、移除连接确认与扫码错误恢复修改。
