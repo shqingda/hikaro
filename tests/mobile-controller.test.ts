@@ -706,6 +706,45 @@ it("fences a secure-store load when the app backgrounds or forgets, and never co
   expect(app.state.phase).toBe("unpaired");
   app.dispose();
 });
+it("allows pairing again after removal finishes while the app is in the background", async () => {
+  const f = fixture();
+  const app = new MobileController(f.store, f.options);
+  let finishErase!: () => void;
+  const originalErase = f.store.erase.getMockImplementation()!;
+  try {
+    app.review(f.uri());
+    await app.confirm();
+    await vi.waitFor(() => expect(app.state.phase).toBe("connected"));
+    const originalIdentity = app.notificationIdentity;
+    f.store.erase.mockImplementationOnce(async () => {
+      await new Promise<void>((done) => {
+        finishErase = done;
+      });
+      await originalErase();
+    });
+    const forgetting = app.forget();
+    await vi.waitFor(() => expect(finishErase).toBeTypeOf("function"));
+    app.suspend();
+    finishErase();
+    await forgetting;
+    expect(app.state.phase).toBe("background");
+    expect(f.credential).toBeNull();
+    const sentBeforeRestore = f.sent.length;
+    await app.restore();
+    expect(app.state.phase).toBe("unpaired");
+    expect(app.state.composer.record).toBeNull();
+    expect(app.notificationIdentity).toBeNull();
+    expect(f.sent).toHaveLength(sentBeforeRestore);
+    expect(() => app.review(f.uri())).not.toThrow();
+    await app.confirm();
+    await vi.waitFor(() => expect(app.state.phase).toBe("connected"));
+    expect(app.notificationIdentity).not.toBe(originalIdentity);
+    expect(f.credential).not.toBeNull();
+  } finally {
+    finishErase?.();
+    app.dispose();
+  }
+});
 it("keeps a persisted enrollment after QR expiry but refuses a revoked token before opening a socket", async () => {
   const f = fixture();
   f.pairing.expires = Date.now() - 1;

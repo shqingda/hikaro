@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import { useMobile } from "@/provider";
-import { Action, Note } from "@/ui";
+import { Action, Note, confirmConnectionRemoval } from "@/ui";
 import { colors, readable } from "@/theme";
 import { NotificationSettings } from "@/notification-settings";
 export default function Tasks() {
@@ -129,9 +129,7 @@ export default function Tasks() {
           <Action
             title="移除这台电脑的连接"
             quiet
-            onPress={() => {
-              void controller.forget().catch(() => {});
-            }}
+            onPress={() => confirmConnectionRemoval(controller)}
           />
         </View>
       }

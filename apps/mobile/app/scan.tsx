@@ -1,47 +1,81 @@
 import { useRef, useState } from "react";
-import { View, Text } from "react-native";
+import { ScrollView, View, Text, useColorScheme } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { router } from "expo-router";
 import { useMobile } from "@/provider";
 import { Action, Note } from "@/ui";
 import { colors } from "@/theme";
 export default function Scan() {
+  useColorScheme();
   const [permission, request] = useCameraPermissions(),
     locked = useRef(false),
     [error, setError] = useState<string | null>(null);
+  const [requesting, setRequesting] = useState(false);
+  const [cameraFailed, setCameraFailed] = useState(false);
   const { controller } = useMobile();
-  if (!permission?.granted)
+  async function requestPermission() {
+    if (requesting) return;
+    setRequesting(true);
+    setError(null);
+    try {
+      await request();
+    } catch {
+      setError("无法请求相机权限。请重试，或返回粘贴配对码。");
+    } finally {
+      setRequesting(false);
+    }
+  }
+  if (!permission?.granted || cameraFailed)
     return (
-      <View
-        style={{
-          flex: 1,
+      <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
+        style={{ backgroundColor: colors.background }}
+        contentContainerStyle={{
+          flexGrow: 1,
           padding: 24,
+          paddingBottom: 48,
           gap: 20,
           justifyContent: "center",
-          backgroundColor: colors.background,
         }}
       >
         <Note>相机只用于扫描你电脑上的配对码，不保存照片。</Note>
-        <Action
-          title="允许使用相机"
-          disabled={permission?.canAskAgain === false}
-          onPress={() => {
-            void request();
-          }}
-        />
+        {error && <Note error>{error}</Note>}
+        {cameraFailed ? (
+          <Action
+            title="重新打开相机"
+            onPress={() => {
+              locked.current = false;
+              setError(null);
+              setCameraFailed(false);
+            }}
+          />
+        ) : (
+          <Action
+            title={requesting ? "正在请求相机权限…" : "允许使用相机"}
+            disabled={requesting || permission?.canAskAgain === false}
+            onPress={() => {
+              void requestPermission();
+            }}
+          />
+        )}
         <Action title="返回粘贴配对码" quiet onPress={() => router.back()} />
         {permission?.canAskAgain === false && (
           <Note>
             相机权限已关闭。你可以使用粘贴方式，或到系统设置中开启相机。
           </Note>
         )}
-      </View>
+      </ScrollView>
     );
   return (
     <View style={{ flex: 1, backgroundColor: colors.ink }}>
       <CameraView
         style={{ flex: 1 }}
         facing="back"
+        onMountError={() => {
+          locked.current = true;
+          setError("相机未能启动。可以重试，或返回粘贴电脑上的配对码。");
+          setCameraFailed(true);
+        }}
         barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
         onBarcodeScanned={({ data }) => {
           if (locked.current) return;

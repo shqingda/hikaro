@@ -369,6 +369,12 @@ export class MobileController {
       const raw = await this.credentials(() => this.storage.read());
       if (epoch !== this.epoch || this.disposed) return;
       if (raw === null) {
+        // Erasing credentials can finish after backgrounding fences forget's UI update.
+        // An unpaired view must also retire the previous in-memory identity.
+        this.pairing = undefined;
+        this.pairingGeneration++;
+        this.draftIdentity++;
+        this.composer.bind(null);
         this.update(empty("unpaired"));
         return;
       }

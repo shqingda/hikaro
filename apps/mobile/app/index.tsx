@@ -11,7 +11,7 @@ import {
 import { TextInput, Host, useNativeState } from "@expo/ui";
 import { router } from "expo-router";
 import { useMobile } from "@/provider";
-import { Action, Note, SunMark } from "@/ui";
+import { Action, Note, SunMark, confirmConnectionRemoval } from "@/ui";
 import { colors } from "@/theme";
 export default function Connect() {
   useColorScheme();
@@ -65,7 +65,7 @@ export default function Connect() {
       </View>
       {pending && (
         <View style={{ gap: 12 }}>
-          <ActivityIndicator />
+          <ActivityIndicator accessibilityLabel="正在连接电脑" />
           <Note>
             正在连接。首次配对请在电脑上确认这台手机，然后授予任务查看权。
           </Note>
@@ -77,9 +77,7 @@ export default function Connect() {
           <Action
             title="移除连接"
             quiet
-            onPress={() => {
-              void controller.forget().catch(() => {});
-            }}
+            onPress={() => confirmConnectionRemoval(controller)}
           />
         </View>
       )}
@@ -138,6 +136,9 @@ export default function Connect() {
         <View style={{ gap: 16 }}>
           {["offline", "error", "blocked"].includes(state.phase) && (
             <>
+              <Note>
+                重新连接不会自动发送草稿。移除连接会清除本机配对、未发送草稿和历史缓存。
+              </Note>
               <Action
                 title="重新连接"
                 onPress={() => {
@@ -147,9 +148,7 @@ export default function Connect() {
               <Action
                 title="移除连接"
                 quiet
-                onPress={() => {
-                  void controller.forget().catch(() => {});
-                }}
+                onPress={() => confirmConnectionRemoval(controller)}
               />
             </>
           )}
@@ -161,6 +160,7 @@ export default function Connect() {
                 onPress={() => router.push("/scan")}
               />
               <Note>也可以粘贴配对码。它包含设备凭据，请不要发给他人。</Note>
+              <Text style={{ color: colors.label, fontSize: 17 }}>配对码</Text>
               <Host
                 matchContents={{ vertical: true }}
                 style={{ width: "100%" }}

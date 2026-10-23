@@ -2,6 +2,7 @@ import { Stack } from "expo-router/stack";
 import { StatusBar } from "expo-status-bar";
 import { MobileProvider } from "@/provider";
 import { NotificationResponses } from "@/notification-responses";
+import { colors } from "@/theme";
 export default function Layout() {
   return (
     <MobileProvider>
@@ -23,7 +24,12 @@ export default function Layout() {
         <Stack.Screen name="steering" options={{ title: "补充指令队列" }} />
         <Stack.Screen
           name="scan"
-          options={{ title: "扫描配对码", presentation: "modal" }}
+          options={{
+            title: "扫描配对码",
+            presentation: "modal",
+            headerStyle: { backgroundColor: colors.background },
+            headerTintColor: colors.label,
+          }}
         />
       </Stack>
       <NotificationResponses />
