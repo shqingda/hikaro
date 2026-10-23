@@ -153,7 +153,9 @@ export default function Task() {
         !state.loading ? (
           <Note>
             {state.session
-              ? "这项任务还没有消息。"
+              ? online
+                ? "这项任务还没有消息。"
+                : "本机没有缓存的消息。连接电脑后可重新读取。"
               : "请返回任务列表选择一项任务。"}
           </Note>
         ) : undefined

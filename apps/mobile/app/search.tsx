@@ -53,6 +53,8 @@ export default function Search() {
             value={query}
             onChangeText={setQuery}
             maxLength={256}
+            autoCorrect={false}
+            autoCapitalize="none"
             accessibilityLabel="搜索消息关键词"
             placeholder="输入关键词"
             placeholderTextColor={colors.secondary}
