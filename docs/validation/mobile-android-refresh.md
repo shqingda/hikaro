@@ -1,6 +1,28 @@
 # Android 自用包更新 · 2026-10-23
 
-## 最新候选 · `a087594`
+## 最新候选 · `7d3f1ab`
+
+原生搜索与缓存闭环验收后的 UI 修改已纳入本次 ARM64 增量构建：搜索输入关闭自动纠正和自动大写，离线缓存清空后显示明确状态。构建成功，用时 16 秒，826 项任务：27 项执行，799 项复用。保留上游 Gradle 弃用提示，没有改变检查或签名配置。
+
+实际命令（工作目录 `apps/mobile/android`）：
+
+```sh
+ANDROID_HOME=/Users/shqingda/Library/Android/sdk ./gradlew :app:assembleRelease -PreactNativeArchitectures=arm64-v8a --console=plain
+```
+
+- 产物：`artifacts/mobile-android-7d3f1ab/hikaro-mobile-0.1.0-preview-arm64.apk`。
+- 大小：41,795,641 字节，架构仅 `arm64-v8a`。
+- SHA-256：`38b2644289f6252f4b8b161520fce8e53cd3bac86a55b0751ba69c9e7bfa9be1`。
+- `apksigner verify --verbose --print-certs` 通过，APK Signature Scheme v2；Android Debug 开发证书 SHA-256 为 `fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c`，与前一候选一致。
+- `aapt dump badging` 确认包名 `dev.hikaro.mobile`、versionName `0.1.0`、versionCode `1`、minSdk 24、targetSdk 36。
+- sourcemap 的 33 个第一方源码逐字匹配固定提交 `7d3f1ab7aefe38ba802fc61235757924f7c01b52`，数量未变化。依赖目录不计为第一方源码；Expo Router 生成的 `?ctx=` 路由上下文单独列出，不伪称对应 Git 源文件。
+- APK 内 `assets/index.android.bundle` 与本次生成的 Hermes bundle 逐字相同：3,576,916 字节，SHA-256 `753e21ba1296f529a6d079e7579a444a2344f216df9b4c9bc45694f2b6a0491f`。完整文件清单、逐文件摘要、签名和包元数据见 [源码与包证据](mobile-android-7d3f1ab.json)。
+
+产物目录保留 `build.log`、`signature.txt`、`package-badging.txt`、`output-metadata.json`、实际 bundle 和 sourcemap、APK 摘要及 `verify.py` 核验脚本。本轮只执行 Android 构建和产物核验；没有重复类型检查、双平台导出、集成或隔离安装验收，也没有安装 APK、创建或下载模拟器。此前同源码的 iOS 原生证据见 [搜索与缓存闭环](mobile-search-cache-native-20261023.md)，不能据此声明 Android 原生操作通过。
+
+该包仍是开发签名的自用候选。Android 安装运行、真机核心流程、生产通知、签名分发及真机性能继续待验收；旧候选与证据保留。
+
+## 前一候选 · `a087594`
 
 最终缓存清理反馈之后再次增量构建成功，用时 20 秒，826 项任务：27 项执行，799 项复用。该包包含存储初始化重试、连接移除确认与后台恢复、扫码错误恢复和标题对比度、缓存清理反馈，以及前轮通知点击与生命周期修改。
 
@@ -13,7 +35,7 @@
 
 构建、集成、导出和隔离安装日志保存在产物同目录。最终再次检查 `adb devices -l` 仍没有设备；该包尚未安装运行。它是开发签名的自用候选，不是商店签名或真机性能证据。旧候选与其验证记录继续保留，避免把新源码证据写回旧包。
 
-## 前一候选 · `f7ef2aa`
+## 历史候选 · `f7ef2aa`
 
 上一轮启动的构建已完成，未因等待期间无输出而重启。`assembleRelease` 成功，用时 16 分 12 秒，826 项任务：76 项执行，750 项复用。保留 Gradle/Kotlin 上游弃用提示，没有关闭 Lint 或放宽构建检查。
 
