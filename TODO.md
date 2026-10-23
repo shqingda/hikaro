@@ -70,7 +70,8 @@ Plan 规格见 [planning-dialogue](docs/specs/planning-dialogue.md)，验证详�
 - [x] 未批准计划正常重启后仍只读；同会话多 Runtime 刷新策略，模式变更使用会话租约；分叉/压缩续接继承只读状态，待发队列不为空时不能解除。
 - [x] 禁止 Plan 中的回退、插件命令/视图和 agent 插件事件回调；不运行界面 Git 状态刷新。已加载第三方代码本身不是被隔离的沙箱，边界见规格。
 - [x] 61 项定向验证分别通过，含一个真实 CLI PTY：读文件、拦截写入、回答、审阅/修改、取消确认、批准后写入；类型检查与构建通过。
-- [ ] 逐步骤执行进度、计划历史版本浏览、计划文件随会话删除清理、普通非 host TUI 的未答问题持久恢复与真实账号验收；独立 host 恢复见下文。
+- [x] 普通/附着 `/plan history` 只读分页浏览不可变计划版本，旧格式缺失提示、权限与故障回归、实际 PTY 通过；会话删除清理计划与历史目录。见 [计划历史验收](docs/validation/plan-history.md)。
+- [ ] 逐步骤执行进度、普通非 host TUI 的未答问题持久恢复与真实账号验收；独立 host 恢复见下文。
 
 附着核心流程规格见 [tui-parity](docs/specs/tui-parity.md)，验证见 [附着核心流程验收](docs/validation/tui-parity.md)。
 
