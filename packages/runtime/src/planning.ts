@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, writeFile, rename, rm } from "node:fs/promises";
+import { mkdir, readFile, writeFile, rename, rm, link } from "node:fs/promises";
 import { join } from "node:path";
 import * as z from "zod";
 export const questionsSchema = z.object({
@@ -28,10 +28,19 @@ const planSchema = proposalSchema.extend({ id: z.string().uuid() });
 const stateSchema = z.object({
   active: z.boolean(),
   plan: planSchema.optional(),
+  versions: z.array(z.string().uuid()).default([]),
+  incomplete: z.boolean().default(false),
 });
 export type Plan = z.infer<typeof planSchema>;
+export type PlanHistory = {
+  items: Array<{ id: string; title: string; revision: number }>;
+  nextBefore: number | null;
+  incomplete: boolean;
+};
 export class Planning {
   private states = new Map<string, z.infer<typeof stateSchema>>();
+  private writes = new Map<string, number>();
+  private reads = new Map<string, Promise<void>>();
   constructor(private home: string) {}
   private path(session: string) {
     return join(
@@ -42,26 +51,53 @@ export class Planning {
   }
   async load(session: string, refresh = false) {
     if (!refresh && this.states.has(session)) return;
+    // Serialize refreshes; a later read must not be replaced by an older response.
+    while (this.reads.has(session))
+      await this.reads.get(session)!.catch(() => {});
+    const work = this.readState(session);
+    this.reads.set(session, work);
     try {
-      this.states.set(
-        session,
-        stateSchema.parse(
-          JSON.parse(await readFile(this.path(session), "utf8")),
-        ),
-      );
+      await work;
+    } finally {
+      if (this.reads.get(session) === work) this.reads.delete(session);
+    }
+  }
+  private async readState(session: string) {
+    const generation = this.writes.get(session) ?? 0;
+    try {
+      const raw = JSON.parse(await readFile(this.path(session), "utf8"));
+      if (generation !== (this.writes.get(session) ?? 0)) return;
+      const state = stateSchema.parse(raw);
+      state.incomplete ||= !Object.hasOwn(raw, "versions");
+      this.states.set(session, state);
     } catch (error) {
+      if (generation !== (this.writes.get(session) ?? 0)) return;
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      this.states.set(session, { active: false });
+      this.states.set(session, {
+        active: false,
+        versions: [],
+        incomplete: false,
+      });
     }
   }
   get(session: string) {
     const value = this.states.get(session);
     if (!value) throw Error("Planning state not loaded");
-    return structuredClone(value);
+    return structuredClone({
+      active: value.active,
+      ...(value.plan ? { plan: value.plan } : {}),
+    });
   }
   async removeSession(session: string) {
+    this.writes.set(session, (this.writes.get(session) ?? 0) + 1);
     this.states.delete(session);
     await rm(this.path(session), { force: true });
+    await rm(this.path(session) + ".versions", {
+      recursive: true,
+      force: true,
+    });
+    this.writes.set(session, (this.writes.get(session) ?? 0) + 1);
+    this.states.delete(session);
   }
   private async save(session: string, state: z.infer<typeof stateSchema>) {
     const path = this.path(session),
@@ -70,26 +106,112 @@ export class Planning {
     try {
       await writeFile(temp, JSON.stringify(state), { flag: "wx", mode: 0o600 });
       await rename(temp, path);
+      this.writes.set(session, (this.writes.get(session) ?? 0) + 1);
       this.states.set(session, state);
     } finally {
       await rm(temp, { force: true });
     }
   }
+  private async archive(session: string, plan: Plan) {
+    const directory = this.path(session) + ".versions";
+    await mkdir(directory, { recursive: true, mode: 0o700 });
+    const path = join(directory, plan.id + ".json");
+    const temp = path + "." + randomUUID() + ".tmp";
+    try {
+      await writeFile(temp, JSON.stringify(plan), { flag: "wx", mode: 0o600 });
+      await link(temp, path);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      const saved = planSchema.parse(JSON.parse(await readFile(path, "utf8")));
+      if (JSON.stringify(saved) !== JSON.stringify(plan))
+        throw Error(
+          "Saved plan version does not match; history was not overwritten",
+        );
+    } finally {
+      await rm(temp, { force: true });
+    }
+  }
+  private async preserve(session: string) {
+    const state = structuredClone(this.states.get(session)!);
+    if (!state) throw Error("Planning state not loaded");
+    if (state.plan && !state.versions.includes(state.plan.id)) {
+      await this.archive(session, state.plan);
+      state.versions.push(state.plan.id);
+      state.incomplete = true;
+    }
+    return state;
+  }
+  private versionIds(session: string) {
+    const state = this.states.get(session);
+    if (!state) throw Error("Planning state not loaded");
+    return state.plan && !state.versions.includes(state.plan.id)
+      ? [...state.versions, state.plan.id]
+      : state.versions;
+  }
+  async history(session: string, before?: number): Promise<PlanHistory> {
+    const ids = this.versionIds(session);
+    const end =
+      before === undefined
+        ? ids.length
+        : Math.min(
+            ids.length,
+            z.number().int().min(1).safe().parse(before) - 1,
+          );
+    const start = Math.max(0, end - 20);
+    const items = [];
+    for (let index = end - 1; index >= start; index--) {
+      const plan = await this.version(session, ids[index]!);
+      items.push({ id: plan.id, title: plan.title, revision: index + 1 });
+    }
+    const state = this.states.get(session)!;
+    return {
+      items,
+      nextBefore: start ? start + 1 : null,
+      incomplete: state.incomplete || ids.length > state.versions.length,
+    };
+  }
+  async version(session: string, id: string): Promise<Plan> {
+    z.string().uuid().parse(id);
+    if (!this.versionIds(session).includes(id))
+      throw Error("Plan version not found in this session");
+    const state = this.states.get(session)!;
+    if (!state.versions.includes(id) && state.plan?.id === id)
+      return structuredClone(state.plan);
+    const plan = planSchema.parse(
+      JSON.parse(
+        await readFile(
+          join(this.path(session) + ".versions", id + ".json"),
+          "utf8",
+        ),
+      ),
+    );
+    if (plan.id !== id) throw Error("Plan version identity does not match");
+    return plan;
+  }
   async setActive(session: string, active: boolean) {
-    await this.save(session, { active });
+    const state = await this.preserve(session);
+    await this.save(session, { ...state, active, plan: undefined });
   }
   async propose(session: string, proposal: z.infer<typeof proposalSchema>) {
     if (!this.get(session).active)
       throw Error("Enter Plan mode before proposing a plan");
+    const state = await this.preserve(session);
     const plan = { ...proposalSchema.parse(proposal), id: randomUUID() };
-    await this.save(session, { active: true, plan });
+    await this.archive(session, plan);
+    await this.save(session, {
+      ...state,
+      active: true,
+      plan,
+      versions: [...state.versions, plan.id],
+    });
     return plan;
   }
   async approve(session: string, id: string) {
     const state = this.get(session);
     if (!state.active || state.plan?.id !== id)
       throw Error("Plan changed; review the current version before executing");
-    await this.save(session, { active: false, plan: state.plan });
+    const saved = await this.preserve(session);
+    await this.save(session, { ...saved, active: false, plan: state.plan });
     return state.plan;
   }
 }

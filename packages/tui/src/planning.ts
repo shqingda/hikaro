@@ -114,3 +114,71 @@ export async function reviewPlan(
     close();
   }
 }
+
+/** History is inspection only; approval always belongs to the current plan. */
+export async function browsePlanHistory(
+  view: HikaroView,
+  source: {
+    list(
+      before?: number,
+    ): Promise<import("../../runtime/src/planning.ts").PlanHistory>;
+    detail(id: string): Promise<Plan>;
+  },
+) {
+  const { panel, signal, close } = view.openModelPanel();
+  const cursors: Array<number | undefined> = [undefined];
+  let page = 0;
+  try {
+    for (;;) {
+      panel.progress("Loading plan history…");
+      const history = await source.list(cursors[page]);
+      signal.throwIfAborted();
+      const choice = await panel.choose(
+        `Plan history · page ${page + 1}`,
+        [
+          ...history.items.map((item) => ({
+            value: item.id,
+            label: `Version ${item.revision} · ${item.title}`,
+          })),
+          ...(page ? [{ value: "previous", label: "Newer versions" }] : []),
+          ...(history.nextBefore !== null
+            ? [{ value: "next", label: "Older versions" }]
+            : []),
+          { value: "close", label: "Close history" },
+        ],
+        history.incomplete
+          ? "Read-only. Earlier versions were not retained by the previous version of Hikaro."
+          : history.items.length
+            ? "Read-only. Use /plan to review and approve the current plan."
+            : "No saved plans in this session.",
+        undefined,
+        { search: false, cancelValue: "close", enterAction: "read" },
+      );
+      if (choice.value === "close") return;
+      if (choice.value === "previous") {
+        page--;
+        continue;
+      }
+      if (choice.value === "next") {
+        cursors[++page] = history.nextBefore!;
+        continue;
+      }
+      const entry = history.items.find((item) => item.id === choice.value);
+      if (!entry) continue;
+      panel.progress("Loading saved plan…");
+      const plan = await source.detail(entry.id);
+      signal.throwIfAborted();
+      if (plan.id !== entry.id)
+        throw Error("Plan version identity does not match");
+      await panel.readDocument(
+        `Plan version ${entry.revision} · read-only`,
+        planText(plan),
+        [],
+      );
+    }
+  } catch (error) {
+    if (!signal.aborted) view.setError(String(error));
+  } finally {
+    close();
+  }
+}

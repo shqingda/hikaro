@@ -20,6 +20,8 @@ export const rpcMethods = [
   "execution.read",
   "execution.action",
   "plan.read",
+  "plan.history",
+  "plan.version",
   "plan.set",
   "plan.execute",
   "questions.read",
@@ -68,6 +70,8 @@ export const rpcReadMethods: ReadonlySet<string> = new Set([
   "changes.diff",
   "execution.read",
   "plan.read",
+  "plan.history",
+  "plan.version",
   "questions.read",
 
   "hello",

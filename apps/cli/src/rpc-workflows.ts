@@ -273,6 +273,20 @@ export class RpcWorkflows {
         else throw Error("Invalid child action");
         return { completed: true };
       }
+      case "plan.history":
+        await this.runtime.planning.load(session.id, true);
+        return this.runtime.planning.history(
+          session.id,
+          p.before === undefined
+            ? undefined
+            : z.number().int().min(1).safe().parse(p.before),
+        );
+      case "plan.version":
+        await this.runtime.planning.load(session.id, true);
+        return this.runtime.planning.version(
+          session.id,
+          z.string().uuid().parse(p.id),
+        );
       case "plan.read":
         await this.runtime.planning.load(session.id, true);
         return this.runtime.planning.get(session.id);

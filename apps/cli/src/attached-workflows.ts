@@ -6,6 +6,7 @@ import { openExecutionControl } from "../../../packages/tui/src/execution-contro
 import {
   askQuestions,
   reviewPlan,
+  browsePlanHistory,
 } from "../../../packages/tui/src/planning.ts";
 import type { FileChange } from "../../../packages/tools/src/changes.ts";
 import type {
@@ -199,6 +200,19 @@ export class AttachedWorkflows {
     if (command === "/plan") {
       this.modal = "plan";
       try {
+        if (arg === "history") {
+          if (
+            !this.client.supports("plan.history") ||
+            !this.client.supports("plan.version")
+          )
+            throw Error("Upgrade the host to browse plan history.");
+          await browsePlanHistory(this.view, {
+            list: (before) => this.request("plan.history", id, { before }),
+            detail: (version) =>
+              this.request("plan.version", id, { id: version }),
+          });
+          return;
+        }
         if (arg === "cancel") {
           this.modal = "plan";
           const { panel, close } = this.view.openModelPanel();
