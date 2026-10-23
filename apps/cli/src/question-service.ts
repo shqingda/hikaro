@@ -3,6 +3,18 @@ import * as z from "zod";
 import type { Runtime } from "../../../packages/runtime/src/index.ts";
 import type { Questions } from "../../../packages/runtime/src/planning.ts";
 import type { PendingQuestion } from "../../../packages/runtime/src/pending-questions.ts";
+const draftRevisionSchema = z.number().int().nonnegative().safe();
+const draftSchema = z.strictObject({
+  answers: z.record(z.string().min(1).max(80), z.string().min(1).max(100000)),
+  inputs: z.record(z.string().min(1).max(80), z.string().max(100000)),
+  position: z.union([
+    z.strictObject({
+      kind: z.enum(["question", "input"]),
+      questionId: z.string().min(1).max(80),
+    }),
+    z.strictObject({ kind: z.literal("review") }),
+  ]),
+});
 export type QuestionView = {
   id: string;
   questions: Questions;
@@ -136,6 +148,64 @@ export class QuestionService {
         }
       : null;
   }
+  async readDraft(
+    sessionId: string,
+    scope: string,
+    p: Record<string, unknown>,
+    signal?: AbortSignal,
+  ) {
+    const current = () => {
+      if (this.closing) throw Error("Questions are closing");
+      signal?.throwIfAborted();
+    };
+    current();
+    const id = z.string().uuid().parse(p.id);
+    await this.ready();
+    current();
+    const result = await this.runtime.store.questionDraft({
+      id,
+      sessionId,
+      scope,
+      ...(this.enforceAccess ? { workspace: this.runtime.options.cwd } : {}),
+    });
+    current();
+    return result;
+  }
+  async saveDraft(
+    sessionId: string,
+    scope: string,
+    p: Record<string, unknown>,
+    signal?: AbortSignal,
+  ) {
+    if (this.closing) throw Error("Questions are closing");
+    signal?.throwIfAborted();
+    const id = z.string().uuid().parse(p.id);
+    const expectedRevision = draftRevisionSchema
+      .max(Number.MAX_SAFE_INTEGER - 1)
+      .parse(p.expectedRevision);
+    const draft = draftSchema.parse(p.draft);
+    if (Buffer.byteLength(JSON.stringify(draft)) > 512 * 1024)
+      throw Error("Question draft exceeds 512 KiB");
+    // Capture earlier writes before registering this save, avoiding a self-wait.
+    // An admitted save may finish during close; new saves are rejected above.
+    const earlier = Promise.all([...this.writes]);
+    return this.writing(
+      (async () => {
+        await earlier;
+        signal?.throwIfAborted();
+        return this.runtime.store.saveQuestionDraft({
+          id,
+          sessionId,
+          scope,
+          expectedRevision,
+          draft,
+          ...(this.enforceAccess
+            ? { workspace: this.runtime.options.cwd }
+            : {}),
+        });
+      })(),
+    );
+  }
   async respond(
     sessionId: string,
     scope: string,
@@ -145,6 +215,10 @@ export class QuestionService {
     if (this.closing) throw Error("Questions are closing");
     signal?.throwIfAborted();
     const id = z.string().uuid().parse(p.id);
+    const draftRevision =
+      p.draftRevision === undefined
+        ? undefined
+        : draftRevisionSchema.parse(p.draftRevision);
     // Keep the waiter reference across reads: cancellation may finish and remove
     // it, but an answer begun before that cancellation is still stale.
     const originalWaiter = this.questions.get(id);
@@ -181,6 +255,7 @@ export class QuestionService {
         scope,
         hostInstanceId: this.hostInstanceId,
         answers,
+        ...(draftRevision === undefined ? {} : { draftRevision }),
         ...(interrupted ? { recover: true } : {}),
         ...(this.enforceAccess ? { workspace: this.runtime.options.cwd } : {}),
       }),

@@ -536,6 +536,8 @@ export async function serveRpc(
         case "plan.read":
         case "plan.set":
         case "questions.read":
+        case "questions.draft.read":
+        case "questions.draft.save":
         case "questions.respond": {
           const session = await selected();
           if (state.session?.id !== session.id || !state.agent)

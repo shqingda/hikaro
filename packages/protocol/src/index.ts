@@ -23,6 +23,8 @@ export const isControlMethod = (method: string) =>
     "tool.manual",
     "approval.respond",
     "questions.respond",
+    "questions.draft.read",
+    "questions.draft.save",
     "client.detach",
     "session.current",
     "steer",

@@ -1,20 +1,50 @@
 import { planText } from "../../runtime/src/plan-text.ts";
 import type { Plan, Questions } from "../../runtime/src/planning.ts";
 import type { HikaroView } from "./index.ts";
+import type { QuestionDraftSaver } from "./question-drafts.ts";
 export async function askQuestions(
   view: HikaroView,
   questions: Questions,
   runSignal: AbortSignal,
   recovered = false,
+  draft?: QuestionDraftSaver,
 ): Promise<Record<string, string> | undefined> {
   runSignal.throwIfAborted();
   const { panel, signal, close } = view.openModelPanel({
     interruptYielding: true,
   });
   runSignal.addEventListener("abort", close, { once: true });
-  const answers: Record<string, string> = Object.create(null);
-  let index = 0;
+  const answers: Record<string, string> = Object.assign(
+    Object.create(null),
+    draft?.initial?.answers,
+  );
+  const inputs: Record<string, string> = Object.assign(
+    Object.create(null),
+    draft?.initial?.inputs,
+  );
+  const position = draft?.initial?.position;
+  let index =
+    position?.kind === "review"
+      ? questions.length
+      : position
+        ? questions.findIndex((q) => q.id === position.questionId)
+        : 0;
+  let writingInput = position?.kind === "input";
+  const save = () =>
+    draft?.update({
+      answers,
+      inputs,
+      position:
+        index === questions.length
+          ? { kind: "review" }
+          : {
+              kind: writingInput ? "input" : "question",
+              questionId: questions[index]!.id,
+            },
+    });
   try {
+    if (index < 0)
+      throw Error("Saved answer draft does not match this question");
     for (;;) {
       if (index === questions.length) {
         const choice = await panel.readDocument(
@@ -27,35 +57,56 @@ export async function askQuestions(
         );
         if (choice.value === "submit") return answers;
         index = choice.value === "revise" ? 0 : questions.length - 1;
+        save();
         continue;
       }
       const q = questions[index]!;
-      const choice = await panel.readDocument(
-        `${recovered ? "Recovered question" : "Question"} ${index + 1}/${questions.length}`,
-        (recovered
-          ? "Previous execution interrupted. Answers will be saved to this session; send a new message to continue. No previous operation will run automatically.\n\n"
-          : "") + q.question,
-        [
-          ...(q.options ?? []).map((label, i) => ({ value: String(i), label })),
-          { value: "custom", label: "Write my answer…" },
-        ],
-      );
+      const choice = writingInput
+        ? { value: "custom" }
+        : await panel.readDocument(
+            `${recovered ? "Recovered question" : "Question"} ${index + 1}/${questions.length}`,
+            (recovered
+              ? "Previous execution interrupted. Answers will be saved to this session; send a new message to continue. No previous operation will run automatically.\n\n"
+              : "") + q.question,
+            [
+              ...(q.options ?? []).map((label, i) => ({
+                value: String(i),
+                label,
+              })),
+              { value: "custom", label: "Write my answer…" },
+            ],
+          );
       if (choice.value === "back") {
         if (!index) return;
         index--;
+        save();
         continue;
       }
       if (choice.value === "custom") {
+        writingInput = true;
+        save();
         const text = await panel.prompt(
           "Your answer",
           false,
-          answers[q.id] ?? "",
-          { cancelValue: "" },
+          inputs[q.id] ?? answers[q.id] ?? "",
+          {
+            cancelValue: "",
+            onChange: (value) => {
+              inputs[q.id] = value;
+              save();
+            },
+          },
         );
-        if (!text.trim()) continue;
+        writingInput = false;
+        if (!text.trim()) {
+          save();
+          continue;
+        }
         answers[q.id] = text;
+        inputs[q.id] = text;
       } else answers[q.id] = q.options![Number(choice.value)]!;
       index++;
+      save();
     }
   } catch (error) {
     if (!signal.aborted) throw error;
@@ -70,50 +121,67 @@ export async function answerQuestion(
   view: HikaroView,
   question: { questions: Questions; recovered?: boolean },
   signal: AbortSignal,
-  submit: (answers: Record<string, string> | undefined) => Promise<unknown>,
+  submit: (
+    answers: Record<string, string> | undefined,
+    draftRevision?: number,
+  ) => Promise<unknown>,
+  draft?: QuestionDraftSaver,
 ) {
-  const answers = await askQuestions(
-    view,
-    question.questions,
-    signal,
-    question.recovered,
-  );
-  while (!signal.aborted) {
-    try {
-      const result = await submit(answers);
-      if (signal.aborted) return;
-      const recovered =
-        question.recovered ||
-        (result &&
-          typeof result === "object" &&
-          "recovered" in result &&
-          result.recovered === true);
-      if (recovered)
-        view.notice(
-          answers
-            ? "Recovered answers saved. Send a new message to continue; no operation was resumed."
-            : "Recovered questions dismissed. No answers were inferred.",
-        );
-      return;
-    } catch (error) {
-      if (signal.aborted) return;
-      const { panel, signal: panelSignal, close } = view.openModelPanel();
-      signal.addEventListener("abort", close, { once: true });
+  try {
+    if (draft?.initial)
+      view.notice(
+        question.recovered
+          ? "Saved answer draft restored. Previous execution interrupted; review and submit to save context only. No operation resumes automatically."
+          : "Saved answer draft restored. Review and submit explicitly to continue.",
+      );
+    const answers = await askQuestions(
+      view,
+      question.questions,
+      signal,
+      question.recovered,
+      draft,
+    );
+    while (!signal.aborted) {
       try {
-        const choice = await panel.readDocument(
-          "Answers not saved",
-          `${String(error)}\n\nYour answers are retained here.${question.recovered ? " A previous execution lease can take up to 30 seconds to expire. Retry when the session is idle." : " Retry saving when ready."}`,
-          [{ value: "retry", label: "Retry saving answers" }],
-        );
-        if (choice.value !== "retry") return;
-      } catch (error) {
-        if (!signal.aborted && !panelSignal.aborted) throw error;
+        await draft?.flush();
+        signal.throwIfAborted();
+        const result = await submit(answers, draft?.revision);
+        if (signal.aborted) return;
+        const recovered =
+          question.recovered ||
+          (result &&
+            typeof result === "object" &&
+            "recovered" in result &&
+            result.recovered === true);
+        if (recovered)
+          view.notice(
+            answers
+              ? "Recovered answers saved. Send a new message to continue; no operation was resumed."
+              : "Recovered questions dismissed. No answers were inferred.",
+          );
         return;
-      } finally {
-        signal.removeEventListener("abort", close);
-        close();
+      } catch (error) {
+        if (signal.aborted) return;
+        const { panel, signal: panelSignal, close } = view.openModelPanel();
+        signal.addEventListener("abort", close, { once: true });
+        try {
+          const choice = await panel.readDocument(
+            "Answers not saved",
+            `${String(error)}\n\nYour answers are retained here.${question.recovered ? " A previous execution lease can take up to 30 seconds to expire. Retry when the session is idle." : " Retry saving when ready."}`,
+            [{ value: "retry", label: "Retry saving answers" }],
+          );
+          if (choice.value !== "retry") return;
+        } catch (error) {
+          if (!signal.aborted && !panelSignal.aborted) throw error;
+          return;
+        } finally {
+          signal.removeEventListener("abort", close);
+          close();
+        }
       }
     }
+  } finally {
+    draft?.stop();
   }
 }
 export async function reviewPlan(

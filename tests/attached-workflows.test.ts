@@ -20,6 +20,85 @@ import { ModelPanel } from "../packages/tui/src/model-panel.ts";
 import type { HikaroView } from "../packages/tui/src/index.ts";
 import { stripVTControlCharacters } from "node:util";
 
+it("does not send an old answer after the same question changes to recovered during beforeSend waits", async () => {
+  vi.useFakeTimers();
+  let recovered = false;
+  let release!: () => void;
+  const waiting = new Promise<void>((resolve) => (release = resolve));
+  let panel: ModelPanel, controller: AbortController;
+  const sent: unknown[] = [];
+  const request = vi.fn(
+    async (
+      method: string,
+      params: Record<string, unknown>,
+      options?: { beforeSend?: () => void },
+    ) => {
+      if (method === "questions.respond") {
+        await waiting;
+        options?.beforeSend?.();
+        sent.push(params);
+        return { completed: true, recovered };
+      }
+      options?.beforeSend?.();
+      if (method === "questions.read")
+        return {
+          id: "same-question",
+          questions: [{ id: "q", question: "Choose", options: ["A"] }],
+          recovered,
+        };
+      return { active: true };
+    },
+  );
+  const client = {
+    state: {
+      canAct: true,
+      session: { id: "session" },
+      sessionRole: "owner",
+      busy: true,
+    },
+    request,
+    supports: () => false,
+  } as unknown as ClientConnection;
+  const view = {
+    openModelPanel() {
+      const current = new AbortController();
+      controller = current;
+      panel = new ModelPanel(current.signal, () => {});
+      return { panel, signal: current.signal, close: () => current.abort() };
+    },
+    closeModelPanel: () => controller?.abort(),
+    notice: vi.fn(),
+    setError: vi.fn(),
+    setPermissionLabel: vi.fn(),
+  } as unknown as HikaroView;
+  const workflows = new AttachedWorkflows(client, view, "/tmp");
+  const screen = () => stripVTControlCharacters(panel.render(110).join("\n"));
+  try {
+    await vi.advanceTimersByTimeAsync(750);
+    expect(screen()).toContain("Question 1/1");
+    panel!.handleInput("\x1b[B");
+    panel!.handleInput("\r");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(screen()).toContain("Review answers");
+    panel!.handleInput("\x1b[B");
+    panel!.handleInput("\r");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(
+      request.mock.calls.filter(([method]) => method === "questions.respond"),
+    ).toHaveLength(1);
+    recovered = true;
+    await vi.advanceTimersByTimeAsync(1500);
+    release();
+    await vi.advanceTimersByTimeAsync(750);
+    expect(sent).toEqual([]);
+    expect(screen()).toContain("Recovered question 1/1");
+  } finally {
+    release();
+    workflows.close();
+    vi.useRealTimers();
+  }
+});
+
 it.each(["poll", "response"] as const)(
   "shows same-question recovery through the %s without claiming the old run resumed",
   async (transition) => {
@@ -51,6 +130,7 @@ it.each(["poll", "response"] as const)(
         busy: true,
       },
       request,
+      supports: () => false,
     } as unknown as ClientConnection;
     const view = {
       openModelPanel() {

@@ -82,6 +82,110 @@ const questions = [
   },
 ];
 
+it("flushes unsubmitted answer input before a normal close without settling the question", async () => {
+  const f = await fixture();
+  try {
+    const answer = f.local.ask(
+      questions,
+      new AbortController().signal,
+      f.session.id,
+    );
+    await f.wait("Question 1/1");
+    f.input("\x1b[B");
+    f.input("\x1b[B");
+    f.input("\x1b[B");
+    f.input("\r");
+    await f.wait("Your answer");
+    f.input("still typing 中文🌅");
+    f.local.close();
+    await f.local.ready();
+    expect(await answer).toBeUndefined();
+    const [question] = await f.runtime.store.pendingQuestions(
+      f.session.id,
+      localQuestionScope,
+    );
+    expect(question).toBeDefined();
+    expect(
+      await f.runtime.store.questionDraft({
+        id: question!.id,
+        sessionId: f.session.id,
+        scope: localQuestionScope,
+      }),
+    ).toMatchObject({
+      draft: {
+        answers: {},
+        inputs: { scope: "still typing 中文🌅" },
+        position: { kind: "input", questionId: "scope" },
+      },
+    });
+    expect(
+      (await f.runtime.store.events(f.session.id)).filter(
+        (e) => e.type === "question.response",
+      ),
+    ).toEqual([]);
+  } finally {
+    await f.close();
+  }
+});
+
+it("drains the newest input on close while an older draft write is still pending", async () => {
+  const f = await fixture();
+  let release!: () => void;
+  const gate = new Promise<void>((done) => {
+    release = done;
+  });
+  const original = f.runtime.store.saveQuestionDraft.bind(f.runtime.store);
+  const saving = vi
+    .spyOn(f.runtime.store, "saveQuestionDraft")
+    .mockImplementationOnce(async (input) => {
+      await gate;
+      return original(input);
+    });
+  try {
+    const answer = f.local.ask(
+      questions,
+      new AbortController().signal,
+      f.session.id,
+    );
+    await f.wait("Question 1/1");
+    f.input("\x1b[B");
+    f.input("\x1b[B");
+    f.input("\x1b[B");
+    f.input("\r");
+    await f.wait("Your answer");
+    f.input("older");
+    await vi.waitFor(() => expect(saving).toHaveBeenCalledTimes(1));
+    f.input(" plus latest 中文🌅");
+    f.local.close();
+    expect(await answer).toBeUndefined();
+    release();
+    await f.local.ready();
+    const [question] = await f.runtime.store.pendingQuestions(
+      f.session.id,
+      localQuestionScope,
+    );
+    expect(
+      await f.runtime.store.questionDraft({
+        id: question!.id,
+        sessionId: f.session.id,
+        scope: localQuestionScope,
+      }),
+    ).toMatchObject({
+      revision: 2,
+      draft: { inputs: { scope: "older plus latest 中文🌅" } },
+    });
+    expect(
+      (await f.runtime.store.events(f.session.id)).filter(
+        (e) => e.type === "question.response",
+      ),
+    ).toEqual([]);
+  } finally {
+    release();
+    saving.mockRestore();
+    await f.close();
+  }
+});
+
 it("reopens a cancelled question after its cancellation write fails without reconnecting the old waiter", async () => {
   const f = await fixture();
   const log = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -212,7 +316,11 @@ it("leaves failed live answers pending when the retry panel closes", async () =>
       ),
     ).toEqual([]);
     const opened = f.local.open();
-    await f.wait("Question 1/1");
+    await f.wait("Review answers");
+    await f.wait("Small");
+    expect(f.notice).toHaveBeenCalledWith(
+      expect.stringContaining("Saved answer draft restored"),
+    );
     f.abort();
     await opened;
     expect(await answer).toBeUndefined();

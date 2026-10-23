@@ -26,6 +26,8 @@ export const rpcMethods = [
   "plan.execute",
   "questions.read",
   "questions.respond",
+  "questions.draft.read",
+  "questions.draft.save",
 
   "hello",
   "command.receipt",
@@ -73,6 +75,7 @@ export const rpcReadMethods: ReadonlySet<string> = new Set([
   "plan.history",
   "plan.version",
   "questions.read",
+  "questions.draft.read",
 
   "hello",
   "command.receipt",
@@ -94,11 +97,26 @@ export type MessageSearchPage = {
   items: { seq: number; role: string; snippet: string }[];
   nextBefore: number | null;
 };
-/** Device push settings have no task receipt and are never automatically replayed. */
+/** Draft CAS and device push settings have no action intent and are never automatically replayed. */
 export const rpcTransientMethods: ReadonlySet<string> = new Set([
   ...rpcReadMethods,
   "push.register",
+  "questions.draft.save",
 ]);
+/** Partial UI state only; restoring a draft never submits any answers. */
+export type QuestionDraft = {
+  answers: Record<string, string>;
+  inputs: Record<string, string>;
+  position:
+    { kind: "question" | "input"; questionId: string } | { kind: "review" };
+};
+export type QuestionDraftSnapshot = {
+  revision: number;
+  draft: QuestionDraft | null;
+};
+/** A conflict must not be retried with a new revision without explicit reconciliation. */
+export type QuestionDraftSaveResult =
+  { revision: number } | { conflict: true; current: QuestionDraftSnapshot };
 export const HelloParams = z.object({
   protocolVersions: z.optional(
     z

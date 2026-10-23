@@ -5,6 +5,9 @@ import type {
   DurableCommandReceipt,
   RpcMethod,
   MessageSearchPage,
+  QuestionDraft,
+  QuestionDraftSnapshot,
+  QuestionDraftSaveResult,
 } from "../../protocol/src/contracts.ts";
 import type { Chunk } from "../../tools/src/indexer.ts";
 import type { Job } from "../../core/src/jobs.ts";
@@ -81,6 +84,24 @@ export class SQLiteStore implements EventStore {
       scope,
     });
   }
+  questionDraft(input: {
+    id: string;
+    sessionId: string;
+    scope: string;
+    workspace?: string;
+  }) {
+    return this.request<QuestionDraftSnapshot>("questionDraft", input);
+  }
+  saveQuestionDraft(input: {
+    id: string;
+    sessionId: string;
+    scope: string;
+    workspace?: string;
+    expectedRevision: number;
+    draft: QuestionDraft;
+  }) {
+    return this.request<QuestionDraftSaveResult>("saveQuestionDraft", input);
+  }
   settleQuestion(input: {
     id: string;
     sessionId: string;
@@ -88,6 +109,7 @@ export class SQLiteStore implements EventStore {
     hostInstanceId: string;
     answers?: Record<string, string>;
     workspace?: string;
+    draftRevision?: number;
     /** Trusted lifecycle state: the original waiter ended after cancellation could not be saved. */
     recover?: boolean;
   }) {

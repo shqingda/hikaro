@@ -247,6 +247,10 @@ export class RpcWorkflows {
         return this.questionService.read(session.id, scope);
       case "questions.respond":
         return this.questionService.respond(session.id, scope, p);
+      case "questions.draft.read":
+        return this.questionService.readDraft(session.id, scope, p);
+      case "questions.draft.save":
+        return this.questionService.saveDraft(session.id, scope, p);
       default:
         throw Error("Unsupported workflow method");
     }

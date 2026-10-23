@@ -2,6 +2,7 @@ import type { Runtime } from "../../../packages/runtime/src/index.ts";
 import type { Questions } from "../../../packages/runtime/src/planning.ts";
 import type { HikaroView } from "../../../packages/tui/src/index.ts";
 import { answerQuestion } from "../../../packages/tui/src/planning.ts";
+import { QuestionDraftSaver } from "../../../packages/tui/src/question-drafts.ts";
 import { QuestionService, type QuestionView } from "./question-service.ts";
 
 // Never aliases an RPC default, attached client, or paired device identity.
@@ -12,14 +13,18 @@ export class LocalQuestions {
   private sessionId?: string;
   private closed = false;
   private panel?: Promise<void>;
+  private drafts = new Set<QuestionDraftSaver>();
+  private closingWriters = new Set<QuestionDraftSaver>();
+  private closingDrafts?: Promise<void>;
   constructor(
     private runtime: Runtime,
     private view: () => HikaroView,
   ) {
     this.service = new QuestionService(runtime);
   }
-  ready() {
-    return this.service.ready();
+  async ready() {
+    await this.closingDrafts;
+    await this.service.ready();
   }
   invalidate() {
     this.selection.abort();
@@ -88,23 +93,79 @@ export class LocalQuestions {
     const signal = runSignal
       ? AbortSignal.any([runSignal, selection])
       : selection;
-    const work = answerQuestion(this.view(), question, signal, (answers) => {
-      signal.throwIfAborted();
-      return this.service.respond(
-        sessionId,
-        localQuestionScope,
-        {
-          id: question.id,
-          ...(answers ? { answers } : { cancelled: true }),
-        },
-        signal,
-      );
-    });
+    const work = this.answer(question, sessionId, signal);
     this.panel = work;
     try {
       await work;
     } finally {
       if (this.panel === work) this.panel = undefined;
+    }
+  }
+  private async answer(
+    question: QuestionView,
+    sessionId: string,
+    signal: AbortSignal,
+  ) {
+    const snapshot = await this.service.readDraft(
+      sessionId,
+      localQuestionScope,
+      { id: question.id },
+      signal,
+    );
+    signal.throwIfAborted();
+    const saver = new QuestionDraftSaver(
+      snapshot,
+      (expectedRevision, draft) => {
+        // Only the frozen, already-open local panel drains after shutdown.
+        // The worker still checks pending identity, schema and revision; no
+        // live answer or RPC request is admitted after QuestionService.close.
+        if (this.closed) {
+          if (!this.closingWriters.has(saver))
+            throw Error("Question draft is closed");
+          return this.runtime.store.saveQuestionDraft({
+            id: question.id,
+            sessionId,
+            scope: localQuestionScope,
+            expectedRevision,
+            draft,
+          });
+        }
+        signal.throwIfAborted();
+        return this.service.saveDraft(sessionId, localQuestionScope, {
+          id: question.id,
+          expectedRevision,
+          draft,
+        });
+      },
+      (error) => {
+        if (!signal.aborted)
+          this.view().setError(`Answer draft not saved: ${String(error)}`);
+      },
+    );
+    this.drafts.add(saver);
+    try {
+      await answerQuestion(
+        this.view(),
+        question,
+        signal,
+        (answers, draftRevision) => {
+          signal.throwIfAborted();
+          return this.service.respond(
+            sessionId,
+            localQuestionScope,
+            {
+              id: question.id,
+              draftRevision,
+              ...(answers ? { answers } : { cancelled: true }),
+            },
+            signal,
+          );
+        },
+        saver,
+      );
+    } finally {
+      saver.stop();
+      this.drafts.delete(saver);
     }
   }
   async open() {
@@ -123,7 +184,21 @@ export class LocalQuestions {
     await this.show(question, sessionId);
   }
   close() {
+    if (this.closed) return;
     this.closed = true;
+    const drafts = [...this.drafts];
+    this.closingWriters = new Set(drafts);
+    this.closingDrafts = Promise.allSettled(
+      drafts.map((draft) =>
+        draft.finish().finally(() => this.closingWriters.delete(draft)),
+      ),
+    ).then((results) => {
+      for (const result of results)
+        if (result.status === "rejected")
+          console.error(
+            `Answer draft could not be saved before exit: ${String(result.reason)}`,
+          );
+    });
     this.service.close();
     this.invalidate();
   }

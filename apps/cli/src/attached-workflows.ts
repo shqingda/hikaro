@@ -1,6 +1,11 @@
 import type { ClientConnection } from "../../../packages/client-core/src/connection.ts";
 import type { HikaroView } from "../../../packages/tui/src/index.ts";
-import type { RpcMethod } from "../../../packages/protocol/src/contracts.ts";
+import type {
+  RpcMethod,
+  QuestionDraftSnapshot,
+  QuestionDraftSaveResult,
+} from "../../../packages/protocol/src/contracts.ts";
+import { QuestionDraftSaver } from "../../../packages/tui/src/question-drafts.ts";
 import { openChangeReview } from "../../../packages/tui/src/change-review.ts";
 import { openExecutionControl } from "../../../packages/tui/src/execution-control.ts";
 import {
@@ -35,10 +40,11 @@ export class AttachedWorkflows {
     method: RpcMethod,
     sessionId: string,
     params: Record<string, unknown> = {},
+    signal?: AbortSignal,
   ): Promise<T> {
     const epoch = this.epoch;
     const current = () => {
-      if (this.stopped || epoch !== this.epoch) return false;
+      if (signal?.aborted || this.stopped || epoch !== this.epoch) return false;
       const state = this.client.state;
       return state.canAct && state.session?.id === sessionId;
     };
@@ -46,7 +52,16 @@ export class AttachedWorkflows {
       throw Error(
         "Connection or session changed; reopen the panel. No action was replayed.",
       );
-    const result = await this.client.request(method, { ...params, sessionId });
+    const result = await this.client.request(
+      method,
+      { ...params, sessionId },
+      {
+        beforeSend: () => {
+          if (!current())
+            throw Error("Connection or session changed; command was not sent.");
+        },
+      },
+    );
     if (!current())
       throw Error(
         "Connection or session changed; inspect current state before retrying. No action was replayed.",
@@ -108,12 +123,7 @@ export class AttachedWorkflows {
         const abort = new AbortController();
         this.question = { id: q.id, recovered: !!q.recovered, abort };
         this.modal = "questions";
-        void answerQuestion(this.view, q, abort.signal, (answers) =>
-          this.request("questions.respond", id, {
-            id: q.id,
-            ...(answers ? { answers } : { cancelled: true }),
-          }),
-        )
+        void this.answer(q, id, abort.signal)
           .catch((error) => this.view.setError(String(error)))
           .finally(() => {
             if (this.question?.abort === abort) {
@@ -148,6 +158,67 @@ export class AttachedWorkflows {
       if (this.client.state.canAct) this.view.setError(String(error));
     } finally {
       this.polling = false;
+    }
+  }
+  private async answer(
+    question: { id: string; questions: Questions; recovered?: boolean },
+    sessionId: string,
+    signal: AbortSignal,
+  ) {
+    let draft: QuestionDraftSaver | undefined;
+    try {
+      if (
+        this.client.supports("questions.draft.read") &&
+        this.client.supports("questions.draft.save")
+      ) {
+        const snapshot = await this.request<QuestionDraftSnapshot>(
+          "questions.draft.read",
+          sessionId,
+          { id: question.id },
+          signal,
+        );
+        signal.throwIfAborted();
+        draft = new QuestionDraftSaver(
+          snapshot,
+          (expectedRevision, draft) => {
+            signal.throwIfAborted();
+            return this.request<QuestionDraftSaveResult>(
+              "questions.draft.save",
+              sessionId,
+              { id: question.id, expectedRevision, draft },
+              signal,
+            );
+          },
+          (error) => {
+            if (!signal.aborted)
+              this.view.setError(`Answer draft not saved: ${String(error)}`);
+          },
+        );
+      }
+      signal.throwIfAborted();
+      await answerQuestion(
+        this.view,
+        question,
+        signal,
+        (answers, draftRevision) => {
+          signal.throwIfAborted();
+          return this.request(
+            "questions.respond",
+            sessionId,
+            {
+              id: question.id,
+              ...(draftRevision === undefined ? {} : { draftRevision }),
+              ...(answers ? { answers } : { cancelled: true }),
+            },
+            signal,
+          );
+        },
+        draft,
+      );
+    } catch (error) {
+      if (!signal.aborted) throw error;
+    } finally {
+      draft?.stop();
     }
   }
   private async review(id: string, plan: Plan) {

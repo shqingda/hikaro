@@ -1,5 +1,9 @@
 import { createStatementCache } from "./statement-cache.mjs";
 import { steeringHandlers } from "./pending-steering.mjs";
+import {
+  questionDraftHandlers,
+  assertDraftRevision,
+} from "./question-drafts.mjs";
 import { parentPort, workerData } from "node:worker_threads";
 import { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "node:crypto";
@@ -31,6 +35,8 @@ try {
   db.exec(`
 CREATE TABLE IF NOT EXISTS pending_questions(id TEXT PRIMARY KEY,sessionId TEXT NOT NULL,scope TEXT NOT NULL,data TEXT NOT NULL,status TEXT NOT NULL,answers TEXT,createdAt INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS pending_question_scope ON pending_questions(sessionId,scope,status);
+CREATE TABLE IF NOT EXISTS question_drafts(id TEXT PRIMARY KEY,sessionId TEXT NOT NULL,scope TEXT NOT NULL,revision INTEGER NOT NULL,data TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS question_draft_session ON question_drafts(sessionId);
 CREATE TABLE IF NOT EXISTS pending_prompts(sessionId TEXT NOT NULL,id TEXT PRIMARY KEY,data TEXT NOT NULL,position INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS pending_prompt_order ON pending_prompts(sessionId,position);
 CREATE TABLE IF NOT EXISTS pending_steering(sessionId TEXT NOT NULL,id TEXT PRIMARY KEY,data TEXT NOT NULL,position INTEGER NOT NULL);
@@ -121,8 +127,30 @@ function insertSession({ cwd, title, parentId, modelSelection }) {
   if (modelSelection) saveModel(session.id, modelSelection);
   return { ...session, ...(modelSelection ? { modelSelection } : {}) };
 }
+function pendingQuestion({ id, sessionId, scope, workspace }) {
+  const row = prepare(
+    "SELECT data FROM pending_questions WHERE id=? AND sessionId=? AND scope=? AND status='pending'",
+  ).get(id, sessionId, scope);
+  if (!row) throw Error("Question expired or belongs to another identity");
+  if (workspace) {
+    if (
+      !prepare("SELECT 1 FROM sessions WHERE id=? AND cwd=?").get(
+        sessionId,
+        workspace,
+      )
+    )
+      throw Error("Session access denied");
+    if (!scope.startsWith("local:")) {
+      const role = handlers.sessionRole({ workspace, sessionId, scope });
+      if (role !== "owner" && role !== "control")
+        throw Error("Session access denied");
+    }
+  }
+  return JSON.parse(row.data);
+}
 const handlers = {
   ...steeringHandlers(db, prepare, assertLease),
+  ...questionDraftHandlers(db, prepare, pendingQuestion),
   claimHost({ workspace, instanceId }) {
     db.exec("BEGIN IMMEDIATE");
     try {
@@ -296,28 +324,18 @@ const handlers = {
     answers,
     workspace,
     recover,
+    draftRevision,
   }) {
     db.exec("BEGIN IMMEDIATE");
     try {
-      const row = prepare(
-        "SELECT data FROM pending_questions WHERE id=? AND sessionId=? AND scope=? AND status='pending'",
-      ).get(id, sessionId, scope);
-      if (!row) throw Error("Question expired or belongs to another identity");
-      if (workspace) {
-        if (
-          !prepare("SELECT 1 FROM sessions WHERE id=? AND cwd=?").get(
-            sessionId,
-            workspace,
-          )
-        )
-          throw Error("Session access denied");
-        if (!scope.startsWith("local:")) {
-          const role = handlers.sessionRole({ workspace, sessionId, scope });
-          if (role !== "owner" && role !== "control")
-            throw Error("Session access denied");
-        }
-      }
-      const question = JSON.parse(row.data);
+      const question = pendingQuestion({ id, sessionId, scope, workspace });
+      if (draftRevision !== undefined)
+        assertDraftRevision(
+          draftRevision,
+          prepare(
+            "SELECT revision FROM question_drafts WHERE id=? AND sessionId=? AND scope=?",
+          ).get(id, sessionId, scope)?.revision ?? 0,
+        );
       const recovered =
         question.hostInstanceId !== hostInstanceId || recover === true;
       if (
@@ -337,6 +355,9 @@ const handlers = {
         answers ? JSON.stringify(answers) : null,
         id,
       );
+      prepare(
+        "DELETE FROM question_drafts WHERE id=? AND sessionId=? AND scope=?",
+      ).run(id, sessionId, scope);
       prepare(
         "INSERT INTO events(sessionId,type,data,timestamp) VALUES(?,?,?,?)",
       ).run(
@@ -425,6 +446,7 @@ const handlers = {
         "pending_prompts",
         "pending_steering",
         "pending_questions",
+        "question_drafts",
         "session_access",
         "client_views",
       ])
