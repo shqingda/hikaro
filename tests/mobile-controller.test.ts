@@ -58,6 +58,7 @@ function fixture(
     active: any,
     dropMethod = "";
   let nextList: (() => Promise<unknown>) | undefined;
+  let messageItems: unknown[] | undefined;
   const readList = () => {
     const read = nextList;
     nextList = undefined;
@@ -162,7 +163,7 @@ function fixture(
                       ? readList()
                       : frame.method === "messages.read"
                         ? {
-                            items: [
+                            items: messageItems ?? [
                               {
                                 seq: 2,
                                 message: {
@@ -244,6 +245,9 @@ function fixture(
     },
     delayNextList: (read: () => Promise<unknown>) => {
       nextList = read;
+    },
+    setMessages: (items: unknown[]) => {
+      messageItems = items;
     },
     uri: () => "hikaro://pair#" + encodeURIComponent(JSON.stringify(pairing)),
     dropResume: () => {
@@ -729,6 +733,327 @@ it("stops only the confirmed current run and never falls back to legacy cancella
     legacy.dispose();
   }
 });
+
+it("keeps bounded tool identity and failures in history without caching call arguments", async () => {
+  const f = fixture();
+  f.setMessages([
+    {
+      seq: 2,
+      message: {
+        role: "assistant",
+        text: "",
+        timestamp: 1,
+        toolCalls: [
+          { id: "call-1", name: "shell", arguments: { command: "private" } },
+        ],
+      },
+    },
+    {
+      seq: 3,
+      message: {
+        role: "tool",
+        name: "shell",
+        isError: true,
+        text: "命令未成功",
+        timestamp: 2,
+      },
+    },
+  ]);
+  const app = new MobileController(f.store, f.options);
+  try {
+    app.review(f.uri());
+    await app.confirm();
+    await vi.waitFor(() => expect(app.state.phase).toBe("connected"));
+    await app.history();
+    expect(app.state.messages[0]?.message).toMatchObject({
+      text: "",
+      toolCalls: [{ id: "call-1", name: "shell" }],
+    });
+    expect(app.state.messages[0]?.message).not.toHaveProperty(
+      "toolCalls.0.arguments",
+    );
+    expect(app.state.messages[1]?.message).toMatchObject({
+      name: "shell",
+      isError: true,
+    });
+    const cached = await f.store.snapshots.load(pairingScope(f.pairing));
+    expect(cached).toMatchObject({
+      items: [
+        { message: { toolCalls: [{ id: "call-1", name: "shell" }] } },
+        { message: { name: "shell", isError: true } },
+      ],
+    });
+    expect(JSON.stringify(cached)).not.toContain("private");
+  } finally {
+    app.dispose();
+  }
+});
+
+it("reads complete tool calls in bounded Unicode-safe pages and can return to ordinary text", async () => {
+  const calls = JSON.stringify([
+    {
+      id: "call-1",
+      name: "shell",
+      arguments: { command: "中文🌅".repeat(7000) },
+    },
+  ]);
+  const f = fixture(undefined, async (params) => {
+    const text = params.field === "toolCalls" ? calls : "普通正文";
+    const end = Math.min(text.length, params.offset + params.limit);
+    return {
+      data: text.slice(params.offset, end),
+      total: text.length,
+      nextOffset: end < text.length ? end : null,
+      encoding: "utf16",
+    };
+  });
+  const app = new MobileController(f.store, f.options);
+  try {
+    app.review(f.uri());
+    await app.confirm();
+    await vi.waitFor(() => expect(app.state.phase).toBe("connected"));
+    const chunks: string[] = [];
+    for (let offset = 0; ;) {
+      await app.readMessage(2, offset, "toolCalls");
+      expect(app.state.content).toMatchObject({ field: "toolCalls", offset });
+      const page = app.state.content!.page!;
+      chunks.push(page.data);
+      if (page.nextOffset === null) break;
+      offset = page.nextOffset;
+    }
+    expect(chunks.length).toBeGreaterThan(3);
+    expect(chunks.join("")).toBe(calls);
+    expect(
+      f.sent
+        .filter((frame) => frame.method === "messages.content")
+        .every(
+          (frame) =>
+            frame.params.field === "toolCalls" && frame.params.limit === 8192,
+        ),
+    ).toBe(true);
+    await app.readMessage(2);
+    expect(app.state.content).toMatchObject({
+      field: "text",
+      page: { data: "普通正文" },
+    });
+    const requestCount = f.sent.length;
+    for (const field of ["thinking", "image", "artifact"])
+      await expect(app.readMessage(2, 0, field as "text")).rejects.toThrow();
+    expect(f.sent).toHaveLength(requestCount);
+    expect(
+      f.sent.some((frame) =>
+        ["prompt", "steer", "tool.manual"].includes(frame.method),
+      ),
+    ).toBe(false);
+  } finally {
+    app.dispose();
+  }
+});
+
+it("does not replace a newer tool-call page with an older ordinary-text response", async () => {
+  let finish!: (page: unknown) => void;
+  const toolPage = {
+    data: "[]",
+    total: 2,
+    nextOffset: null,
+    encoding: "utf16",
+  };
+  const f = fixture(undefined, (params) =>
+    params.field === "text"
+      ? new Promise((resolve) => {
+          finish = resolve;
+        })
+      : Promise.resolve(toolPage),
+  );
+  const app = new MobileController(f.store, f.options);
+  try {
+    app.review(f.uri());
+    await app.confirm();
+    await vi.waitFor(() => expect(app.state.phase).toBe("connected"));
+    const earlier = app.readMessage(2);
+    void earlier.catch(() => {});
+    await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+    await app.readMessage(2, 0, "toolCalls");
+    finish({ data: "old", total: 3, nextOffset: null, encoding: "utf16" });
+    await earlier;
+    expect(app.state.content).toMatchObject({
+      field: "toolCalls",
+      page: { data: "[]" },
+    });
+  } finally {
+    app.dispose();
+  }
+});
+
+it.each(["close", "selection", "background"] as const)(
+  "fences a late tool-call page after %s",
+  async (invalidate) => {
+    let finish!: (page: unknown) => void;
+    const f = fixture(
+      undefined,
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const app = new MobileController(f.store, f.options);
+    try {
+      app.review(f.uri());
+      await app.confirm();
+      await vi.waitFor(() =>
+        expect(app.state.composer.record?.session.id).toBe("s1"),
+      );
+      const pending = app.readMessage(2, 0, "toolCalls");
+      void pending.catch(() => {});
+      await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+      expect(
+        f.sent.filter((frame) => frame.method === "messages.content").at(-1)
+          ?.params.field,
+      ).toBe("toolCalls");
+      if (invalidate === "close") app.closeMessage();
+      if (invalidate === "selection") await app.select("s1");
+      if (invalidate === "background") app.suspend();
+      finish({ data: "[]", total: 2, nextOffset: null, encoding: "utf16" });
+      await pending.catch(() => {});
+      expect(app.state.content).toBeNull();
+    } finally {
+      app.dispose();
+    }
+  },
+);
+
+it("reads all tool calls through a view-only encrypted host and rejects foreign messages and revoked access", async () => {
+  const home = await realpath(
+      await mkdtemp(join(tmpdir(), "hikaro-mobile-tools-")),
+    ),
+    cwd = join(home, "workspace");
+  await mkdir(cwd);
+  let bridge: SharedHostClient;
+  const f = fixture({
+    request: (frame) => dispatchRemote(bridge, f.pairing.deviceId, frame),
+    subscribe: (fn) => bridge.subscribe(fn),
+  });
+  await writeFile(
+    join(home, "remote.json"),
+    JSON.stringify({
+      relay: f.pairing.relay,
+      hostId: f.pairing.hostId,
+      publicKey: f.host.publicKey,
+      devices: {
+        [f.pairing.deviceId]: { publicKey: f.pairing.identity.publicKey },
+      },
+    }),
+    { mode: 0o600 },
+  );
+  const db = await SQLiteStore.open(join(home, "sessions.sqlite"));
+  const session = await db.createSession(cwd),
+    foreign = await db.createSession(cwd);
+  const calls = Array.from({ length: 40 }, (_, i) => ({
+    id: `call-${i}`,
+    name: "shell",
+    arguments: {
+      command: i === 0 ? "中文🌅".repeat(5000) : `read-only-example-${i}`,
+    },
+  }));
+  const callEvent = await db.append(session.id, "message", {
+    message: {
+      role: "assistant",
+      text: "",
+      timestamp: 1,
+      toolCalls: calls,
+    },
+  });
+  await db.append(session.id, "message", {
+    message: {
+      role: "tool",
+      name: "shell",
+      isError: true,
+      text: "合成失败结果",
+      timestamp: 2,
+    },
+  });
+  const foreignEvent = await db.append(foreign.id, "message", {
+    message: {
+      role: "assistant",
+      text: "",
+      timestamp: 3,
+      toolCalls: calls,
+    },
+  });
+  await db.close();
+  const host = await serveSharedHost({ home, cwd, demo: true });
+  const owner = await SharedHostClient.connect({
+    home,
+    cwd,
+    clientId: "mobile-tools-owner",
+  });
+  bridge = await SharedHostClient.connect({ home, cwd, mode: "bridge" });
+  const app = new MobileController(f.store, f.options);
+  try {
+    await owner.request("session.resume", { sessionId: session.id });
+    await owner.request("session.access", {
+      deviceId: f.pairing.deviceId,
+      role: "view",
+    });
+    app.review(f.uri());
+    await app.confirm();
+    await vi.waitFor(() => expect(app.state.phase).toBe("connected"));
+    await app.select(session.id);
+    await vi.waitFor(() => expect(app.state.messages).toHaveLength(2));
+    expect(app.state.messages[0]?.message).toMatchObject({
+      toolCalls: calls.slice(0, 32).map(({ id, name }) => ({ id, name })),
+    });
+    expect(app.state.messages[0]?.message).not.toHaveProperty(
+      "toolCalls.0.arguments",
+    );
+    expect(app.state.messages[1]?.message).toMatchObject({
+      name: "shell",
+      isError: true,
+    });
+    const pages: string[] = [];
+    for (let offset = 0; ;) {
+      await app.readMessage(callEvent.seq, offset, "toolCalls");
+      const page = app.state.content!.page!;
+      pages.push(page.data);
+      if (page.nextOffset === null) break;
+      offset = page.nextOffset;
+    }
+    expect(pages.length).toBeGreaterThan(2);
+    expect(pages.join("")).toBe(JSON.stringify(calls));
+    expect(JSON.parse(pages.join(""))).toHaveLength(40);
+    await expect(
+      app.readMessage(foreignEvent.seq, 0, "toolCalls"),
+    ).rejects.toThrow();
+    expect(app.state.content?.page).toBeNull();
+    await app.readMessage(callEvent.seq, 0, "toolCalls");
+    await owner.request("session.access", {
+      deviceId: f.pairing.deviceId,
+      role: null,
+    });
+    await vi.waitFor(() => expect(app.state.session).toBeNull());
+    expect(app.state.content).toBeNull();
+    await expect(
+      app.readMessage(callEvent.seq, 0, "toolCalls"),
+    ).rejects.toThrow();
+    expect(
+      f.sent.some((frame) =>
+        [
+          "prompt",
+          "steer",
+          "tool.manual",
+          "approval.respond",
+          "run.cancel",
+        ].includes(frame.method),
+      ),
+    ).toBe(false);
+  } finally {
+    app.dispose();
+    owner.close();
+    bridge.close();
+    await host.close();
+    await rm(home, { recursive: true, force: true });
+  }
+}, 20000);
 
 it("clears full-message pages on close, selection and background, fencing late responses", async () => {
   let resolve!: (page: unknown) => void;

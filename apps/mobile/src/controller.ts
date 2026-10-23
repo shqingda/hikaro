@@ -59,6 +59,12 @@ const itemSchema = z.object({
     timestamp: z.number(),
     textLength: z.number().int().nonnegative().optional(),
     imageCount: z.number().int().nonnegative().optional(),
+    name: z.string().max(256).optional(),
+    isError: z.boolean().optional(),
+    toolCalls: z
+      .array(z.object({ id: z.string().max(128), name: z.string().max(256) }))
+      .max(32)
+      .optional(),
   }),
 });
 const pageSchema = z.object({
@@ -74,6 +80,7 @@ const snapshotSchema = z.object({
 export type MobileSnapshot = z.infer<typeof snapshotSchema>;
 export type MobileMessage = z.infer<typeof itemSchema>;
 export type MobileSession = z.infer<typeof sessionSchema>;
+export type MobileContentField = "text" | "toolCalls";
 export interface MobileStorage {
   read(): Promise<string | null>;
   write(credential: string): Promise<void>;
@@ -164,6 +171,7 @@ export type MobileState = {
   content: {
     sessionId: string;
     seq: number;
+    field: MobileContentField;
     offset: number;
     page: ContentPage | null;
   } | null;
@@ -921,13 +929,18 @@ export class MobileController {
     this.contentEpoch++;
     this.update({ content: null, contentLoading: false, contentError: null });
   }
-  async readMessage(seq: number, offset = 0) {
+  async readMessage(
+    seq: number,
+    offset = 0,
+    field: MobileContentField = "text",
+  ) {
     const client = this.client,
       epoch = this.epoch,
       sessionId = client?.state.session?.id;
     if (!client?.state.canAct || !sessionId)
       throw Error("Not connected to a task");
     if (!Number.isSafeInteger(seq) || seq < 0) throw Error("Invalid message");
+    z.enum(["text", "toolCalls"]).parse(field);
     const requestOffset = contentRequestOffset(offset),
       read = ++this.contentEpoch;
     const current = () =>
@@ -936,7 +949,7 @@ export class MobileController {
       client === this.client &&
       sessionId === client.state.session?.id;
     this.update({
-      content: { sessionId, seq, offset, page: null },
+      content: { sessionId, seq, field, offset, page: null },
       contentLoading: true,
       contentError: null,
     });
@@ -944,13 +957,19 @@ export class MobileController {
       const raw = await client.request("messages.content", {
         sessionId,
         seq,
-        field: "text",
+        field,
         offset: requestOffset,
         limit: 8192,
       });
       if (current())
         this.update({
-          content: { sessionId, seq, offset, page: contentPage(raw, offset) },
+          content: {
+            sessionId,
+            seq,
+            field,
+            offset,
+            page: contentPage(raw, offset),
+          },
           contentLoading: false,
         });
     } catch (error) {

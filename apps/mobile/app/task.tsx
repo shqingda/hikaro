@@ -106,7 +106,9 @@ export default function Task() {
               ? "你的要求"
               : item.message.role === "assistant"
                 ? "Hikaro"
-                : "工具记录"}
+                : item.message.role === "tool"
+                  ? `工具记录${item.message.name ? ` · ${readable(item.message.name)}` : ""}${item.message.isError ? " · 失败" : ""}`
+                  : "系统记录"}
           </Text>
           <Text
             selectable
@@ -119,6 +121,28 @@ export default function Task() {
           >
             {readable(item.message.text)}
           </Text>
+          {!!item.message.toolCalls?.length && (
+            <View style={{ gap: 10 }}>
+              <Note>
+                工具调用名称预览：
+                {item.message.toolCalls
+                  .map((call) => readable(call.name))
+                  .join("、")}
+                。完整调用参数可按需查看。
+              </Note>
+              <Action
+                title="查看工具调用"
+                quiet
+                disabled={!online || state.contentLoading}
+                onPress={() => {
+                  void controller
+                    .readMessage(item.seq, 0, "toolCalls")
+                    .catch(() => {});
+                  router.push("/message");
+                }}
+              />
+            </View>
+          )}
           {!!item.message.imageCount && (
             <Action
               title={`查看 ${item.message.imageCount} 张图片`}
