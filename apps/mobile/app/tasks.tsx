@@ -12,6 +12,7 @@ import { useMobile } from "@/provider";
 import { Action, Note, confirmConnectionRemoval } from "@/ui";
 import { colors, readable } from "@/theme";
 import { NotificationSettings } from "@/notification-settings";
+import { canReturnToTask } from "@/task-continuation";
 export default function Tasks() {
   useColorScheme();
   const { controller, state } = useMobile();
@@ -32,7 +33,11 @@ export default function Tasks() {
           <Text
             style={{ fontSize: 13, fontWeight: "600", color: colors.secondary }}
           >
-            {online ? "已连接" : "连接已断开 · 以下是上次内容"}
+            {online
+              ? "已连接"
+              : state.phase === "connecting" || state.phase === "restoring"
+                ? "正在恢复连接 · 以下是上次内容"
+                : "连接已断开 · 以下是上次内容"}
           </Text>
           {state.relay && <Note>{state.relay}</Note>}
           {state.error && <Note error>{state.error}</Note>}
@@ -120,11 +125,24 @@ export default function Tasks() {
             </View>
           )}
           {state.session && (
-            <Action
-              title="返回正在查看的任务"
-              disabled={!online}
-              onPress={() => router.push("/task")}
-            />
+            <>
+              {!online && canReturnToTask(state) && (
+                <Note>离线内容可能已过时；草稿不会自动发送。</Note>
+              )}
+              <Action
+                title={
+                  online
+                    ? "返回正在查看的任务"
+                    : state.messages.length
+                      ? "查看离线任务与草稿"
+                      : "查看本机草稿"
+                }
+                disabled={!canReturnToTask(state)}
+                onPress={() => {
+                  if (canReturnToTask(controller.state)) router.push("/task");
+                }}
+              />
+            </>
           )}
           <Action
             title="移除这台电脑的连接"
