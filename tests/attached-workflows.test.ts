@@ -179,9 +179,6 @@ it("uses durable host receipts and rejects cross-selection workflow commands", a
       ).toBe(false);
       expect(client.state.busy).toBe(false);
     });
-    await expect(
-      client.request("plan.execute", { sessionId: session.id, id: plan.id }),
-    ).rejects.toThrow(/changed/);
     const receipts = client.receipts.filter((r) => r.method === "plan.execute");
     expect(receipts.length).toBeGreaterThan(0);
     const executed = receipts[0]!;
@@ -190,6 +187,11 @@ it("uses durable host receipts and rejects cross-selection workflow commands", a
         await transport.request("command.receipt", { commandId: executed.id }),
       ).toMatchObject({ receipt: { status: "completed" } });
     });
+    // The accepted command can precede run.start; an initially idle snapshot
+    // does not prove execution finished. Wait for its durable terminal receipt.
+    await expect(
+      client.request("plan.execute", { sessionId: session.id, id: plan.id }),
+    ).rejects.toThrow(/changed/);
     expect(
       await transport.request(
         "plan.execute",

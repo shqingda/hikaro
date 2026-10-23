@@ -21,6 +21,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm exec vitest run --exclude tests/sandbox.test.ts --exclude tests/pty.test.ts
+      - run: pnpm test:scripts
       - run: pnpm build
   macos:
     runs-on: macos-14

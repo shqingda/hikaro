@@ -130,6 +130,8 @@ See [Cloudflare setup](docs/remote.md). The relay carries encrypted frames; tool
 
 Use the affected test path or filter once, for example `pnpm exec vitest run tests/session-search.test.ts`. Skip tests for documentation and pure styling. Full suites and benchmarks run only when explicitly needed. Correctness CI runs on pull requests and pushes to main; performance measurement is an explicit local command. See the [harness and performance guide](docs/harness-performance.md) for workloads, budgets and evidence limitations.
 
+`pnpm test` runs the application suites in `tests/` with Vitest, then the release/build script checks with Node's test runner. Use `pnpm test:scripts` for the script checks alone. Generated acceptance workspaces under `artifacts/` are evidence, not application test suites.
+
 Optional cloud configuration can be checked with `pnpm check:relay` and `pnpm --filter @hikaro/relay build` (local dry-run, no deployment).
 
 Read [validation status](docs/validation.md) for measured results and remaining acceptance checks. The core and TUI are implemented; remaining daily-use and Pi acceptance work is tracked in TODO.md.
