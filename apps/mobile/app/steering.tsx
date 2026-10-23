@@ -129,6 +129,8 @@ export default function Steering() {
           <TextInput
             key={item.id}
             testID="steering-editor"
+            accessibilityLabel="补充指令正文"
+            accessibilityHint="回车换行。点击保存修改后才更新电脑队列。"
             value={queue.editText}
             multiline
             submitBehavior="newline"

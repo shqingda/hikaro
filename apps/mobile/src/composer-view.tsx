@@ -24,6 +24,8 @@ export function Composer() {
       <TextInput
         key={record.session.id}
         testID="task-composer"
+        accessibilityLabel="任务要求"
+        accessibilityHint="回车换行。点击发送、加入待发队列或补充到下一模型轮才会提交。"
         value={record.text}
         multiline
         submitBehavior="newline"
