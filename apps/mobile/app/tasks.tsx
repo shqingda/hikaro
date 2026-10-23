@@ -104,24 +104,28 @@ export default function Tasks() {
           <NotificationSettings />
           {(state.offset > 0 || state.moreSessions) && (
             <View style={{ flexDirection: "row", gap: 12 }}>
-              <Action
-                title="上一页"
-                quiet
-                disabled={!online || state.loading || state.offset === 0}
-                onPress={() => {
-                  void controller
-                    .tasks(Math.max(0, state.offset - 50))
-                    .catch(() => {});
-                }}
-              />
-              <Action
-                title="下一页"
-                quiet
-                disabled={!online || state.loading || !state.moreSessions}
-                onPress={() => {
-                  void controller.tasks(state.offset + 50).catch(() => {});
-                }}
-              />
+              <View style={{ flex: 1 }}>
+                <Action
+                  title="上一页"
+                  quiet
+                  disabled={!online || state.loading || state.offset === 0}
+                  onPress={() => {
+                    void controller
+                      .tasks(Math.max(0, state.offset - 50))
+                      .catch(() => {});
+                  }}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Action
+                  title="下一页"
+                  quiet
+                  disabled={!online || state.loading || !state.moreSessions}
+                  onPress={() => {
+                    void controller.tasks(state.offset + 50).catch(() => {});
+                  }}
+                />
+              </View>
             </View>
           )}
           {state.session && (

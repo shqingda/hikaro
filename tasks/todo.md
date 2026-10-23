@@ -39,6 +39,7 @@
 - [x] 普通/附着 TUI 共用模型设置参数解析，附着模式支持 `/context 128k`、`/thinking high`、`/speed auto` 及 `active|default` 范围；相关 9 项检查、类型检查和构建通过。
 - [x] 30f1db5 新候选干净最低 Node 构建/安全/安装恢复通过，下载 SHA 核对，以及安装包搜索、原文分页与图片导出通过。
 - [x] 手机全文搜索入口、结果分页与原文跳转实现，类型检查、阅读模块测试和双平台导出通过。
+- [x] 手机任务超过 50 项时的原生分页按钮宽度修复；51 项任务前后翻页、边界禁用及离线返回当前历史/草稿通过 iOS 模拟器验收，见[分页验收](../docs/validation/mobile-task-pagination-20261023.md)。Android/真机与大字体另验。
 - [x] 手机搜索真实加密传输、长正文尾部命中、主机重启后搜索与撤权拒绝通过；见 docs/validation/mobile-search-recovery.md。
 - [x] 手机搜索原生点击、长正文尾词命中与完整正文分页通过（iOS 模拟器），见 [原生记录](../docs/validation/mobile-search-cache-native-20261023.md)。
 - [ ] 手机软键盘、完整输入法及 Android/真机搜索验收。
