@@ -1,4 +1,5 @@
 import { it, expect, vi } from "vitest";
+import { mobileLifecycle } from "../apps/mobile/src/lifecycle.ts";
 import {
   MobileController,
   pairingScope,
@@ -56,6 +57,12 @@ function fixture(
   let credential: string | null = null,
     active: any,
     dropMethod = "";
+  let nextList: (() => Promise<unknown>) | undefined;
+  const readList = () => {
+    const read = nextList;
+    nextList = undefined;
+    return read ? read() : [session];
+  };
   const intents: any[] = [];
   const draftRows = new Map<string, DraftRecord>();
   const snapshots = new Map<string, unknown>();
@@ -152,7 +159,7 @@ function fixture(
                         ...snapshotPatch,
                       }
                     : frame.method === "session.list"
-                      ? [session]
+                      ? readList()
                       : frame.method === "messages.read"
                         ? {
                             items: [
@@ -234,6 +241,9 @@ function fixture(
       ...clock,
       probe: async () => "ready" as const,
       socketOptions: { socket, reconnectMs: 1, heartbeatMs: 60000 },
+    },
+    delayNextList: (read: () => Promise<unknown>) => {
+      nextList = read;
     },
     uri: () => "hikaro://pair#" + encodeURIComponent(JSON.stringify(pairing)),
     dropResume: () => {
@@ -1238,3 +1248,132 @@ it("arbitrates approvals and run-specific stops with a real host, reconciling lo
     await rm(home, { recursive: true, force: true });
   }
 }, 20000);
+
+it("rechecks notification task authority without mutations and rejects stale identities", async () => {
+  const f = fixture();
+  await f.store.write(JSON.stringify(f.pairing));
+  const app = new MobileController(f.store, f.options);
+  try {
+    await app.restore();
+    await vi.waitFor(() => expect(app.state.phase).toBe("connected"));
+    await vi.waitFor(() => expect(app.state.loading).toBe(false));
+    const identity = app.notificationIdentity!;
+    f.sent.length = 0;
+    expect(await app.refreshNotificationTasks(identity)).toBe(true);
+    expect(app.state.sessions.map((session) => session.id)).toEqual(["s1"]);
+    expect(f.sent.map((frame) => frame.method)).toEqual(["session.list"]);
+    expect(f.sent[0].params).toEqual({ offset: 0, limit: 50 });
+    expect(await app.refreshNotificationTasks("old-pairing")).toBe(false);
+    app.suspend();
+    expect(app.notificationIdentity).toBe(identity);
+    expect(await app.refreshNotificationTasks(identity)).toBe(false);
+    await app.restore();
+    await vi.waitFor(() => expect(app.state.phase).toBe("connected"));
+    expect(app.notificationIdentity).toBe(identity);
+    await app.forget();
+    expect(app.notificationIdentity).toBeNull();
+    app.review(f.uri());
+    await app.confirm();
+    await vi.waitFor(() => expect(app.state.phase).toBe("connected"));
+    expect(app.notificationIdentity).not.toBe(identity);
+    expect(await app.refreshNotificationTasks(identity)).toBe(false);
+  } finally {
+    app.dispose();
+  }
+});
+
+it("keeps drafts and the encrypted connection through permission sheets, but hides and restores actual background content", async () => {
+  const f = fixture(undefined, undefined, { sessionRole: "control" });
+  await f.store.write(JSON.stringify(f.pairing));
+  const app = new MobileController(f.store, f.options);
+  try {
+    const change = mobileLifecycle(app, "active");
+    await vi.waitFor(() => expect(app.state.phase).toBe("connected"));
+    await vi.waitFor(() =>
+      expect(app.state.composer.record?.session.id).toBe("s1"),
+    );
+    app.editDraft("s1", "权限窗口期间保留的草稿");
+    await app.saveDraft();
+    const identity = app.pushIdentity;
+    const connections = f.sent.filter(
+      (frame) => frame.method === "hello",
+    ).length;
+    change("inactive");
+    change("active");
+    expect(app.pushIdentity).toBe(identity);
+    expect(app.state.composer.record?.text).toBe("权限窗口期间保留的草稿");
+    expect(f.sent.filter((frame) => frame.method === "hello")).toHaveLength(
+      connections,
+    );
+    change("background");
+    expect(app.state.phase).toBe("background");
+    expect(app.state.messages).toEqual([]);
+    expect(app.state.composer.record).toBeNull();
+    change("active");
+    await vi.waitFor(() => expect(app.state.phase).toBe("connected"));
+    await vi.waitFor(() =>
+      expect(app.state.composer.record?.text).toBe("权限窗口期间保留的草稿"),
+    );
+    expect(app.pushIdentity).toBe(identity);
+    expect(f.sent.filter((frame) => frame.method === "hello")).toHaveLength(
+      connections + 1,
+    );
+    expect(f.sent.filter((frame) => frame.method === "prompt")).toEqual([]);
+  } finally {
+    app.dispose();
+  }
+});
+
+it("rejects a notification refresh when its encrypted response arrives after a newer page", async () => {
+  const f = fixture();
+  await f.store.write(JSON.stringify(f.pairing));
+  const app = new MobileController(f.store, f.options);
+  try {
+    await app.restore();
+    await vi.waitFor(() => expect(app.state.phase).toBe("connected"));
+    await vi.waitFor(() => expect(app.state.loading).toBe(false));
+    let finish!: (rows: unknown[]) => void;
+    f.delayNextList(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const oldRefresh = app.refreshNotificationTasks(app.notificationIdentity!);
+    await app.tasks(50);
+    finish([]);
+    expect(await oldRefresh).toBe(false);
+    expect(app.state.offset).toBe(50);
+    expect(app.state.sessions.map((session) => session.id)).toEqual(["s1"]);
+  } finally {
+    app.dispose();
+  }
+});
+
+it("does not repopulate task data when a notification refresh loses its pairing", async () => {
+  const f = fixture();
+  await f.store.write(JSON.stringify(f.pairing));
+  const app = new MobileController(f.store, f.options);
+  try {
+    await app.restore();
+    await vi.waitFor(() => expect(app.state.phase).toBe("connected"));
+    await vi.waitFor(() => expect(app.state.loading).toBe(false));
+    let finish!: (rows: unknown[]) => void;
+    f.delayNextList(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const oldRefresh = app
+      .refreshNotificationTasks(app.notificationIdentity!)
+      .catch(() => false);
+    await app.forget();
+    finish([]);
+    expect(await oldRefresh).toBe(false);
+    expect(app.state.phase).toBe("unpaired");
+    expect(app.state.sessions).toEqual([]);
+  } finally {
+    app.dispose();
+  }
+});

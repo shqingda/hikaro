@@ -209,6 +209,7 @@ export class MobileController {
   private value = empty("unpaired");
   private listeners = new Set<() => void>();
   private epoch = 0;
+  private pairingGeneration = 0;
   private historyEpoch = 0;
   private listEpoch = 0;
   private contentEpoch = 0;
@@ -325,6 +326,7 @@ export class MobileController {
       throw Error("Pairing data exceeds secure storage capacity");
     this.epoch++;
     this.stop();
+    this.pairingGeneration++;
     this.pendingPairing = JSON.parse(serialized);
     this.update({
       ...empty("review"),
@@ -662,13 +664,16 @@ export class MobileController {
         .array(sessionSchema)
         .max(50)
         .parse(await client.request("session.list", { offset, limit: 50 }));
-      if (epoch === this.epoch && list === this.listEpoch)
+      if (epoch === this.epoch && list === this.listEpoch) {
         this.update({
           sessions,
           offset,
           moreSessions: sessions.length === 50,
           loading: false,
         });
+        return true;
+      }
+      return false;
     } catch (e) {
       if (epoch === this.epoch && list === this.listEpoch)
         this.update({ loading: false, error: "无法读取任务列表，请重试。" });
@@ -1011,6 +1016,29 @@ export class MobileController {
       throw error;
     }
   }
+  get notificationIdentity() {
+    return this.pairing &&
+      !this.disposed &&
+      !["unpaired", "review", "blocked", "revoked"].includes(this.value.phase)
+      ? JSON.stringify([this.pairingGeneration, pairingScope(this.pairing)])
+      : null;
+  }
+  async refreshNotificationTasks(identity: string): Promise<boolean> {
+    const epoch = this.epoch;
+    if (
+      !identity ||
+      identity !== this.notificationIdentity ||
+      this.value.phase !== "connected"
+    )
+      return false;
+    const fresh = await this.tasks(0);
+    return (
+      fresh &&
+      epoch === this.epoch &&
+      identity === this.notificationIdentity &&
+      this.value.phase === "connected"
+    );
+  }
   get pushIdentity() {
     return this.pairing && this.value.phase === "connected"
       ? pairingScope(this.pairing)
@@ -1075,6 +1103,7 @@ export class MobileController {
   private async revoked(epoch: number) {
     if (epoch !== this.epoch) return;
     epoch = ++this.epoch;
+    this.pairingGeneration++;
     const p = this.pairing;
     this.draftIdentity++;
     this.composer.bind(null);
@@ -1108,6 +1137,7 @@ export class MobileController {
     this.update(empty("background"));
   }
   async forget() {
+    this.pairingGeneration++;
     const epoch = ++this.epoch,
       p = this.pairing;
     this.draftIdentity++;

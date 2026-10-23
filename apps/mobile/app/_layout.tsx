@@ -1,6 +1,7 @@
 import { Stack } from "expo-router/stack";
 import { StatusBar } from "expo-status-bar";
 import { MobileProvider } from "@/provider";
+import { NotificationResponses } from "@/notification-responses";
 export default function Layout() {
   return (
     <MobileProvider>
@@ -25,6 +26,7 @@ export default function Layout() {
           options={{ title: "扫描配对码", presentation: "modal" }}
         />
       </Stack>
+      <NotificationResponses />
     </MobileProvider>
   );
 }

@@ -1,6 +1,6 @@
 # 移动通知缺口核查
 
-最新进展：任务列表已增加用户主动开启/更新及关闭通知入口，接入 expo-notifications 58.1.5、系统权限、Android 默认通知渠道和 Expo token 获取。构建可通过 HIKARO_EXPO_PROJECT_ID 注入项目 UUID；缺失时不请求系统权限，旧安装包缺少原生模块时安全失败。token 不写入本地存储，异步获取期间连接身份变化会取消注册。修复 MobileController 传输白名单遗漏 messages.search、push.register 的问题。17 项控制器回归及根/移动类型检查通过，其中新增真实加密传输注册、关闭与旧配对身份拒绝用例。仍缺通知点击后的状态复核、推送项目与平台凭据、原生安装及后台实际收件验收；以下为各轮历史记录。
+最新进展：任务列表已增加用户主动开启/更新及关闭通知入口，接入 expo-notifications 58.1.5、系统权限、Android 默认通知渠道和 Expo token 获取。构建可通过 HIKARO_EXPO_PROJECT_ID 注入项目 UUID；缺失时不请求系统权限，旧安装包缺少原生模块时安全失败。token 不写入本地存储，异步获取期间连接身份变化会取消注册。修复 MobileController 传输白名单遗漏 messages.search、push.register 的问题。17 项控制器回归及根/移动类型检查通过，其中新增真实加密传输注册、关闭与旧配对身份拒绝用例。通知点击后的状态复核已接入并完成应用侧回归，详见[通知点击验收记录](mobile-notification-open.md)。仍缺推送项目与平台凭据、目标原生安装及后台实际收件验收；以下为各轮历史记录。
 
 2026-10-22。relay 已有 Expo push token 保存、通用提醒队列与去重投递；加密 host bridge 已有 push.register 处理。原先远程 hello 直接转发本地 RPC 能力清单，漏掉 bridge 自己实现的 push.register，手机客户端无法通过能力探测发现注册支持。
 
