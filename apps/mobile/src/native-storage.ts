@@ -10,24 +10,47 @@ const options = {
 };
 export function nativeStorage(): MobileStorage {
   let database: Promise<SQLiteDatabase> | undefined;
+  let unfinished: SQLiteDatabase | undefined;
   const db = () =>
     (database ??= (async () => {
-      const value = await openDatabaseAsync("hikaro-mobile-state.sqlite");
-      await value.execAsync(
-        "PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; CREATE TABLE IF NOT EXISTS installation(id INTEGER PRIMARY KEY); CREATE TABLE IF NOT EXISTS intents(scope TEXT PRIMARY KEY, data TEXT NOT NULL); CREATE TABLE IF NOT EXISTS mobile_drafts(scope TEXT NOT NULL, sessionId TEXT NOT NULL, data TEXT NOT NULL, updatedAt INTEGER NOT NULL, PRIMARY KEY(scope, sessionId));",
-      );
-      await value.execAsync(
-        "CREATE TABLE IF NOT EXISTS mobile_snapshots(scope TEXT PRIMARY KEY, data TEXT NOT NULL)",
-      );
-      // Keychain can survive iOS uninstall. A new app installation does not silently
-      // reuse an identity left by an old installation or a restored backup.
-      if (
-        !(await value.getFirstAsync("SELECT id FROM installation WHERE id=1"))
-      ) {
-        await SecureStore.deleteItemAsync(key, options);
-        await value.runAsync("INSERT INTO installation VALUES(1)");
+      let value: SQLiteDatabase | undefined;
+      try {
+        if (unfinished) {
+          await unfinished.closeAsync();
+          unfinished = undefined;
+        }
+        value = await openDatabaseAsync("hikaro-mobile-state.sqlite");
+        await value.execAsync(
+          "PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; CREATE TABLE IF NOT EXISTS installation(id INTEGER PRIMARY KEY); CREATE TABLE IF NOT EXISTS intents(scope TEXT PRIMARY KEY, data TEXT NOT NULL); CREATE TABLE IF NOT EXISTS mobile_drafts(scope TEXT NOT NULL, sessionId TEXT NOT NULL, data TEXT NOT NULL, updatedAt INTEGER NOT NULL, PRIMARY KEY(scope, sessionId));",
+        );
+        await value.execAsync(
+          "CREATE TABLE IF NOT EXISTS mobile_snapshots(scope TEXT PRIMARY KEY, data TEXT NOT NULL)",
+        );
+        // Keychain can survive iOS uninstall. A new app installation does not silently
+        // reuse an identity left by an old installation or a restored backup.
+        if (
+          !(await value.getFirstAsync("SELECT id FROM installation WHERE id=1"))
+        ) {
+          await SecureStore.deleteItemAsync(key, options);
+          await value.runAsync("INSERT INTO installation VALUES(1)");
+        }
+        return value;
+      } catch (error) {
+        // A locked Keychain or transient SQLite failure must remain retryable.
+        // Keep initialization shared until any partial connection has closed.
+        if (value) {
+          unfinished = value;
+          try {
+            await value.closeAsync();
+            unfinished = undefined;
+          } catch {
+            // Expo caches open connections. Retain this owner until cleanup
+            // succeeds so retries do not leak native reference counts.
+          }
+        }
+        database = undefined;
+        throw error;
       }
-      return value;
     })());
   return {
     async read() {
