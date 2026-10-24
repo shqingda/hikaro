@@ -72,6 +72,8 @@ export class PluginExecutions {
       controller,
       name,
     });
+    let plan:
+      import("../../core/src/change-evidence.ts").PlanReference | undefined;
     let lost = false;
     const checkpoint = async () => {
       controller.signal.throwIfAborted();
@@ -113,11 +115,12 @@ export class PluginExecutions {
         throw Error(
           "Plugin commands and views are unavailable in read-only Plan mode",
         );
+      plan = this.planning.reference(session.id);
       await checkpoint();
       await this.store.append(
         session.id,
         "plugin.start",
-        { invocationId, name, kind },
+        { invocationId, name, kind, ...(plan ? { plan } : {}) },
         lease,
       );
       const command = this.plugins.commands.get(name);
@@ -127,7 +130,12 @@ export class PluginExecutions {
       const text = await this.observations.capture(
         session.id,
         session.cwd,
-        { source: "plugin", callId: invocationId, tool: name },
+        {
+          source: "plugin",
+          callId: invocationId,
+          tool: name,
+          ...(plan ? { plan } : {}),
+        },
         async () => {
           await checkpoint();
           return kind === "command" ? command!(args, context) : view!(context);
@@ -153,7 +161,16 @@ export class PluginExecutions {
       await this.store.append(
         session.id,
         "plugin.end",
-        { invocationId, name, status: "completed" },
+        {
+          invocationId,
+          name,
+          status: "completed",
+          result: {
+            text: text.slice(0, 60000),
+            truncated: text.length > 60000,
+          },
+          ...(plan ? { plan } : {}),
+        },
         lease,
       );
       return text.length > 60000
@@ -168,6 +185,7 @@ export class PluginExecutions {
           {
             invocationId,
             name,
+            ...(plan ? { plan } : {}),
             status: controller.signal.aborted ? "cancelled" : "failed",
           },
           lease,

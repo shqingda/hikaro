@@ -1,3 +1,5 @@
+import type { PlanReference } from "../../core/src/change-evidence.ts";
+import { planEvidence } from "./plan-evidence.ts";
 import { ChangeReview } from "./change-review.ts";
 import { ChangeObservations } from "../../tools/src/change-observations.ts";
 import {
@@ -90,6 +92,7 @@ export class Runtime {
   private initializingAgents = new Map<string, Promise<Agent>>();
   private pendingSubagents = 0;
   private delegatedParents = new Map<string, string>();
+  private delegatedPlans = new Map<string, PlanReference>();
   /** Only live runtime delegation inherits its parent's approval authority. */
   approvalAuthority(sessionId: string): string {
     for (let depth = 0; depth < 2; depth++) {
@@ -174,7 +177,10 @@ export class Runtime {
     const recordedEdits = (await this.changes.list(sessionId)).filter(
       (entry) => entry.timestamp >= since,
     ).length;
-    return { ...progress, recordedEdits };
+    return {
+      ...(await planEvidence(sessionId, progress, this.review, this.store)),
+      recordedEdits,
+    };
   }
   async approvePlan(session: Session, id: string) {
     return this.changePlanning(session, () =>
@@ -374,6 +380,7 @@ export class Runtime {
   async setPermissionMode(mode: PermissionMode) {
     const next = permissionModeSchema.parse(mode);
     if (
+      this.pluginExecution?.busy ||
       this.pendingSubagents > 0 ||
       this.initializingAgents.size > 0 ||
       [...this.agents.values()].some((agent) => agent.busy)
@@ -580,6 +587,7 @@ export class Runtime {
             );
             ctx.signal.throwIfAborted();
             runtime.delegatedParents.set(session.id, ctx.sessionId);
+            if (ctx.plan) runtime.delegatedPlans.set(session.id, ctx.plan);
             const child = await runtime.agent(
               session,
               ctx.depth + 1,
@@ -641,6 +649,7 @@ export class Runtime {
             if (session) {
               runtime.agents.delete(session.id);
               runtime.delegatedParents.delete(session.id);
+              runtime.delegatedPlans.delete(session.id);
             }
           }
         },
@@ -788,7 +797,11 @@ export class Runtime {
     baseUrl?: string,
   ) {
     const agent = this.agents.get(session.id);
-    if (agent?.busy || this.initializingAgents.has(session.id))
+    if (
+      agent?.busy ||
+      this.pluginExecution?.current(session.id) ||
+      this.initializingAgents.has(session.id)
+    )
       throw Error("Stop active runs before changing model");
     const saved = await this.session(session.id);
     const previous = saved.modelSelection ?? this.defaultSelection();
@@ -875,6 +888,9 @@ export class Runtime {
     this.lifecycle.signal.throwIfAborted();
     await this.planning.load(session.id);
     const agent = new Agent({
+      capturePlan: () =>
+        this.planning.reference(session.id) ??
+        this.delegatedPlans.get(session.id),
       executeTool: (tool, args, context) => {
         const run = async () => {
           await context.checkpoint?.();
@@ -887,6 +903,9 @@ export class Runtime {
               {
                 source: tool.name === "shell" ? "shell" : "plugin",
                 callId: context.callId,
+                ...(context.parentCallId
+                  ? { parentCallId: context.parentCallId }
+                  : {}),
                 tool: tool.name,
                 runId: context.runId,
                 ...(context.plan ? { plan: context.plan } : {}),
@@ -1012,7 +1031,7 @@ export class Runtime {
       this.plugins,
       this.planning,
       (session) => this.planningIdle(session),
-        this.review.observations,
+      this.review.observations,
     ));
   }
   invokePlugin(
@@ -1143,7 +1162,11 @@ export class Runtime {
   }
   async deleteSession(id: string) {
     const session = await this.session(id);
-    if (this.agents.get(id)?.busy || this.initializingAgents.has(id))
+    if (
+      this.agents.get(id)?.busy ||
+      this.pluginExecution?.current(id) ||
+      this.initializingAgents.has(id)
+    )
       throw Error("Stop the active run before deleting this session");
     await this.store.deleteSession(id);
     this.agents.delete(id);
@@ -1229,8 +1252,8 @@ export class Runtime {
     const deadline = Date.now() + 5000;
     while (
       (this.initializingAgents.size > 0 ||
-        this.pendingSubagents > 0 ||
         this.pluginExecution?.busy ||
+        this.pendingSubagents > 0 ||
         [...this.agents.values()].some((a) => a.busy)) &&
       Date.now() < deadline
     )

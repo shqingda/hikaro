@@ -1,3 +1,4 @@
+import { stepEvidenceSchema } from "../../../packages/core/src/change-evidence.ts";
 import * as z from "zod";
 import {
   MobileInspection,
@@ -85,6 +86,8 @@ const planProgressSchema = z.object({
   planId: z.string().uuid(),
   title: z.string().max(200),
   recordedEdits: z.number().int().nonnegative().optional(),
+  unassigned: stepEvidenceSchema.optional(),
+  evidenceIncomplete: z.boolean().optional(),
   steps: z
     .array(
       z.object({
@@ -97,6 +100,7 @@ const planProgressSchema = z.object({
           "skipped",
         ]),
         note: z.string().max(500).optional(),
+        evidence: stepEvidenceSchema.optional(),
       }),
     )
     .max(12),
@@ -145,6 +149,7 @@ const allowed = new Set([
   "messages.search",
   "push.register",
   "messages.content",
+  "plan.evidence",
   "plan.read",
   "changes.review.list",
   "changes.review.diff",
@@ -210,6 +215,8 @@ export type MobileState = {
   actionNotice: string | null;
   content: {
     sessionId: string;
+    evidence?: { owner: string; planId: string };
+    truncated?: boolean;
     seq: number;
     field: MobileContentField;
     offset: number;
@@ -1074,6 +1081,7 @@ export class MobileController {
     seq: number,
     offset = 0,
     field: MobileContentField = "text",
+    evidence?: { owner: string; planId: string },
   ) {
     const client = this.client,
       epoch = this.epoch,
@@ -1090,18 +1098,29 @@ export class MobileController {
       client === this.client &&
       sessionId === client.state.session?.id;
     this.update({
-      content: { sessionId, seq, field, offset, page: null },
+      content: {
+        sessionId,
+        seq,
+        field,
+        offset,
+        page: null,
+        ...(evidence ? { evidence } : {}),
+      },
       contentLoading: true,
       contentError: null,
     });
     try {
-      const raw = await client.request("messages.content", {
-        sessionId,
-        seq,
-        field,
-        offset: requestOffset,
-        limit: 8192,
-      });
+      const raw = await client.request(
+        evidence ? "plan.evidence" : "messages.content",
+        {
+          sessionId,
+          ...(evidence ? evidence : {}),
+          seq,
+          field,
+          offset: requestOffset,
+          limit: 8192,
+        },
+      );
       if (current())
         this.update({
           content: {
@@ -1110,6 +1129,13 @@ export class MobileController {
             field,
             offset,
             page: contentPage(raw, offset),
+            ...(evidence
+              ? {
+                  evidence,
+                  truncated: z.object({ truncated: z.boolean() }).parse(raw)
+                    .truncated,
+                }
+              : {}),
           },
           contentLoading: false,
         });

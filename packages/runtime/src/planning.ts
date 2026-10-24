@@ -1,3 +1,7 @@
+import type {
+  PlanReference,
+  StepEvidence,
+} from "../../core/src/change-evidence.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile, rename, rm, link } from "node:fs/promises";
 import { join } from "node:path";
@@ -63,10 +67,13 @@ export type PlanProgress = {
   approvedAt?: number;
   /** File-tool edits recorded since approval, for comparison with the report. */
   recordedEdits?: number;
+  unassigned?: StepEvidence;
+  evidenceIncomplete?: boolean;
   steps: Array<{
     text: string;
     status: z.infer<typeof stepStatusSchema>;
     note?: string;
+    evidence?: StepEvidence;
   }>;
 };
 export type PlanHistory = {
@@ -140,6 +147,18 @@ export class Planning {
         text,
         ...structuredClone(progress.steps[index]!),
       })),
+    };
+  }
+  reference(session: string): PlanReference | undefined {
+    const progress = this.progress(session);
+    if (!progress) return;
+    const active = progress.steps.flatMap((step, index) =>
+      step.status === "in_progress" ? [index + 1] : [],
+    );
+    return {
+      sessionId: session,
+      planId: progress.planId,
+      ...(active.length === 1 ? { step: active[0]! } : {}),
     };
   }
   async updateStep(session: string, update: z.infer<typeof stepUpdateSchema>) {

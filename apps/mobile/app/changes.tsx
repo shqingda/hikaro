@@ -48,6 +48,13 @@ export default function Changes() {
       {changes?.warnings?.map((warning) => (
         <Note key={warning}>{readable(warning)}</Note>
       ))}
+      {changes?.filter?.planId && (
+        <Note>
+          {changes.filter.step
+            ? `计划第 ${changes.filter.step} 步`
+            : "计划未关联步骤"}
+        </Note>
+      )}
       {diff && (
         <Note>这是修改时保存的前后快照，当前工作区可能已变化。此页只读。</Note>
       )}

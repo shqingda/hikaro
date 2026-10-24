@@ -10,6 +10,7 @@ export async function copyStorageWorker(directory) {
     "statement-cache.mjs",
     "question-drafts.mjs",
     "execution-history.mjs",
+    "plan-evidence.mjs",
     "child-tasks.mjs",
     "terminal-records.mjs",
   ])

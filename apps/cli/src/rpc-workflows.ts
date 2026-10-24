@@ -80,6 +80,8 @@ export class RpcWorkflows {
         const review =
           method === "changes.review.list"
             ? await this.runtime.review.list(session.id, {
+                planId: z.string().uuid().optional().parse(p.planId),
+                step: z.number().int().min(0).max(12).optional().parse(p.step),
                 source: z
                   .enum(["file", "shell", "plugin"])
                   .optional()
@@ -283,6 +285,29 @@ export class RpcWorkflows {
           session.id,
           z.string().uuid().parse(p.id),
         );
+      case "plan.evidence": {
+        const owner = z.string().min(1).max(128).parse(p.owner);
+        if (!(await this.runtime.review.owners(session.id)).has(owner))
+          throw Error("Tool result not found in this task tree");
+        return this.runtime.store.planEvidenceContent(
+          owner,
+          session.id,
+          z.string().uuid().parse(p.planId),
+          z.number().int().positive().parse(p.seq),
+          z
+            .number()
+            .int()
+            .min(0)
+            .max(128 * 1024)
+            .parse(p.offset ?? 0),
+          z
+            .number()
+            .int()
+            .min(1)
+            .max(16000)
+            .parse(p.limit ?? 8192),
+        );
+      }
       case "plan.read":
         await this.runtime.planning.load(session.id, true);
         return {

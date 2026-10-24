@@ -249,7 +249,11 @@ export class AttachedWorkflows {
       if (this.modal === "plan") this.modal = undefined;
     }
   }
-  async command(command: string, arg: string) {
+  async command(
+    command: string,
+    arg: string,
+    filter: import("../../../packages/runtime/src/change-review.ts").ReviewFilter = {},
+  ) {
     const id = this.client.state.session?.id;
     if (!id) throw Error("No session selected");
     if (this.modal) throw Error("Close the current workflow first");
@@ -257,14 +261,53 @@ export class AttachedWorkflows {
       this.modal = "plan";
       try {
         if (arg === "progress") {
-          await browsePlanProgress(this.view, async () => {
-            const state = await this.request<{
-              progress?: PlanProgress | null;
-            }>("plan.read", id);
-            if (state.progress === undefined)
-              throw Error("Upgrade the host to read plan progress.");
-            return state.progress;
-          });
+          await browsePlanProgress(
+            this.view,
+            async () => {
+              const state = await this.request<{
+                progress?: PlanProgress | null;
+              }>("plan.read", id);
+              if (state.progress === undefined)
+                throw Error("Upgrade the host to read plan progress.");
+              return state.progress;
+            },
+            this.client.supports("plan.evidence")
+              ? {
+                  changes: async (planId, step) => {
+                    this.modal = undefined;
+                    await this.command("/changes", "", { planId, step });
+                  },
+                  tool: async (planId, tool) => {
+                    let offset = 0,
+                      text = "";
+                    for (;;) {
+                      const part = await this.request<{
+                        data: string;
+                        nextOffset: number | null;
+                        truncated: boolean;
+                      }>("plan.evidence", id, {
+                        planId,
+                        owner: tool.sessionId,
+                        seq: tool.seq,
+                        offset,
+                        limit: 16000,
+                      });
+                      text += part.data;
+                      if (part.nextOffset === null)
+                        return (
+                          text +
+                          (part.truncated
+                            ? "\n[Result preview limited; see session history.]"
+                            : "")
+                        );
+                      if (part.nextOffset <= offset || text.length > 128000)
+                        throw Error("Invalid evidence page");
+                      offset = part.nextOffset;
+                    }
+                  },
+                }
+              : undefined,
+          );
           return;
         }
         if (arg === "history") {
@@ -347,6 +390,7 @@ export class AttachedWorkflows {
                 warnings?: string[];
               }>(unified ? "changes.review.list" : "changes.list", id, {
                 offset,
+                ...filter,
               });
               warnings = page.warnings ?? [];
               all.push(...page.items);

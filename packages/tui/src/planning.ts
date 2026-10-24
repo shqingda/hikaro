@@ -325,17 +325,24 @@ export function planProgressText(progress: PlanProgress) {
   return `${progress.title}\n${done}/${progress.steps.length} steps reported completed${edits}\n\n${progress.steps
     .map(
       (step, index) =>
-        `${index + 1}. ${stepMarks[step.status]} · ${step.text}${step.note ? `\n   ${step.note}` : ""}`,
+        `${index + 1}. ${stepMarks[step.status]} · ${step.text}${step.note ? `\n   ${step.note}` : ""}${step.evidence ? `\n   Evidence: ${step.evidence.reliable} reliable edits, ${step.evidence.observed} observed differences, ${step.evidence.tools.length} tool results` : ""}`,
     )
     .join(
       "\n\n",
-    )}\n\nStatus is reported by the model while executing; check /changes and tests for actual results.`;
+    )}${progress.unassigned ? `\n\nUnassigned: ${progress.unassigned.reliable} reliable edits, ${progress.unassigned.observed} observed differences, ${progress.unassigned.tools.length} tool results` : ""}${progress.evidenceIncomplete ? "\nEvidence listing is incomplete; inspect /changes and session history." : ""}\n\nStatus is reported by the model while executing; check /changes and tests for actual results.`;
 }
 
 /** Read-only progress of the approved plan; refreshing never resumes execution. */
 export async function browsePlanProgress(
   view: HikaroView,
   read: () => Promise<PlanProgress | null>,
+  evidence?: {
+    changes(planId: string, step: number): Promise<void>;
+    tool(
+      planId: string,
+      tool: import("../../core/src/change-evidence.ts").ToolEvidence,
+    ): Promise<string>;
+  },
 ) {
   const { panel, signal, close } = view.openModelPanel();
   try {
@@ -352,8 +359,59 @@ export async function browsePlanProgress(
       const choice = await panel.readDocument(
         "Plan progress · reported by the model",
         planProgressText(progress),
-        [{ value: "refresh", label: "Refresh" }],
+        [
+          { value: "refresh", label: "Refresh" },
+          ...(evidence && progress.unassigned
+            ? [{ value: "evidence", label: "Inspect execution evidence…" }]
+            : []),
+        ],
       );
+      if (choice.value === "evidence" && evidence) {
+        const selection = await panel.choose(
+          "Evidence by step",
+          [
+            ...progress.steps.map((step, index) => ({
+              value: String(index + 1),
+              label: `${index + 1}. ${step.text}`,
+            })),
+            { value: "0", label: "Unassigned" },
+          ],
+          "Model reports and execution evidence are distinct. Zero edits alone do not mean failure.",
+          undefined,
+          { search: false },
+        );
+        const step = Number(selection.value);
+        const proof = step
+          ? progress.steps[step - 1]?.evidence
+          : progress.unassigned;
+        if (!proof) continue;
+        const action = await panel.readDocument(
+          "Execution evidence",
+          evidenceText(proof),
+          [
+            { value: "changes", label: "Inspect file differences…" },
+            ...proof.tools
+              .filter((t) => t.status !== "unknown")
+              .map((tool) => ({
+                value: String(tool.seq),
+                label: `${tool.name} · ${tool.status} · ${tool.sessionId.slice(0, 8)}`,
+              })),
+          ],
+        );
+        if (action.value === "changes") {
+          close();
+          await evidence.changes(progress.planId, step);
+          return;
+        }
+        const tool = proof.tools.find((t) => String(t.seq) === action.value);
+        if (tool) {
+          panel.progress("Loading tool result…");
+          const text = await evidence.tool(progress.planId, tool);
+          signal.throwIfAborted();
+          await panel.readDocument(`${tool.name} · ${tool.status}`, text, []);
+        }
+        continue;
+      }
       if (choice.value !== "refresh") return;
     }
   } catch (error) {
@@ -361,4 +419,18 @@ export async function browsePlanProgress(
   } finally {
     close();
   }
+}
+
+function evidenceText(
+  evidence: import("../../core/src/change-evidence.ts").StepEvidence,
+) {
+  return (
+    `${evidence.reliable} reliable edits · ${evidence.observed} observed differences · ${evidence.tools.length} tool results\n\n` +
+    evidence.tools
+      .map(
+        (tool) =>
+          `${tool.name} · ${tool.status}\nTask ${tool.sessionId} · call ${tool.callId}${tool.runId ? ` · run ${tool.runId}` : ""}\n${tool.preview}`,
+      )
+      .join("\n\n")
+  );
 }

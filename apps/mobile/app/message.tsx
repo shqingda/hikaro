@@ -38,7 +38,7 @@ export default function Message() {
   const load = (offset: number) => {
     if (content)
       void controller
-        .readMessage(content.seq, offset, content.field)
+        .readMessage(content.seq, offset, content.field, content.evidence)
         .catch(() => {});
   };
   return (
@@ -63,6 +63,12 @@ export default function Message() {
         >
           {readable(state.session?.title ?? "消息正文")}
         </Text>
+        {content?.evidence && (
+          <Note>计划执行证据 · 只读工具结果；不执行或重试工具。</Note>
+        )}
+        {content?.truncated && (
+          <Note>预览已截断，完整输出请在电脑会话历史查看。</Note>
+        )}
         {toolCalls && (
           <Note>工具调用参数 · 仅供阅读，不会执行或重试工具。</Note>
         )}

@@ -268,7 +268,7 @@ it("runs Plan, questions, rollback and execution management through an attached 
     await wait("Rolled back sample.txt", rollback);
     await wait("File changes", rollback);
     expect(await readFile(join(cwd, "sample.txt"), "utf8")).toBe("original");
-    await wait("Enter send", send("\x1b[B\r"));
+    await wait("Enter send", send("\x1b[B".repeat(2) + "\r"));
     const executionOffset = send("start execution\r");
     await vi.waitFor(
       () =>

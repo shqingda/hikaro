@@ -495,6 +495,32 @@ async function main() {
     onCommand: async (text) => {
       const [command, ...parts] = text.slice(1).split(" ");
       const arg = parts.join(" ");
+      const reviewChanges = async (
+        filter: import("../../../packages/runtime/src/change-review.ts").ReviewFilter = {},
+      ) => {
+        const { openChangeReview } =
+          await import("../../../packages/tui/src/change-review.ts");
+        let reviewRows: import("../../../packages/runtime/src/change-review.ts").ReviewEntry[] =
+          [];
+        let warnings: string[] = [];
+        await openChangeReview(view, {
+          cwd: session.cwd,
+          list: async () => {
+            const page = await runtime.review.list(session.id, filter);
+            reviewRows = page.items;
+            warnings = page.warnings;
+            return reviewRows;
+          },
+          warnings: () => warnings,
+          detail: (id) => {
+            const row = reviewRows.find((row) => row.id === id);
+            if (!row) throw Error("Change not found; refresh the list");
+            return runtime.review.detail(session.id, row);
+          },
+          rollback: (id, signal) => runtime.rollbackChange(session, id, signal),
+          redo: (id, signal) => runtime.redoChange(session, id, signal),
+        });
+      };
       const applyActiveModel = async (
         settings: import("../../../packages/core/src/types.ts").ModelSettings,
       ) => {
@@ -578,10 +604,41 @@ async function main() {
             const id = session.id;
             const { browsePlanProgress } =
               await import("../../../packages/tui/src/planning.ts");
-            await browsePlanProgress(view, async () => {
-              await runtime.planning.load(id, true);
-              return runtime.planProgress(id);
-            });
+            await browsePlanProgress(
+              view,
+              async () => {
+                await runtime.planning.load(id, true);
+                return runtime.planProgress(id);
+              },
+              {
+                changes: (planId, step) => reviewChanges({ planId, step }),
+                tool: async (planId, tool) => {
+                  if (!(await runtime.review.owners(id)).has(tool.sessionId))
+                    throw Error("Task tree changed");
+                  let offset = 0,
+                    text = "";
+                  for (;;) {
+                    const part = await runtime.store.planEvidenceContent(
+                      tool.sessionId,
+                      id,
+                      planId,
+                      tool.seq,
+                      offset,
+                      16000,
+                    );
+                    text += part.data;
+                    if (part.nextOffset === null)
+                      return (
+                        text +
+                        (part.truncated
+                          ? "\n[Result preview limited; see session history.]"
+                          : "")
+                      );
+                    offset = part.nextOffset;
+                  }
+                },
+              },
+            );
             return;
           }
           if (arg.trim() === "history") {
@@ -692,29 +749,7 @@ async function main() {
             await promptWork;
           if (agent.busy)
             throw Error("Finish or cancel the run before reviewing changes.");
-          const { openChangeReview } =
-            await import("../../../packages/tui/src/change-review.ts");
-          let reviewRows: import("../../../packages/runtime/src/change-review.ts").ReviewEntry[] =
-            [];
-          let warnings: string[] = [];
-          await openChangeReview(view, {
-            cwd: session.cwd,
-            list: async () => {
-              const page = await runtime.review.list(session.id);
-              reviewRows = page.items;
-              warnings = page.warnings;
-              return reviewRows;
-            },
-            warnings: () => warnings,
-            detail: (id) => {
-              const row = reviewRows.find((row) => row.id === id);
-              if (!row) throw Error("Change not found; refresh the list");
-              return runtime.review.detail(session.id, row);
-            },
-            rollback: (id, signal) =>
-              runtime.rollbackChange(session, id, signal),
-            redo: (id, signal) => runtime.redoChange(session, id, signal),
-          });
+          await reviewChanges();
           return;
         }
         case "permissions": {

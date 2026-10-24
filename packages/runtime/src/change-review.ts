@@ -10,11 +10,14 @@ export type ReviewEntry = Omit<FileChange, "after" | "state"> & {
   source: "file" | "shell" | "plugin";
   readOnly: boolean;
   callId?: string;
+  plan?: import("../../core/src/change-evidence.ts").PlanReference;
 };
 export type ReviewFilter = {
   source?: ReviewEntry["source"];
   owner?: string;
   runId?: string;
+  planId?: string;
+  step?: number;
 };
 
 /** Read access to a root includes delegated descendants, never unrelated forks. */
@@ -58,7 +61,8 @@ export class ChangeReview {
         if (
           reliable.some(
             (row) =>
-              row.origin?.callId === entry.callId &&
+              (row.origin?.callId === entry.callId ||
+                row.origin?.parentCallId === entry.callId) &&
               row.path === entry.path &&
               row.before === entry.before &&
               row.after === entry.after,
@@ -85,7 +89,17 @@ export class ChangeReview {
         .filter(
           (row) =>
             (!filter.source || row.source === filter.source) &&
-            (!filter.runId || row.runId === filter.runId),
+            (!filter.runId || row.runId === filter.runId) &&
+            (!filter.planId ||
+              (() => {
+                const ref =
+                  row.state === "observed" ? row.plan : row.origin?.plan;
+                return (
+                  ref?.sessionId === root &&
+                  ref.planId === filter.planId &&
+                  (filter.step === undefined || (ref.step ?? 0) === filter.step)
+                );
+              })()),
         )
         .sort((a, b) => b.timestamp - a.timestamp || b.id.localeCompare(a.id)),
       warnings: [...warnings],

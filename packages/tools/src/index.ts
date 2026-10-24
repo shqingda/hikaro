@@ -41,6 +41,9 @@ export function codingPlugin(options: {
               ctx.callId
                 ? {
                     callId: ctx.callId,
+                    ...(ctx.parentCallId
+                      ? { parentCallId: ctx.parentCallId }
+                      : {}),
                     tool: "file",
                     ...(ctx.plan ? { plan: ctx.plan } : {}),
                   }

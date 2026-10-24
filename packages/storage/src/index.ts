@@ -390,6 +390,28 @@ export class SQLiteStore implements EventStore {
   events(sessionId: string, after = 0, limit = 200) {
     return this.request<AgentEvent[]>("events", { sessionId, after, limit });
   }
+  planEvidence(sessionId: string, root: string, planId: string) {
+    return this.request<{
+      items: import("../../core/src/change-evidence.ts").ToolEvidence[];
+      more: boolean;
+    }>("planEvidence", { sessionId, root, planId });
+  }
+  planEvidenceContent(
+    sessionId: string,
+    root: string,
+    planId: string,
+    seq: number,
+    offset = 0,
+    limit = 8192,
+  ) {
+    return this.request<{
+      data: string;
+      total: number;
+      encoding: "utf16";
+      nextOffset: number | null;
+      truncated: boolean;
+    }>("planEvidenceContent", { sessionId, root, planId, seq, offset, limit });
+  }
   messages(sessionId: string, limit = 200) {
     return this.request<Message[]>("messages", { sessionId, limit });
   }

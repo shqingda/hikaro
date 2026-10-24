@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import type { StepEvidence } from "../../../packages/core/src/change-evidence.ts";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, ScrollView, Text, View } from "react-native";
 import { router, useNavigation } from "expo-router";
 import { useMobile } from "@/provider";
@@ -68,11 +69,12 @@ export default function Plan() {
           {progress.recordedEdits !== undefined && (
             <Note>{`批准后实际记录到 ${progress.recordedEdits} 次文件修改，可在“查看文件修改”核对。`}</Note>
           )}
+          {progress.evidenceIncomplete && (
+            <Note>执行证据列表不完整，请结合文件修改和会话历史核对。</Note>
+          )}
           {progress.steps.map((step, index) => (
             <View
               key={index}
-              accessible
-              accessibilityLabel={`第 ${index + 1} 步，${labels[step.status]}：${readable(step.text)}${step.note ? `。备注：${readable(step.note)}` : ""}`}
               style={{
                 padding: 16,
                 gap: 6,
@@ -86,6 +88,14 @@ export default function Plan() {
               <Text selectable style={{ color: colors.label, fontSize: 16 }}>
                 {readable(step.text)}
               </Text>
+              {step.evidence && (
+                <Evidence
+                  evidence={step.evidence}
+                  step={index + 1}
+                  planId={progress.planId}
+                  online={online}
+                />
+              )}
               {step.note && (
                 <Text selectable style={{ color: colors.secondary }}>
                   {readable(step.note)}
@@ -93,6 +103,17 @@ export default function Plan() {
               )}
             </View>
           ))}
+          {progress.unassigned && (
+            <View style={{ gap: 8 }}>
+              <Note>未关联步骤（没有唯一进行中步骤）</Note>
+              <Evidence
+                evidence={progress.unassigned}
+                step={0}
+                planId={progress.planId}
+                online={online}
+              />
+            </View>
+          )}
         </>
       )}
       <Action
@@ -102,5 +123,65 @@ export default function Plan() {
         onPress={() => void controller.readPlanProgress().catch(() => {})}
       />
     </ScrollView>
+  );
+}
+
+function Evidence({
+  evidence,
+  step,
+  planId,
+  online,
+}: {
+  evidence: StepEvidence;
+  step: number;
+  planId: string;
+  online: boolean;
+}) {
+  const { controller } = useMobile();
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <View style={{ gap: 8 }}>
+      <Note>{`执行证据：${evidence.reliable} 次可靠修改，${evidence.observed} 次观察差异，${evidence.tools.length} 项工具结果。零修改不代表失败。`}</Note>
+      <Action
+        title="查看这一步的文件修改"
+        quiet
+        disabled={!online}
+        onPress={() => {
+          void controller.inspection
+            .listChanges(0, { planId, step })
+            .catch(() => {});
+          router.push("/changes");
+        }}
+      />
+      {!!evidence.tools.length && (
+        <Action
+          title={expanded ? "收起工具结果" : "查看工具结果"}
+          quiet
+          onPress={() => setExpanded(!expanded)}
+        />
+      )}
+      {expanded &&
+        evidence.tools.map((tool) => (
+          <View key={`${tool.sessionId}:${tool.seq}`} style={{ gap: 6 }}>
+            <Note>{`${tool.name} · ${tool.status} · ${tool.sessionId.slice(0, 8)}\n${readable(tool.preview)}`}</Note>
+            {tool.status !== "unknown" && (
+              <Action
+                title={`阅读 ${tool.name} 输出`}
+                quiet
+                disabled={!online}
+                onPress={() => {
+                  void controller
+                    .readMessage(tool.seq, 0, "text", {
+                      owner: tool.sessionId,
+                      planId,
+                    })
+                    .catch(() => {});
+                  router.push("/message");
+                }}
+              />
+            )}
+          </View>
+        ))}
+    </View>
   );
 }

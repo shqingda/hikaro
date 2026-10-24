@@ -266,6 +266,8 @@ export class Agent implements AgentBackend {
       budget?: RunBudget;
       outputDirectory?: string;
       readonlyResources?: readonly string[];
+      capturePlan?: () =>
+        import("./change-evidence.ts").PlanReference | undefined;
       executeTool?: (
         tool: Tool,
         args: unknown,
@@ -978,9 +980,12 @@ export class Agent implements AgentBackend {
         text: `Invalid arguments: ${parsed.error.message}`,
         isError: true,
       };
+    const plan = this.options.capturePlan?.();
     await this.emit("tool.start", {
       callId,
       parentCallId,
+      ...(plan ? { plan } : {}),
+      runId: this.runId,
       name,
       arguments: args,
     });
@@ -992,6 +997,8 @@ export class Agent implements AgentBackend {
       sessionId: this.options.session.id,
       signal,
       callId,
+      ...(parentCallId ? { parentCallId } : {}),
+      ...(plan ? { plan } : {}),
       ...(this.runId ? { runId: this.runId } : {}),
       depth: this.options.depth ?? 0,
       budget: this.budget,
@@ -1052,8 +1059,14 @@ export class Agent implements AgentBackend {
     }
     await this.emit("tool.end", {
       callId,
+      ...(parentCallId ? { parentCallId } : {}),
       name,
       result,
+      status: signal.aborted
+        ? "cancelled"
+        : result.isError
+          ? "failed"
+          : "completed",
       runId: this.runId,
       ...(context.plan ? { plan: context.plan } : {}),
     });

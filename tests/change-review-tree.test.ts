@@ -56,6 +56,24 @@ it("aggregates only persisted descendants and makes their edits read-only after 
       /not found/,
     );
     expect(await runtime.changes.list(root.id)).toEqual([]);
+    await runtime.review.observations.capture(
+      root.id,
+      cwd,
+      { source: "plugin", callId: "wrapper" },
+      () =>
+        runtime.changes.update(
+          root.id,
+          join(cwd, "wrapped.txt"),
+          new AbortController().signal,
+          () => "wrapped",
+          undefined,
+          undefined,
+          { callId: "nested", parentCallId: "wrapper" },
+        ),
+    );
+    const combined = await runtime.review.list(root.id);
+    expect(combined.items).toHaveLength(2);
+    expect(combined.items.every((row) => row.source === "file")).toBe(true);
   } finally {
     await runtime.close();
     await rm(home, { recursive: true, force: true });

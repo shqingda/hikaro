@@ -73,6 +73,7 @@ export const emptyInspection = () => ({
     more: boolean;
     previous: number[];
     warnings?: string[];
+    filter?: { planId?: string; step?: number };
   } | null,
   diff: null as {
     entry: ChangeEntry;
@@ -271,7 +272,11 @@ export class MobileInspection {
       throw error;
     }
   }
-  async listChanges(offset = 0) {
+  async listChanges(
+    offset = 0,
+    filter: { planId?: string; step?: number } = this.state.changes?.filter ??
+      {},
+  ) {
     if (!Number.isSafeInteger(offset) || offset < 0 || offset > 10000)
       throw Error("Invalid change page");
     const method =
@@ -303,7 +308,7 @@ export class MobileInspection {
         .parse(
           await c.client.request(
             method,
-            { sessionId: c.sessionId, offset },
+            { sessionId: c.sessionId, offset, ...filter },
             { beforeSend: c.guard },
           ),
         );
@@ -313,7 +318,10 @@ export class MobileInspection {
         (!page.items.length || offset + page.items.length >= 10000)
       )
         throw Error("Incomplete change page");
-      this.update({ loading: false, changes: { ...page, offset, previous } });
+      this.update({
+        loading: false,
+        changes: { ...page, offset, previous, filter },
+      });
     } catch (error) {
       this.fail(c.generation, error);
       throw error;
