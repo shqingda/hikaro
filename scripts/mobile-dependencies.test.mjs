@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
 import { verifyForge } from "./forge-patch.mjs";
@@ -13,22 +14,17 @@ const plugins = createRequire(
 );
 const xcode = createRequire(plugins.resolve("xcode/package.json"));
 
-test("Xcode's resolved UUID rejects partial buffer writes before mutation", () => {
-  const uuid = xcode("uuid");
-  for (const method of [uuid.v3, uuid.v5]) {
-    for (const [size, offset] of [
-      [8, 0],
-      [16, 1],
-      [16, -1],
-    ]) {
-      const bytes = new Uint8Array(size).fill(0xaa);
-      assert.throws(
-        () => method("test", uuid.v5.DNS, bytes, offset),
-        RangeError,
-      );
-      assert.ok(bytes.every((byte) => byte === 0xaa));
-    }
-  }
+test("Xcode uses native randomUUID without the legacy UUID dependency", (t) => {
+  assert.equal(xcode("./package.json").dependencies.uuid, undefined);
+  const randomUUID = t.mock.method(
+    crypto,
+    "randomUUID",
+    () => "12345678-abcd-4abc-8def-123456789abc",
+  );
+  const project = plugins("xcode").project("in-memory.pbxproj");
+  project.hash = { project: { objects: {} } };
+  assert.equal(project.generateUuid(), "12345678ABCD4ABC8DEF1234");
+  assert.equal(randomUUID.mock.callCount(), 1);
 });
 
 test("Xcode still creates unique 24-digit group/file IDs and serializes them", () => {
