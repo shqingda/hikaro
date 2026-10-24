@@ -284,9 +284,7 @@ export class MobileController {
   private pairingGeneration = 0;
   private historyEpoch = 0;
   private listEpoch = 0;
-  private contentEpoch = 0;
-  private planEpoch = 0;
-  private backgroundEpoch = 0;
+  private readEpoch = { content: 0, plan: 0, background: 0 };
   private credentialQueue: Promise<unknown> = Promise.resolve();
   private pendingPairing?: Pairing;
   private pairing?: Pairing;
@@ -366,9 +364,9 @@ export class MobileController {
     this.inspection.bind(null);
     this.steering.bind(null);
     this.composer.hide();
-    this.contentEpoch++;
-    this.planEpoch++;
-    this.backgroundEpoch++;
+    this.readEpoch.content++;
+    this.readEpoch.plan++;
+    this.readEpoch.background++;
     this.value = {
       ...this.value,
       background: null,
@@ -993,22 +991,27 @@ export class MobileController {
       if (epoch === this.epoch) this.update({ actionPending: null });
     }
   }
-  closeBackground() {
-    this.backgroundEpoch++;
-    this.update({ background: null });
-  }
-  async readBackground() {
+  /** Each page owns its request generation; unrelated readers never invalidate one another. */
+  private readContext(kind: keyof MobileController["readEpoch"]) {
     const client = this.client,
       epoch = this.epoch,
       sessionId = client?.state.session?.id;
     if (!client?.state.canAct || !sessionId)
       throw Error("Not connected to a task");
-    const read = ++this.backgroundEpoch;
+    const read = ++this.readEpoch[kind];
     const current = () =>
       epoch === this.epoch &&
-      read === this.backgroundEpoch &&
+      read === this.readEpoch[kind] &&
       client === this.client &&
       sessionId === client.state.session?.id;
+    return { client, sessionId, current };
+  }
+  closeBackground() {
+    this.readEpoch.background++;
+    this.update({ background: null });
+  }
+  async readBackground() {
+    const { client, sessionId, current } = this.readContext("background");
     this.update({
       background: { sessionId, status: "loading", children: [], terminals: [] },
     });
@@ -1039,21 +1042,11 @@ export class MobileController {
     }
   }
   closePlan() {
-    this.planEpoch++;
+    this.readEpoch.plan++;
     this.update({ plan: null });
   }
   async readPlanProgress() {
-    const client = this.client,
-      epoch = this.epoch,
-      sessionId = client?.state.session?.id;
-    if (!client?.state.canAct || !sessionId)
-      throw Error("Not connected to a task");
-    const read = ++this.planEpoch;
-    const current = () =>
-      epoch === this.epoch &&
-      read === this.planEpoch &&
-      client === this.client &&
-      sessionId === client.state.session?.id;
+    const { client, sessionId, current } = this.readContext("plan");
     this.update({ plan: { sessionId, status: "loading" } });
     try {
       const { progress } = planReadSchema.parse(
@@ -1074,7 +1067,7 @@ export class MobileController {
     }
   }
   closeMessage() {
-    this.contentEpoch++;
+    this.readEpoch.content++;
     this.update({ content: null, contentLoading: false, contentError: null });
   }
   async readMessage(
@@ -1083,20 +1076,10 @@ export class MobileController {
     field: MobileContentField = "text",
     evidence?: { owner: string; planId: string },
   ) {
-    const client = this.client,
-      epoch = this.epoch,
-      sessionId = client?.state.session?.id;
-    if (!client?.state.canAct || !sessionId)
-      throw Error("Not connected to a task");
     if (!Number.isSafeInteger(seq) || seq < 0) throw Error("Invalid message");
     z.enum(["text", "toolCalls"]).parse(field);
-    const requestOffset = contentRequestOffset(offset),
-      read = ++this.contentEpoch;
-    const current = () =>
-      epoch === this.epoch &&
-      read === this.contentEpoch &&
-      client === this.client &&
-      sessionId === client.state.session?.id;
+    const requestOffset = contentRequestOffset(offset);
+    const { client, sessionId, current } = this.readContext("content");
     this.update({
       content: {
         sessionId,
