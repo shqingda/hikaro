@@ -116,3 +116,43 @@ it("asks the model to report progress against the approved plan id", () => {
   expect(text).toContain("update_plan_step");
   expect(text).toContain("1. Add storage");
 });
+
+it("offers update_plan_step to the model only while an approved plan executes", async () => {
+  const { Runtime } = await import("../packages/runtime/src/index.ts");
+  const home = await mkdtemp(join(tmpdir(), "hikaro-plan-tool-"));
+  const runtime = await Runtime.open({
+    home,
+    cwd: home,
+    demo: true,
+    approve: async () => true,
+  });
+  try {
+    const session = await runtime.session();
+    const agent = await runtime.agent(session);
+    const policy = (
+      agent as unknown as {
+        options: {
+          toolPolicy: {
+            refresh(): Promise<void>;
+            allowed(tool: unknown): boolean;
+          };
+        };
+      }
+    ).options.toolPolicy;
+    const tool = runtime.tools.get("update_plan_step")!;
+    const offered = async () => {
+      await policy.refresh();
+      return policy.allowed(tool);
+    };
+    expect(await offered()).toBe(false);
+    await runtime.setPlanning(session, true);
+    const plan = await runtime.planning.propose(session.id, proposal);
+    expect(await offered()).toBe(false);
+    await runtime.approvePlan(session, plan.id);
+    expect(await offered()).toBe(true);
+    expect(policy.allowed(runtime.tools.get("read_file")!)).toBe(true);
+  } finally {
+    await runtime.close();
+    await rm(home, { recursive: true, force: true });
+  }
+});

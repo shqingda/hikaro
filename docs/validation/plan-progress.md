@@ -22,6 +22,8 @@
 - `tests/plan-progress.test.ts`：批准写入 `approvedAt`。`tests/attached-workflows.test.ts`：真实 `RpcWorkflows` 在批准后的 0 次与 1 次修改时返回对应条数，附着面板显示条数。`tests/planning-pty.test.ts` 真实 PTY：执行阶段写 1 个文件后显示 `1 file edits recorded since approval`。
 - `pnpm check` 退出码 0：117 个应用测试文件、618 项测试，15 项脚本检查，类型检查与构建通过。日志 `/tmp/hikaro-check-20261024-plan-edits.log`。移动类型检查与 iOS/Android Hermes 导出通过，日志 `/tmp/hikaro-mobile-export-20261024-plan-edits.log`。
 
+`update_plan_step` 只在会话有已批准、正在执行的计划时才发给模型，Plan 只读阶段和普通会话都不提供，避免无关请求多占 token 或误导模型。`tests/plan-progress.test.ts` 用真实 runtime 的工具策略验证：普通会话、只读计划阶段为否，批准后为是，其他工具不受影响。`pnpm check`：117 个文件、620 项测试通过，日志 `/tmp/hikaro-check-20261024-plan-tool.log`。
+
 ## 未覆盖
 
 真实模型是否可靠调用该工具、模型报告与实际修改的逐步自动核对（目前只有修改条数对照）、附着端真实 PTY、移动端显示及历史计划版本的进度均未验证或未实现。本轮未调整发布百分比。

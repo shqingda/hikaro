@@ -967,7 +967,10 @@ export class Runtime {
       toolPolicy: {
         refresh: () => this.planning.load(session.id, true),
         allowed: (tool) =>
-          !this.planning.get(session.id).active || this.planTools.has(tool),
+          // Progress reporting is only meaningful while an approved plan runs.
+          tool.name === "update_plan_step"
+            ? this.planning.progress(session.id) !== null
+            : !this.planning.get(session.id).active || this.planTools.has(tool),
         instructions: () =>
           this.planning.get(session.id).active
             ? "\nPLAN MODE: Read-only exploration only. Use read_file, list_files, search. Ask clarifying questions with ask_user. Submit an actionable plan including verification with submit_plan, then end your turn. Do not edit, run commands, delegate, or claim approval. The user must review and confirm the current plan before execution."
