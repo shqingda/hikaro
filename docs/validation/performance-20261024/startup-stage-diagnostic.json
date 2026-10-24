@@ -1,0 +1,44 @@
+{
+  "scope": "Temporary instrumented build. Child performance.now timestamps, not PTY spawn duration. Three attachments share one host; only the first creates a new session. Diagnostic only, not budget evidence.",
+  "samples": [
+    {
+      "launcher": 26.85975,
+      "main": 42.615208,
+      "attach entry": 79.688292,
+      "imports + transport": 189.632708,
+      "files": 190.660167,
+      "preferences": 191.882792,
+      "view built": 195.039667,
+      "connected": 215.023708,
+      "session": 243.754542,
+      "refreshed": 249.623208,
+      "start UI": 249.89625
+    },
+    {
+      "launcher": 20.236167,
+      "main": 32.297792,
+      "attach entry": 76.263375,
+      "imports + transport": 196.171583,
+      "files": 196.566792,
+      "preferences": 197.895083,
+      "view built": 201.845958,
+      "connected": 220.668958,
+      "session": 220.794542,
+      "refreshed": 221.767875,
+      "start UI": 221.924458
+    },
+    {
+      "launcher": 47.535958,
+      "main": 57.452167,
+      "attach entry": 74.566292,
+      "imports + transport": 212.764375,
+      "files": 219.207792,
+      "preferences": 226.4015,
+      "view built": 228.91275,
+      "connected": 247.680792,
+      "session": 247.846875,
+      "refreshed": 248.996083,
+      "start UI": 249.163083
+    }
+  ]
+}

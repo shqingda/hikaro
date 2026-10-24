@@ -1,0 +1,45 @@
+{
+  "scope": "Unbundled dependency import only; alternating versions; no PTY or application readiness",
+  "samples": [
+    {
+      "version": "1.2.0",
+      "importMs": 57.765834
+    },
+    {
+      "version": "1.4.0",
+      "importMs": 48.25
+    },
+    {
+      "version": "1.2.0",
+      "importMs": 43.278915999999995
+    },
+    {
+      "version": "1.4.0",
+      "importMs": 50.485542
+    },
+    {
+      "version": "1.2.0",
+      "importMs": 44.405750000000005
+    },
+    {
+      "version": "1.4.0",
+      "importMs": 47.011667
+    },
+    {
+      "version": "1.2.0",
+      "importMs": 43.670416
+    },
+    {
+      "version": "1.4.0",
+      "importMs": 49.591791
+    },
+    {
+      "version": "1.2.0",
+      "importMs": 47.260792
+    },
+    {
+      "version": "1.4.0",
+      "importMs": 48.111041
+    }
+  ]
+}
