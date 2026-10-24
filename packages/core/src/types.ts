@@ -75,6 +75,8 @@ export interface ToolContext {
   sessionId: string;
   signal: AbortSignal;
   callId: string;
+  /** Current model run, when the call belongs to one. */
+  runId?: string;
   depth: number;
   budget: RunBudget;
   scope?: string;

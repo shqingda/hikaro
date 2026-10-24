@@ -977,6 +977,7 @@ export class Agent implements AgentBackend {
       sessionId: this.options.session.id,
       signal,
       callId,
+      ...(this.runId ? { runId: this.runId } : {}),
       depth: this.options.depth ?? 0,
       budget: this.budget,
       scope: this.origin?.scope,

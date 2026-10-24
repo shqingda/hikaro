@@ -21,6 +21,17 @@ export function batchRollbackTargets(entries: FileChange[], id: string) {
   return targets.length > 1 ? targets : [];
 }
 
+/** Committed edits from the same model run as `id`, newest first. */
+export function runRollbackTargets(entries: FileChange[], id: string) {
+  const chosen = entries.find((entry) => entry.id === id);
+  if (!chosen?.runId || chosen.state !== "committed") return [];
+  const run = entries.filter((entry) => entry.runId === chosen.runId);
+  if (run.some((e) => e.state === "prepared" || e.state === "reverting"))
+    return [];
+  const targets = run.filter((entry) => entry.state === "committed");
+  return targets.length > 1 ? targets : [];
+}
+
 /** Not a transaction: stops at the first failure and leaves the rest untouched. */
 export async function runBatchRollback(
   targets: FileChange[],
@@ -60,18 +71,21 @@ export async function openChangeReview(
 ) {
   const cwd = await realpath(source.cwd);
   const { panel, signal, close } = view.openModelPanel();
-  const confirmBatchRollback = async (batch: FileChange[]) => {
+  const confirmBatchRollback = async (
+    batch: FileChange[],
+    scope: "here" | "this run",
+  ) => {
     const files = [
       ...new Set(batch.map((entry) => relative(cwd, entry.path) || entry.path)),
     ];
     const created = batch.filter((entry) => entry.before === null).length;
     const confirmed = await panel.choose(
-      "Confirm rollback to here",
+      `Confirm rollback ${scope === "here" ? "to here" : "of this run"}`,
       [
         { value: "cancel", label: "Keep these changes" },
         { value: "confirm", label: `Roll back ${batch.length} changes` },
       ],
-      `${batch.length} changes across ${files.length} files, newest first:\n${files.join("\n")}\n${created ? `${created} created files will be removed. ` : ""}Stops at the first conflict; changes already rolled back stay rolled back.`,
+      `${scope === "this run" ? `Run ${batch[0]!.runId!.slice(0, 8)} · ` : ""}${batch.length} changes across ${files.length} files, newest first:\n${files.join("\n")}\n${created ? `${created} created files will be removed. ` : ""}Stops at the first conflict; changes already rolled back stay rolled back.`,
       undefined,
       {
         search: false,
@@ -111,7 +125,7 @@ export async function openChangeReview(
       const items = entries.slice(page * 20, (page + 1) * 20).map((entry) => ({
         value: entry.id,
         label: relative(cwd, entry.path) || entry.path,
-        description: `${entry.before === null ? "Created" : "Edited"} · ${entry.state} · ${new Date(entry.timestamp).toLocaleTimeString()}`,
+        description: `${entry.before === null ? "Created" : "Edited"} · ${entry.state} · ${new Date(entry.timestamp).toLocaleTimeString()}${entry.runId ? ` · run ${entry.runId.slice(0, 8)}` : ""}`,
       }));
       if (page)
         items.push({
@@ -160,23 +174,39 @@ export async function openChangeReview(
         } catch {
           // Unfinished newer work only hides the batch action; single rollback still checks it.
         }
+        const run = runRollbackTargets(entries, entry.id);
         const action = await panel.readDocument(
           `${path} · ${entry.state}`,
           changeDiff(path, before, after),
           entry.state === "reverted" && source.redo
             ? [{ value: "redo", label: "Reapply this edit…" }]
-            : batch.length
+            : batch.length || run.length
               ? [
                   { value: "rollback", label: "Roll back this edit…" },
-                  {
-                    value: "batch",
-                    label: `Roll back to here (${batch.length} changes)…`,
-                  },
+                  ...(run.length
+                    ? [
+                        {
+                          value: "run",
+                          label: `Roll back this run (${run.length} changes)…`,
+                        },
+                      ]
+                    : []),
+                  ...(batch.length
+                    ? [
+                        {
+                          value: "batch",
+                          label: `Roll back to here (${batch.length} changes)…`,
+                        },
+                      ]
+                    : []),
                 ]
               : entry.state === "committed",
         );
-        if (action.value === "batch") {
-          message = await confirmBatchRollback(batch);
+        if (action.value === "batch" || action.value === "run") {
+          message = await confirmBatchRollback(
+            action.value === "run" ? run : batch,
+            action.value === "run" ? "this run" : "here",
+          );
           continue;
         }
         if (action.value !== "rollback" && action.value !== "redo") continue;

@@ -37,6 +37,7 @@ export function codingPlugin(options: {
               ctx.signal,
               replace,
               ctx.checkpoint,
+              ctx.runId,
             )
           : updateTextFile(path, ctx.signal, replace, ctx.checkpoint);
       host.registerTool({

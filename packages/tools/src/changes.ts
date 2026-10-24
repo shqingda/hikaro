@@ -17,6 +17,8 @@ const recordSchema = z.object({
     .nullable(),
   after: z.string().regex(/^[a-f0-9]{64}$/),
   state: z.enum(["prepared", "committed", "reverting", "reverted"]),
+  /** The model run that made the edit; absent for older records and redo. */
+  runId: z.string().max(128).optional(),
 });
 export type FileChange = z.infer<typeof recordSchema>;
 
@@ -129,6 +131,7 @@ export class ChangeJournal {
     signal: AbortSignal,
     replace: (current: string | undefined) => string,
     checkpoint?: () => Promise<void>,
+    runId?: string,
   ) {
     await this.initialize(true);
     let entry: FileChange | undefined,
@@ -155,6 +158,7 @@ export class ChangeJournal {
                 : await this.snapshot(session, before),
             after: await this.snapshot(session, after),
             state: "prepared",
+            ...(runId ? { runId } : {}),
           };
           await this.saveRecord(session, entry);
         }

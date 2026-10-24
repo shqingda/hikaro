@@ -10,6 +10,7 @@ import {
 import {
   batchRollbackTargets,
   runBatchRollback,
+  runRollbackTargets,
 } from "../packages/tui/src/change-review.ts";
 
 const entry = (state: FileChange["state"], timestamp: number): FileChange => ({
@@ -115,4 +116,48 @@ it("stops before the next change once cancelled", async () => {
   expect(done).toEqual([targets[0]!.id]);
   expect(result.completed).toBe(1);
   expect(result.failed?.entry.id).toBe(targets[1]!.id);
+});
+
+it("groups recorded edits by run and rolls back only the chosen run", async () => {
+  const root = await realpath(
+    await mkdtemp(join(tmpdir(), "hikaro-run-rollback-")),
+  );
+  try {
+    const journal = new ChangeJournal(join(root, "journal"));
+    const a = join(root, "a.txt"),
+      b = join(root, "b.txt"),
+      c = join(root, "c.txt");
+    const signal = new AbortController().signal;
+    const edit = async (path: string, text: string, runId?: string) => {
+      await new Promise((done) => setTimeout(done, 2));
+      await journal.update("s", path, signal, () => text, undefined, runId);
+    };
+    await edit(a, "run1-a", "run-1");
+    await edit(b, "run1-b", "run-1");
+    await edit(c, "run2-c", "run-2");
+    await edit(c, "legacy-c"); // recorded before run ids existed
+    const list = await journal.list("s");
+    expect(list.map((row) => row.runId)).toEqual([
+      undefined,
+      "run-2",
+      "run-1",
+      "run-1",
+    ]);
+    const first = list.find((row) => row.path === b)!;
+    const targets = runRollbackTargets(list, first.id);
+    expect(targets.map((row) => row.path)).toEqual([b, a]);
+    expect(runRollbackTargets(list, list[0]!.id)).toEqual([]);
+    expect(runRollbackTargets(list, list[1]!.id)).toEqual([]);
+    const result = await runBatchRollback(
+      targets,
+      (id) => journal.rollback("s", id, signal).then(() => {}),
+      signal,
+    );
+    expect(result).toEqual({ completed: 2, total: 2 });
+    await expect(readFile(a, "utf8")).rejects.toThrow();
+    await expect(readFile(b, "utf8")).rejects.toThrow();
+    expect(await readFile(c, "utf8")).toBe("legacy-c");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

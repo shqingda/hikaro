@@ -129,10 +129,15 @@ it("rolls back several model edits to a chosen point from the TUI", async () => 
     expect(await readFile(join(cwd, "sample.txt"), "utf8")).toBe(
       "edited by model",
     );
-    await wait("File changes", send("/changes\r"));
+    const list = send("/changes\r");
+    await wait("File changes", list);
+    // Both edits came from one model run, so the list labels that run.
+    await wait("· run ", list);
     // Newest first: sample.txt, then notes.txt. Open the older one.
-    await wait("Roll back to here (2 changes)", send("\x1b[B\r"));
-    const confirm = send("\x1b[B\x1b[B\r");
+    const detail = send("\x1b[B\r");
+    await wait("Roll back this run (2 changes)", detail);
+    await wait("Roll back to here (2 changes)", detail);
+    const confirm = send("\x1b[B".repeat(3) + "\r");
     await wait("Confirm rollback to here", confirm);
     await wait("1 created files will be removed", confirm);
     const done = send("\x1b[B\r");
