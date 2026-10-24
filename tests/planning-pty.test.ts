@@ -65,6 +65,13 @@ it("explores read-only, answers a question, revises and approves a plan before w
         content: "implemented",
         expected: "original",
       });
+    else if (execution && n === 2)
+      tool("update_plan_step", {
+        plan_id: /approved plan ([0-9a-f-]{36})/.exec(prompt!)![1],
+        step: 1,
+        status: "completed",
+        note: "sample.txt now reads implemented",
+      });
     else if (execution) {
       chunk({ role: "assistant", content: "Execution verified" });
       chunk({}, "stop");
@@ -177,20 +184,30 @@ it("explores read-only, answers a question, revises and approves a plan before w
     expect(answered).toBe(true);
     expect(
       seenTools.every(
-        (names) => !names.includes("write_file") && !names.includes("shell"),
+        (names) =>
+          !names.includes("write_file") &&
+          !names.includes("shell") &&
+          !names.includes("update_plan_step"),
       ),
     ).toBe(true);
     await wait("Plan kept read-only", send("\x1b"));
     expect(await readFile(join(cwd, "sample.txt"), "utf8")).toBe("original");
     await wait("Plan review", send("/plan\r"));
     await wait("Changes to the plan", send("\x1b[B".repeat(2) + "\r"));
-    await wait("Revised plan", send("Keep it focused\r"));
+    // The revised review panel opens after the turn ends, not when its text streams.
+    await wait("Approve and execute", send("Keep it focused\r"));
     await wait("Confirm plan execution", send("\x1b[B\r"));
     await wait("Plan review", send("\x1b"));
     expect(await readFile(join(cwd, "sample.txt"), "utf8")).toBe("original");
     await wait("Confirm plan execution", send("\x1b[B\r"));
     await wait("Execution verified", send("\x1b[B\r"));
     expect(await readFile(join(cwd, "sample.txt"), "utf8")).toBe("implemented");
+    const progress = send("/plan progress\r");
+    await wait("1/1 steps reported completed", progress);
+    await wait("✓ Completed · Update sample.txt as requested", progress);
+    await wait("sample.txt now reads implemented", progress);
+    await wait("1 file edits recorded since approval", progress);
+    await wait("Enter send", send("\x1b"));
     send("\x04");
     expect(await exited).toBe(0);
   } finally {

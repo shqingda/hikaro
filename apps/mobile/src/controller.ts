@@ -1,5 +1,32 @@
 import * as z from "zod";
 import {
+  MobileInspection,
+  emptyInspection,
+  type InspectionState,
+} from "./inspection.ts";
+import {
+  MobileSteering,
+  emptySteering,
+  type SteeringState,
+} from "./steering.ts";
+import {
+  MobileComposer,
+  emptyComposer,
+  type ComposerState,
+  type DraftStore,
+} from "./composer.ts";
+import {
+  rpcTransientMethods,
+  CommandReceiptResult,
+  RunCancelResult,
+  type Permission,
+  type RpcMethod,
+} from "../../../packages/protocol/src/contracts.ts";
+import type {
+  CommandReceipt,
+  ExecutionState,
+} from "../../../packages/client-core/src/index.ts";
+import {
   contentPage,
   contentRequestOffset,
   type ContentPage,
@@ -32,6 +59,12 @@ const itemSchema = z.object({
     timestamp: z.number(),
     textLength: z.number().int().nonnegative().optional(),
     imageCount: z.number().int().nonnegative().optional(),
+    name: z.string().max(256).optional(),
+    isError: z.boolean().optional(),
+    toolCalls: z
+      .array(z.object({ id: z.string().max(128), name: z.string().max(256) }))
+      .max(32)
+      .optional(),
   }),
 });
 const pageSchema = z.object({
@@ -39,14 +72,64 @@ const pageSchema = z.object({
   hasOlder: z.boolean(),
   hasNewer: z.boolean(),
 });
+const snapshotSchema = z.object({
+  session: sessionSchema,
+  items: z.array(itemSchema).max(20),
+  savedAt: z.number().finite().nonnegative(),
+});
+export type MobileSnapshot = z.infer<typeof snapshotSchema>;
 export type MobileMessage = z.infer<typeof itemSchema>;
 export type MobileSession = z.infer<typeof sessionSchema>;
+export type MobileContentField = "text" | "toolCalls";
+const planProgressSchema = z.object({
+  planId: z.string().uuid(),
+  title: z.string().max(200),
+  recordedEdits: z.number().int().nonnegative().optional(),
+  steps: z
+    .array(
+      z.object({
+        text: z.string().max(4000),
+        status: z.enum([
+          "pending",
+          "in_progress",
+          "completed",
+          "blocked",
+          "skipped",
+        ]),
+        note: z.string().max(500).optional(),
+      }),
+    )
+    .max(12),
+});
+// Older hosts omit `progress`; null means no approved plan is executing.
+const planReadSchema = z.object({
+  progress: planProgressSchema.nullable().optional(),
+});
+export type MobilePlanProgress = z.infer<typeof planProgressSchema>;
+const backgroundItemsSchema = z
+  .array(
+    z.object({
+      id: z.string().max(128),
+      title: z.string().max(240),
+      state: z.string().max(200),
+    }),
+  )
+  .max(200);
+export type MobileBackgroundItem = z.infer<
+  typeof backgroundItemsSchema
+>[number];
 export interface MobileStorage {
   read(): Promise<string | null>;
   write(credential: string): Promise<void>;
   erase(): Promise<void>;
   journal(scope: string): IntentStore;
   clear(scope: string): Promise<void>;
+  drafts: DraftStore;
+  snapshots: {
+    load(scope: string): Promise<unknown>;
+    save(scope: string, snapshot: MobileSnapshot): Promise<void>;
+    clear(scope: string): Promise<void>;
+  };
 }
 export type MobileOptions = Omit<ConnectionOptions, "intents"> & {
   probe(pairing: Pairing): Promise<"ready" | "pending" | "offline" | "revoked">;
@@ -59,9 +142,22 @@ const allowed = new Set([
   "session.current",
   "session.list",
   "messages.read",
+  "messages.search",
+  "push.register",
   "messages.content",
+  "plan.read",
+  "changes.list",
+  "changes.diff",
   "session.resume",
   "command.receipt",
+  "approval.respond",
+  "run.cancel",
+  "prompt",
+  "steer",
+  "execution.hold",
+  "execution.release",
+  "execution.read",
+  "execution.action",
 ]);
 export type MobileState = {
   phase:
@@ -97,15 +193,41 @@ export type MobileState = {
   runStatus: string;
   loading: boolean;
   error: string | null;
+  cacheClear: "idle" | "clearing" | "cleared" | "failed";
   unknown: number;
+  sessionRole: ExecutionState["sessionRole"];
+  canStopRun: boolean;
+  canSend: boolean;
+  canSteer: boolean;
+  inspection: InspectionState;
+  steering: SteeringState;
+  composer: ComposerState;
+  approvals: Permission[];
+  receipts: CommandReceipt[];
+  actionPending: string | null;
+  actionNotice: string | null;
   content: {
     sessionId: string;
     seq: number;
+    field: MobileContentField;
     offset: number;
     page: ContentPage | null;
   } | null;
   contentLoading: boolean;
   contentError: string | null;
+  /** Model-reported step status; read-only and never a verification result. */
+  plan: {
+    sessionId: string;
+    status: "loading" | "ready" | "none" | "unsupported" | "error";
+    progress?: MobilePlanProgress;
+  } | null;
+  /** Child agents and terminals, read without a queue hold or any action. */
+  background: {
+    sessionId: string;
+    status: "loading" | "ready" | "error";
+    children: MobileBackgroundItem[];
+    terminals: MobileBackgroundItem[];
+  } | null;
 };
 const empty = (phase: MobileState["phase"]): MobileState => ({
   phase,
@@ -126,19 +248,36 @@ const empty = (phase: MobileState["phase"]): MobileState => ({
   runStatus: "idle",
   loading: false,
   error: null,
+  cacheClear: "idle",
   unknown: 0,
+  sessionRole: null,
+  canStopRun: false,
+  canSend: false,
+  canSteer: false,
+  inspection: emptyInspection(),
+  steering: emptySteering(),
+  composer: emptyComposer(),
+  approvals: [],
+  receipts: [],
+  actionPending: null,
+  actionNotice: null,
   content: null,
   contentLoading: false,
   contentError: null,
+  plan: null,
+  background: null,
 });
-/** A read-only view. No public escape hatch exposes mutation-capable transport. */
+/** Only explicit, authority-checked operations expose mutation-capable transport. */
 export class MobileController {
   private value = empty("unpaired");
   private listeners = new Set<() => void>();
   private epoch = 0;
+  private pairingGeneration = 0;
   private historyEpoch = 0;
   private listEpoch = 0;
   private contentEpoch = 0;
+  private planEpoch = 0;
+  private backgroundEpoch = 0;
   private credentialQueue: Promise<unknown> = Promise.resolve();
   private pendingPairing?: Pairing;
   private pairing?: Pairing;
@@ -149,10 +288,45 @@ export class MobileController {
   private refresh?: Promise<void>;
   private refreshAgain = false;
   private paint?: () => void;
+  private draftIdentity = 0;
+  private cacheVersion = 0;
+  private cacheClearEpoch = 0;
+  private composer: MobileComposer;
+  readonly steering: MobileSteering;
+  readonly inspection: MobileInspection;
   constructor(
     private storage: MobileStorage,
     private options: MobileOptions,
-  ) {}
+  ) {
+    this.inspection = new MobileInspection((inspection) => {
+      if (!this.disposed) this.update({ inspection });
+    });
+    this.steering = new MobileSteering((steering) => {
+      if (!this.disposed) this.update({ steering });
+    }, options.schedule);
+    this.composer = new MobileComposer(
+      {
+        load: (scope, id) =>
+          this.credentials(() => this.storage.drafts.load(scope, id)),
+        save: (scope, record) => {
+          const identity = this.draftIdentity;
+          return this.credentials(async () => {
+            if (identity === this.draftIdentity)
+              await this.storage.drafts.save(scope, record);
+          });
+        },
+      },
+      (composer) => {
+        if (
+          !this.disposed &&
+          !["background", "blocked", "revoked", "unpaired"].includes(
+            this.value.phase,
+          )
+        )
+          this.update({ composer });
+      },
+    );
+  }
   get state(): MobileState {
     return this.value;
   }
@@ -180,12 +354,26 @@ export class MobileController {
     return task;
   }
   private stop() {
+    this.inspection.bind(null);
+    this.steering.bind(null);
+    this.composer.hide();
     this.contentEpoch++;
+    this.planEpoch++;
+    this.backgroundEpoch++;
     this.value = {
       ...this.value,
+      background: null,
       content: null,
       contentLoading: false,
       contentError: null,
+      plan: null,
+      approvals: [],
+      sessionRole: null,
+      canStopRun: false,
+      canSend: false,
+      canSteer: false,
+      actionPending: null,
+      actionNotice: null,
     };
     this.paint?.();
     this.paint = undefined;
@@ -208,6 +396,7 @@ export class MobileController {
       throw Error("Pairing data exceeds secure storage capacity");
     this.epoch++;
     this.stop();
+    this.pairingGeneration++;
     this.pendingPairing = JSON.parse(serialized);
     this.update({
       ...empty("review"),
@@ -250,6 +439,12 @@ export class MobileController {
       const raw = await this.credentials(() => this.storage.read());
       if (epoch !== this.epoch || this.disposed) return;
       if (raw === null) {
+        // Erasing credentials can finish after backgrounding fences forget's UI update.
+        // An unpaired view must also retire the previous in-memory identity.
+        this.pairing = undefined;
+        this.pairingGeneration++;
+        this.draftIdentity++;
+        this.composer.bind(null);
         this.update(empty("unpaired"));
         return;
       }
@@ -261,13 +456,14 @@ export class MobileController {
     } catch {
       if (epoch === this.epoch)
         this.update({
-          ...empty("error"),
+          phase: "error",
           error: "无法读取或验证连接。请重试，或移除后重新配对。",
         });
     }
   }
   private async connect(p: Pairing, epoch: number) {
     this.pairing = p;
+    this.composer.bind(pairingScope(p));
     this.update({
       phase: "connecting",
       review: null,
@@ -275,6 +471,29 @@ export class MobileController {
       relay: validateRelay(p.relay),
       error: null,
     });
+    await this.composer.select();
+    if (epoch !== this.epoch || this.disposed) return;
+    this.update({ session: this.composer.state.record?.session ?? null });
+    try {
+      const saved = await this.credentials(() =>
+        this.storage.snapshots.load(pairingScope(p)),
+      );
+      if (epoch !== this.epoch || this.disposed) return;
+      if (saved !== null) {
+        const cached = snapshotSchema.parse(saved);
+        if (
+          !this.value.session ||
+          this.value.session.id === cached.session.id
+        ) {
+          if (!this.composer.state.record)
+            await this.composer.select(cached.session);
+          if (epoch !== this.epoch || this.disposed) return;
+          this.update({ session: cached.session, messages: cached.items });
+        }
+      }
+    } catch {
+      // Cached display data is optional; a corrupt cache must not block reconnecting.
+    }
     const probe = await this.options.probe(p);
     if (epoch !== this.epoch || this.disposed) return;
     if (probe === "revoked") {
@@ -289,7 +508,7 @@ export class MobileController {
         observe: (fn) => transport.observe(fn),
         send: (frame) => {
           if (!allowed.has(frame.method))
-            throw Error("M0 allows read-only operations");
+            throw Error("Mobile operation is not supported");
           return transport.send(frame);
         },
       },
@@ -328,13 +547,52 @@ export class MobileController {
         }
         const current = s.session?.id;
         const restored = s.canAct && (!ready || selected !== current);
+        if (
+          s.canAct &&
+          this.value.session &&
+          this.value.session.id !== current
+        ) {
+          // An authoritative selection/access change invalidates the old offline copy.
+          this.cacheVersion++;
+          void this.credentials(async () => {
+            if (epoch === this.epoch)
+              await this.storage.snapshots.clear(pairingScope(p));
+          }).catch(() => {
+            if (epoch === this.epoch)
+              this.update({
+                error: "未能清除旧任务的本机缓存，请移除连接后重试。",
+              });
+          });
+        }
         if (restored || selected !== current) this.closeMessage();
         if (selected !== current) {
           this.historyEpoch++;
-          this.update({ messages: [], hasOlder: false, hasNewer: false });
+          this.update({
+            messages: [],
+            hasOlder: false,
+            hasNewer: false,
+            actionNotice: null,
+          });
         }
         selected = current;
         ready = s.canAct;
+        this.inspection.bind(s.canAct && s.session ? client : null);
+        const control =
+          s.canAct &&
+          !!s.session &&
+          ["owner", "control"].includes(s.sessionRole ?? "");
+        this.steering.bind(
+          control &&
+            [
+              "execution.hold",
+              "execution.release",
+              "execution.read",
+              "execution.action",
+              "command.receipt",
+            ].every((method) => client.supports(method as RpcMethod))
+            ? client
+            : null,
+        );
         this.update(
           {
             phase: s.canAct
@@ -342,19 +600,56 @@ export class MobileController {
               : s.connection === "offline"
                 ? "offline"
                 : "connecting",
-            session: s.session,
+            session: s.canAct || s.session ? s.session : this.value.session,
             stream: s.stream,
             busy: s.busy,
             streamTruncated: s.streamTruncated,
             runId: s.runId,
             runStatus: s.runStatus,
+            sessionRole: s.sessionRole,
+            canStopRun:
+              s.canAct &&
+              client.supports("run.cancel") &&
+              s.busy &&
+              s.runStatus === "running" &&
+              !!s.runId &&
+              ["owner", "control"].includes(s.sessionRole ?? ""),
+            canSend:
+              s.canAct &&
+              client.supports("prompt") &&
+              client.supports("command.receipt") &&
+              !!s.session &&
+              ["owner", "control"].includes(s.sessionRole ?? ""),
+            canSteer:
+              control &&
+              client.supports("steer") &&
+              client.supports("command.receipt"),
+            approvals: s.canAct ? s.approvals : [],
+            receipts: client.receipts.filter((r) =>
+              [
+                "approval.respond",
+                "run.cancel",
+                "prompt",
+                "steer",
+                "execution.action",
+              ].includes(r.method),
+            ),
             error: null,
-            unknown: client.receipts.filter((r) => r.status === "unknown")
-              .length,
+            unknown: client.receipts.filter(
+              (r) =>
+                r.status === "unknown" && !rpcTransientMethods.has(r.method),
+            ).length,
           },
           false,
         );
-        if (restored) void this.reload(epoch);
+        if (restored) {
+          void this.reload(epoch);
+          void (async () => {
+            if (this.composer.state.record?.session.id !== current)
+              await this.composer.select(s.session);
+            if (epoch === this.epoch) await this.reconcileDraft();
+          })().catch(() => {});
+        }
       }),
     );
     this.releases.push(
@@ -445,13 +740,16 @@ export class MobileController {
         .array(sessionSchema)
         .max(50)
         .parse(await client.request("session.list", { offset, limit: 50 }));
-      if (epoch === this.epoch && list === this.listEpoch)
+      if (epoch === this.epoch && list === this.listEpoch) {
         this.update({
           sessions,
           offset,
           moreSessions: sessions.length === 50,
           loading: false,
         });
+        return true;
+      }
+      return false;
     } catch (e) {
       if (epoch === this.epoch && list === this.listEpoch)
         this.update({ loading: false, error: "无法读取任务列表，请重试。" });
@@ -459,6 +757,9 @@ export class MobileController {
     }
   }
   async select(sessionId: string) {
+    if (this.value.actionPending) throw Error("A decision is pending");
+    if (!this.client?.state.canAct) throw Error("Not connected");
+    await this.composer.flush();
     if (!this.client?.state.canAct) throw Error("Not connected");
     this.closeMessage();
     const epoch = this.epoch;
@@ -475,17 +776,310 @@ export class MobileController {
       if (epoch === this.epoch) this.update({ loading: false });
     }
   }
+  editDraft(sessionId: string, text: string) {
+    if (
+      this.disposed ||
+      !this.pairing ||
+      !["connected", "offline", "connecting", "error"].includes(
+        this.value.phase,
+      )
+    )
+      throw Error("Draft unavailable");
+    if (this.value.session?.id !== sessionId)
+      throw Error("Draft selection changed");
+    this.composer.edit(sessionId, text);
+  }
+  saveDraft() {
+    return this.composer.retrySave();
+  }
+  restoreDraft(sessionId: string) {
+    return this.composer.restoreDraft(sessionId);
+  }
+  async sendDraft(sessionId: string, method: "prompt" | "steer" = "prompt") {
+    const client = this.client,
+      epoch = this.epoch;
+    const guard = () => {
+      if (
+        epoch !== this.epoch ||
+        client !== this.client ||
+        !client?.state.canAct ||
+        client.state.session?.id !== sessionId ||
+        !["owner", "control"].includes(client.state.sessionRole ?? "") ||
+        !client.supports(method) ||
+        !client.supports("command.receipt")
+      )
+        throw Error(
+          "Current session control permission required; selection changed or offline",
+        );
+    };
+    guard();
+    const id = this.options.id();
+    await this.composer.send(
+      sessionId,
+      id,
+      (text) => {
+        guard();
+        return client!.request(
+          method,
+          { sessionId, text },
+          { id, beforeSend: guard },
+        );
+      },
+      method,
+    );
+  }
+  async reconcileDraft() {
+    const client = this.client,
+      epoch = this.epoch;
+    if (!client?.state.canAct || !client.supports("command.receipt")) return;
+    const method = this.composer.state.record?.submission?.method ?? "prompt";
+    await this.composer.reconcile(async (id) => {
+      const result = await client.request("command.receipt", { commandId: id });
+      if (epoch !== this.epoch) throw Error("Connection changed");
+      const receipt = CommandReceiptResult.parse(result).receipt;
+      if (!receipt) return "unknown";
+      if (
+        receipt.id !== id ||
+        receipt.method !== method ||
+        receipt.scope !== client.scope
+      )
+        throw Error("Receipt identity mismatch");
+      // The durable claim precedes enqueueing. Only an RPC acknowledgement or
+      // completed receipt proves acceptance; an accepted claim alone retains text.
+      return receipt.status === "accepted" ? "pending" : receipt.status;
+    });
+  }
+  async respondApproval(id: string, allow: boolean) {
+    const client = this.client,
+      epoch = this.epoch;
+    const state = client?.state;
+    if (
+      !client ||
+      !state?.canAct ||
+      !state.session ||
+      !["owner", "control"].includes(state.sessionRole ?? "")
+    ) {
+      this.update({
+        actionNotice: "请先恢复连接，并确认电脑已授予当前任务的控制权限。",
+      });
+      throw Error("Current session control permission required");
+    }
+    if (this.value.actionPending) {
+      this.update({ actionNotice: "上一项操作仍在等待回执，请先核对结果。" });
+      throw Error("A decision is pending");
+    }
+    if (
+      !state.approvals.some(
+        (a) =>
+          a.id === id &&
+          (a.authoritySessionId ?? a.sessionId) === state.session!.id,
+      )
+    ) {
+      this.update({
+        actionNotice: "这项审批已失效或不属于当前任务，请查看最新请求。",
+      });
+      throw Error("Approval expired or belongs to another task");
+    }
+    this.update({ actionPending: id, actionNotice: null });
+    try {
+      await client.request("approval.respond", {
+        id,
+        allow,
+        sessionId: state.session.id,
+      });
+      if (epoch === this.epoch)
+        this.update({
+          actionNotice: "电脑已收到决定，工具结果以任务记录为准。",
+        });
+    } catch (error) {
+      if (epoch === this.epoch)
+        this.update({
+          actionNotice:
+            "决定未确认或已失效。请核对回执与电脑状态，不会自动重发。",
+        });
+      throw error;
+    } finally {
+      if (epoch === this.epoch) this.update({ actionPending: null });
+    }
+  }
+  async stopRun(sessionId: string, runId: string) {
+    const client = this.client,
+      epoch = this.epoch,
+      state = client?.state;
+    if (
+      !client ||
+      !state?.canAct ||
+      !["owner", "control"].includes(state.sessionRole ?? "")
+    ) {
+      this.update({
+        actionNotice: "请先恢复连接，并确认电脑已授予当前任务的控制权限。",
+      });
+      throw Error("Current session control permission required");
+    }
+    if (!client.supports("run.cancel")) {
+      this.update({
+        actionNotice: "请更新电脑上的 Hikaro 后，再从手机停止运行。",
+      });
+      throw Error("Host does not support run cancellation");
+    }
+    if (
+      state.session?.id !== sessionId ||
+      state.runId !== runId ||
+      !state.busy ||
+      state.runStatus !== "running"
+    ) {
+      this.update({
+        actionNotice: "这次运行已结束或任务已变化，原停止确认已失效。",
+      });
+      throw Error("Run confirmation expired");
+    }
+    if (this.value.actionPending) throw Error("An operation is pending");
+    this.update({ actionPending: runId, actionNotice: "正在发送停止请求…" });
+    try {
+      const result = RunCancelResult.parse(
+        await client.request("run.cancel", { sessionId, runId }),
+      );
+      if (result.runId !== runId)
+        throw Error("Stop receipt does not match the requested run");
+      if (epoch === this.epoch)
+        this.update({
+          actionNotice: "电脑已收到停止请求，实际终态以运行状态为准。",
+        });
+    } catch (error) {
+      if (epoch === this.epoch)
+        this.update({
+          actionNotice:
+            "停止结果未确认或目标已失效。请核对回执与运行状态，不会自动重发。",
+        });
+      throw error;
+    } finally {
+      if (epoch === this.epoch) this.update({ actionPending: null });
+    }
+  }
+  async reconcileActions() {
+    const client = this.client,
+      epoch = this.epoch;
+    if (!client?.state.canAct) {
+      this.update({ actionNotice: "请先恢复连接，再核对操作回执。" });
+      throw Error("Not connected");
+    }
+    if (this.value.actionPending) throw Error("A decision is pending");
+    this.update({
+      actionPending: "receipts",
+      actionNotice: "正在核对操作回执…",
+    });
+    try {
+      await client.reconcile();
+      if (epoch === this.epoch)
+        this.update({
+          actionNotice: "回执已核对。仍显示结果未知的操作不会自动重发。",
+        });
+    } catch (error) {
+      if (epoch === this.epoch)
+        this.update({
+          actionNotice: "暂时无法核对回执，请恢复连接后重试核对。",
+        });
+      throw error;
+    } finally {
+      if (epoch === this.epoch) this.update({ actionPending: null });
+    }
+  }
+  closeBackground() {
+    this.backgroundEpoch++;
+    this.update({ background: null });
+  }
+  async readBackground() {
+    const client = this.client,
+      epoch = this.epoch,
+      sessionId = client?.state.session?.id;
+    if (!client?.state.canAct || !sessionId)
+      throw Error("Not connected to a task");
+    const read = ++this.backgroundEpoch;
+    const current = () =>
+      epoch === this.epoch &&
+      read === this.backgroundEpoch &&
+      client === this.client &&
+      sessionId === client.state.session?.id;
+    this.update({
+      background: { sessionId, status: "loading", children: [], terminals: [] },
+    });
+    const list = async (kind: "children" | "terminals") =>
+      backgroundItemsSchema.parse(
+        await client.request("execution.read", { sessionId, kind }),
+      );
+    try {
+      const [children, terminals] = await Promise.all([
+        list("children"),
+        list("terminals"),
+      ]);
+      if (current())
+        this.update({
+          background: { sessionId, status: "ready", children, terminals },
+        });
+    } catch (error) {
+      if (current())
+        this.update({
+          background: {
+            sessionId,
+            status: "error",
+            children: [],
+            terminals: [],
+          },
+        });
+      throw error;
+    }
+  }
+  closePlan() {
+    this.planEpoch++;
+    this.update({ plan: null });
+  }
+  async readPlanProgress() {
+    const client = this.client,
+      epoch = this.epoch,
+      sessionId = client?.state.session?.id;
+    if (!client?.state.canAct || !sessionId)
+      throw Error("Not connected to a task");
+    const read = ++this.planEpoch;
+    const current = () =>
+      epoch === this.epoch &&
+      read === this.planEpoch &&
+      client === this.client &&
+      sessionId === client.state.session?.id;
+    this.update({ plan: { sessionId, status: "loading" } });
+    try {
+      const { progress } = planReadSchema.parse(
+        await client.request("plan.read", { sessionId }),
+      );
+      if (current())
+        this.update({
+          plan:
+            progress === undefined
+              ? { sessionId, status: "unsupported" }
+              : progress === null
+                ? { sessionId, status: "none" }
+                : { sessionId, status: "ready", progress },
+        });
+    } catch (error) {
+      if (current()) this.update({ plan: { sessionId, status: "error" } });
+      throw error;
+    }
+  }
   closeMessage() {
     this.contentEpoch++;
     this.update({ content: null, contentLoading: false, contentError: null });
   }
-  async readMessage(seq: number, offset = 0) {
+  async readMessage(
+    seq: number,
+    offset = 0,
+    field: MobileContentField = "text",
+  ) {
     const client = this.client,
       epoch = this.epoch,
       sessionId = client?.state.session?.id;
     if (!client?.state.canAct || !sessionId)
       throw Error("Not connected to a task");
     if (!Number.isSafeInteger(seq) || seq < 0) throw Error("Invalid message");
+    z.enum(["text", "toolCalls"]).parse(field);
     const requestOffset = contentRequestOffset(offset),
       read = ++this.contentEpoch;
     const current = () =>
@@ -494,7 +1088,7 @@ export class MobileController {
       client === this.client &&
       sessionId === client.state.session?.id;
     this.update({
-      content: { sessionId, seq, offset, page: null },
+      content: { sessionId, seq, field, offset, page: null },
       contentLoading: true,
       contentError: null,
     });
@@ -502,13 +1096,19 @@ export class MobileController {
       const raw = await client.request("messages.content", {
         sessionId,
         seq,
-        field: "text",
+        field,
         offset: requestOffset,
         limit: 8192,
       });
       if (current())
         this.update({
-          content: { sessionId, seq, offset, page: contentPage(raw, offset) },
+          content: {
+            sessionId,
+            seq,
+            field,
+            offset,
+            page: contentPage(raw, offset),
+          },
           contentLoading: false,
         });
     } catch (error) {
@@ -524,7 +1124,8 @@ export class MobileController {
     const client = this.client,
       epoch = this.epoch,
       sessionId = client?.state.session?.id,
-      history = ++this.historyEpoch;
+      history = ++this.historyEpoch,
+      cacheVersion = this.cacheVersion;
     if (!client || !client.state.canAct) return;
     if (!sessionId) {
       this.update({ messages: [], hasOlder: false, hasNewer: false });
@@ -546,23 +1147,153 @@ export class MobileController {
         epoch === this.epoch &&
         history === this.historyEpoch &&
         sessionId === client.state.session?.id
-      )
+      ) {
         this.update({
           messages: page.items,
           hasOlder: page.hasOlder,
           hasNewer: page.hasNewer,
           loading: false,
         });
+        const pairing = this.pairing;
+        const session = this.value.session;
+        if (pairing && session?.id === sessionId) {
+          try {
+            await this.credentials(async () => {
+              if (
+                epoch !== this.epoch ||
+                history !== this.historyEpoch ||
+                cacheVersion !== this.cacheVersion
+              )
+                return;
+              await this.storage.snapshots.save(pairingScope(pairing), {
+                session,
+                items: page.items,
+                savedAt: Date.now(),
+              });
+            });
+          } catch {
+            if (epoch === this.epoch && history === this.historyEpoch)
+              this.update({ error: "内容已读取，但未能保存本机历史缓存。" });
+          }
+        }
+      }
     } catch (error) {
       if (epoch === this.epoch && history === this.historyEpoch)
         this.update({ loading: false, error: "无法恢复任务内容，请重试。" });
       throw error;
     }
   }
+  get notificationIdentity() {
+    return this.pairing &&
+      !this.disposed &&
+      !["unpaired", "review", "blocked", "revoked"].includes(this.value.phase)
+      ? JSON.stringify([this.pairingGeneration, pairingScope(this.pairing)])
+      : null;
+  }
+  async refreshNotificationTasks(identity: string): Promise<boolean> {
+    const epoch = this.epoch;
+    if (
+      !identity ||
+      identity !== this.notificationIdentity ||
+      this.value.phase !== "connected"
+    )
+      return false;
+    const fresh = await this.tasks(0);
+    return (
+      fresh &&
+      epoch === this.epoch &&
+      identity === this.notificationIdentity &&
+      this.value.phase === "connected"
+    );
+  }
+  get pushIdentity() {
+    return this.pairing && this.value.phase === "connected"
+      ? pairingScope(this.pairing)
+      : null;
+  }
+  matchesPushHost(hostId: unknown) {
+    return typeof hostId === "string" && this.pairing?.hostId === hostId;
+  }
+  async configurePush(token: string | null, identity = this.pushIdentity) {
+    if (
+      token !== null &&
+      !/^(Expo|Exponent)PushToken\[[A-Za-z0-9_-]+\]$/.test(token)
+    )
+      throw Error("Invalid push token");
+    const client = this.client,
+      epoch = this.epoch;
+    const current = () => {
+      if (
+        !identity ||
+        identity !== this.pushIdentity ||
+        !client ||
+        client !== this.client ||
+        epoch !== this.epoch ||
+        this.value.phase !== "connected"
+      )
+        throw Error("通知连接已变化，请重新操作。");
+    };
+    current();
+    if (!client!.supports("push.register"))
+      throw Error("电脑端尚不支持通知设置，请升级后重试。");
+    const result = await client!.request(
+      "push.register",
+      { token },
+      { beforeSend: current },
+    );
+    current();
+    if (
+      !result ||
+      typeof result !== "object" ||
+      !("ok" in result) ||
+      result.ok !== true
+    )
+      throw Error("通知设置未确认，请重试。");
+  }
+  async clearHistoryCache() {
+    const pairing = this.pairing;
+    if (
+      !pairing ||
+      this.disposed ||
+      this.value.cacheClear === "clearing" ||
+      !["connected", "offline", "connecting", "error"].includes(
+        this.value.phase,
+      )
+    )
+      return;
+    const epoch = this.epoch,
+      request = ++this.cacheClearEpoch;
+    const current = () =>
+      !this.disposed &&
+      epoch === this.epoch &&
+      pairing === this.pairing &&
+      request === this.cacheClearEpoch;
+    this.cacheVersion++;
+    this.update({ cacheClear: "clearing" });
+    try {
+      await this.credentials(async () => {
+        if (current())
+          await this.storage.snapshots.clear(pairingScope(pairing));
+      });
+      if (current())
+        this.update({
+          cacheClear: "cleared",
+          ...(this.value.phase !== "connected"
+            ? { messages: [], hasOlder: false, hasNewer: false }
+            : {}),
+        });
+    } catch (error) {
+      if (current()) this.update({ cacheClear: "failed" });
+      throw error;
+    }
+  }
   private async revoked(epoch: number) {
     if (epoch !== this.epoch) return;
     epoch = ++this.epoch;
+    this.pairingGeneration++;
     const p = this.pairing;
+    this.draftIdentity++;
+    this.composer.bind(null);
     this.stop();
     this.update({ ...empty("blocked"), error: "正在移除失效的设备连接…" });
     try {
@@ -593,8 +1324,11 @@ export class MobileController {
     this.update(empty("background"));
   }
   async forget() {
+    this.pairingGeneration++;
     const epoch = ++this.epoch,
       p = this.pairing;
+    this.draftIdentity++;
+    this.composer.bind(null);
     this.stop();
     this.pendingPairing = undefined;
     this.update({ ...empty("blocked"), error: "正在移除连接…" });

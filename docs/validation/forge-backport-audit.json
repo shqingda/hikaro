@@ -1,0 +1,106 @@
+{
+  "artifact": "/Users/shqingda/Projects/hikaro/artifacts/release/hikaro-0.1.0-darwin-arm64.tgz",
+  "sha256": "003976229d04334bc1d873f843ba93e5883405ccf548e92f7a48cc696eee6dc5",
+  "measuredAt": "2026-10-21T08:55:43.911Z",
+  "scope": "tarball production dependency lock and bundled forge implementation",
+  "passed": true,
+  "vulnerabilities": {
+    "info": 0,
+    "low": 0,
+    "moderate": 0,
+    "high": 2,
+    "critical": 0,
+    "total": 2
+  },
+  "result": {
+    "auditReportVersion": 2,
+    "vulnerabilities": {
+      "@anthropic-ai/sandbox-runtime": {
+        "name": "@anthropic-ai/sandbox-runtime",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "node-forge"
+        ],
+        "effects": [],
+        "range": ">=0.0.51",
+        "nodes": [
+          "node_modules/@anthropic-ai/sandbox-runtime"
+        ],
+        "fixAvailable": {
+          "name": "@anthropic-ai/sandbox-runtime",
+          "version": "0.0.50",
+          "isSemVerMajor": true
+        }
+      },
+      "node-forge": {
+        "name": "node-forge",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1240912,
+            "name": "node-forge",
+            "dependency": "node-forge",
+            "title": "node-forge RSA PKCS#1 v1.5 signature verification accepts extra nested DigestAlgorithm elements",
+            "url": "https://github.com/advisories/GHSA-86w9-cpqp-85rv",
+            "severity": "high",
+            "cwe": [
+              "CWE-347"
+            ],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:N"
+            },
+            "range": "<=1.4.0"
+          }
+        ],
+        "effects": [
+          "@anthropic-ai/sandbox-runtime"
+        ],
+        "range": "*",
+        "nodes": [
+          "node_modules/node-forge"
+        ],
+        "fixAvailable": {
+          "name": "@anthropic-ai/sandbox-runtime",
+          "version": "0.0.50",
+          "isSemVerMajor": true
+        }
+      }
+    },
+    "metadata": {
+      "vulnerabilities": {
+        "info": 0,
+        "low": 0,
+        "moderate": 0,
+        "high": 2,
+        "critical": 0,
+        "total": 2
+      },
+      "dependencies": {
+        "prod": 201,
+        "dev": 0,
+        "optional": 12,
+        "peer": 0,
+        "peerOptional": 0,
+        "total": 212
+      }
+    }
+  },
+  "registryPassed": false,
+  "remediations": [
+    {
+      "advisory": "https://github.com/advisories/GHSA-86w9-cpqp-85rv",
+      "method": "verified source backport",
+      "locations": [
+        {
+          "path": "node_modules/node-forge",
+          "version": "1.4.0",
+          "rsaSha256": "447c5441cea1b125e23661d7e27a8b1759cc3400241c0013b2d034b4ee1dbf50",
+          "verifiedNodeFiles": 49
+        }
+      ]
+    }
+  ]
+}

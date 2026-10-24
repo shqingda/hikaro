@@ -10,6 +10,8 @@ import { router } from "expo-router";
 import { useMobile } from "@/provider";
 import { Action, Note } from "@/ui";
 import { colors, readable } from "@/theme";
+import { TaskActions } from "@/task-actions";
+import { Composer } from "@/composer-view";
 const status: Record<string, string> = {
   idle: "尚未运行",
   running: "电脑正在执行",
@@ -30,6 +32,9 @@ export default function Task() {
   return (
     <FlatList
       contentInsetAdjustmentBehavior="automatic"
+      automaticallyAdjustKeyboardInsets
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="interactive"
       contentContainerStyle={{ padding: 24, gap: 24, paddingBottom: 48 }}
       style={{ backgroundColor: colors.background }}
       data={state.messages}
@@ -53,10 +58,51 @@ export default function Task() {
               ? (status[state.runStatus] ?? "状态待确认")
               : "离线快照 · 状态可能已变化"}
           </Note>
-          <Note>本页只读。发送、停止和审批请回到电脑。</Note>
+          <TaskActions />
+          {online && state.inspection.canSearch && (
+            <Action
+              title="搜索消息"
+              quiet
+              onPress={() => router.push("./search")}
+            />
+          )}
+          {online && (
+            <Action
+              title="查看后台任务"
+              quiet
+              onPress={() => {
+                void controller.readBackground().catch(() => {});
+                router.push("/background");
+              }}
+            />
+          )}
+          {online && (
+            <Action
+              title="查看计划进度"
+              quiet
+              onPress={() => {
+                void controller.readPlanProgress().catch(() => {});
+                router.push("/plan");
+              }}
+            />
+          )}
+          {online && (
+            <Action
+              title="查看文件修改"
+              quiet
+              disabled={!state.inspection.canChanges}
+              onPress={() => {
+                void controller.inspection.listChanges().catch(() => {});
+                router.push("/changes");
+              }}
+            />
+          )}
+          {online && !state.inspection.canChanges && (
+            <Note>电脑版本尚不支持手机差异阅读，请升级电脑端。</Note>
+          )}
           {state.unknown > 0 && (
             <Note>
-              有未确认的会话切换记录。当前内容以电脑返回的状态为准，没有重新发送操作。
+              有未确认的操作。当前内容以电脑返回的状态为准，没有重新发送操作。
             </Note>
           )}
           {state.error && <Note error>{state.error}</Note>}
@@ -80,7 +126,9 @@ export default function Task() {
               ? "你的要求"
               : item.message.role === "assistant"
                 ? "Hikaro"
-                : "工具记录"}
+                : item.message.role === "tool"
+                  ? `工具记录${item.message.name ? ` · ${readable(item.message.name)}` : ""}${item.message.isError ? " · 失败" : ""}`
+                  : "系统记录"}
           </Text>
           <Text
             selectable
@@ -93,10 +141,40 @@ export default function Task() {
           >
             {readable(item.message.text)}
           </Text>
+          {!!item.message.toolCalls?.length && (
+            <View style={{ gap: 10 }}>
+              <Note>
+                工具调用名称预览：
+                {item.message.toolCalls
+                  .map((call) => readable(call.name))
+                  .join("、")}
+                。完整调用参数可按需查看。
+              </Note>
+              <Action
+                title="查看工具调用"
+                quiet
+                disabled={!online || state.contentLoading}
+                onPress={() => {
+                  void controller
+                    .readMessage(item.seq, 0, "toolCalls")
+                    .catch(() => {});
+                  router.push("/message");
+                }}
+              />
+            </View>
+          )}
           {!!item.message.imageCount && (
-            <Note>
-              包含 {item.message.imageCount} 张图片，图片浏览将在后续阶段开放。
-            </Note>
+            <Action
+              title={`查看 ${item.message.imageCount} 张图片`}
+              quiet
+              disabled={!online || !state.inspection.canImages}
+              onPress={() => {
+                void controller.inspection
+                  .readImage(item.seq, 0, item.message.imageCount!)
+                  .catch(() => {});
+                router.push("/image");
+              }}
+            />
           )}
           {item.message.textLength !== undefined &&
             item.message.textLength > item.message.text.length && (
@@ -119,13 +197,16 @@ export default function Task() {
         !state.loading ? (
           <Note>
             {state.session
-              ? "这项任务还没有消息。"
+              ? online
+                ? "这项任务还没有消息。"
+                : "本机没有缓存的消息。连接电脑后可重新读取。"
               : "请返回任务列表选择一项任务。"}
           </Note>
         ) : undefined
       }
       ListFooterComponent={
         <View style={{ gap: 18, marginTop: 16 }}>
+          <Composer />
           {state.stream && !state.hasNewer && (
             <>
               <Text style={{ fontSize: 12, color: colors.secondary }}>
@@ -162,6 +243,32 @@ export default function Task() {
               ).catch(() => {});
             }}
           />
+          <Note>本机仅缓存最近查看的一页消息；图片和完整附件不缓存。</Note>
+          <Action
+            title={
+              state.cacheClear === "clearing"
+                ? "正在清除本机历史缓存…"
+                : state.cacheClear === "failed"
+                  ? "重试清除本机历史缓存"
+                  : "清除本机历史缓存"
+            }
+            quiet
+            disabled={state.cacheClear === "clearing"}
+            onPress={() => {
+              void controller.clearHistoryCache().catch(() => {});
+            }}
+          />
+          {state.cacheClear === "cleared" && (
+            <View accessible accessibilityLiveRegion="polite">
+              <Note>已清除本机历史缓存。</Note>
+            </View>
+          )}
+          {state.cacheClear === "failed" && (
+            <Note error>未能清除本机历史缓存，请重试。</Note>
+          )}
+          <Note>
+            清除缓存保留未发送草稿和电脑上的任务记录；继续读取任务会重新缓存。
+          </Note>
         </View>
       }
     />

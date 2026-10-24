@@ -1,6 +1,13 @@
+import type { PendingQuestion } from "../../runtime/src/pending-questions.ts";
+import type { PendingPrompt } from "../../core/src/pending-prompts.ts";
+import type { PendingSteering } from "../../core/src/steering-queue.ts";
 import type {
   DurableCommandReceipt,
   RpcMethod,
+  MessageSearchPage,
+  QuestionDraft,
+  QuestionDraftSnapshot,
+  QuestionDraftSaveResult,
 } from "../../protocol/src/contracts.ts";
 import type { Chunk } from "../../tools/src/indexer.ts";
 import type { Job } from "../../core/src/jobs.ts";
@@ -19,6 +26,22 @@ import type {
   ContextCheckpointInput,
   ContextHistory,
 } from "../../core/src/types.ts";
+export type RunHistoryRecord = {
+  id: string;
+  /** Metadata is bounded for display; output remains in the session transcript. */
+  start?: AgentEvent;
+  end?: AgentEvent;
+};
+export type ToolArtifactPage = {
+  items: Array<{
+    seq: number;
+    name: string;
+    callId: string;
+    references: Array<{ path: string } | { invalid: true }>;
+  }>;
+  after: number;
+  hasMore: boolean;
+};
 export class SQLiteStore implements EventStore {
   private pending = new Map<
     number,
@@ -67,6 +90,127 @@ export class SQLiteStore implements EventStore {
       this.pending.set(id, { resolve, reject });
       this.worker.postMessage({ id, method, args });
     });
+  }
+  saveQuestion(question: PendingQuestion) {
+    return this.request<void>("saveQuestion", { question });
+  }
+  pendingQuestions(sessionId: string, scope: string) {
+    return this.request<PendingQuestion[]>("pendingQuestions", {
+      sessionId,
+      scope,
+    });
+  }
+  questionDraft(input: {
+    id: string;
+    sessionId: string;
+    scope: string;
+    workspace?: string;
+  }) {
+    return this.request<QuestionDraftSnapshot>("questionDraft", input);
+  }
+  saveQuestionDraft(input: {
+    id: string;
+    sessionId: string;
+    scope: string;
+    workspace?: string;
+    expectedRevision: number;
+    draft: QuestionDraft;
+  }) {
+    return this.request<QuestionDraftSaveResult>("saveQuestionDraft", input);
+  }
+  settleQuestion(input: {
+    id: string;
+    sessionId: string;
+    scope: string;
+    hostInstanceId: string;
+    answers?: Record<string, string>;
+    workspace?: string;
+    draftRevision?: number;
+    /** Trusted lifecycle state: the original waiter ended after cancellation could not be saved. */
+    recover?: boolean;
+  }) {
+    return this.request<{ recovered: boolean }>("settleQuestion", input);
+  }
+  pendingPrompts(sessionId: string) {
+    return this.request<PendingPrompt[]>("pendingPrompts", { sessionId });
+  }
+  saveChildTask(record: {
+    id: string;
+    parentId: string;
+    task: string;
+    state: string;
+    output: string;
+  }) {
+    return this.request<void>("saveChildTask", record);
+  }
+  saveTerminalRecord(record: {
+    id: string;
+    owner: string;
+    command: string;
+    state: string;
+    exitCode?: number;
+    output: string;
+  }) {
+    return this.request<void>("saveTerminalRecord", record);
+  }
+  terminalRecords(owner: string) {
+    return this.request<
+      Array<{
+        id: string;
+        owner: string;
+        command: string;
+        state: string;
+        exitCode?: number;
+        output: string;
+        createdAt: number;
+      }>
+    >("terminalRecords", { owner });
+  }
+  childTaskTree(parentId: string) {
+    return this.request<
+      Array<{
+        id: string;
+        parentId: string;
+        task: string;
+        state: string;
+        output: string;
+        createdAt: number;
+      }>
+    >("childTaskTree", { parentId });
+  }
+  pendingSteering(sessionId: string) {
+    return this.request<PendingSteering[]>("pendingSteering", { sessionId });
+  }
+  insertPendingSteering(sessionId: string, item: PendingSteering) {
+    return this.request<void>("insertPendingSteering", { sessionId, item });
+  }
+  updatePendingSteering(sessionId: string, id: string, text: string) {
+    return this.request<void>("updatePendingSteering", { sessionId, id, text });
+  }
+  prioritizePendingSteering(sessionId: string, id: string) {
+    return this.request<void>("prioritizePendingSteering", { sessionId, id });
+  }
+  takePendingSteering(sessionId: string, id: string) {
+    return this.request<boolean>("takePendingSteering", { sessionId, id });
+  }
+  consumePendingSteering(sessionId: string, id: string, lease: SessionLease) {
+    return this.request<AgentEvent | undefined>("consumePendingSteering", {
+      sessionId,
+      id,
+      lease,
+    });
+  }
+  insertPendingPrompt(sessionId: string, item: PendingPrompt) {
+    return this.request<void>("insertPendingPrompt", { sessionId, item });
+  }
+  updatePendingPrompt(sessionId: string, id: string, text: string) {
+    return this.request<void>("updatePendingPrompt", { sessionId, id, text });
+  }
+  prioritizePendingPrompt(sessionId: string, id: string) {
+    return this.request<void>("prioritizePendingPrompt", { sessionId, id });
+  }
+  takePendingPrompt(sessionId: string, id: string) {
+    return this.request<boolean>("takePendingPrompt", { sessionId, id });
   }
   createSession(
     cwd: string,
@@ -194,6 +338,19 @@ export class SQLiteStore implements EventStore {
   ) {
     return this.request<MessagePage>("messagePage", { sessionId, ...options });
   }
+  searchMessages(
+    sessionId: string,
+    query: string,
+    before?: number,
+    limit = 20,
+  ) {
+    return this.request<MessageSearchPage>("searchMessages", {
+      sessionId,
+      query,
+      before,
+      limit,
+    });
+  }
   messageContent(
     sessionId: string,
     seq: number,
@@ -209,6 +366,15 @@ export class SQLiteStore implements EventStore {
       encoding: string;
       mimeType?: string;
     }>("messageContent", { sessionId, seq, field, offset, limit, image });
+  }
+  toolArtifactPage(
+    sessionId: string,
+    options: { after: number; through: number; limit?: number },
+  ) {
+    return this.request<ToolArtifactPage>("toolArtifactPage", {
+      sessionId,
+      ...options,
+    });
   }
   latestSeq(sessionId: string) {
     return this.request<number>("latestSeq", { sessionId });
@@ -331,6 +497,26 @@ export class SQLiteStore implements EventStore {
   }
   release(sessionId: string, owner: string) {
     return this.request<void>("release", { sessionId, owner });
+  }
+  recentRunEvents(sessionId: string) {
+    return this.request<AgentEvent[]>("recentRunEvents", { sessionId });
+  }
+  runHistoryPage(
+    sessionId: string,
+    cursor: { snapshot?: number; before?: number } = {},
+  ) {
+    return this.request<{
+      items: RunHistoryRecord[];
+      snapshot: number;
+      nextBefore: number | null;
+    }>("runHistoryPage", { sessionId, ...cursor });
+  }
+  runHistoryDetail(sessionId: string, id: string, snapshot?: number) {
+    return this.request<RunHistoryRecord | null>("runHistoryDetail", {
+      sessionId,
+      id,
+      snapshot,
+    });
   }
   latestRunEvent(sessionId: string) {
     return this.request<AgentEvent | undefined>("latestRunEvent", {

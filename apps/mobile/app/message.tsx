@@ -18,7 +18,11 @@ export default function Message() {
   const { controller, state } = useMobile();
   const navigation = useNavigation();
   const content = state.content;
+  const toolCalls = content?.field === "toolCalls";
   const online = state.phase === "connected";
+  useEffect(() => {
+    navigation.setOptions({ title: toolCalls ? "工具调用" : "消息正文" });
+  }, [navigation, toolCalls]);
   useEffect(() => {
     const release = navigation.addListener("removed", () =>
       controller.closeMessage(),
@@ -33,7 +37,9 @@ export default function Message() {
   }, [state.phase, online, content]);
   const load = (offset: number) => {
     if (content)
-      void controller.readMessage(content.seq, offset).catch(() => {});
+      void controller
+        .readMessage(content.seq, offset, content.field)
+        .catch(() => {});
   };
   return (
     <SafeAreaView
@@ -43,7 +49,7 @@ export default function Message() {
       <ScrollView
         key={
           content
-            ? `${content.sessionId}:${content.seq}:${content.offset}`
+            ? `${content.sessionId}:${content.seq}:${content.field}:${content.offset}`
             : "empty"
         }
         contentInsetAdjustmentBehavior="automatic"
@@ -57,15 +63,20 @@ export default function Message() {
         >
           {readable(state.session?.title ?? "消息正文")}
         </Text>
+        {toolCalls && (
+          <Note>工具调用参数 · 仅供阅读，不会执行或重试工具。</Note>
+        )}
         <Note>
           {!online
-            ? "离线快照 · 正文可能已变化"
+            ? "离线快照 · 内容可能已变化"
             : content
-              ? `第 ${content.offset / CONTENT_STEP + 1} 段 · 按需读取，不保存正文到手机`
+              ? `第 ${content.offset / CONTENT_STEP + 1} 段 · 按需读取，不保存完整内容到手机`
               : "详情已清除，请返回任务重新打开消息。"}
         </Note>
         {state.contentLoading && (
-          <ActivityIndicator accessibilityLabel="正在读取正文" />
+          <ActivityIndicator
+            accessibilityLabel={toolCalls ? "正在读取工具调用" : "正在读取正文"}
+          />
         )}
         {state.contentError && <Note error>{state.contentError}</Note>}
         {content && state.contentError && (

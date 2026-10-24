@@ -75,6 +75,8 @@ export interface ToolContext {
   sessionId: string;
   signal: AbortSignal;
   callId: string;
+  /** Current model run, when the call belongs to one. */
+  runId?: string;
   depth: number;
   budget: RunBudget;
   scope?: string;
@@ -124,7 +126,7 @@ export type AgentEvent = {
   timestamp: number;
 };
 export type MessagePage = {
-  items: Array<{ seq: number; message: Message }>;
+  items: Array<{ seq: number; message: Message & { imageCount?: number } }>;
   hasOlder: boolean;
   hasNewer: boolean;
 };
@@ -208,7 +210,7 @@ export interface EventStore {
 export interface AgentBackend {
   prompt(text: string, images?: ImageInput[]): Promise<void>;
   cancel(): void;
-  steer(text: string): void;
+  steer(text: string): void | Promise<void>;
   subscribe(fn: (event: AgentEvent) => void): () => void;
 }
 export interface Plugin {

@@ -277,10 +277,11 @@ async function withCriticalTui(
       const reply = `fixture-response-${requestNumber}`;
       await wait("Working", after);
       await request.write(reply);
-      // Keep the stream open until the busy UI is visible, then finish it.
-      await wait(reply, after);
+      // Complete this response before waiting for its final rendered text.
+      // Adjacent chunks can be consumed together and remain coalesced until EOF.
       const beforeFinish = position;
       request.finish();
+      await wait(reply, after);
       await wait("Enter send", beforeFinish);
       return request;
     };

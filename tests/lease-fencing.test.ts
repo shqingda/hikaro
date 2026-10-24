@@ -351,3 +351,72 @@ it("refuses provider output and terminal events after another process takes over
   expect(requestSignal?.aborted).toBe(true);
   await second.assertLease(session.id, successor);
 });
+
+it("clears queue ownership before a failed final prompt rejects", async () => {
+  const { first, session } = await fixture();
+  const agent = new Agent({
+    session,
+    store: first,
+    tools: new ToolRegistry(),
+    approve: async () => false,
+    provider: {
+      ...provider,
+      async *stream() {
+        throw Error("fixture failure");
+      },
+    },
+  });
+  await expect(agent.prompt("fail")).rejects.toThrow("fixture failure");
+  expect(agent.busy).toBe(false);
+});
+
+it("settles each queued prompt independently while keeping later work exclusive", async () => {
+  const { first, session } = await fixture();
+  const gate = () => {
+    let resolve!: () => void;
+    const promise = new Promise<void>((done) => {
+      resolve = done;
+    });
+    return { promise, resolve };
+  };
+  const started = gate(),
+    finishFirst = gate(),
+    finishSecond = gate();
+  let calls = 0;
+  const agent = new Agent({
+    session,
+    store: first,
+    pendingStore: first,
+    tools: new ToolRegistry(),
+    approve: async () => false,
+    provider: {
+      ...provider,
+      async *stream(input) {
+        const call = ++calls;
+        if (call === 1) started.resolve();
+        await (call === 1 ? finishFirst : finishSecond).promise;
+        yield* provider.stream(input);
+      },
+    },
+  });
+  const one = await agent.enqueuePrompt("one");
+  await started.promise;
+  const two = await agent.enqueuePrompt("two");
+  try {
+    finishFirst.resolve();
+    await one.completion;
+    expect(agent.busy).toBe(true);
+    await expect(
+      agent.executeTool("unused", {}, "must not interleave"),
+    ).rejects.toThrow("Wait for the active run");
+    finishSecond.resolve();
+    await two.completion;
+    expect(agent.busy).toBe(false);
+    expect(calls).toBe(2);
+    expect(agent.pendingPrompts()).toEqual([]);
+  } finally {
+    finishFirst.resolve();
+    finishSecond.resolve();
+    await Promise.allSettled([one.completion, two.completion]);
+  }
+});

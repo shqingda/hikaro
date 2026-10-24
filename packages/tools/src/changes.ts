@@ -17,12 +17,20 @@ const recordSchema = z.object({
     .nullable(),
   after: z.string().regex(/^[a-f0-9]{64}$/),
   state: z.enum(["prepared", "committed", "reverting", "reverted"]),
+  /** The model run that made the edit; absent for older records and redo. */
+  runId: z.string().max(128).optional(),
 });
 export type FileChange = z.infer<typeof recordSchema>;
 
 /** Journal files are private local data. Snapshots never enter model context. */
 export class ChangeJournal {
   constructor(private readonly home: string) {}
+  private lastTimestamp = 0;
+  /** Strictly increasing per process, so newest-first order never ties. */
+  private nextTimestamp() {
+    this.lastTimestamp = Math.max(Date.now(), this.lastTimestamp + 1);
+    return this.lastTimestamp;
+  }
   private root?: string;
   private async initialize(create = false) {
     if (this.root) return;
@@ -31,6 +39,10 @@ export class ChangeJournal {
   }
   private folder(session: string) {
     return join(this.root ?? this.home, "changes", digest(session));
+  }
+  async removeSession(session: string) {
+    await this.initialize();
+    await rm(this.folder(session), { recursive: true, force: true });
   }
   private recordPath(session: string, id: string) {
     z.uuid().parse(id);
@@ -125,6 +137,7 @@ export class ChangeJournal {
     signal: AbortSignal,
     replace: (current: string | undefined) => string,
     checkpoint?: () => Promise<void>,
+    runId?: string,
   ) {
     await this.initialize(true);
     let entry: FileChange | undefined,
@@ -144,13 +157,14 @@ export class ChangeJournal {
           entry = {
             id: randomUUID(),
             path,
-            timestamp: Date.now(),
+            timestamp: this.nextTimestamp(),
             before:
               before === undefined
                 ? null
                 : await this.snapshot(session, before),
             after: await this.snapshot(session, after),
             state: "prepared",
+            ...(runId ? { runId } : {}),
           };
           await this.saveRecord(session, entry);
         }
@@ -158,6 +172,35 @@ export class ChangeJournal {
       },
     );
     if (entry) await this.saveRecord(session, { ...entry, state: "committed" });
+  }
+  async redo(
+    session: string,
+    id: string,
+    signal: AbortSignal,
+    checkpoint?: () => Promise<void>,
+  ) {
+    const { entry, before, after } = await this.detail(session, id);
+    if (entry.state !== "reverted")
+      throw Error(`This change is ${entry.state}; redo is unavailable.`);
+    // Record reapplication as a new edit, so it can itself be undone and audited.
+    await this.update(
+      session,
+      entry.path,
+      signal,
+      (current) => {
+        if (current !== before)
+          throw Error(
+            "File changed after rollback. Preserve the newer work; redo refused.",
+          );
+        return after;
+      },
+      async () => {
+        await checkpoint?.();
+        if ((await this.record(session, id)).state !== "reverted")
+          throw Error("Change state changed; redo refused.");
+      },
+    );
+    return entry;
   }
   async rollback(
     session: string,

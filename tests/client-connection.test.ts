@@ -1,6 +1,100 @@
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { ClientConnection } from "../packages/client-core/src/connection.ts";
+import { ClientState } from "../packages/client-core/src/index.ts";
 import { rpcCapabilities } from "../packages/protocol/src/contracts.ts";
+
+afterEach(() => vi.restoreAllMocks());
+
+it("uses a caller command ID and rechecks authority after the durable journal commits", async () => {
+  let receive!: (frame: unknown) => void;
+  const sent: any[] = [];
+  let release: (() => void) | undefined;
+  let next = 0;
+  const client = new ClientConnection(
+    "device",
+    {
+      observe(fn) {
+        receive = fn;
+        return () => {};
+      },
+      send(frame) {
+        sent.push(frame);
+        const result =
+          frame.method === "hello"
+            ? {
+                ...rpcCapabilities(),
+                methods: [
+                  "hello",
+                  "session.current",
+                  "approval.respond",
+                  "command.receipt",
+                ],
+              }
+            : frame.method === "approval.respond"
+              ? { saved: true }
+              : frame.method === "command.receipt"
+                ? { receipt: null }
+                : {
+                    session: null,
+                    busy: false,
+                    stream: "",
+                    streamTruncated: false,
+                    cursor: 0,
+                    revision: 0,
+                    approvals: [],
+                  };
+        queueMicrotask(() =>
+          receive({ type: "response", scope: "device", id: frame.id, result }),
+        );
+      },
+    },
+    {
+      id: () => String(++next),
+      schedule: () => () => {},
+      intents: {
+        load: async () => [],
+        save: () =>
+          new Promise<void>((resolve) => {
+            release = resolve;
+          }),
+      },
+    },
+  );
+  // No pending intents: the initial reconcile's journal flush still needs completing.
+  const connecting = client.connected();
+  await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+  release!();
+  await connecting;
+  release = undefined;
+  let allowed = true;
+  const guard = () => {
+    if (!allowed) throw Error("selection changed");
+  };
+  const blocked = client.request(
+    "approval.respond",
+    { text: "old" },
+    { id: "persisted-id", beforeSend: guard },
+  );
+  await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+  allowed = false;
+  release!();
+  await expect(blocked).rejects.toThrow("selection changed");
+  expect(sent.some((f) => f.id === "persisted-id")).toBe(false);
+  await expect(
+    client.request("approval.respond", {}, { id: "persisted-id" }),
+  ).rejects.toThrow(/already used/);
+  release = undefined;
+  const success = client.request(
+    "approval.respond",
+    { text: "new" },
+    { id: "new-id" },
+  );
+  await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+  release!();
+  await success;
+  expect(sent.find((f) => f.id === "new-id")?.params).toEqual({ text: "new" });
+  client.close();
+});
 
 it("does not turn a successful mutation into a failure when an older host lacks receipt queries", async () => {
   let receive!: (frame: unknown) => void;
@@ -42,11 +136,19 @@ it("does not turn a successful mutation into a failure when an older host lacks 
   client.subscribe(() => {
     throw Error("broken view");
   });
+  const snapshots = vi.spyOn(ClientState.prototype, "state", "get");
   await client.connected();
   expect(await client.request("draft.save", { text: "saved" })).toEqual({
     saved: true,
   });
   expect(methods).not.toContain("command.receipt");
+  // Transport synchronization must not clone stream/history for boolean checks.
+  expect(snapshots).not.toHaveBeenCalled();
+  const snapshot = client.state;
+  snapshot.canAct = false;
+  snapshot.events.push({ seq: 999, type: "injected", timestamp: 0 });
+  expect(client.state.canAct).toBe(true);
+  expect(client.state.events).toEqual([]);
   client.close();
 });
 
@@ -176,4 +278,149 @@ it("durably records intent before send and fences a delayed write across connect
     client.receipts.find((receipt) => receipt.method === "prompt")?.status,
   ).toBe("unknown");
   client.close();
+});
+
+it("reclaims durable terminal receipts across more than 64 sequential runs", async () => {
+  let receive!: (frame: unknown) => void;
+  let id = 0;
+  const durable = new Map<string, any>();
+  const prompts: string[] = [];
+  const client = new ClientConnection(
+    "device",
+    {
+      observe(fn) {
+        receive = fn;
+        return () => {};
+      },
+      send(frame) {
+        let result: unknown;
+        if (frame.method === "hello") result = rpcCapabilities();
+        else if (frame.method === "session.current")
+          result = {
+            session: null,
+            busy: false,
+            stream: "",
+            streamTruncated: false,
+            cursor: 0,
+            revision: 0,
+            approvals: [],
+          };
+        else if (frame.method === "prompt") {
+          prompts.push(frame.id);
+          durable.set(frame.id, {
+            id: frame.id,
+            scope: "device",
+            method: "prompt",
+            digest: "a".repeat(64),
+            hostInstanceId: "host",
+            sessionId: null,
+            status: "accepted",
+            createdAt: 1,
+            updatedAt: 1,
+          });
+          result = { accepted: true };
+        } else if (frame.method === "command.receipt") {
+          result = {
+            receipt: durable.get(String(frame.params.commandId)) ?? null,
+          };
+        }
+        queueMicrotask(() =>
+          receive({ type: "response", scope: "device", id: frame.id, result }),
+        );
+      },
+    },
+    { id: () => String(++id), schedule: () => () => {} },
+  );
+  try {
+    await client.connected();
+    for (let run = 0; run < 100; run++) {
+      await client.request("prompt", { text: `run-${run}` });
+      // The run finishes after the immediate acknowledgement receipt query.
+      const receipt = durable.get(prompts.at(-1)!);
+      receipt.status = run % 2 ? "failed" : "completed";
+      receipt.updatedAt = 2;
+    }
+    expect(prompts).toHaveLength(100);
+    expect(new Set(prompts).size).toBe(100);
+    expect(client.receipts.length).toBeLessThanOrEqual(64);
+  } finally {
+    client.close();
+  }
+});
+
+it("keeps device push settings out of task receipts and never replays a lost registration", async () => {
+  let receive!: (frame: unknown) => void;
+  let next = 0;
+  let drop = false;
+  const sent: any[] = [];
+  const saves: any[] = [];
+  const client = new ClientConnection(
+    "device",
+    {
+      observe(fn) {
+        receive = fn;
+        return () => {};
+      },
+      send(frame) {
+        sent.push(frame);
+        if (drop && frame.method === "push.register") return;
+        const result =
+          frame.method === "hello"
+            ? {
+                ...rpcCapabilities(),
+                methods: [...rpcCapabilities().methods, "push.register"],
+              }
+            : frame.method === "push.register"
+              ? { ok: true }
+              : frame.method === "command.receipt"
+                ? { receipt: null }
+                : {
+                    session: null,
+                    busy: false,
+                    stream: "",
+                    streamTruncated: false,
+                    cursor: 0,
+                    revision: 0,
+                    approvals: [],
+                  };
+        queueMicrotask(() =>
+          receive({ type: "response", scope: "device", id: frame.id, result }),
+        );
+      },
+    },
+    {
+      id: () => String(++next),
+      schedule: () => () => {},
+      intents: {
+        load: async () => [],
+        save: async (value) => {
+          saves.push(value);
+        },
+      },
+    },
+  );
+  try {
+    expect(rpcCapabilities(true).methods).not.toContain("push.register");
+    await client.connected();
+    expect(client.supports("push.register")).toBe(true);
+    await expect(
+      client.request("push.register", { token: "ExpoPushToken[test]" }),
+    ).resolves.toEqual({ ok: true });
+    drop = true;
+    const lost = client.request("push.register", { token: null });
+    const rejected = expect(lost).rejects.toThrow();
+    client.disconnected();
+    await rejected;
+    drop = false;
+    await client.connected();
+    expect(sent.filter((f) => f.method === "push.register")).toHaveLength(2);
+    expect(saves.flat()).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ method: "push.register" }),
+      ]),
+    );
+    expect(JSON.stringify(saves)).not.toContain("ExpoPushToken");
+  } finally {
+    client.close();
+  }
 });

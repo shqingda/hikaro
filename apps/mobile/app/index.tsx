@@ -11,7 +11,7 @@ import {
 import { TextInput, Host, useNativeState } from "@expo/ui";
 import { router } from "expo-router";
 import { useMobile } from "@/provider";
-import { Action, Note, SunMark } from "@/ui";
+import { Action, Note, SunMark, confirmConnectionRemoval } from "@/ui";
 import { colors } from "@/theme";
 export default function Connect() {
   useColorScheme();
@@ -45,8 +45,11 @@ export default function Connect() {
     >
       <View style={{ gap: 16, paddingVertical: 12 }}>
         <SunMark />
+        {/* The wordmark is decorative branding; cap scaling so it stays one word. */}
         <Text
           accessibilityRole="header"
+          maxFontSizeMultiplier={1.5}
+          numberOfLines={1}
           style={{
             fontFamily: Platform.OS === "ios" ? "Georgia" : "serif",
             fontSize: 48,
@@ -60,12 +63,12 @@ export default function Connect() {
           {"任务留在电脑，\n进展随你同行。"}
         </Text>
         <Note>
-          连接你自己的电脑，查看同一个任务与最新输出。当前移动端为只读模式。
+          连接你自己的电脑，查看任务与输出。获得控制权限后，可以发送要求、审批和停止运行；离线时保留草稿。
         </Note>
       </View>
       {pending && (
         <View style={{ gap: 12 }}>
-          <ActivityIndicator />
+          <ActivityIndicator accessibilityLabel="正在连接电脑" />
           <Note>
             正在连接。首次配对请在电脑上确认这台手机，然后授予任务查看权。
           </Note>
@@ -77,9 +80,7 @@ export default function Connect() {
           <Action
             title="移除连接"
             quiet
-            onPress={() => {
-              void controller.forget().catch(() => {});
-            }}
+            onPress={() => confirmConnectionRemoval(controller)}
           />
         </View>
       )}
@@ -124,10 +125,23 @@ export default function Connect() {
         </View>
       )}
       {(error || state.error) && <Note error>{error ?? state.error}</Note>}
+      {state.phase !== "connected" &&
+        state.session &&
+        state.composer.record && (
+          <Action
+            title={
+              state.messages.length ? "查看上次任务与草稿" : "继续编辑本机草稿"
+            }
+            onPress={() => router.push("/task")}
+          />
+        )}
       {!pending && !state.review && (
         <View style={{ gap: 16 }}>
           {["offline", "error", "blocked"].includes(state.phase) && (
             <>
+              <Note>
+                重新连接不会自动发送草稿。移除连接会清除本机配对、未发送草稿和历史缓存。
+              </Note>
               <Action
                 title="重新连接"
                 onPress={() => {
@@ -137,9 +151,7 @@ export default function Connect() {
               <Action
                 title="移除连接"
                 quiet
-                onPress={() => {
-                  void controller.forget().catch(() => {});
-                }}
+                onPress={() => confirmConnectionRemoval(controller)}
               />
             </>
           )}
@@ -151,6 +163,7 @@ export default function Connect() {
                 onPress={() => router.push("/scan")}
               />
               <Note>也可以粘贴配对码。它包含设备凭据，请不要发给他人。</Note>
+              <Text style={{ color: colors.label, fontSize: 17 }}>配对码</Text>
               <Host
                 matchContents={{ vertical: true }}
                 style={{ width: "100%" }}

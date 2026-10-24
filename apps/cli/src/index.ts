@@ -166,7 +166,7 @@ async function main() {
           return;
         }
         if (text.startsWith("/steer ")) {
-          backend.steer(text.slice(7));
+          await backend.steer(text.slice(7));
           return;
         }
         if (text.startsWith("/permissions"))
@@ -222,21 +222,33 @@ async function main() {
     options.cwd,
   );
   const { openInteractive } = await import("./interactive-startup.ts");
+  // Start the storage worker before evaluating the TUI's synchronous module
+  // graph, so schema initialization can progress while the main thread loads UI.
+  const { SQLiteStore } =
+    await import("../../../packages/storage/src/index.ts");
+  const startupStore = await SQLiteStore.open(
+    join(options.home ?? join(homedir(), ".hikaro"), "sessions.sqlite"),
+  );
   const { view: ui, runtime } = await openInteractive(
     import("../../../packages/tui/src/index.ts"),
-    Runtime.open({
-      ...options,
-      permissionMode,
-      approve: (r, s) => view.approve(r, s),
-      askUser: async (questions, signal) => {
-        const { askQuestions } =
-          await import("../../../packages/tui/src/planning.ts");
-        return askQuestions(view, questions, signal);
+    Runtime.open(
+      {
+        ...options,
+        permissionMode,
+        approve: (r, s) => view.approve(r, s),
+        askUser: (questions, signal, executionSessionId, scope) =>
+          localQuestions.ask(questions, signal, executionSessionId, scope),
       },
+      startupStore,
+    ).catch(async (error) => {
+      await startupStore.close();
+      throw error;
     }),
   );
   const { createTerminal, HikaroView } = ui;
   const tui = createTerminal();
+  const { LocalQuestions } = await import("./local-questions.ts");
+  const localQuestions = new LocalQuestions(runtime, () => view);
   const { loadTuiPreferences, saveTuiPreferences } =
     await import("../../../packages/tui/src/preferences.ts");
   let preferences = await loadTuiPreferences(runtime.options.home!);
@@ -278,13 +290,18 @@ async function main() {
   const exit = () => {
     if (exiting) return;
     exiting = true;
+    // Preserve pending questions before disposing panels or cancelling tools.
+    localQuestions.close();
+    agent.cancel(true);
     view.dispose();
     tui.stop({ preserveScreen: true });
     console.log(`\nContinue: pnpm start · New session: pnpm start --new`);
     drafts.update(draftSessionId, view.editor.getExpandedText());
-    void drafts
-      .flush()
-      .finally(() => runtime.close())
+    const savedDraft = drafts.flush();
+    void runtime
+      .close(async () => {
+        await Promise.all([savedDraft, localQuestions.ready()]);
+      })
       .then(
         () => {
           process.exitCode = 0;
@@ -354,42 +371,51 @@ async function main() {
       }
       const approved = await runtime.approvePlan(session, result.id);
       updateStatus();
-      const { planText } =
+      const { planExecutionPrompt } =
         await import("../../../packages/runtime/src/planning.ts");
       view.notice(
         "Plan approved. Starting execution under the current permissions.",
       );
-      await agent.prompt(
-        `The user reviewed and approved plan ${approved.id}. Execute this plan and verify the result:\n${planText(approved)}`,
-      );
+      await agent.prompt(planExecutionPrompt(approved));
       return;
     }
   };
+  const executionReaders = new Set<AbortController>();
+  let sessionTransitions = 0;
   const bind = async (next: typeof session) => {
     if (agent.busy) throw Error("Cancel the active run first");
-    if (await runtime.store.session(draftSessionId))
-      drafts.update(draftSessionId, view.editor.getExpandedText());
-    await drafts.flush();
-    session = next;
-    await runtime.store.rememberSession(next.id);
-    agent = await runtime.agent(next);
-    view.bind(agent);
-    view.setModel(
-      agent.options.provider.id + "/" + agent.options.provider.model,
-    );
-    removeStatus();
-    removeStatus = agent.subscribe((event) => {
-      if (event.type === "run.end") updateStatus();
-    });
-    updateStatus();
-    const page = await history("latest");
-    view.showMessages(page.messages, page);
-    const savedDraft = await drafts.restore(draftSessionId, next.id, (id) =>
-      runtime.store.draft(id),
-    );
-    if (savedDraft !== undefined) {
-      draftSessionId = next.id;
-      view.editor.setText(savedDraft);
+    sessionTransitions++;
+    for (const reader of executionReaders) reader.abort();
+    try {
+      // Fence slow /questions reads before any part of the visible session changes.
+      localQuestions.invalidate();
+      if (await runtime.store.session(draftSessionId))
+        drafts.update(draftSessionId, view.editor.getExpandedText());
+      await drafts.flush();
+      session = next;
+      await runtime.store.rememberSession(next.id);
+      agent = await runtime.agent(next);
+      view.bind(agent);
+      view.setModel(
+        agent.options.provider.id + "/" + agent.options.provider.model,
+      );
+      removeStatus();
+      removeStatus = agent.subscribe((event) => {
+        if (event.type === "run.end") updateStatus();
+      });
+      updateStatus();
+      const page = await history("latest");
+      view.showMessages(page.messages, page);
+      const savedDraft = await drafts.restore(draftSessionId, next.id, (id) =>
+        runtime.store.draft(id),
+      );
+      if (savedDraft !== undefined) {
+        draftSessionId = next.id;
+        view.editor.setText(savedDraft);
+      }
+      await localQuestions.select(next.id);
+    } finally {
+      sessionTransitions--;
     }
   };
   const applyPreferences = async (next: typeof preferences) => {
@@ -415,6 +441,8 @@ async function main() {
     onPreferences: (patch) => applyPreferences({ ...preferences, ...patch }),
     onDraftChange: (text) => drafts.update(draftSessionId, text),
     commands: [
+      { name: "search", description: "Search full messages in this session" },
+      { name: "questions", description: "Answer or dismiss saved questions" },
       {
         name: "plan",
         description: "Read-only planning, questions and plan review",
@@ -447,7 +475,7 @@ async function main() {
         await agent.executeTool("shell", parseManualCommand(text), text);
         return;
       }
-      const work = agent.prompt(text, images);
+      const { completion: work } = await agent.enqueuePrompt(text, images);
       promptWork = work;
       const pending = agent.pendingPrompts().length;
       if (pending)
@@ -490,41 +518,15 @@ async function main() {
           throw Error(
             "Finish or cancel the run before changing model settings.",
           );
-        const { openModelControl } =
+        const { openModelControl, parseModelControl } =
           await import("../../../packages/tui/src/model-settings.ts");
-        const tokens = arg.trim().split(/\s+/).filter(Boolean);
-        const scope = tokens.includes("default") ? "default" : "active";
-        const raw = tokens.filter((t) => t !== "active" && t !== "default");
-        if (raw.length > 1)
-          throw Error(`Use /${field} [VALUE] [active|default]`);
+        const { scope, supplied, key, value } = parseModelControl(field, arg);
         const active = agent.options.session.modelSelection!;
         const defaults =
           (await runtime.providerCatalog().readDefault()) ??
           runtime.defaultSelection();
-        if (raw.length) {
+        if (supplied) {
           const selected = scope === "active" ? active : defaults;
-          let value: string | number | undefined = raw[0];
-          if (value === "auto") value = undefined;
-          else if (field === "context") {
-            const match = /^(\d+)(k|m)?$/i.exec(value!);
-            if (!match)
-              throw Error(
-                "Use /context auto, /context 128k, or /context 1000000",
-              );
-            value =
-              Number(match[1]) *
-              (match[2]?.toLowerCase() === "m"
-                ? 1000000
-                : match[2]?.toLowerCase() === "k"
-                  ? 1000
-                  : 1);
-          }
-          const key =
-            field === "context"
-              ? "contextWindow"
-              : field === "thinking"
-                ? "reasoning"
-                : "speed";
           const settings = {
             ...selected.settings,
             [key]: value,
@@ -547,7 +549,53 @@ async function main() {
           );
       };
       switch (command) {
+        case "questions": {
+          await localQuestions.open();
+          return;
+        }
+        case "search": {
+          const { openMessageSearch } =
+            await import("../../../packages/tui/src/message-search.ts");
+          const { libraryRequest } = await import("./rpc-library.ts");
+          const id = session.id;
+          await openMessageSearch(
+            view,
+            arg,
+            (query, before) => runtime.store.searchMessages(id, query, before),
+            async (seq, offset) =>
+              (await libraryRequest(
+                runtime,
+                "messages.content",
+                { seq, field: "text", offset, limit: 16000 },
+                () => runtime.session(id),
+              )) as import("../../../packages/tui/src/message-search.ts").SearchContent,
+          );
+          return;
+        }
         case "plan": {
+          if (arg.trim() === "progress") {
+            const id = session.id;
+            const { browsePlanProgress } =
+              await import("../../../packages/tui/src/planning.ts");
+            await browsePlanProgress(view, async () => {
+              await runtime.planning.load(id, true);
+              return runtime.planProgress(id);
+            });
+            return;
+          }
+          if (arg.trim() === "history") {
+            const id = session.id;
+            const { browsePlanHistory } =
+              await import("../../../packages/tui/src/planning.ts");
+            await browsePlanHistory(view, {
+              list: async (before) => {
+                await runtime.planning.load(id, true);
+                return runtime.planning.history(id, before);
+              },
+              detail: (version) => runtime.planning.version(id, version),
+            });
+            return;
+          }
           if (agent.busy)
             throw Error(
               "Finish or cancel the current run and queued messages before opening Plan mode",
@@ -591,14 +639,47 @@ async function main() {
           return;
         }
         case "tasks": {
-          const { openExecutionControl } =
-            await import("../../../packages/tui/src/execution-control.ts");
-          await openExecutionControl(view, {
-            agent,
-            runtime,
-            session: session.id,
-          });
-          return;
+          if (sessionTransitions)
+            throw Error(
+              "Session is changing; reopen the execution reader when it finishes.",
+            );
+          // Register before dynamic imports: a concurrent bind must invalidate
+          // both an open panel and a reader that has not opened its panel yet.
+          const reader = new AbortController();
+          executionReaders.add(reader);
+          try {
+            const history = /^history(?:\s+(.+))?$/u.exec(arg.trim());
+            if (history) {
+              const { browseExecutionHistory } =
+                await import("../../../packages/tui/src/execution-history.ts");
+              const id = session.id;
+              await browseExecutionHistory(
+                view,
+                {
+                  list: (cursor) => runtime.executionHistoryPage(id, cursor),
+                  detail: (runId, snapshot) =>
+                    runtime.executionHistoryDetail(id, runId, snapshot),
+                },
+                history[1],
+                reader.signal,
+              );
+              return;
+            }
+            const { openExecutionControl } =
+              await import("../../../packages/tui/src/execution-control.ts");
+            await openExecutionControl(
+              view,
+              {
+                agent,
+                runtime,
+                session: session.id,
+              },
+              reader.signal,
+            );
+            return;
+          } finally {
+            executionReaders.delete(reader);
+          }
         }
         case "changes": {
           // run.end reaches the view before lease release and queue cleanup.
@@ -618,6 +699,7 @@ async function main() {
             detail: (id) => runtime.changes.detail(session.id, id),
             rollback: (id, signal) =>
               runtime.rollbackChange(session, id, signal),
+            redo: (id, signal) => runtime.redoChange(session, id, signal),
           });
           return;
         }
@@ -664,6 +746,20 @@ async function main() {
         case "quit":
           exit();
           return;
+        case "paste-image": {
+          const target = session.id;
+          const draft = view.editor.getExpandedText();
+          const { saveClipboardImage } =
+            await import("../../../packages/runtime/src/clipboard-image.ts");
+          const { attachmentReference } =
+            await import("../../../packages/runtime/src/attachments.ts");
+          const path = await saveClipboardImage();
+          if (exiting) return;
+          if (session.id !== target || view.editor.getExpandedText() !== draft)
+            return `Input changed; clipboard image saved at ${path}. Use /attach PATH to add it when ready.`;
+          view.editor.setText(attachmentReference(path) + " ");
+          return "Clipboard image attached. Add your question and press Enter. The private temporary file is retained for draft recovery.";
+        }
         case "attach": {
           if (!arg.trim())
             return 'Use /attach PATH, then add your question and send. You can also type @file or @"path with spaces" directly.';
@@ -674,7 +770,7 @@ async function main() {
           return "Attachment added. Add your question and press Enter.";
         }
         case "help":
-          return '/plan [TASK] · Read-only exploration, questions and plan review\n/plan cancel · Leave without executing\n/tasks · Manage queued messages, background terminals and child agents\n/changes · Review and roll back recorded file edits\n/new  /sessions  /resume [ID]  /rename TITLE  /export\n/fork  /compact  /model provider/model\n/attach PATH · @file or @"path with spaces" attaches text/images\n/settings  /permissions [ask|auto|full]\n/context [default]  /thinking [default]  /speed [default]\n/status  /resources\n/steer instructions  /tools  /older  /newer  /latest  /quit\n![--unrestricted] COMMAND follows the current permission mode. Ctrl+C cancels. Ctrl+D exits. Shift+Enter adds a line.\nNew prompts queue while the agent works.';
+          return '/plan [TASK] · Read-only exploration, questions and plan review\n/plan cancel · Leave without executing\n/plan history · Read saved plan versions\n/plan progress · Read reported step status of the approved plan\n/questions · Answer or dismiss saved questions\n/tasks · Manage queued messages, background terminals and child agents\n/tasks history [RUN_ID] · Read saved runs without pausing the queue\n/search [TEXT] · Search this session and read matching messages\n/changes · Review and roll back recorded file edits\n/new  /sessions  /resume [ID]  /rename TITLE  /export\n/fork  /compact  /model provider/model\n/attach PATH · @file or @"path with spaces" attaches text/images\n/settings  /permissions [ask|auto|full]\n/context [default]  /thinking [default]  /speed [default]\n/status  /resources\n/steer instructions  /tools  /older  /newer  /latest  /quit\n![--unrestricted] COMMAND follows the current permission mode. Ctrl+C cancels. Ctrl+D exits. Shift+Enter adds a line.\nNew prompts queue while the agent works.';
         case "new":
           await bind(await runtime.session());
           return;
@@ -683,7 +779,7 @@ async function main() {
           session = await runtime.renameSession(session.id, arg);
           return "Session renamed.";
         case "export":
-          return `Exported: ${await runtime.exportSession(session.id, preferences.showThinking)}`;
+          return `Exported: ${await runtime.exportSession(session.id, preferences.showThinking)}\nIf an .assets folder is present beside the Markdown, copy it together with the file.`;
         case "resume":
           if (arg) {
             await bind(await runtime.session(arg));
@@ -721,7 +817,7 @@ async function main() {
           await bind(await runtime.fork(session));
           return;
         case "steer":
-          agent.steer(arg);
+          await agent.steer(arg);
           return "Instructions queued for the next model turn.";
         case "login":
         case "model": {
@@ -827,6 +923,7 @@ async function main() {
   // The editor, saved draft, history and permissions are ready. Paint them
   // immediately; advisory Git metadata can update after this first frame.
   tui.requestRender(true);
+  await localQuestions.select(session.id);
   setImmediate(refreshGitStatus);
   view.startTheme();
   runtime.startJobs();

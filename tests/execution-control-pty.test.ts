@@ -153,7 +153,7 @@ it("manages queued messages, terminal input/exit, and child cancellation from a 
     releaseRoot!();
     await vi.waitFor(() => expect(childStarted).toBe(true), { timeout: 8000 });
     await wait("Execution manager", send("/tasks\r"));
-    await wait("Background terminals", send("\x1b[B\r"));
+    await wait("Background terminals · page", send("\x1b[B\r"));
     await wait("Send a line", send("\r"));
     await wait("Send a line to terminal", send("\x1b[B\r"));
     await wait("Send terminal input?", send("hello\r"));
@@ -164,7 +164,8 @@ it("manages queued messages, terminal input/exit, and child cancellation from a 
     await wait("State: exited", send("\r"));
     await wait("Background terminals", send("\x1b"));
     await wait("Execution manager", send("\x1b"));
-    await wait("Child agents", send("\x1b[B".repeat(2) + "\r"));
+    // The manager menu also says "Child agents"; wait for the loaded list.
+    await wait("Child agents · page", send("\x1b[B".repeat(2) + "\r"));
     await wait("Task: child fixture", send("\r"));
     await wait("Stop this task?", send("\x1b[B\r"));
     await wait("Stop requested", send("\x1b[B\r"));

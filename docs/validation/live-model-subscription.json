@@ -1,0 +1,68 @@
+{
+  "status": "passed",
+  "provider": "xai",
+  "model": "grok-4.7",
+  "authentication": "existing subscription OAuth via normal credential store",
+  "scope": "source Runtime and provider integration; not packaged CLI acceptance",
+  "directory": "/Users/shqingda/Projects/hikaro/artifacts/live-model-f9xV5u",
+  "startedAt": "2026-10-21T10:08:17.925Z",
+  "events": [
+    {
+      "type": "run.start"
+    },
+    {
+      "type": "tool.start",
+      "name": "read_file"
+    },
+    {
+      "type": "tool.end",
+      "name": "read_file"
+    },
+    {
+      "type": "tool.start",
+      "name": "read_file"
+    },
+    {
+      "type": "tool.end",
+      "name": "read_file"
+    },
+    {
+      "type": "tool.start",
+      "name": "edit_file"
+    },
+    {
+      "type": "tool.end",
+      "name": "edit_file"
+    },
+    {
+      "type": "tool.start",
+      "name": "shell"
+    },
+    {
+      "type": "tool.end",
+      "name": "shell",
+      "isError": false
+    },
+    {
+      "type": "tool.start",
+      "name": "git_diff"
+    },
+    {
+      "type": "tool.end",
+      "name": "git_diff",
+      "isError": false
+    },
+    {
+      "type": "run.end",
+      "status": "completed"
+    }
+  ],
+  "usage": {
+    "input": 6345,
+    "output": 400,
+    "cost": 0.02597
+  },
+  "diff": "diff --git a/sum.cjs b/sum.cjs\nindex 0a92af8..a5a1121 100644\n--- a/sum.cjs\n+++ b/sum.cjs\n@@ -1 +1 @@\n-exports.sum = (a, b) => a - b;\n+exports.sum = (a, b) => a + b;\n",
+  "finishedAt": "2026-10-21T10:08:25.488Z",
+  "usageCostMeaning": "Provider catalog estimate only; not a subscription invoice or charge."
+}

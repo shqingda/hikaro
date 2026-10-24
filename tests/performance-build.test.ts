@@ -133,3 +133,61 @@ describe("production startup packaging", () => {
     );
   });
 });
+
+it("keeps host planning schemas out of the attached planning view graph", async () => {
+  const { cliBuildOptions } = await import(buildOptionsPath);
+  const directory = await fixtureDirectory();
+  const result = await build({
+    ...cliBuildOptions(),
+    entryPoints: { planning: "packages/tui/src/planning.ts" },
+    outdir: directory,
+    write: false,
+  });
+  const inputs = Object.keys(result.metafile!.inputs);
+  expect(inputs.some((path) => path.endsWith("runtime/src/plan-text.ts"))).toBe(
+    true,
+  );
+  expect(inputs.some((path) => path.endsWith("runtime/src/planning.ts"))).toBe(
+    false,
+  );
+  expect(inputs.some((path) => path.includes("/zod/"))).toBe(false);
+});
+
+it("does not retain unused Zod locales in the production graph", async () => {
+  const { cliBuildOptions } = await import(buildOptionsPath);
+  const result = await build({ ...cliBuildOptions(), write: false });
+  const locales = new Set(
+    Object.values(result.metafile!.outputs).flatMap((output) =>
+      Object.entries(output.inputs)
+        .filter(
+          ([path, input]) =>
+            path.includes("zod/v4/locales/") && input.bytesInOutput > 0,
+        )
+        .map(([path]) => path.split("/").at(-1)),
+    ),
+  );
+  expect([...locales]).toEqual(["en.js"]);
+});
+
+it("reports the packaged version without loading application chunks or creating a home", async () => {
+  const { cliBuildOptions } = await import(buildOptionsPath);
+  const directory = await fixtureDirectory();
+  const resultBuild = await build({ ...cliBuildOptions(), outdir: directory });
+  // Keep shared constants, remove the lazy application entry itself.
+  const launcher = Object.entries(resultBuild.metafile!.outputs).find(
+    ([file]) => file.endsWith("/hikaro.mjs"),
+  )![1];
+  const applicationImports = launcher.imports.filter(
+    (entry) => entry.kind === "dynamic-import",
+  );
+  expect(applicationImports.length).toBeGreaterThan(0);
+  for (const entry of applicationImports) await rm(resolve(entry.path));
+  const source = JSON.parse(await readFile("package.json", "utf8"));
+  const result = await execute(
+    process.execPath,
+    [join(directory, "hikaro.mjs"), "--version"],
+    { cwd: directory },
+  );
+  expect(result.stdout.trim()).toBe(`hikaro ${source.version}`);
+  expect(result.stderr).toBe("");
+});

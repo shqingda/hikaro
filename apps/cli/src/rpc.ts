@@ -1,6 +1,6 @@
 import * as z from "zod";
 import { RpcWorkflows } from "./rpc-workflows.ts";
-import { planText } from "../../../packages/runtime/src/planning.ts";
+import { planExecutionPrompt } from "../../../packages/runtime/src/planning.ts";
 import { commandDigest, isMutation } from "./rpc-receipts.ts";
 import { randomUUID } from "node:crypto";
 import type { Readable, Writable } from "node:stream";
@@ -25,6 +25,7 @@ import {
   rpcReadMethods,
   HelloParams,
   rpcCapabilities,
+  RunCancelParams,
 } from "../../../packages/protocol/src/contracts.ts";
 const integer = (
   value: unknown,
@@ -139,8 +140,8 @@ export async function serveRpc(
   const runtime = await Runtime.open(
     {
       ...options,
-      askUser: (questions, signal, sessionId) =>
-        workflows.ask(questions, signal, sessionId),
+      askUser: (questions, signal, sessionId, scope) =>
+        workflows.ask(questions, signal, sessionId, scope),
       approve: (request, signal) =>
         new Promise((resolve) => {
           if (signal.aborted) {
@@ -181,7 +182,7 @@ export async function serveRpc(
     },
     shared?.store,
   );
-  workflows = new RpcWorkflows(runtime);
+  workflows = new RpcWorkflows(runtime, hostInstanceId, !!shared);
   runtime.startJobs();
   const requireLive = (scope: string, state: ScopeState) => {
     if (shuttingDown || scopes.get(scope) !== state)
@@ -248,14 +249,15 @@ export async function serveRpc(
     state: ScopeState,
     includeSelected = true,
     revokedScope?: string,
+    preserveRecovered = false,
   ) => {
     state.generation++;
     for (const operation of state.work.operations) operation.abort();
     for (const agent of state.work.activeAgents.keys()) {
       if (shared && revokedScope) agent.cancelScope(revokedScope);
-      else agent.cancel();
+      else agent.cancel(preserveRecovered);
     }
-    if (includeSelected) state.agent?.cancel();
+    if (includeSelected) state.agent?.cancel(preserveRecovered);
   };
   const releaseWork = (scope: string, work: ScopeWork, agent?: Agent) => {
     if (agent) {
@@ -393,6 +395,7 @@ export async function serveRpc(
             "prompt",
             "steer",
             "cancel",
+            "run.cancel",
             "tool.manual",
             "plugins.invoke",
           ].includes(command.method) ||
@@ -521,14 +524,22 @@ export async function serveRpc(
 
         case "changes.list":
         case "changes.detail":
+        case "changes.diff":
         case "changes.rollback":
+        case "changes.redo":
         case "execution.hold":
         case "execution.release":
         case "execution.read":
+        case "execution.history":
+        case "execution.history.detail":
         case "execution.action":
+        case "plan.history":
+        case "plan.version":
         case "plan.read":
         case "plan.set":
         case "questions.read":
+        case "questions.draft.read":
+        case "questions.draft.save":
         case "questions.respond": {
           const session = await selected();
           if (state.session?.id !== session.id || !state.agent)
@@ -708,6 +719,7 @@ export async function serveRpc(
         case "model.set":
         case "model.default":
         case "messages.content":
+        case "messages.search":
         case "artifact.read": {
           const { libraryRequest } = await import("./rpc-library.ts");
           result = await libraryRequest(runtime, command.method, p, selected);
@@ -870,7 +882,7 @@ export async function serveRpc(
             );
             requireSameSelection();
             requireUncancelled();
-            p.text = `The user reviewed and approved plan ${approved.id}. Execute and verify:\n${planText(approved)}`;
+            p.text = planExecutionPrompt(approved);
           }
         case "prompt": {
           if (!state.agent || !state.session)
@@ -910,9 +922,19 @@ export async function serveRpc(
               runId = String(event.data.runId);
           });
           ownAgent(state.work, agent);
+          let accepted: Awaited<ReturnType<Agent["enqueuePrompt"]>>;
+          try {
+            accepted = await agent.enqueuePrompt(text, images, {
+              scope,
+              commandId: command.id,
+            });
+          } catch (error) {
+            stopRunTracking();
+            releaseWork(scope, state.work, agent);
+            throw error;
+          }
           track(
-            agent
-              .prompt(text, images, { scope, commandId: command.id })
+            accepted.completion
               .then(async () => {
                 await finish("completed", {
                   sessionId: session.id,
@@ -947,13 +969,37 @@ export async function serveRpc(
         }
         case "steer":
           if (!state.agent) throw Error("No session selected");
-          state.agent.steer(z.string().min(1).max(100000).parse(p.text), scope);
+          await state.agent.steer(
+            z.string().min(1).max(100000).parse(p.text),
+            scope,
+          );
           result = {};
           break;
         case "cancel":
           cancel(state);
           result = {};
           break;
+        case "run.cancel": {
+          const { sessionId, runId } = RunCancelParams.parse(p);
+          const agent = state.agent;
+          if (!agent || state.session?.id !== sessionId)
+            throw Error("Command must target the selected session");
+          const current = agent.snapshot();
+          if (
+            !current.busy ||
+            current.runStatus !== "running" ||
+            current.runId !== runId
+          )
+            throw Error(
+              "Run is no longer active; refresh before deciding again",
+            );
+          // Do not yield between checking the run and aborting it. Scope-wide
+          // cancellation could also stop unrelated work in another session.
+          agent.cancel();
+          await finish("completed", { sessionId, runId });
+          result = { accepted: true, runId };
+          break;
+        }
         case "approval.respond": {
           const approval = approvals.get(z.string().parse(p.id));
           if (!approval)
@@ -996,6 +1042,7 @@ export async function serveRpc(
       }
       if (
         accepted &&
+        !settled &&
         command.method !== "prompt" &&
         command.method !== "plan.execute" &&
         command.method !== "session.compact"
@@ -1031,6 +1078,7 @@ export async function serveRpc(
         // reserving space for cancellation, approval and detach replies.
         const critical = [
           "cancel",
+          "run.cancel",
           "approval.respond",
           "questions.respond",
           "client.detach",
@@ -1102,7 +1150,7 @@ export async function serveRpc(
     workflows.close();
     for (const a of approvals.values()) a.finish(false);
     for (const state of scopes.values()) {
-      cancel(state);
+      cancel(state, true, undefined, true);
       state.unsubscribe?.();
     }
     for (const work of ownedWork.values())

@@ -15,6 +15,171 @@ import { RpcWorkflows } from "../apps/cli/src/rpc-workflows.ts";
 import { serveSharedHost } from "../apps/cli/src/shared-host.ts";
 import { SharedHostClient } from "../packages/host/src/client.ts";
 import { ClientConnection } from "../packages/client-core/src/connection.ts";
+import { AttachedWorkflows } from "../apps/cli/src/attached-workflows.ts";
+import { ModelPanel } from "../packages/tui/src/model-panel.ts";
+import type { HikaroView } from "../packages/tui/src/index.ts";
+import { stripVTControlCharacters } from "node:util";
+
+it("does not send an old answer after the same question changes to recovered during beforeSend waits", async () => {
+  vi.useFakeTimers();
+  let recovered = false;
+  let release!: () => void;
+  const waiting = new Promise<void>((resolve) => (release = resolve));
+  let panel: ModelPanel, controller: AbortController;
+  const sent: unknown[] = [];
+  const request = vi.fn(
+    async (
+      method: string,
+      params: Record<string, unknown>,
+      options?: { beforeSend?: () => void },
+    ) => {
+      if (method === "questions.respond") {
+        await waiting;
+        options?.beforeSend?.();
+        sent.push(params);
+        return { completed: true, recovered };
+      }
+      options?.beforeSend?.();
+      if (method === "questions.read")
+        return {
+          id: "same-question",
+          questions: [{ id: "q", question: "Choose", options: ["A"] }],
+          recovered,
+        };
+      return { active: true };
+    },
+  );
+  const client = {
+    state: {
+      canAct: true,
+      session: { id: "session" },
+      sessionRole: "owner",
+      busy: true,
+    },
+    request,
+    supports: () => false,
+  } as unknown as ClientConnection;
+  const view = {
+    openModelPanel() {
+      const current = new AbortController();
+      controller = current;
+      panel = new ModelPanel(current.signal, () => {});
+      return { panel, signal: current.signal, close: () => current.abort() };
+    },
+    closeModelPanel: () => controller?.abort(),
+    notice: vi.fn(),
+    setError: vi.fn(),
+    setPermissionLabel: vi.fn(),
+  } as unknown as HikaroView;
+  const workflows = new AttachedWorkflows(client, view, "/tmp");
+  const screen = () => stripVTControlCharacters(panel.render(110).join("\n"));
+  try {
+    await vi.advanceTimersByTimeAsync(750);
+    expect(screen()).toContain("Question 1/1");
+    panel!.handleInput("\x1b[B");
+    panel!.handleInput("\r");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(screen()).toContain("Review answers");
+    panel!.handleInput("\x1b[B");
+    panel!.handleInput("\r");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(
+      request.mock.calls.filter(([method]) => method === "questions.respond"),
+    ).toHaveLength(1);
+    recovered = true;
+    await vi.advanceTimersByTimeAsync(1500);
+    release();
+    await vi.advanceTimersByTimeAsync(750);
+    expect(sent).toEqual([]);
+    expect(screen()).toContain("Recovered question 1/1");
+  } finally {
+    release();
+    workflows.close();
+    vi.useRealTimers();
+  }
+});
+
+it.each(["poll", "response"] as const)(
+  "shows same-question recovery through the %s without claiming the old run resumed",
+  async (transition) => {
+    vi.useFakeTimers();
+    let recovered = false,
+      pending = true;
+    let panel: ModelPanel, controller: AbortController;
+    const notice = vi.fn();
+    const request = vi.fn(async (method: string) => {
+      if (method === "questions.read")
+        return pending
+          ? {
+              id: "same-question",
+              questions: [{ id: "q", question: "Choose", options: ["A"] }],
+              recovered,
+            }
+          : null;
+      if (method === "questions.respond") {
+        pending = false;
+        return { completed: true, recovered };
+      }
+      return { active: true };
+    });
+    const client = {
+      state: {
+        canAct: true,
+        session: { id: "session" },
+        sessionRole: "owner",
+        busy: true,
+      },
+      request,
+      supports: () => false,
+    } as unknown as ClientConnection;
+    const view = {
+      openModelPanel() {
+        const current = new AbortController();
+        controller = current;
+        panel = new ModelPanel(current.signal, () => {});
+        return { panel, signal: current.signal, close: () => current.abort() };
+      },
+      closeModelPanel: () => controller?.abort(),
+      notice,
+      setError: vi.fn(),
+      setPermissionLabel: vi.fn(),
+    } as unknown as HikaroView;
+    const workflows = new AttachedWorkflows(client, view, "/tmp");
+    const screen = () => stripVTControlCharacters(panel.render(110).join("\n"));
+    try {
+      await vi.advanceTimersByTimeAsync(750);
+      expect(screen()).toContain("Question 1/1");
+      const previous = controller!;
+      recovered = true;
+      if (transition === "poll") {
+        await vi.advanceTimersByTimeAsync(1500);
+        expect(previous.signal.aborted).toBe(true);
+        expect(screen()).toContain("Recovered question 1/1");
+        expect(
+          request.mock.calls.filter(
+            ([method]) => method === "questions.respond",
+          ),
+        ).toEqual([]);
+      }
+      panel!.handleInput("\x1b[B");
+      panel!.handleInput("\r");
+      await vi.advanceTimersByTimeAsync(0);
+      expect(screen()).toContain("Review answers");
+      panel!.handleInput("\x1b[B");
+      panel!.handleInput("\r");
+      await vi.advanceTimersByTimeAsync(0);
+      expect(notice).toHaveBeenCalledWith(
+        expect.stringContaining("Recovered answers saved"),
+      );
+      expect(
+        request.mock.calls.filter(([method]) => method === "questions.respond"),
+      ).toHaveLength(1);
+    } finally {
+      workflows.close();
+      vi.useRealTimers();
+    }
+  },
+);
 
 it("chunks snapshots, scopes pending questions, and expires abandoned queue holds", async () => {
   const home = await realpath(
@@ -55,14 +220,12 @@ it("chunks snapshots, scopes pending questions, and expires abandoned queue hold
     await invoke("changes.rollback", { id: list.items[0]!.id });
     expect(await readFile(join(home, "sample"), "utf8")).toBe("before");
     const records = await runtime.changes.list(session.id);
-    const listing = vi
-      .spyOn(runtime.changes, "list")
-      .mockResolvedValueOnce(
-        Array.from({ length: 100 }, () => ({
-          ...records[0]!,
-          path: "/" + "\u0001".repeat(3000),
-        })),
-      );
+    const listing = vi.spyOn(runtime.changes, "list").mockResolvedValueOnce(
+      Array.from({ length: 100 }, () => ({
+        ...records[0]!,
+        path: "/" + "\u0001".repeat(3000),
+      })),
+    );
     const page = (await invoke("changes.list")) as {
       items: unknown[];
       more: boolean;
@@ -76,6 +239,7 @@ it("chunks snapshots, scopes pending questions, and expires abandoned queue hold
       [{ id: "q", question: "Choose", options: ["A", "B"] }],
       abort.signal,
       session.id,
+      "one",
     );
     const question = (await invoke("questions.read")) as { id: string };
     await expect(
@@ -99,6 +263,7 @@ it("chunks snapshots, scopes pending questions, and expires abandoned queue hold
       [{ id: "q", question: "Again?" }],
       abort.signal,
       session.id,
+      "one",
     );
     abort.abort();
     expect(await cancelled).toBeUndefined();
@@ -179,9 +344,6 @@ it("uses durable host receipts and rejects cross-selection workflow commands", a
       ).toBe(false);
       expect(client.state.busy).toBe(false);
     });
-    await expect(
-      client.request("plan.execute", { sessionId: session.id, id: plan.id }),
-    ).rejects.toThrow(/changed/);
     const receipts = client.receipts.filter((r) => r.method === "plan.execute");
     expect(receipts.length).toBeGreaterThan(0);
     const executed = receipts[0]!;
@@ -190,6 +352,11 @@ it("uses durable host receipts and rejects cross-selection workflow commands", a
         await transport.request("command.receipt", { commandId: executed.id }),
       ).toMatchObject({ receipt: { status: "completed" } });
     });
+    // The accepted command can precede run.start; an initially idle snapshot
+    // does not prove execution finished. Wait for its durable terminal receipt.
+    await expect(
+      client.request("plan.execute", { sessionId: session.id, id: plan.id }),
+    ).rejects.toThrow(/changed/);
     expect(
       await transport.request(
         "plan.execute",
@@ -246,3 +413,128 @@ function deferred<T>() {
   });
   return { promise, resolve };
 }
+
+it.each([
+  ["current host", true],
+  ["older host", false],
+] as const)(
+  "reads approved plan progress from the %s without entering Plan mode",
+  async (_label, current) => {
+    let panel: ModelPanel | undefined, controller: AbortController | undefined;
+    const request = vi.fn(async (method: string) => {
+      if (method !== "plan.read") return null;
+      return current
+        ? {
+            active: false,
+            progress: {
+              planId: randomUUID(),
+              title: "Attached plan",
+              recordedEdits: 3,
+              steps: [
+                { text: "Edit file", status: "completed", note: "Done" },
+                { text: "Run tests", status: "in_progress" },
+              ],
+            },
+          }
+        : { active: false };
+    });
+    const client = {
+      state: { canAct: true, session: { id: "session" }, busy: true },
+      request,
+      supports: () => true,
+    } as unknown as ClientConnection;
+    const setError = vi.fn();
+    const view = {
+      openModelPanel() {
+        const next = new AbortController();
+        controller = next;
+        panel = new ModelPanel(next.signal, () => {});
+        return { panel, signal: next.signal, close: () => next.abort() };
+      },
+      closeModelPanel: () => controller?.abort(),
+      notice: vi.fn(),
+      setError,
+      setPermissionLabel: vi.fn(),
+    } as unknown as HikaroView;
+    const workflows = new AttachedWorkflows(client, view, "/tmp");
+    try {
+      const command = workflows.command("/plan", "progress");
+      await vi.waitFor(() =>
+        expect(request.mock.calls.some(([m]) => m === "plan.read")).toBe(true),
+      );
+      if (current) {
+        const screen = () =>
+          stripVTControlCharacters(panel!.render(110).join("\n"));
+        await vi.waitFor(() =>
+          expect(screen()).toContain("1/2 steps reported completed"),
+        );
+        expect(screen()).toContain("◐ In progress · Run tests");
+        expect(screen()).toContain("3 file edits recorded since approval");
+        panel!.handleInput("\r");
+      }
+      await command;
+      if (!current)
+        expect(String(setError.mock.calls[0]?.[0])).toContain(
+          "Upgrade the host to read plan progress",
+        );
+      else expect(setError).not.toHaveBeenCalled();
+      expect(
+        request.mock.calls.filter(([m]) => m === "plan.set" || m === "prompt"),
+      ).toEqual([]);
+    } finally {
+      workflows.close();
+    }
+  },
+);
+
+it("returns approved plan progress from the shared host plan.read", async () => {
+  const home = await realpath(
+    await mkdtemp(join(tmpdir(), "hikaro-plan-progress-rpc-")),
+  );
+  const runtime = await Runtime.open({
+    home,
+    cwd: home,
+    demo: true,
+    approve: async () => true,
+  });
+  const workflows = new RpcWorkflows(runtime);
+  try {
+    const session = await runtime.session();
+    const agent = await runtime.agent(session);
+    const read = async () =>
+      (
+        (await workflows.handle("plan.read", {}, session, agent, "one")) as {
+          progress: unknown;
+        }
+      ).progress;
+    await runtime.setPlanning(session, true);
+    const plan = await runtime.planning.propose(session.id, {
+      title: "Host plan",
+      steps: ["One"],
+      validation: "Check",
+    });
+    expect(await read()).toBeNull();
+    await runtime.approvePlan(session, plan.id);
+    await runtime.planning.updateStep(session.id, {
+      planId: plan.id,
+      step: 1,
+      status: "completed",
+    });
+    expect(await read()).toMatchObject({ recordedEdits: 0 });
+    await runtime.changes.update(
+      session.id,
+      join(home, "edited.txt"),
+      new AbortController().signal,
+      () => "after approval",
+    );
+    expect(await read()).toMatchObject({
+      planId: plan.id,
+      recordedEdits: 1,
+      steps: [{ text: "One", status: "completed" }],
+    });
+  } finally {
+    workflows.close();
+    await runtime.close();
+    await rm(home, { recursive: true, force: true });
+  }
+});

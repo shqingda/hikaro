@@ -3,63 +3,117 @@ import { relative } from "node:path";
 import type { FileChange } from "../../tools/src/changes.ts";
 import type { HikaroView } from "./index.ts";
 
-/** One exact replacement hunk; common prefix/suffix stay out of large previews. */
-export function changeDiff(
-  path: string,
-  before: string | undefined,
-  after: string,
-) {
-  const lines = (text: string) => text.match(/[^\n]*\n|[^\n]+$/g) ?? [];
-  const old = lines(before ?? "");
-  const next = lines(after);
-  const display = (prefix: string, line: string) =>
-    line.endsWith("\n")
-      ? prefix + line.slice(0, -1)
-      : prefix + line + "\n\\ No newline at end of file";
-  let start = 0,
-    end = 0;
-  while (
-    start < old.length &&
-    start < next.length &&
-    old[start] === next[start]
-  )
-    start++;
-  while (
-    end < old.length - start &&
-    end < next.length - start &&
-    old[old.length - 1 - end] === next[next.length - 1 - end]
-  )
-    end++;
-  const from = Math.max(0, start - 3);
-  const oldEnd = Math.min(old.length, old.length - end + 3);
-  const newEnd = Math.min(next.length, next.length - end + 3);
-  return [
-    `--- ${before === undefined ? "/dev/null" : path}`,
-    `+++ ${path}`,
-    `@@ -${oldEnd === from ? from : from + 1},${oldEnd - from} +${newEnd === from ? from : from + 1},${newEnd - from} @@`,
-    ...old.slice(from, start).map((line) => display(" ", line)),
-    ...old.slice(start, old.length - end).map((line) => display("-", line)),
-    ...next.slice(start, next.length - end).map((line) => display("+", line)),
-    ...next.slice(next.length - end, newEnd).map((line) => display(" ", line)),
-  ].join("\n");
+import { changeDiff } from "../../core/src/change-diff.ts";
+export { changeDiff } from "../../core/src/change-diff.ts";
+/**
+ * Committed changes from the newest through `id`, newest first. Rolling them
+ * back in this order lets each step pass the single-change conflict check.
+ */
+export function batchRollbackTargets(entries: FileChange[], id: string) {
+  const index = entries.findIndex((entry) => entry.id === id);
+  if (index < 0 || entries[index]!.state !== "committed") return [];
+  const range = entries.slice(0, index + 1);
+  if (range.some((e) => e.state === "prepared" || e.state === "reverting"))
+    throw Error(
+      "A newer edit or rollback is unfinished; review it before rolling back several changes.",
+    );
+  const targets = range.filter((entry) => entry.state === "committed");
+  return targets.length > 1 ? targets : [];
 }
+
+/** Committed edits from the same model run as `id`, newest first. */
+export function runRollbackTargets(entries: FileChange[], id: string) {
+  const chosen = entries.find((entry) => entry.id === id);
+  if (!chosen?.runId || chosen.state !== "committed") return [];
+  const run = entries.filter((entry) => entry.runId === chosen.runId);
+  if (run.some((e) => e.state === "prepared" || e.state === "reverting"))
+    return [];
+  const targets = run.filter((entry) => entry.state === "committed");
+  return targets.length > 1 ? targets : [];
+}
+
+/** Not a transaction: stops at the first failure and leaves the rest untouched. */
+export async function runBatchRollback(
+  targets: FileChange[],
+  rollback: (id: string, signal: AbortSignal) => Promise<void>,
+  signal: AbortSignal,
+): Promise<{
+  completed: number;
+  total: number;
+  failed?: { entry: FileChange; error: unknown };
+}> {
+  let completed = 0;
+  for (const entry of targets) {
+    try {
+      signal.throwIfAborted();
+      await rollback(entry.id, signal);
+    } catch (error) {
+      return { completed, total: targets.length, failed: { entry, error } };
+    }
+    completed++;
+  }
+  return { completed, total: targets.length };
+}
+
 export async function openChangeReview(
   view: HikaroView,
   source: {
     cwd: string;
     list(): Promise<FileChange[]>;
-    detail(
-      id: string,
-    ): Promise<{
+    detail(id: string): Promise<{
       entry: FileChange;
       before: string | undefined;
       after: string;
     }>;
     rollback(id: string, signal: AbortSignal): Promise<void>;
+    redo?(id: string, signal: AbortSignal): Promise<void>;
   },
 ) {
   const cwd = await realpath(source.cwd);
   const { panel, signal, close } = view.openModelPanel();
+  const confirmBatchRollback = async (
+    batch: FileChange[],
+    scope: "here" | "this run",
+  ) => {
+    const files = [
+      ...new Set(batch.map((entry) => relative(cwd, entry.path) || entry.path)),
+    ];
+    const created = batch.filter((entry) => entry.before === null).length;
+    const confirmed = await panel.choose(
+      `Confirm rollback ${scope === "here" ? "to here" : "of this run"}`,
+      [
+        { value: "cancel", label: "Keep these changes" },
+        { value: "confirm", label: `Roll back ${batch.length} changes` },
+      ],
+      `${scope === "this run" ? `Run ${batch[0]!.runId!.slice(0, 8)} · ` : ""}${batch.length} changes across ${files.length} files, newest first:\n${files.join("\n")}\n${created ? `${created} created files will be removed. ` : ""}Stops at the first conflict; changes already rolled back stay rolled back.`,
+      undefined,
+      {
+        search: false,
+        cancelValue: "cancel",
+        selectedValue: "cancel",
+        enterAction: "confirm",
+        requireNoticeVisible: true,
+      },
+    );
+    if (confirmed.value !== "confirm") return "";
+    panel.progress(`Rolling back ${batch.length} changes…`);
+    const result = await runBatchRollback(batch, source.rollback, signal);
+    if (!result.failed) {
+      const text = `Rolled back ${result.total} changes across ${files.length} files.`;
+      view.notice(text);
+      return text;
+    }
+    if (signal.aborted) throw result.failed.error;
+    const failedPath =
+      relative(cwd, result.failed.entry.path) || result.failed.entry.path;
+    const reason =
+      result.failed.error instanceof Error
+        ? result.failed.error.message
+        : String(result.failed.error);
+    const text = `Rolled back ${result.completed}/${result.total} changes, then stopped at ${failedPath}: ${reason} Remaining changes were kept.`;
+    view.setError(text);
+    return text;
+  };
   let page = 0,
     selected: string | undefined,
     message = "";
@@ -71,7 +125,7 @@ export async function openChangeReview(
       const items = entries.slice(page * 20, (page + 1) * 20).map((entry) => ({
         value: entry.id,
         label: relative(cwd, entry.path) || entry.path,
-        description: `${entry.before === null ? "Created" : "Edited"} · ${entry.state} · ${new Date(entry.timestamp).toLocaleTimeString()}`,
+        description: `${entry.before === null ? "Created" : "Edited"} · ${entry.state} · ${new Date(entry.timestamp).toLocaleTimeString()}${entry.runId ? ` · run ${entry.runId.slice(0, 8)}` : ""}`,
       }));
       if (page)
         items.push({
@@ -114,25 +168,66 @@ export async function openChangeReview(
         const { entry, before, after } = await source.detail(selected);
         signal.throwIfAborted();
         const path = relative(cwd, entry.path) || entry.path;
+        let batch: FileChange[] = [];
+        try {
+          batch = batchRollbackTargets(entries, entry.id);
+        } catch {
+          // Unfinished newer work only hides the batch action; single rollback still checks it.
+        }
+        const run = runRollbackTargets(entries, entry.id);
         const action = await panel.readDocument(
           `${path} · ${entry.state}`,
           changeDiff(path, before, after),
-          entry.state === "committed",
+          entry.state === "reverted" && source.redo
+            ? [{ value: "redo", label: "Reapply this edit…" }]
+            : batch.length || run.length
+              ? [
+                  { value: "rollback", label: "Roll back this edit…" },
+                  ...(run.length
+                    ? [
+                        {
+                          value: "run",
+                          label: `Roll back this run (${run.length} changes)…`,
+                        },
+                      ]
+                    : []),
+                  ...(batch.length
+                    ? [
+                        {
+                          value: "batch",
+                          label: `Roll back to here (${batch.length} changes)…`,
+                        },
+                      ]
+                    : []),
+                ]
+              : entry.state === "committed",
         );
-        if (action.value !== "rollback") continue;
+        if (action.value === "batch" || action.value === "run") {
+          message = await confirmBatchRollback(
+            action.value === "run" ? run : batch,
+            action.value === "run" ? "this run" : "here",
+          );
+          continue;
+        }
+        if (action.value !== "rollback" && action.value !== "redo") continue;
+        const redo = action.value === "redo";
         const confirmed = await panel.choose(
-          "Confirm file rollback",
+          redo ? "Confirm reapply edit" : "Confirm file rollback",
           [
-            { value: "cancel", label: "Keep this change" },
+            {
+              value: "cancel",
+              label: redo ? "Keep current file" : "Keep this change",
+            },
             {
               value: "confirm",
-              label:
-                before === undefined
+              label: redo
+                ? "Reapply recorded contents"
+                : before === undefined
                   ? "Delete created file"
                   : "Restore previous contents",
             },
           ],
-          `${entry.path}\n${before === undefined ? "Removes this newly created file." : "Restores contents from before this edit."} Later edits cause a conflict and are preserved.`,
+          `${entry.path}\n${redo ? "Reapplies the recorded edit as a new change." : before === undefined ? "Removes this newly created file." : "Restores contents from before this edit."} Later edits cause a conflict and are preserved.`,
           undefined,
           {
             search: false,
@@ -143,9 +238,12 @@ export async function openChangeReview(
           },
         );
         if (confirmed.value !== "confirm") continue;
-        panel.progress("Rolling back…");
-        await source.rollback(selected, signal);
-        message = `Rolled back ${path}. ${before === undefined ? "Created file removed." : "Previous contents restored."}`;
+        panel.progress(redo ? "Reapplying…" : "Rolling back…");
+        if (redo) await source.redo!(selected, signal);
+        else await source.rollback(selected, signal);
+        message = redo
+          ? `Reapplied ${path}. A new change was recorded.`
+          : `Rolled back ${path}. ${before === undefined ? "Created file removed." : "Previous contents restored."}`;
         view.notice(message);
       } catch (error) {
         if (signal.aborted) throw error;

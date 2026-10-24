@@ -1,7 +1,15 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  writeFile,
+  rm,
+  realpath,
+  readdir,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { Runtime } from "../packages/runtime/src/index.ts";
 import { selectInitialSession } from "../apps/cli/src/startup.ts";
 import { openModelControl } from "../packages/tui/src/model-settings.ts";
@@ -473,12 +481,27 @@ it("constructs real SDK request bodies with reasoning and speed settings, withou
 });
 
 it("deletes session history and outputs, preserves branches and refuses a live session", async () => {
-  const { runtime, home } = await fixture();
+  const { runtime, home, cwd } = await fixture();
   const session = await runtime.session();
   await runtime.store.append(session.id, "message", {
     message: { role: "user", text: "Delete only this session", timestamp: 1 },
   });
   const branch = await runtime.fork(session);
+  const file = join(await realpath(cwd), "recorded.txt");
+  await runtime.changes.update(
+    session.id,
+    file,
+    AbortSignal.timeout(10000),
+    () => "first",
+  );
+  await runtime.changes.update(
+    branch.id,
+    file,
+    AbortSignal.timeout(10000),
+    () => "branch",
+  );
+  await runtime.planning.setActive(session.id, true);
+  await runtime.planning.setActive(branch.id, true);
   await runtime.store.acquire(session.id, "running-owner");
   await expect(runtime.deleteSession(session.id)).rejects.toThrow(
     "Stop the active run",
@@ -488,6 +511,14 @@ it("deletes session history and outputs, preserves branches and refuses a live s
   await mkdir(folder, { recursive: true });
   await writeFile(join(folder, "sample.json"), "{}");
   await runtime.deleteSession(session.id);
+  expect(await runtime.changes.list(session.id)).toEqual([]);
+  expect(await runtime.changes.list(branch.id)).toHaveLength(1);
+  expect(await readdir(join(home, "changes"))).toHaveLength(1);
+  expect(await readdir(join(home, "plans"))).toHaveLength(1);
+  await runtime.planning.load(session.id);
+  expect(runtime.planning.get(session.id).active).toBe(false);
+  expect(runtime.planning.get(branch.id).active).toBe(true);
+  expect(await readFile(file, "utf8")).toBe("branch");
   expect(await runtime.store.session(session.id)).toBeUndefined();
   expect(await runtime.store.events(session.id)).toEqual([]);
   await expect(readFile(join(folder, "sample.json"))).rejects.toMatchObject({
@@ -639,6 +670,28 @@ it("exports all message pages without including hidden thinking by default", asy
   expect(text).toContain("Export row 0");
   expect(text).toContain("Export row 100");
   expect(text).not.toContain("Hidden thinking");
+});
+
+it("exports image bytes in portable relative files without provider secrets", async () => {
+  const { runtime } = await fixture();
+  const session = await runtime.session();
+  const pixels = Buffer.alloc(100003, 73);
+  await runtime.store.append(session.id, "message", {
+    message: {
+      role: "user",
+      text: "A picture",
+      timestamp: 1,
+      images: [{ mimeType: "image/png", data: pixels.toString("base64") }],
+      providerData: { secret: "PRIVATE-PROVIDER-DATA" },
+    },
+  });
+  const path = await runtime.exportSession(session.id);
+  const text = await readFile(path, "utf8");
+  const relative = text.match(/!\[Image 1\]\(([^)]+)\)/)![1]!;
+  expect(relative.startsWith("/")).toBe(false);
+  expect(await readFile(join(dirname(path), relative))).toEqual(pixels);
+  expect(text).not.toContain("PRIVATE-PROVIDER-DATA");
+  expect(text).not.toContain(pixels.toString("base64"));
 });
 
 it("paginates sessions and exposes rename in the session picker", async () => {

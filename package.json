@@ -1,22 +1,27 @@
 {
   "name": "hikaro",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@12.11.2",
+  "packageManager": "pnpm@12.14.0",
   "engines": {
-    "node": ">=24.21.0"
+    "node": ">=26.12.1"
   },
   "scripts": {
     "dev": "tsx apps/cli/src/index.ts",
     "build": "node scripts/build.mjs",
     "start": "node dist/hikaro.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "check": "pnpm typecheck && pnpm test && pnpm build",
+    "test": "vitest run && pnpm test:scripts",
+    "test:scripts": "node --test scripts/*.test.mjs",
+    "check": "pnpm typecheck && pnpm build && pnpm test",
+    "check:install": "node scripts/check-install.mjs",
+    "check:upgrade": "node scripts/check-upgrade.mjs",
     "bench": "node scripts/bench.mjs",
     "bench:check": "node scripts/bench.mjs --check",
     "bench:attach:check": "node scripts/bench-shared-host.mjs --check",
+    "bench:soak": "node scripts/bench-soak.mjs",
+    "bench:soak:check": "node scripts/bench-soak.mjs --check",
     "bench:harness": "node --import tsx scripts/bench-harness.mjs",
     "bench:harness:check": "node --import tsx scripts/bench-harness.mjs --check",
     "postinstall": "node scripts/prepare-native.mjs",
@@ -29,7 +34,10 @@
     "mobile:lab:check": "vitest run tests/mobile-lab.test.ts tests/dev-sim.test.ts",
     "mobile:ios": "pnpm --filter @hikaro/mobile ios",
     "mobile:android": "pnpm --filter @hikaro/mobile android",
-    "mobile:typecheck": "pnpm --filter @hikaro/mobile typecheck"
+    "mobile:typecheck": "pnpm --filter @hikaro/mobile typecheck",
+    "release:pack": "node scripts/package-release.mjs",
+    "check:release": "node --import tsx scripts/check-release.mjs",
+    "audit:release": "node scripts/release-audit.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sandbox-runtime": "0.0.79",
@@ -47,7 +55,7 @@
     "zod": "4.6.7"
   },
   "devDependencies": {
-    "@types/node": "24.10.1",
+    "@types/node": "26.6.5",
     "@types/qrcode-terminal": "0.12.2",
     "@types/ws": "8.18.1",
     "esbuild": "0.28.2",
@@ -55,6 +63,6 @@
     "serve-sim": "0.1.48",
     "tsx": "4.23.15",
     "typescript": "7.0.2",
-    "vitest": "5.0.4"
+    "vitest": "5.0.5"
   }
 }

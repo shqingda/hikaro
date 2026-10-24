@@ -44,6 +44,7 @@ export class ModelPanel implements Component {
   private enterAction: string | ((item: SelectItem) => string) = "confirm";
   private cancelValue?: string;
   private input?: Input;
+  private onInputChange?: (value: string) => void;
   private list?: SelectList;
   private items: SelectItem[] = [];
   private matches: SelectItem[] = [];
@@ -112,6 +113,7 @@ export class ModelPanel implements Component {
     this.items = items;
     this.emptyMessage = options?.emptyMessage ?? "No matching options";
     this.input = undefined;
+    this.onInputChange = undefined;
     if (options?.search ?? items.length > 5) {
       this.input = new Input({
         prompt: "> ",
@@ -137,9 +139,11 @@ export class ModelPanel implements Component {
       [
         {
           value: "back",
-          label: Array.isArray(canRollback)
-            ? "Back to list"
-            : "Back to changes",
+          label:
+            Array.isArray(canRollback) &&
+            !canRollback.some((item) => item.value === "rollback")
+              ? "Back to list"
+              : "Back to changes",
         },
         ...(Array.isArray(canRollback)
           ? canRollback
@@ -209,7 +213,7 @@ export class ModelPanel implements Component {
     title: string,
     secret = false,
     initial = "",
-    options?: { cancelValue?: string },
+    options?: { cancelValue?: string; onChange?: (value: string) => void },
   ): Promise<string> {
     this.signal.throwIfAborted();
     this.searchRevision++;
@@ -221,6 +225,7 @@ export class ModelPanel implements Component {
     this.error = "";
     this.message = "";
     this.secret = secret;
+    this.onInputChange = secret ? undefined : options?.onChange;
     this.list = undefined;
     this.input = new Input({ prompt: "> " });
     this.input.setValue(initial);
@@ -244,6 +249,7 @@ export class ModelPanel implements Component {
     this.pending = undefined;
     this.input?.setValue("");
     this.input = undefined;
+    this.onInputChange = undefined;
     this.list = undefined;
     this.refresh();
   }
@@ -266,6 +272,7 @@ export class ModelPanel implements Component {
       this.error = "";
       this.list = undefined;
       this.input = undefined;
+      this.onInputChange = undefined;
     }
     this.message = text;
     this.refresh();
@@ -348,6 +355,14 @@ export class ModelPanel implements Component {
     } else {
       const previous = this.input?.getValue();
       this.input?.handleInput(data);
+      // Submission clears the input internally; that is not a draft edit.
+      if (
+        this.pending &&
+        !this.secret &&
+        this.input &&
+        previous !== this.input.getValue()
+      )
+        this.onInputChange?.(this.input.getValue());
       if (this.list && previous !== this.input?.getValue()) {
         if (this.loadItems) {
           if (!this.searching) void this.searchItems();

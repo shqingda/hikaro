@@ -20,17 +20,15 @@ it("keeps a non-consuming output preview, isolates ownership, and confirms actua
     approve: async () => true,
   } as unknown as ToolContext;
   try {
-    const result = await tools
-      .get("terminal_start")!
-      .execute(
-        {
-          command:
-            "printf 'READY\\n'; read answer; printf 'ANSWER:%s\\n' \"$answer\"; sleep 30",
-          cols: 80,
-          rows: 24,
-        },
-        ctx,
-      );
+    const result = await tools.get("terminal_start")!.execute(
+      {
+        command:
+          "printf 'READY\\n'; read answer; printf 'ANSWER:%s\\n' \"$answer\"; sleep 30",
+        cols: 80,
+        rows: 24,
+      },
+      ctx,
+    );
     const id = (result.data as { id: string }).id;
     await vi.waitFor(() =>
       expect(manager.detail("owner", id).output).toContain("READY"),
@@ -46,11 +44,17 @@ it("keeps a non-consuming output preview, isolates ownership, and confirms actua
     manager.stop("owner", id);
     expect(["stopping", "exited"]).toContain(manager.detail("owner", id).state);
     await vi.waitFor(() =>
-      expect(manager.detail("owner", id).state).toBe("exited"),
+      expect(
+        manager.detail("owner", id).state,
+        JSON.stringify(manager.detail("owner", id)),
+      ).toBe("exited"),
     );
     expect(manager.detail("owner", id).exitCode).toEqual(expect.any(Number));
     await tools.get("terminal_read")!.execute({ id }, ctx);
-    expect(manager.detail("owner", id).state).toBe("exited");
+    expect(
+      manager.detail("owner", id).state,
+      JSON.stringify(manager.detail("owner", id)),
+    ).toBe("exited");
   } finally {
     await host.close();
   }

@@ -38,7 +38,12 @@ async function connection() {
       cancelled: boolean;
       cancel: () => void;
       prompt: () => Promise<void>;
-      snapshot: () => { busy: boolean; runId: null; runStatus: "idle" };
+      enqueuePrompt: () => Promise<{ completion: Promise<void> }>;
+      snapshot: () => {
+        busy: boolean;
+        runId: string | null;
+        runStatus: "idle" | "running" | "completed";
+      };
       subscribe: () => () => void;
     }
   >();
@@ -86,6 +91,9 @@ async function connection() {
             this.cancelled = true;
           },
           prompt: () => run.promise,
+          async enqueuePrompt() {
+            return { completion: this.prompt() };
+          },
           snapshot: () => ({ busy: false, runId: null, runStatus: "idle" }),
           subscribe: () => () => {},
         };
@@ -169,6 +177,80 @@ it("accepts compaction immediately and keeps cancellation and other scopes respo
   expect(current.session.id).not.toBe(session.id);
   await rpc.request("cancel");
   expect(rpc.agents.get(session.id)?.cancelled).toBe(true);
+});
+
+it("fences run cancellation after the durable claim and records the targeted run", async () => {
+  const rpc = await connection();
+  const session = await rpc.request("session.create");
+  const agent = rpc.agents.get(session.id)!;
+  const active = { busy: true, runId: "run-1", runStatus: "running" as const };
+  agent.snapshot = () => active;
+  const claim = deferred<Awaited<ReturnType<SQLiteStore["acceptCommand"]>>>();
+  const accept = rpc.runtime.store.acceptCommand.getMockImplementation()!;
+  rpc.runtime.store.acceptCommand.mockImplementationOnce(() => claim.promise);
+  const stale = rpc.send("run.cancel", "a", {
+    sessionId: session.id,
+    runId: "run-1",
+  });
+  await setImmediate();
+  active.runId = "run-2";
+  const command = rpc.runtime.store.acceptCommand.mock.calls.find(
+    ([item]) => item.method === "run.cancel",
+  )?.[0];
+  expect(command).toBeDefined();
+  claim.resolve(await accept(command!));
+  await setImmediate();
+  expect(rpc.reply(stale)?.error).toMatch(/no longer active/i);
+  expect(agent.cancelled).toBe(false);
+  const other = rpc.send("run.cancel", "a", {
+    sessionId: "other",
+    runId: "run-2",
+  });
+  await setImmediate();
+  expect(rpc.reply(other)?.error).toMatch(/selected session/i);
+  expect(agent.cancelled).toBe(false);
+  const listing = deferred<Session[]>();
+  rpc.runtime.store.sessions.mockImplementationOnce(() => listing.promise);
+  const blocked = rpc.send("session.list");
+  await setImmediate();
+  expect(rpc.reply(blocked)).toBeUndefined();
+  try {
+    expect(
+      await rpc.request("run.cancel", "a", {
+        sessionId: session.id,
+        runId: "run-2",
+      }),
+    ).toEqual({ accepted: true, runId: "run-2" });
+  } finally {
+    listing.resolve([session]);
+  }
+  expect(agent.cancelled).toBe(true);
+  const stopped = rpc.runtime.store.acceptCommand.mock.calls.at(-1)![0];
+  expect(
+    rpc.runtime.store.finishCommand.mock.calls.filter(
+      ([outcome]) => outcome.id === stopped.id,
+    ),
+  ).toHaveLength(1);
+  expect(rpc.runtime.store.finishCommand).toHaveBeenCalledWith(
+    expect.objectContaining({
+      status: "completed",
+      sessionId: session.id,
+      runId: "run-2",
+    }),
+  );
+  agent.cancelled = false;
+  agent.snapshot = () => ({
+    busy: false,
+    runId: "run-2",
+    runStatus: "completed",
+  });
+  const ended = rpc.send("run.cancel", "a", {
+    sessionId: session.id,
+    runId: "run-2",
+  });
+  await setImmediate();
+  expect(rpc.reply(ended)?.error).toMatch(/no longer active/i);
+  expect(agent.cancelled).toBe(false);
 });
 
 it("delivers compaction completion through scoped operation events", async () => {

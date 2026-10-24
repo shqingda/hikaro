@@ -255,6 +255,11 @@ it("runs Plan, questions, rollback and execution management through an attached 
     expect(await readFile(join(cwd, "sample.txt"), "utf8")).toBe("original");
     await wait("Confirm plan execution", send("\x1b[B\r"));
     await wait("Execution verified", send("\x1b[B\r"));
+    const progress = send("/plan progress\r");
+    await wait("Plan progress · reported by the model", progress);
+    await wait("steps reported completed", progress);
+    await wait("file edits recorded since approval", progress);
+    await wait("Enter send", send("\x1b"));
     expect(await readFile(join(cwd, "sample.txt"), "utf8")).toBe("implemented");
     await wait("File changes", send("/changes\r"));
     await wait("Roll back this edit", send("\r"));

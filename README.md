@@ -4,7 +4,7 @@ Independent TypeScript coding agent. Current executable clients: fullscreen TUI 
 
 ## Run
 
-Requires **Node 24.21+**, **pnpm 12.11.2**, and `rg`. macOS is the initial supported host.
+Requires **Node 26.12.1+**, **pnpm 12.14.0**, and `rg`. macOS is the initial supported host.
 
 Installing or building from source also requires a C11 compiler: Xcode Command Line Tools on macOS, or `build-essential` on Linux. Installation and build compile the small file-operation helper; the built CLI includes that executable. After pulling native helper changes, run `pnpm build` or `pnpm install` before using either `pnpm dev` or `pnpm start`. File tools refuse to run if it is unavailable.
 
@@ -16,11 +16,10 @@ pnpm start --demo
 
 Interactive `--demo` starts a fresh offline session unless an offline session is explicitly selected; it cannot restore a live-model session implicitly. The demo model never calls tools. An explicit `!COMMAND` still runs a real sandboxed command under the normal permission policy.
 
-For a real model, set its provider environment variable, then run:
+For a real model, start the TUI and enter `/login`. For an xAI subscription, choose **xAI → Sign in with SuperGrok or X Premium**. Existing subscribers can use their saved login directly; no API key is required:
 
 ```sh
-export ANTHROPIC_API_KEY='your-key'
-pnpm start --provider anthropic --model claude-sonnet-4-6
+pnpm start --provider xai --model grok-4.7
 ```
 
 `--models` lists the installed Pi AI catalog. `--base-url` supports OpenAI-compatible local or hosted servers. Provider credentials stay in the host process. Browsing `/model` lists built-in and cached models without reading Keychain; saved-provider status comes from metadata, not credential validation. Credentials are read when using a provider or explicitly connecting/refreshing it. Interactive provider sign-in saves credentials in Keychain; only provider/type metadata is written to `auth-index.json`. Enter saves the model with the active session. Ctrl+S also saves the default for new sessions. `/context`, `/thinking`, and `/speed` separate **active** and **default**: Enter applies the chosen value immediately; Ctrl+S also saves the default. Add `default` to edit only defaults for new sessions. `/settings` saves display, completion bell and startup preferences immediately. Plain `pnpm start` restores the last opened session in this workspace, including its model settings. Use `/new` or `pnpm start --new` for a new session. `--session ID` selects a specific session. No task is automatically replayed.
@@ -131,6 +130,10 @@ See [Cloudflare setup](docs/remote.md). The relay carries encrypted frames; tool
 
 Use the affected test path or filter once, for example `pnpm exec vitest run tests/session-search.test.ts`. Skip tests for documentation and pure styling. Full suites and benchmarks run only when explicitly needed. Correctness CI runs on pull requests and pushes to main; performance measurement is an explicit local command. See the [harness and performance guide](docs/harness-performance.md) for workloads, budgets and evidence limitations.
 
+`pnpm test` runs the application suites in `tests/` with Vitest, then the release/build script checks with Node's test runner. Use `pnpm test:scripts` for the script checks alone. Generated acceptance workspaces under `artifacts/` are evidence, not application test suites.
+
 Optional cloud configuration can be checked with `pnpm check:relay` and `pnpm --filter @hikaro/relay build` (local dry-run, no deployment).
 
 Read [validation status](docs/validation.md) for measured results and remaining acceptance checks. The core and TUI are implemented; remaining daily-use and Pi acceptance work is tracked in TODO.md.
+
+Source installation, macOS arm64 candidate tarballs (`pnpm release:pack` / `pnpm check:release`), upgrade/rollback precautions and isolated installation checks: [TUI installation guide](docs/install-release.md).

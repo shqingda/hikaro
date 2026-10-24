@@ -1,6 +1,6 @@
 import { ClientState, type ExecutionState } from "./index.ts";
 import {
-  rpcReadMethods,
+  rpcTransientMethods,
   type RpcMethod,
 } from "../../protocol/src/contracts.ts";
 
@@ -62,6 +62,9 @@ export class ClientConnection {
   }
   get receipts() {
     return this.view.receipts;
+  }
+  supports(method: RpcMethod): boolean {
+    return this.view.supports(method);
   }
   subscribe(fn: () => void) {
     this.listeners.add(fn);
@@ -133,7 +136,7 @@ export class ClientConnection {
       );
     if (this.syncing)
       return this.syncing.then(() => {
-        if (this.active && this.view.state.syncRequired)
+        if (this.active && this.view.needsSynchronization)
           return this.synchronize(attempt + 1);
       });
     const task = this.request("session.current").then(() => {});
@@ -150,7 +153,7 @@ export class ClientConnection {
       throw Error("Host does not support durable receipt queries");
     for (const receipt of this.receipts.filter(
       (r) =>
-        !rpcReadMethods.has(r.method) &&
+        !rpcTransientMethods.has(r.method) &&
         ["unknown", "acknowledged"].includes(r.status),
     ))
       await this.request("command.receipt", { commandId: receipt.id });
@@ -163,7 +166,7 @@ export class ClientConnection {
         this.receipts
           .filter(
             (r) =>
-              !rpcReadMethods.has(r.method) &&
+              !rpcTransientMethods.has(r.method) &&
               !["completed", "failed"].includes(r.status),
           )
           .map((r) => ({ id: r.id, method: r.method })),
@@ -172,9 +175,10 @@ export class ClientConnection {
     this.journalQueue = task;
     return task;
   }
-  request(
+  async request(
     method: RpcMethod,
     params: Record<string, unknown> = {},
+    options: { id?: string; beforeSend?: () => void } = {},
   ): Promise<unknown> {
     if (!this.active || this.disposed)
       return Promise.reject(Error("Not connected"));
@@ -183,13 +187,38 @@ export class ClientConnection {
       "session.current",
       "command.receipt",
       "cancel",
+      "run.cancel",
       "approval.respond",
     ].includes(method);
+    // A prompt acknowledgement can precede durable run completion. Refresh old
+    // outcomes before admitting another mutation so completed runs release slots.
+    // Recovery commands remain available even while outcome queries are blocked.
+    if (
+      !recovery &&
+      !rpcTransientMethods.has(method) &&
+      this.view.supports("command.receipt") &&
+      this.receipts.some(
+        (r) =>
+          !rpcTransientMethods.has(r.method) &&
+          ["acknowledged", "unknown"].includes(r.status),
+      )
+    ) {
+      const epoch = this.epoch;
+      await this.reconcile();
+      if (!this.active || this.disposed || epoch !== this.epoch)
+        throw Error(
+          "Connection replaced before send; command was not replayed",
+        );
+    }
     if (this.pending.size >= (recovery ? 32 : 28))
       return Promise.reject(Error("Client request capacity exceeded"));
     let frame: ClientCommand;
     try {
-      frame = this.view.command(this.options.id(), method, params);
+      frame = this.view.command(
+        options.id ?? this.options.id(),
+        method,
+        params,
+      );
     } catch (error) {
       return Promise.reject(error);
     }
@@ -216,10 +245,12 @@ export class ClientConnection {
           throw Error(
             "Connection replaced before send; command was not replayed",
           );
+        // Recheck view-specific authority after journal/reconciliation awaits.
+        options.beforeSend?.();
         return this.transport.send(frame);
       };
       try {
-        if (!rpcReadMethods.has(method) && this.options.intents)
+        if (!rpcTransientMethods.has(method) && this.options.intents)
           void this.persistIntents().then(send).catch(failed);
         else Promise.resolve(send()).catch(failed);
       } catch (error) {
@@ -227,10 +258,10 @@ export class ClientConnection {
       }
       this.notify();
     }).then(async (result) => {
-      if (!recovery && this.active && this.view.state.syncRequired)
+      if (!recovery && this.active && this.view.needsSynchronization)
         await this.synchronize();
       if (
-        !rpcReadMethods.has(method) &&
+        !rpcTransientMethods.has(method) &&
         this.active &&
         this.view.supports("command.receipt")
       )
@@ -267,11 +298,7 @@ export class ClientConnection {
       }
     }
     this.notify();
-    if (
-      this.view.state.connection === "connected" &&
-      this.view.state.syncRequired &&
-      !this.syncing
-    ) {
+    if (this.view.needsSynchronization && !this.syncing) {
       const epoch = this.epoch;
       void Promise.resolve()
         .then(() => {

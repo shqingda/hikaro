@@ -9,18 +9,18 @@ import { AppState, View, Text, useColorScheme } from "react-native";
 import { createMobileController } from "./native-runtime";
 import type { MobileController } from "./controller";
 import { colors } from "./theme";
+import { mobileLifecycle } from "./lifecycle";
 const Context = createContext<MobileController | null>(null);
 export function MobileProvider({ children }: { children: React.ReactNode }) {
   useColorScheme();
   const [controller] = useState(createMobileController);
   const [active, setActive] = useState(AppState.currentState === "active");
   useEffect(() => {
-    if (AppState.currentState === "active") void controller.restore();
+    const change = mobileLifecycle(controller, AppState.currentState);
     const subscription = AppState.addEventListener("change", (state) => {
       const visible = state === "active";
       setActive(visible);
-      if (visible) void controller.restore();
-      else controller.suspend();
+      change(state);
     });
     return () => {
       subscription.remove();

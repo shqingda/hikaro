@@ -107,8 +107,27 @@ async function host(options: Partial<Parameters<typeof serveRemote>[0]> = {}) {
       connectionId,
       body: device.send({ id: `request-${sequence++}`, method, params: {} }),
     });
-  return { deviceId, connectionId, incoming, send };
+  return {
+    deviceId,
+    connectionId,
+    incoming,
+    send,
+    receive: () => device.receive(JSON.parse(socket.sent.at(-1)).body).data,
+  };
 }
+
+it("advertises bridge-owned push registration only in encrypted remote hello", async () => {
+  const remote = await host();
+  const localHello = { methods: ["hello", "session.current"] };
+  state.request.mockResolvedValue(localHello);
+  remote.send("hello");
+  await setImmediate();
+  expect(remote.receive()).toMatchObject({
+    type: "response",
+    result: { methods: ["hello", "session.current", "push.register"] },
+  });
+  expect(localHello.methods).toEqual(["hello", "session.current"]);
+});
 
 it("attaches the encrypted bridge to the existing workspace host", async () => {
   await host();

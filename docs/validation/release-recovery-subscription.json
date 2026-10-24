@@ -1,0 +1,251 @@
+{
+  "status": "passed",
+  "artifact": "/Users/shqingda/Projects/hikaro/artifacts/ci-release-cf57c46/hikaro-0.1.0-darwin-arm64.tgz",
+  "sha256": "4fc18e9c33251a7540c6d9c2dea0e337db84b75df0d7757784f7d91d49f6338d",
+  "directory": "/Users/shqingda/Projects/hikaro/artifacts/live-release-YAd8Z1",
+  "node": "v26.12.0",
+  "platform": "darwin",
+  "arch": "arm64",
+  "authentication": "normal subscription credential store; XAI_API_KEY removed from child environment",
+  "startedAt": "2026-10-21T11:51:35.900Z",
+  "checks": [
+    "empty-cache installed artifact, version and patched forge signatures",
+    "installed TUI + subscription model reads, edits, tests and reviews diff; independent tests pass",
+    "TUI rejects unrestricted shell; denied command has no file side effect",
+    "Ctrl+C cancels real model shell; cancelled run and process exit both confirmed",
+    "SIGKILL during real model approval recovers unknown without executing command; explicit new TUI prompt succeeds",
+    "process-local offline/429/real-stream-cut/hang faults fail or cancel visibly with no automatic retry; each explicit subscription continuation succeeds",
+    "installed TUI clean exit"
+  ],
+  "forge": {
+    "version": "1.4.0",
+    "rsaSha256": "447c5441cea1b125e23661d7e27a8b1759cc3400241c0013b2d034b4ee1dbf50",
+    "verifiedNodeFiles": 49
+  },
+  "version": "hikaro 0.1.0",
+  "sessionId": "7710d8b3-a43f-4dcb-a32d-463a514bbcf7",
+  "diff": "diff --git a/sum.cjs b/sum.cjs\nindex 0a92af8..a5a1121 100644\n--- a/sum.cjs\n+++ b/sum.cjs\n@@ -1 +1 @@\n-exports.sum = (a, b) => a - b;\n+exports.sum = (a, b) => a + b;\n",
+  "recovery": {
+    "beforeRunId": "bbf72718-c5e5-4aeb-9e23-eba5946e7c96",
+    "runId": "bbf72718-c5e5-4aeb-9e23-eba5946e7c96",
+    "runStatus": "unknown"
+  },
+  "networkFaults": [
+    {
+      "mode": "offline",
+      "status": "failed",
+      "injectedRequests": 1,
+      "explicitContinuation": "completed",
+      "trace": [
+        {
+          "mode": "offline",
+          "event": "request"
+        }
+      ]
+    },
+    {
+      "mode": "rate-limit",
+      "status": "failed",
+      "injectedRequests": 1,
+      "explicitContinuation": "completed",
+      "trace": [
+        {
+          "mode": "rate-limit",
+          "event": "request"
+        }
+      ]
+    },
+    {
+      "mode": "disconnect",
+      "status": "failed",
+      "injectedRequests": 1,
+      "explicitContinuation": "completed",
+      "trace": [
+        {
+          "mode": "disconnect",
+          "event": "request"
+        },
+        {
+          "mode": "disconnect",
+          "event": "cut-after-text"
+        }
+      ]
+    },
+    {
+      "mode": "hang",
+      "status": "cancelled",
+      "injectedRequests": 1,
+      "explicitContinuation": "completed",
+      "trace": [
+        {
+          "mode": "hang",
+          "event": "request"
+        },
+        {
+          "mode": "hang",
+          "event": "aborted"
+        }
+      ]
+    }
+  ],
+  "events": [
+    {
+      "type": "run.start"
+    },
+    {
+      "type": "tool.start",
+      "name": "read_file"
+    },
+    {
+      "type": "tool.end",
+      "name": "read_file"
+    },
+    {
+      "type": "tool.start",
+      "name": "read_file"
+    },
+    {
+      "type": "tool.end",
+      "name": "read_file"
+    },
+    {
+      "type": "tool.start",
+      "name": "edit_file"
+    },
+    {
+      "type": "tool.end",
+      "name": "edit_file"
+    },
+    {
+      "type": "tool.start",
+      "name": "shell"
+    },
+    {
+      "type": "tool.end",
+      "name": "shell",
+      "isError": false
+    },
+    {
+      "type": "tool.start",
+      "name": "git_diff"
+    },
+    {
+      "type": "tool.end",
+      "name": "git_diff",
+      "isError": false
+    },
+    {
+      "type": "run.end",
+      "status": "completed"
+    },
+    {
+      "type": "run.start"
+    },
+    {
+      "type": "tool.start",
+      "name": "shell"
+    },
+    {
+      "type": "tool.end",
+      "name": "shell",
+      "isError": true
+    },
+    {
+      "type": "run.end",
+      "status": "failed"
+    },
+    {
+      "type": "run.start"
+    },
+    {
+      "type": "tool.start",
+      "name": "shell"
+    },
+    {
+      "type": "tool.end",
+      "name": "shell",
+      "isError": true
+    },
+    {
+      "type": "run.end",
+      "status": "cancelled"
+    },
+    {
+      "type": "run.start"
+    },
+    {
+      "type": "tool.start",
+      "name": "shell"
+    },
+    {
+      "type": "run.start"
+    },
+    {
+      "type": "run.end",
+      "status": "completed"
+    },
+    {
+      "type": "run.start"
+    },
+    {
+      "type": "run.end",
+      "status": "failed"
+    },
+    {
+      "type": "run.start"
+    },
+    {
+      "type": "run.end",
+      "status": "completed"
+    },
+    {
+      "type": "run.start"
+    },
+    {
+      "type": "run.end",
+      "status": "failed"
+    },
+    {
+      "type": "run.start"
+    },
+    {
+      "type": "run.end",
+      "status": "completed"
+    },
+    {
+      "type": "run.start"
+    },
+    {
+      "type": "run.end",
+      "status": "failed"
+    },
+    {
+      "type": "run.start"
+    },
+    {
+      "type": "run.end",
+      "status": "completed"
+    },
+    {
+      "type": "run.start"
+    },
+    {
+      "type": "run.end",
+      "status": "cancelled"
+    },
+    {
+      "type": "run.start"
+    },
+    {
+      "type": "run.end",
+      "status": "completed"
+    }
+  ],
+  "finishedAt": "2026-10-21T11:54:45.247Z",
+  "limitations": [
+    "current macOS arm64 machine",
+    "physical IME not exercised",
+    "network failures are process-local injections, not an actual provider outage or account rate limit",
+    "not publicly published"
+  ]
+}

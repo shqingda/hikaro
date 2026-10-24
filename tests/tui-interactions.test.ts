@@ -88,6 +88,7 @@ function interactionView(
     return () => {};
   });
   const focus = vi.spyOn(tui, "setFocus");
+  const exit = vi.fn();
   const view = new HikaroView(tui, {
     cwd,
     model: "fixture",
@@ -95,7 +96,7 @@ function interactionView(
     onDraftChange,
     preparePrompt,
     onCommand: async () => {},
-    onExit: () => {},
+    onExit: exit,
   });
   const event = (type: string, data: Record<string, unknown> = {}) =>
     view.event({
@@ -105,8 +106,27 @@ function interactionView(
       seq: 1,
       timestamp: 1,
     } satisfies AgentEvent);
-  return { view, input: (data: string) => input(data), focus, event };
+  return { view, input: (data: string) => input(data), focus, event, exit };
 }
+
+it("Ctrl+D exits with an unsent draft intact, while a model panel keeps its own shortcut", () => {
+  const prompt = vi.fn(async () => {});
+  const { view, input, exit } = interactionView(prompt);
+  try {
+    const text = "未发送草稿 😀\n第二行";
+    view.editor.setText(text);
+    const panel = view.openModelPanel();
+    expect(input("\x04")).toBeUndefined();
+    expect(exit).not.toHaveBeenCalled();
+    panel.close();
+    expect(input("\x04")).toEqual({ consume: true });
+    expect(exit).toHaveBeenCalledTimes(1);
+    expect(view.editor.getExpandedText()).toBe(text);
+    expect(prompt).not.toHaveBeenCalled();
+  } finally {
+    view.dispose();
+  }
+});
 
 it("keeps attachment input and draft on preparation failure without dispatching", async () => {
   const prompt = vi.fn(async () => {});
@@ -685,6 +705,32 @@ it("lets structured questions replace execution management and preserves the edi
     expect(questions.signal.aborted).toBe(false);
     questions.close();
     expect(view.editor.getText()).toBe("draft question");
+  } finally {
+    view.dispose();
+  }
+});
+
+it("does not redraw an unchanged shared-host status during idle polling", () => {
+  const tui = new TuiAltScreen(terminalStub);
+  const render = vi.spyOn(tui, "requestRender").mockImplementation(() => {});
+  const view = new HikaroView(tui, {
+    cwd: "/tmp",
+    model: "shared host",
+    onPrompt: async () => {},
+    onCommand: async () => {},
+    onExit: () => {},
+  });
+  try {
+    view.setInfo("Shared host · session");
+    render.mockClear();
+    for (let poll = 0; poll < 100; poll++)
+      view.setInfo("Shared host · session");
+    expect(render).not.toHaveBeenCalled();
+    view.setInfo("Host disconnected / synchronizing · draft stays local");
+    expect(render).toHaveBeenCalledOnce();
+    expect(
+      stripVTControlCharacters(view.layout.render(100).join("\n")),
+    ).toContain("Host disconnected");
   } finally {
     view.dispose();
   }

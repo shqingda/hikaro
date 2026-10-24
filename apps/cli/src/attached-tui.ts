@@ -1,13 +1,12 @@
 import { parseManualCommand } from "../../../packages/tui/src/manual-command.ts";
-import { AttachedWorkflows } from "./attached-workflows.ts";
+import type { AttachedWorkflows } from "./attached-workflows.ts";
 import { randomUUID } from "node:crypto";
 import { SharedHostClient } from "../../../packages/host/src/client.ts";
 import { ClientFiles } from "../../../packages/host/src/client-files.ts";
 import { ClientConnection } from "../../../packages/client-core/src/connection.ts";
-import {
-  createTerminal,
+import type {
   HikaroView,
-  type HistoryDirection,
+  HistoryDirection,
 } from "../../../packages/tui/src/index.ts";
 import { DraftSaver } from "../../../packages/tui/src/drafts.ts";
 import {
@@ -30,10 +29,22 @@ export async function attachTui(options: {
 }) {
   if (!process.stdin.isTTY || !process.stdout.isTTY)
     throw Error("--attach requires a terminal");
-  const transport = await SharedHostClient.connect({
-    ...options,
-    clientId: options.clientId ?? "main",
-  });
+  const { openInteractive } = await import("./interactive-startup.ts");
+  const {
+    runtime: transport,
+    view: [ui, workflowsModule],
+  } = await openInteractive(
+    Promise.all([
+      import("../../../packages/tui/src/index.ts"),
+      import("./attached-workflows.ts"),
+    ]),
+    SharedHostClient.connect({
+      ...options,
+      clientId: options.clientId ?? "main",
+    }),
+  );
+  const { createTerminal, HikaroView } = ui;
+  const { AttachedWorkflows } = workflowsModule;
   const files = await ClientFiles.open(
     transport.endpoint.home,
     transport.endpoint.key,
@@ -102,6 +113,15 @@ export async function attachTui(options: {
     lastEvent = 0;
   let sessionId: string | undefined;
   let historyRows: Array<{ seq: number; message: Message }> = [];
+  const messageSources = new WeakMap<
+    Message,
+    { sessionId: string; seq: number }
+  >();
+  const rememberMessages = (page: MessagePage, sessionId: string) => {
+    for (const row of page.items)
+      messageSources.set(row.message, { sessionId, seq: row.seq });
+    return page.items.map((row) => row.message);
+  };
   let buffer: AgentEvent[] = [];
   let bufferBytes = 0;
   const listeners = new Set<(event: AgentEvent) => void>();
@@ -128,8 +148,7 @@ export async function attachTui(options: {
       };
     },
   };
-  const syncApprovals = () => {
-    const state = client.state;
+  const syncApprovals = (state = client.state) => {
     const live = state.canAct ? state.approvals : [];
     for (const [id, controller] of approvals)
       if (!live.some((a) => a.id === id)) {
@@ -164,7 +183,7 @@ export async function attachTui(options: {
       p.after = historyRows.at(-1)!.seq;
     const page = (await client.request("messages.read", p)) as MessagePage;
     historyRows = page.items;
-    return { ...page, messages: page.items.map((row) => row.message) };
+    return { ...page, messages: rememberMessages(page, p.sessionId as string) };
   }
   async function refresh() {
     const epoch = ++loadEpoch;
@@ -197,10 +216,7 @@ export async function attachTui(options: {
       )
         return;
       historyRows = page.items;
-      view.showMessages(
-        page.items.map((row) => row.message),
-        page,
-      );
+      view.showMessages(rememberMessages(page, next), page);
       lastEvent = page.items.at(-1)?.seq ?? 0;
       for (const event of buffer)
         if (event.seq > lastEvent) {
@@ -246,13 +262,15 @@ export async function attachTui(options: {
       void refresh();
       return;
     }
-    if (
-      frame.type !== "event" ||
-      !client.state.canAct ||
-      frame.event.sessionId !== client.state.session?.id
-    )
-      return;
+    if (frame.type !== "event") return;
+    const state = client.state;
+    if (!state.canAct || frame.event.sessionId !== state.session?.id) return;
     const event = frame.event as AgentEvent;
+    if (event.type === "message")
+      messageSources.set(event.data.message as Message, {
+        sessionId: event.sessionId,
+        seq: event.seq,
+      });
     if (loading) {
       const bytes = Buffer.byteLength(JSON.stringify(event));
       if (buffer.length >= 128 || bufferBytes + bytes > 1_048_576) {
@@ -290,7 +308,7 @@ export async function attachTui(options: {
         stream: "",
         streamTruncated: false,
       });
-    } else syncApprovals();
+    } else syncApprovals(state);
   });
   const offConnection = transport.onConnection((connected) => {
     if (connected) void client.connected().catch(fail);
@@ -323,6 +341,7 @@ export async function attachTui(options: {
     onExit: leave,
     detachOnCtrlD: true,
     commands: [
+      { name: "search", description: "Search full messages in this session" },
       ...[
         "recovery",
         "export",
@@ -397,10 +416,64 @@ export async function attachTui(options: {
       }
     },
     onHistory: history,
+    onReadMessage: async (message, offset, limit) => {
+      const source = messageSources.get(message);
+      const epoch = loadEpoch;
+      if (
+        !source ||
+        !client.state.canAct ||
+        source.sessionId !== client.state.session?.id
+      )
+        throw Error(
+          "Message is no longer in the selected session. Reload history.",
+        );
+      const content = (await client.request("messages.content", {
+        ...source,
+        field: "text",
+        offset,
+        limit,
+      })) as { data: string };
+      if (
+        epoch !== loadEpoch ||
+        !client.state.canAct ||
+        source.sessionId !== client.state.session?.id
+      )
+        throw Error(
+          "Session or connection changed while reading. Reload history.",
+        );
+      return content.data;
+    },
     onCommand: async (text) => {
       const [command, ...parts] = text.trim().split(/\s+/);
       const rest = parts.join(" ");
       switch (command) {
+        case "/search": {
+          if (!client.supports("messages.search"))
+            throw Error("Upgrade the host to search message history.");
+          const { openMessageSearch } =
+            await import("../../../packages/tui/src/message-search.ts");
+          const sessionId = client.state.session?.id;
+          if (!sessionId) throw Error("No session selected");
+          await openMessageSearch(
+            view,
+            rest,
+            async (query, before) =>
+              (await client.request("messages.search", {
+                sessionId,
+                query,
+                before,
+              })) as import("../../../packages/protocol/src/contracts.ts").MessageSearchPage,
+            async (seq, offset) =>
+              (await client.request("messages.content", {
+                sessionId,
+                seq,
+                field: "text",
+                offset,
+                limit: 16000,
+              })) as import("../../../packages/tui/src/message-search.ts").SearchContent,
+          );
+          return;
+        }
         case "/changes":
         case "/tasks":
         case "/plan":
@@ -410,7 +483,7 @@ export async function attachTui(options: {
           leave();
           return;
         case "/help":
-          return "Shared host: /recovery, /export, /plugins, ![--unrestricted] COMMAND (host approvals apply), /changes, /tasks, /plan [TASK], /plan cancel · host workflows. /sessions [query], /resume ID, /new, /rename title, /compact, /fork, /steer text, /status, /access, /share DEVICE view|control|off, /model [PROVIDER/MODEL], /login, /settings, /permissions, /context [default], /thinking [default], /speed [default], /resources [query], /attach PATH. Ctrl+C stops the selected task; Ctrl+D detaches. Local files use the existing @ completion.";
+          return "Shared host: /recovery, /export, /plugins, ![--unrestricted] COMMAND (host approvals apply), /search [text], /changes, /tasks, /tasks history [RUN_ID], /plan [TASK], /plan cancel, /plan history, /plan progress · host workflows. /sessions [query], /resume ID, /new, /rename title, /compact, /fork, /steer text, /status, /access, /share DEVICE view|control|off, /model [PROVIDER/MODEL], /login, /settings, /permissions, /context [default], /thinking [default], /speed [default], /resources [query], /attach PATH. Ctrl+C stops the selected task; Ctrl+D detaches. Local files use the existing @ completion.";
         case "/status":
           return JSON.stringify(
             {
@@ -471,6 +544,22 @@ export async function attachTui(options: {
             role: role === "off" ? null : role,
           });
           return "Session access updated.";
+        }
+        case "/paste-image": {
+          const target = client.state.session?.id;
+          const draft = view.editor.getExpandedText();
+          const { saveClipboardImage } =
+            await import("../../../packages/runtime/src/clipboard-image.ts");
+          const path = await saveClipboardImage();
+          if (exiting) return;
+          if (
+            !client.state.canAct ||
+            client.state.session?.id !== target ||
+            view.editor.getExpandedText() !== draft
+          )
+            return `Input or connection changed; clipboard image saved at ${path}. Use /attach PATH to add it when ready.`;
+          view.editor.setText(attachmentReference(path) + " ");
+          return "Clipboard image attached. Add your question and press Enter. The private temporary file is retained for draft recovery.";
         }
         case "/attach":
           view.editor.setText(attachmentReference(text.slice(7)));

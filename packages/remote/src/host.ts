@@ -327,10 +327,11 @@ export async function serveRemote(options: {
           if (command.method === "push.register") {
             if (
               !isRecord(command.params) ||
-              typeof command.params.token !== "string" ||
-              !/^(Expo|Exponent)PushToken\[[A-Za-z0-9_-]+\]$/.test(
-                command.params.token,
-              )
+              (command.params.token !== null &&
+                (typeof command.params.token !== "string" ||
+                  !/^(Expo|Exponent)PushToken\[[A-Za-z0-9_-]+\]$/.test(
+                    command.params.token,
+                  )))
             )
               throw Error("Invalid push registration");
             await post(config, "push", secret.token, {
@@ -341,6 +342,17 @@ export async function serveRemote(options: {
           } else {
             activeScopes.add(id);
             response = await dispatchRemote(rpc, id, command);
+            // Push registration is implemented by this encrypted bridge, not
+            // the local RPC server. Advertise it only on the remote channel.
+            if (
+              command.method === "hello" &&
+              isRecord(response) &&
+              Array.isArray(response.methods)
+            )
+              response = {
+                ...response,
+                methods: [...new Set([...response.methods, "push.register"])],
+              };
           }
           send(id, { type: "response", id: command.id, result: response });
         } catch (error) {

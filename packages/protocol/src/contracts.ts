@@ -12,16 +12,24 @@ export const rpcMethods = [
   "resources.list",
   "changes.list",
   "changes.detail",
+  "changes.diff",
   "changes.rollback",
+  "changes.redo",
   "execution.hold",
   "execution.release",
   "execution.read",
+  "execution.history",
+  "execution.history.detail",
   "execution.action",
   "plan.read",
+  "plan.history",
+  "plan.version",
   "plan.set",
   "plan.execute",
   "questions.read",
   "questions.respond",
+  "questions.draft.read",
+  "questions.draft.save",
 
   "hello",
   "command.receipt",
@@ -44,14 +52,17 @@ export const rpcMethods = [
   "model.set",
   "model.default",
   "messages.read",
+  "messages.search",
   "messages.content",
   "artifact.read",
   "events.read",
   "prompt",
   "steer",
   "cancel",
+  "run.cancel",
   "approval.respond",
   "client.detach",
+  "push.register",
 ] as const;
 export type RpcMethod = (typeof rpcMethods)[number];
 export const rpcReadMethods: ReadonlySet<string> = new Set([
@@ -60,9 +71,15 @@ export const rpcReadMethods: ReadonlySet<string> = new Set([
   "resources.list",
   "changes.list",
   "changes.detail",
+  "changes.diff",
   "execution.read",
+  "execution.history",
+  "execution.history.detail",
   "plan.read",
+  "plan.history",
+  "plan.version",
   "questions.read",
+  "questions.draft.read",
 
   "hello",
   "command.receipt",
@@ -75,10 +92,35 @@ export const rpcReadMethods: ReadonlySet<string> = new Set([
   "models.list",
   "model.read",
   "messages.read",
+  "messages.search",
   "messages.content",
   "artifact.read",
   "events.read",
 ]);
+export type MessageSearchPage = {
+  items: { seq: number; role: string; snippet: string }[];
+  nextBefore: number | null;
+};
+/** Draft CAS and device push settings have no action intent and are never automatically replayed. */
+export const rpcTransientMethods: ReadonlySet<string> = new Set([
+  ...rpcReadMethods,
+  "push.register",
+  "questions.draft.save",
+]);
+/** Partial UI state only; restoring a draft never submits any answers. */
+export type QuestionDraft = {
+  answers: Record<string, string>;
+  inputs: Record<string, string>;
+  position:
+    { kind: "question" | "input"; questionId: string } | { kind: "review" };
+};
+export type QuestionDraftSnapshot = {
+  revision: number;
+  draft: QuestionDraft | null;
+};
+/** A conflict must not be retried with a new revision without explicit reconciliation. */
+export type QuestionDraftSaveResult =
+  { revision: number } | { conflict: true; current: QuestionDraftSnapshot };
 export const HelloParams = z.object({
   protocolVersions: z.optional(
     z
@@ -93,8 +135,9 @@ export function rpcCapabilities(sharedHost = false) {
     supportedProtocolVersions: [protocolVersion],
     methods: rpcMethods.filter(
       (method) =>
-        sharedHost ||
-        !["session.access", "session.access.read"].includes(method),
+        method !== "push.register" &&
+        (sharedHost ||
+          !["session.access", "session.access.read"].includes(method)),
     ),
     snapshotMethod: "session.current" as const,
     eventSequence: "global-monotonic-filtered-by-session" as const,
@@ -108,6 +151,12 @@ export function rpcCapabilities(sharedHost = false) {
   };
 }
 const id = z.string().check(z.minLength(1)).check(z.maxLength(128));
+export const RunCancelParams = z.object({ sessionId: id, runId: id });
+/** Acceptance records a stop request; the run's terminal event proves its outcome. */
+export const RunCancelResult = z.object({
+  accepted: z.literal(true),
+  runId: id,
+});
 const sequence = z.int().check(z.gte(0)).check(z.lte(Number.MAX_SAFE_INTEGER));
 export const HelloResult = z.object({
   protocolVersion: z.literal(protocolVersion),

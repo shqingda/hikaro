@@ -1,3 +1,5 @@
+import type { PendingPrompt, PendingPromptStore } from "./pending-prompts.ts";
+import { SteeringQueue, type PendingSteeringStore } from "./steering-queue.ts";
 import { randomUUID } from "node:crypto";
 import * as z from "zod";
 import { checkpointMessage, fitContext, summarizeHistory } from "./context.ts";
@@ -129,18 +131,18 @@ export class PluginHost {
 export class Agent implements AgentBackend {
   private listeners = new Set<(e: AgentEvent) => void>();
   private controller?: AbortController;
-  private steering: Array<{ text: string; scope?: string }> = [];
+  private steering: SteeringQueue;
+  private queueWaiters = new Set<() => void>();
   private compacting = false;
   private origin?: { scope?: string; commandId?: string };
   private queueHolds = 0;
-  private queue: Array<{
-    id: string;
-    text: string;
-    images?: ImageInput[];
-    origin?: { scope?: string; commandId?: string };
-    resolve: () => void;
-    reject: (e: unknown) => void;
-  }> = [];
+  private queue: Array<
+    PendingPrompt & {
+      recovered?: boolean;
+      resolve: () => void;
+      reject: (e: unknown) => void;
+    }
+  > = [];
   private draining = false;
   private runActive = false;
   private runId: string | null = null;
@@ -220,7 +222,7 @@ export class Agent implements AgentBackend {
   }
   snapshot() {
     return {
-      busy: this.runActive || this.queue.length > 0,
+      busy: this.runActive || this.queue.some((item) => !item.recovered),
       stream: this.streamPreview,
       streamTruncated: this.streamTruncated,
       cursor: this.cursor,
@@ -237,6 +239,8 @@ export class Agent implements AgentBackend {
     readonly options: {
       session: Session;
       store: EventStore;
+      pendingStore?: PendingPromptStore;
+      steeringStore?: PendingSteeringStore;
       provider: ProviderAdapter;
       tools: ToolRegistry;
       system?: string;
@@ -255,6 +259,10 @@ export class Agent implements AgentBackend {
       saveArtifact?: (callId: string, result: ToolResult) => Promise<string>;
     },
   ) {
+    this.steering = new SteeringQueue(
+      options.session.id,
+      options.steeringStore,
+    );
     this.budget = options.budget ?? {
       usage: { input: 0, output: 0, cost: 0 },
       maxCost: options.maxCost ?? 10,
@@ -262,7 +270,7 @@ export class Agent implements AgentBackend {
     };
   }
   get busy() {
-    return this.draining;
+    return this.draining || this.queueWrites > 0;
   }
   subscribe(fn: (e: AgentEvent) => void) {
     this.listeners.add(fn);
@@ -338,17 +346,88 @@ export class Agent implements AgentBackend {
       );
     if (!text.trim() && !images?.length) return;
     if (this.queue.length >= 32) throw Error("Prompt queue is full");
-    return new Promise<void>((resolve, reject) => {
-      this.queue.push({
-        id: randomUUID(),
-        text,
-        images,
-        origin,
-        resolve,
-        reject,
-      });
-      void this.drain();
+    const accepted = await this.enqueuePrompt(text, images, origin);
+    return accepted.completion;
+  }
+  async enqueuePrompt(
+    text: string,
+    images?: ImageInput[],
+    origin?: { scope?: string; commandId?: string },
+  ) {
+    if (images?.length && this.options.provider.supportsImages === false)
+      throw Error(
+        "The selected model does not support image input. Choose an image-capable model.",
+      );
+    if (this.compacting)
+      throw Error(
+        "Wait for compaction to finish before sending another prompt.",
+      );
+    if (!text.trim() && !images?.length) throw Error("Prompt is empty");
+    let resolve!: () => void, reject!: (error: unknown) => void;
+    const completion = new Promise<void>((yes, no) => {
+      resolve = yes;
+      reject = no;
     });
+    // Acceptance and completion are separate: a caller may attach after dispatch starts.
+    void completion.catch(() => {});
+    await this.queueOperation(async () => {
+      if (this.queue.length >= 32) throw Error("Prompt queue is full");
+      const item = { id: randomUUID(), text, images, origin, resolve, reject };
+      await this.options.pendingStore?.insertPendingPrompt(
+        this.options.session.id,
+        { id: item.id, text, images, origin },
+      );
+      this.queue.push(item);
+    });
+    void this.drain();
+    return { completion };
+  }
+  private queueTail: Promise<unknown> = Promise.resolve();
+  private queueWrites = 0;
+  private queueOperation<T>(operation: () => Promise<T>): Promise<T> {
+    this.queueWrites++;
+    const result = this.queueTail.then(operation).finally(() => {
+      this.queueWrites--;
+    });
+    this.queueTail = result.catch(() => {});
+    return result;
+  }
+  async queueSettled() {
+    await this.queueTail;
+  }
+  async restorePending() {
+    await this.queueOperation(async () => {
+      await this.steering.restore();
+      const items =
+        (await this.options.pendingStore?.pendingPrompts(
+          this.options.session.id,
+        )) ?? [];
+      for (const item of items) {
+        if (!this.queue.some((q) => q.id === item.id))
+          this.queue.push({
+            ...item,
+            recovered: true,
+            resolve() {},
+            reject(error) {
+              console.error(`Recovered message failed: ${String(error)}`);
+            },
+          });
+      }
+    });
+  }
+  async resumePending(id: string, scope?: string) {
+    await this.queueOperation(async () => {
+      const item = this.queue[this.pendingIndex(id)]!;
+      if (!item.recovered) throw Error("Message is already queued");
+      if (item.origin?.scope !== scope)
+        throw Error("Restore from the original client identity");
+      if (item.images?.length && this.options.provider.supportsImages === false)
+        throw Error(
+          "The selected model does not support image input. Choose an image-capable model.",
+        );
+      item.recovered = false;
+    });
+    void this.drain();
   }
   /** Freeze dispatch while the user manages pending work; active work continues. */
   holdQueue() {
@@ -358,14 +437,16 @@ export class Agent implements AgentBackend {
       if (released) return;
       released = true;
       this.queueHolds--;
+      if (!this.queueHolds) for (const resume of this.queueWaiters) resume();
       void this.drain();
     };
   }
   pendingPrompts() {
-    return this.queue.map(({ id, text, images }) => ({
+    return this.queue.map(({ id, text, images, recovered }) => ({
       id,
       text,
       attachments: images?.length ?? 0,
+      recovered: recovered ?? false,
     }));
   }
   private pendingIndex(id: string) {
@@ -375,58 +456,221 @@ export class Agent implements AgentBackend {
     return index;
   }
   updatePending(id: string, text: string) {
-    const item = this.queue[this.pendingIndex(id)]!;
-    if (!text.trim() && !item.images?.length)
-      throw Error("Message cannot be empty");
-    item.text = text;
+    return this.queueOperation(async () => {
+      const item = this.queue[this.pendingIndex(id)]!;
+      if (!text.trim() && !item.images?.length)
+        throw Error("Message cannot be empty");
+      await this.options.pendingStore?.updatePendingPrompt(
+        this.options.session.id,
+        id,
+        text,
+      );
+      item.text = text;
+    });
   }
   prioritizePending(id: string) {
-    const [item] = this.queue.splice(this.pendingIndex(id), 1);
-    this.queue.unshift(item!);
+    return this.queueOperation(async () => {
+      const index = this.pendingIndex(id);
+      await this.options.pendingStore?.prioritizePendingPrompt(
+        this.options.session.id,
+        id,
+      );
+      const [item] = this.queue.splice(index, 1);
+      this.queue.unshift(item!);
+    });
   }
   removePending(id: string) {
-    const [item] = this.queue.splice(this.pendingIndex(id), 1);
-    item!.reject(new DOMException("Removed from queue", "AbortError"));
+    return this.queueOperation(async () => {
+      const index = this.pendingIndex(id);
+      await this.options.pendingStore?.takePendingPrompt(
+        this.options.session.id,
+        id,
+      );
+      const [item] = this.queue.splice(index, 1);
+      item!.reject(new DOMException("Removed from queue", "AbortError"));
+    });
   }
   steer(text: string, scope?: string) {
-    if (this.steering.length >= 16) throw Error("Steering queue is full");
-    this.steering.push({ text, scope });
+    const epoch = this.cancelEpoch,
+      scopeEpoch = scope ? this.scopeEpochs.get(scope) : undefined;
+    const cancelled = () =>
+      epoch !== this.cancelEpoch ||
+      (scope !== undefined && scopeEpoch !== this.scopeEpochs.get(scope));
+    return this.queueOperation(async () => {
+      if (cancelled()) throw new DOMException("Cancelled", "AbortError");
+      const id = await this.steering.add(text, scope);
+      if (cancelled()) {
+        this.steering.block((item) => item.id === id);
+        throw new DOMException("Cancelled", "AbortError");
+      }
+    });
+  }
+  pendingSteering() {
+    return this.steering.pending();
+  }
+  updateSteering(id: string, text: string) {
+    return this.queueOperation(() => this.steering.update(id, text));
+  }
+  prioritizeSteering(id: string) {
+    return this.queueOperation(() => this.steering.prioritize(id));
+  }
+  removeSteering(id: string) {
+    return this.queueOperation(() => this.steering.remove(id));
+  }
+  resumeSteering(id: string, scope?: string) {
+    return this.queueOperation(async () => this.steering.resume(id, scope));
+  }
+  private discardSteering(matches: Parameters<SteeringQueue["discard"]>[0]) {
+    this.steering.block(matches);
+    void this.queueOperation(() => this.steering.discard(matches)).catch(
+      (error) => {
+        console.error(
+          `Could not persist steering cancellation: ${String(error)}`,
+        );
+      },
+    );
+  }
+  private async applySteering(signal: AbortSignal) {
+    for (;;) {
+      await this.waitForSteeringRelease(signal);
+      const state = await this.queueOperation(async () => {
+        signal.throwIfAborted();
+        if (this.queueHolds && this.steering.ready) return "held";
+        return (await this.steering.consume(
+          this.activeLease,
+          (event) => {
+            this.publish(event);
+          },
+          (text) => this.message({ role: "user", text, timestamp: Date.now() }),
+        ))
+          ? "applied"
+          : "empty";
+      });
+      if (state === "empty") return;
+    }
+  }
+  private async waitForSteeringRelease(signal: AbortSignal) {
+    while (this.queueHolds && this.steering.ready) {
+      signal.throwIfAborted();
+      await new Promise<void>((resolve, reject) => {
+        const cleanup = () => {
+          this.queueWaiters.delete(resume);
+          signal.removeEventListener("abort", abort);
+        };
+        const resume = () => {
+          cleanup();
+          resolve();
+        };
+        const abort = () => {
+          cleanup();
+          reject(signal.reason);
+        };
+        this.queueWaiters.add(resume);
+        signal.addEventListener("abort", abort, { once: true });
+      });
+    }
+    signal.throwIfAborted();
   }
   /** Revocation removes this participant's work without stopping another owner. */
   cancelScope(scope: string) {
+    this.scopeEpochs.set(scope, (this.scopeEpochs.get(scope) ?? 0) + 1);
     if (this.origin?.scope === scope && !this.compacting)
       this.controller?.abort();
-    const kept: typeof this.queue = [];
-    for (const item of this.queue) {
-      if (item.origin?.scope === scope)
-        item.reject(new DOMException("Client revoked", "AbortError"));
-      else kept.push(item);
-    }
-    this.queue = kept;
-    this.steering = this.steering.filter((item) => item.scope !== scope);
+    void this.discardPending((item) => item.origin?.scope === scope);
+    this.discardSteering((item) => item.scope === scope);
   }
-  cancel() {
+  private cancelEpoch = 0;
+  private scopeEpochs = new Map<string, number>();
+  private async discardPending(
+    matches: (item: PendingPrompt & { recovered?: boolean }) => boolean,
+  ) {
+    try {
+      await this.queueOperation(async () => {
+        for (const item of [...this.queue]) {
+          if (!matches(item)) continue;
+          await this.options.pendingStore?.takePendingPrompt(
+            this.options.session.id,
+            item.id,
+          );
+          this.queue.splice(this.pendingIndex(item.id), 1);
+          item.reject(new DOMException("Cancelled", "AbortError"));
+        }
+      });
+    } catch (error) {
+      // A failed durable cancellation must never let memory-only state dispatch.
+      this.queueHolds++;
+      console.error(`Could not persist queue cancellation: ${String(error)}`);
+    }
+  }
+  cancel(preserveRecovered = false) {
+    this.cancelEpoch++;
     this.controller?.abort();
-    for (const item of this.queue.splice(0))
-      item.reject(new DOMException("Cancelled", "AbortError"));
-    this.steering = [];
+    void this.discardPending((item) => !preserveRecovered || !item.recovered);
+    this.discardSteering((item) => !preserveRecovered || !item.recovered);
   }
   private async drain() {
-    if (this.draining) return;
+    if (
+      this.draining ||
+      (this.queueWrites === 0 && !this.queue.some((item) => !item.recovered))
+    )
+      return;
     this.draining = true;
     try {
-      while (this.queue.length && !this.queueHolds) {
-        const item = this.queue.shift()!;
+      for (;;) {
+        const epoch = this.cancelEpoch;
+        const scopes = new Map(this.scopeEpochs);
+        const item = await this.queueOperation(async () => {
+          if (this.queueHolds) return;
+          const index = this.queue.findIndex((item) => !item.recovered);
+          if (index < 0) return;
+          const item = this.queue[index]!;
+          try {
+            if (
+              this.options.pendingStore &&
+              !(await this.options.pendingStore.takePendingPrompt(
+                this.options.session.id,
+                item.id,
+              ))
+            )
+              throw Error(
+                "Message was claimed or removed elsewhere; it will not be replayed",
+              );
+          } catch (error) {
+            item.recovered = true;
+            item.reject(error);
+            return;
+          }
+          this.queue.splice(index, 1);
+          return item;
+        });
+        if (!item) break;
         try {
+          if (
+            epoch !== this.cancelEpoch ||
+            (item.origin?.scope &&
+              scopes.get(item.origin.scope) !==
+                this.scopeEpochs.get(item.origin.scope))
+          )
+            throw new DOMException("Cancelled", "AbortError");
           this.origin = item.origin;
           await this.run(item.text, item.images);
           item.resolve();
         } catch (e) {
           item.reject(e);
         }
+        // Settle the final item and release ownership in the same microtask.
+        // An awaited empty dequeue otherwise leaves completion observers busy.
+        // Pending queue writes must finish before we can decide it is empty.
+        if (
+          this.queueWrites === 0 &&
+          (this.queueHolds || !this.queue.some((queued) => !queued.recovered))
+        )
+          break;
       }
     } finally {
       this.draining = false;
+      if (!this.queueHolds && this.queue.some((item) => !item.recovered))
+        void this.drain();
     }
   }
   private async message(m: Message) {
@@ -733,6 +977,7 @@ export class Agent implements AgentBackend {
       sessionId: this.options.session.id,
       signal,
       callId,
+      ...(this.runId ? { runId: this.runId } : {}),
       depth: this.options.depth ?? 0,
       budget: this.budget,
       scope: this.origin?.scope,
@@ -836,8 +1081,7 @@ export class Agent implements AgentBackend {
           throw Error("Session cost budget reached");
         if (this.budget.modelCallsLeft <= 0)
           throw Error("Shared model-call budget exhausted");
-        for (const { text } of this.steering.splice(0))
-          await this.message({ role: "user", text, timestamp: Date.now() });
+        await this.applySteering(signal);
         const { system, tools, context } = await this.requestContext(
           user.seq,
           signal,
@@ -846,6 +1090,34 @@ export class Agent implements AgentBackend {
         let delta = "";
         let thinking = "";
         let lastFlush = performance.now();
+        // Coalesce deltas for at most 24 ms. A timer flushes text that would
+        // otherwise wait for the next provider event when the stream pauses.
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        let emitted: Promise<void> = Promise.resolve();
+        const flush = () => {
+          clearTimeout(timer);
+          timer = undefined;
+          emitted = emitted.then(async () => {
+            if (thinking) {
+              const text = thinking;
+              thinking = "";
+              await this.emit("thinking.delta", { text });
+            }
+            if (delta) {
+              const text = delta;
+              delta = "";
+              await this.emit("text.delta", { text });
+            }
+            lastFlush = performance.now();
+          });
+          return emitted;
+        };
+        const schedule = () => {
+          const waited = performance.now() - lastFlush;
+          if (waited >= 24) return flush();
+          timer ??= setTimeout(() => void flush().catch(() => {}), 24 - waited);
+          return emitted;
+        };
         await this.checkExecution(signal);
         // Child agents share this budget. Recheck after the last await so only
         // one request can consume the final call, without charging failed fits.
@@ -854,46 +1126,45 @@ export class Agent implements AgentBackend {
         if (this.budget.modelCallsLeft <= 0)
           throw Error("Shared model-call budget exhausted");
         this.budget.modelCallsLeft--;
-        for await (const event of this.options.provider.stream({
-          system,
-          messages: context.messages,
-          tools,
-          signal,
-          sessionId: this.options.session.id,
-        })) {
-          if (event.type === "text") {
-            if (thinking) {
-              await this.emit("thinking.delta", { text: thinking });
-              thinking = "";
+        try {
+          for await (const event of this.options.provider.stream({
+            system,
+            messages: context.messages,
+            tools,
+            signal,
+            sessionId: this.options.session.id,
+          })) {
+            if (event.type === "text") {
+              // Keep thinking before the text that follows it.
+              if (thinking) await flush();
+              delta += event.text;
+              await schedule();
+            } else if (event.type === "thinking") {
+              if (delta) await flush();
+              thinking += event.text;
+              await schedule();
+            } else if (event.type === "done") {
+              final = event.message;
+              this.usage.input += event.usage.input;
+              this.usage.output += event.usage.output;
+              this.usage.cost += event.usage.cost;
             }
-            delta += event.text;
-            if (performance.now() - lastFlush >= 24) {
-              await this.emit("text.delta", { text: delta });
-              delta = "";
-              lastFlush = performance.now();
-            }
-          } else if (event.type === "thinking") {
-            thinking += event.text;
-            if (performance.now() - lastFlush >= 24) {
-              await this.emit("thinking.delta", { text: thinking });
-              thinking = "";
-              lastFlush = performance.now();
-            }
-          } else if (event.type === "done") {
-            final = event.message;
-            this.usage.input += event.usage.input;
-            this.usage.output += event.usage.output;
-            this.usage.cost += event.usage.cost;
           }
+        } finally {
+          clearTimeout(timer);
+          timer = undefined;
+          // A timer flush already in progress must finish before the run ends.
+          await emitted.catch(() => {});
         }
-        if (delta) await this.emit("text.delta", { text: delta });
-        if (thinking) await this.emit("thinking.delta", { text: thinking });
+        await flush();
         signal.throwIfAborted();
         if (!final) throw Error("Provider ended without a final message");
         await this.message(final);
         if (!final.toolCalls?.length) {
           signal.throwIfAborted();
-          if (this.steering.length) continue;
+          await this.queueSettled();
+          await this.waitForSteeringRelease(signal);
+          if (this.steering.ready) continue;
           await this.emit("run.end", {
             runId,
             status: "completed",

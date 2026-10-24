@@ -1,0 +1,136 @@
+{
+  "status": "passed",
+  "artifact": "/Users/shqingda/Projects/hikaro/artifacts/release/hikaro-0.1.0-darwin-arm64.tgz",
+  "sha256": "ca314cd01f7937411cd781b64be691dfee96277ebbe5415f384f837f40f9daad",
+  "directory": "/Users/shqingda/Projects/hikaro/artifacts/live-release-v8PFo2",
+  "node": "v26.12.0",
+  "platform": "darwin",
+  "arch": "arm64",
+  "authentication": "normal subscription credential store; XAI_API_KEY removed from child environment",
+  "startedAt": "2026-10-21T10:49:50.049Z",
+  "checks": [
+    "empty-cache installed artifact, version and patched forge signatures",
+    "installed TUI + subscription model reads, edits, tests and reviews diff; independent tests pass",
+    "TUI rejects unrestricted shell; denied command has no file side effect",
+    "Ctrl+C cancels real model shell; cancelled run and process exit both confirmed",
+    "SIGKILL during real model approval recovers unknown without executing command; explicit new TUI prompt succeeds",
+    "installed TUI clean exit"
+  ],
+  "forge": {
+    "version": "1.4.0",
+    "rsaSha256": "447c5441cea1b125e23661d7e27a8b1759cc3400241c0013b2d034b4ee1dbf50",
+    "verifiedNodeFiles": 49
+  },
+  "version": "hikaro 0.1.0",
+  "sessionId": "a78a3b3f-e7f1-4e24-825d-41ca581173ab",
+  "diff": "diff --git a/sum.cjs b/sum.cjs\nindex 0a92af8..a5a1121 100644\n--- a/sum.cjs\n+++ b/sum.cjs\n@@ -1 +1 @@\n-exports.sum = (a, b) => a - b;\n+exports.sum = (a, b) => a + b;\n",
+  "recovery": {
+    "beforeRunId": "688cf5c9-22cb-4a9e-9843-1cdb424eca85",
+    "runId": "688cf5c9-22cb-4a9e-9843-1cdb424eca85",
+    "runStatus": "unknown"
+  },
+  "events": [
+    {
+      "type": "run.start"
+    },
+    {
+      "type": "tool.start",
+      "name": "read_file"
+    },
+    {
+      "type": "tool.end",
+      "name": "read_file"
+    },
+    {
+      "type": "tool.start",
+      "name": "read_file"
+    },
+    {
+      "type": "tool.end",
+      "name": "read_file"
+    },
+    {
+      "type": "tool.start",
+      "name": "edit_file"
+    },
+    {
+      "type": "tool.end",
+      "name": "edit_file"
+    },
+    {
+      "type": "tool.start",
+      "name": "shell"
+    },
+    {
+      "type": "tool.end",
+      "name": "shell",
+      "isError": false
+    },
+    {
+      "type": "tool.start",
+      "name": "git_diff"
+    },
+    {
+      "type": "tool.end",
+      "name": "git_diff",
+      "isError": false
+    },
+    {
+      "type": "run.end",
+      "status": "completed"
+    },
+    {
+      "type": "run.start"
+    },
+    {
+      "type": "tool.start",
+      "name": "shell"
+    },
+    {
+      "type": "tool.end",
+      "name": "shell",
+      "isError": true
+    },
+    {
+      "type": "run.end",
+      "status": "failed"
+    },
+    {
+      "type": "run.start"
+    },
+    {
+      "type": "tool.start",
+      "name": "shell"
+    },
+    {
+      "type": "tool.end",
+      "name": "shell",
+      "isError": true
+    },
+    {
+      "type": "run.end",
+      "status": "cancelled"
+    },
+    {
+      "type": "run.start"
+    },
+    {
+      "type": "tool.start",
+      "name": "shell"
+    },
+    {
+      "type": "run.start"
+    },
+    {
+      "type": "run.end",
+      "status": "completed"
+    }
+  ],
+  "finishedAt": "2026-10-21T10:50:52.896Z",
+  "limitations": [
+    "current macOS arm64 machine",
+    "physical IME not exercised",
+    "provider rate limiting/network failure not injected",
+    "not publicly published"
+  ]
+}

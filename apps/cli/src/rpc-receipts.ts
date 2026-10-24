@@ -2,7 +2,10 @@ import { createHash } from "node:crypto";
 import type { Command } from "../../../packages/protocol/src/index.ts";
 import { rpcReadMethods } from "../../../packages/protocol/src/contracts.ts";
 
-export const isMutation = (method: string) => !rpcReadMethods.has(method);
+// Autosaved question drafts use their own revision CAS, not task receipts.
+// This classification does not grant read-only clients mutation permission.
+export const isMutation = (method: string) =>
+  !rpcReadMethods.has(method) && method !== "questions.draft.save";
 
 /** Object key order is irrelevant; array order and all JSON values are significant. */
 export function commandDigest(command: Command): string {

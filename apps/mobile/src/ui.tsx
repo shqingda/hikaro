@@ -1,6 +1,37 @@
 import { Host, Button } from "@expo/ui";
-import { Text, View, useColorScheme } from "react-native";
+import { Alert, Text, View, useColorScheme } from "react-native";
 import { colors } from "./theme";
+import { connectionRemoval } from "./connection-removal";
+
+export function confirmConnectionRemoval(
+  controller: Parameters<typeof connectionRemoval>[0],
+) {
+  const confirmation = connectionRemoval(controller);
+  Alert.alert(
+    "移除这台电脑的连接？",
+    "这会清除本机配对、未发送草稿和历史缓存。电脑上的任务与记录仍保留；再次连接需要重新配对。",
+    [
+      { text: "保留连接", style: "cancel", onPress: confirmation.cancel },
+      {
+        text: "移除连接与本机草稿",
+        style: "destructive",
+        onPress: () => {
+          void confirmation
+            .confirm()
+            .then((result) => {
+              if (result === "changed")
+                Alert.alert("连接已变化", "请重新查看当前连接，再选择移除。");
+            })
+            .catch(() => {
+              Alert.alert("未能完成移除", "请查看连接状态并重试。");
+            });
+        },
+      },
+    ],
+    { cancelable: true, onDismiss: confirmation.cancel },
+  );
+}
+
 export function Action({
   title,
   onPress,
@@ -23,7 +54,9 @@ export function Action({
         onPress={onPress}
         disabled={disabled}
         variant={quiet ? "text" : "filled"}
-        style={{ height: 48, paddingVertical: 6 }}
+        // No fixed height: it truncates labels at large Dynamic Type sizes.
+        // Host keeps the 48 pt minimum touch target.
+        style={{ paddingVertical: 6 }}
       />
     </Host>
   );

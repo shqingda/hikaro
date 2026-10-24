@@ -1,0 +1,16 @@
+{
+  "status": "passed",
+  "scope": "single installed CLI subscription request; not the full fault matrix",
+  "sourceCommit": "30f1db586b71395ebd89aafebb0cd4b5fc93f8b2",
+  "sha256": "d52dab095dc182fc49c50a6b706953b5b2adcb59b3626c37ac98bc96e7874a79",
+  "provider": "xai",
+  "model": "grok-4.7",
+  "authentication": "existing subscription OAuth; XAI_API_KEY removed from child environment",
+  "checks": [
+    "installed CLI exits 0",
+    "exact expected response marker",
+    "empty stderr"
+  ],
+  "fullFaultMatrixRepeated": false,
+  "verifiedAt": "2026-10-21T16:04:09.945Z"
+}

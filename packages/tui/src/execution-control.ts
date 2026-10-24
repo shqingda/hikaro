@@ -1,6 +1,10 @@
 import type { Agent } from "../../core/src/index.ts";
 import type { Runtime } from "../../runtime/src/index.ts";
 import type { HikaroView } from "./index.ts";
+import {
+  readExecutionHistory,
+  type ExecutionHistorySource,
+} from "./execution-history.ts";
 
 import {
   executionItems,
@@ -15,11 +19,29 @@ type LocalSource = {
     | "updatePending"
     | "prioritizePending"
     | "removePending"
+    | "resumePending"
+    | "pendingSteering"
+    | "updateSteering"
+    | "prioritizeSteering"
+    | "removeSteering"
+    | "resumeSteering"
   >;
-  runtime: Pick<Runtime, "terminals" | "childTasks" | "stopChild">;
+  runtime: Pick<
+    Runtime,
+    | "terminals"
+    | "childTasks"
+    | "loadChildTasks"
+    | "terminalList"
+    | "loadTerminals"
+    | "stopChild"
+    | "executionHistory"
+    | "executionHistoryPage"
+    | "executionHistoryDetail"
+  >;
   session: string;
 };
 export type ExecutionSource = {
+  history?: ExecutionHistorySource;
   hold(): Promise<() => Promise<void>>;
   list(kind: Kind): Promise<Item[]>;
   detail(kind: Kind, id: string): Promise<Item>;
@@ -27,29 +49,52 @@ export type ExecutionSource = {
 };
 export function localExecutionSource(source: LocalSource): ExecutionSource {
   return {
+    history: {
+      list: (cursor) =>
+        source.runtime.executionHistoryPage(source.session, cursor),
+      detail: (id, snapshot) =>
+        source.runtime.executionHistoryDetail(source.session, id, snapshot),
+    },
     async hold() {
       const release = source.agent.holdQueue();
       return async () => release();
     },
     async list(kind) {
+      if (kind === "history")
+        return source.runtime.executionHistory(source.session);
+      if (kind === "children")
+        await source.runtime.loadChildTasks(source.session);
+      if (kind === "terminals")
+        await source.runtime.loadTerminals(source.session);
       return executionItems(source.agent, source.runtime, source.session, kind);
     },
     async detail(kind, id) {
-      const item = executionItems(
-        source.agent,
-        source.runtime,
-        source.session,
-        kind,
+      if (kind === "children")
+        await source.runtime.loadChildTasks(source.session);
+      if (kind === "terminals")
+        await source.runtime.loadTerminals(source.session);
+      const item = (
+        kind === "history"
+          ? await source.runtime.executionHistory(source.session)
+          : executionItems(source.agent, source.runtime, source.session, kind)
       ).find((t) => t.id === id);
       if (!item) throw Error("Item is no longer available");
       return item;
     },
     async act(kind, id, action, text) {
+      if (kind === "history") throw Error("Execution history is read-only");
       if (kind === "queue") {
-        if (action === "edit") source.agent.updatePending(id, text!);
-        else if (action === "first") source.agent.prioritizePending(id);
-        else if (action === "remove") source.agent.removePending(id);
+        if (action === "edit") await source.agent.updatePending(id, text!);
+        else if (action === "first") await source.agent.prioritizePending(id);
+        else if (action === "remove") await source.agent.removePending(id);
+        else if (action === "resume") await source.agent.resumePending(id);
         else throw Error("Unknown queue action");
+      } else if (kind === "steering") {
+        if (action === "edit") await source.agent.updateSteering(id, text!);
+        else if (action === "first") await source.agent.prioritizeSteering(id);
+        else if (action === "remove") await source.agent.removeSteering(id);
+        else if (action === "resume") await source.agent.resumeSteering(id);
+        else throw Error("Unknown steering action");
       } else if (kind === "terminals") {
         if (action === "send")
           source.runtime.terminals.send(source.session, id, text!);
@@ -65,19 +110,24 @@ export function localExecutionSource(source: LocalSource): ExecutionSource {
 export async function openExecutionControl(
   view: HikaroView,
   input: ExecutionSource | LocalSource,
+  selectionSignal?: AbortSignal,
 ) {
+  if (selectionSignal?.aborted) return;
   const source = "agent" in input ? localExecutionSource(input) : input;
   const { panel, signal, close } = view.openModelPanel({
     yieldToApproval: true,
   });
+  selectionSignal?.addEventListener("abort", close, { once: true });
   let release: (() => Promise<void>) | undefined;
   const names = {
     queue: "Pending messages",
     terminals: "Background terminals",
     children: "Child agents",
+    steering: "Steering messages",
+    history: source.history ? "Execution history" : "Recent execution history",
   };
   let message =
-    "Pending dispatch is paused while this manager is open. Active work continues. Close to resume.";
+    "Prompt dispatch and steering consumption are paused while this manager is open. Close to resume.";
   const confirm = async (title: string, detail: string) =>
     (
       await panel.choose(
@@ -102,6 +152,8 @@ export async function openExecutionControl(
           { value: "queue", label: names.queue },
           { value: "terminals", label: names.terminals },
           { value: "children", label: names.children },
+          { value: "steering", label: names.steering },
+          { value: "history", label: names.history },
           { value: "close", label: "Close and resume queue" },
         ],
         message,
@@ -110,6 +162,16 @@ export async function openExecutionControl(
       );
       if (category.value === "close") return;
       const kind = category.value as Kind;
+      if (kind === "history" && source.history) {
+        await readExecutionHistory(
+          panel,
+          signal,
+          source.history,
+          undefined,
+          "Back to manager",
+        );
+        continue;
+      }
       let page = 0;
       for (;;) {
         panel.progress(`Loading ${names[kind].toLowerCase()}…`);
@@ -132,7 +194,9 @@ export async function openExecutionControl(
             { value: "back", label: "Back to manager" },
           ],
           all.length
-            ? message
+            ? kind === "history"
+              ? "Recent history only: latest 200 run events, up to 100 runs. Upgrade the host for complete saved history."
+              : message
             : `No ${names[kind].toLowerCase()} in this session.`,
           undefined,
           { search: false, cancelValue: "back" },
@@ -164,28 +228,31 @@ export async function openExecutionControl(
             );
             let refreshing = false;
             let active = true;
-            const timer = setInterval(() => {
-              if (!active || signal.aborted || refreshing) return;
-              refreshing = true;
-              void source
-                .detail(kind, item.id)
-                .then((latest) => {
-                  if (active && !signal.aborted)
-                    panel.updateDocument(
-                      `${names[kind]} · ${latest.state}`,
-                      latest.detail,
-                    );
-                })
-                .catch((error) => {
-                  if (active && !signal.aborted) {
-                    view.setError(String(error));
-                    close();
-                  }
-                })
-                .finally(() => {
-                  refreshing = false;
-                });
-            }, 500);
+            const timer =
+              kind === "history"
+                ? undefined
+                : setInterval(() => {
+                    if (!active || signal.aborted || refreshing) return;
+                    refreshing = true;
+                    void source
+                      .detail(kind, item.id)
+                      .then((latest) => {
+                        if (active && !signal.aborted)
+                          panel.updateDocument(
+                            `${names[kind]} · ${latest.state}`,
+                            latest.detail,
+                          );
+                      })
+                      .catch((error) => {
+                        if (active && !signal.aborted) {
+                          view.setError(String(error));
+                          close();
+                        }
+                      })
+                      .finally(() => {
+                        refreshing = false;
+                      });
+                  }, 500);
             let action;
             try {
               action = await pending;
@@ -217,6 +284,21 @@ export async function openExecutionControl(
               panel.progress("Applying action…");
               await source.act(kind, item.id, "remove");
               message = "Message removed; it will not be sent.";
+            } else if (action.value === "resume") {
+              if (
+                !(await confirm(
+                  kind === "steering"
+                    ? "Apply recovered steering?"
+                    : "Resume recovered message?",
+                  item.detail,
+                ))
+              )
+                continue;
+              await source.act(kind, item.id, "resume");
+              message =
+                kind === "steering"
+                  ? "Steering confirmed for the next model turn. No new task was started."
+                  : "Message restored to queue. Close the manager to send.";
             } else if (action.value === "send") {
               const text = await panel.prompt(
                 "Send a line to terminal",
@@ -257,6 +339,7 @@ export async function openExecutionControl(
     if (!signal.aborted)
       view.setError(error instanceof Error ? error.message : String(error));
   } finally {
+    selectionSignal?.removeEventListener("abort", close);
     close();
     await release?.().catch((error) => view.setError(String(error)));
   }

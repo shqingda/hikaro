@@ -1,8 +1,18 @@
+import { createStatementCache } from "./statement-cache.mjs";
+import { steeringHandlers } from "./pending-steering.mjs";
+import { executionHistoryHandlers } from "./execution-history.mjs";
+import { childTaskHandlers } from "./child-tasks.mjs";
+import { terminalRecordHandlers } from "./terminal-records.mjs";
+import {
+  questionDraftHandlers,
+  assertDraftRevision,
+} from "./question-drafts.mjs";
 import { parentPort, workerData } from "node:worker_threads";
 import { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "node:crypto";
 import { chmodSync } from "node:fs";
 const db = new DatabaseSync(workerData.path);
+const prepare = createStatementCache(db);
 // SQLite's built-in lower() only folds ASCII. Match the TUI's Unicode search.
 db.function("hikaro_lower", { deterministic: true }, (text) =>
   text.toLowerCase(),
@@ -26,6 +36,14 @@ for (;;) {
 db.exec("BEGIN IMMEDIATE");
 try {
   db.exec(`
+CREATE TABLE IF NOT EXISTS pending_questions(id TEXT PRIMARY KEY,sessionId TEXT NOT NULL,scope TEXT NOT NULL,data TEXT NOT NULL,status TEXT NOT NULL,answers TEXT,createdAt INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS pending_question_scope ON pending_questions(sessionId,scope,status);
+CREATE TABLE IF NOT EXISTS question_drafts(id TEXT PRIMARY KEY,sessionId TEXT NOT NULL,scope TEXT NOT NULL,revision INTEGER NOT NULL,data TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS question_draft_session ON question_drafts(sessionId);
+CREATE TABLE IF NOT EXISTS pending_prompts(sessionId TEXT NOT NULL,id TEXT PRIMARY KEY,data TEXT NOT NULL,position INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS pending_prompt_order ON pending_prompts(sessionId,position);
+CREATE TABLE IF NOT EXISTS pending_steering(sessionId TEXT NOT NULL,id TEXT PRIMARY KEY,data TEXT NOT NULL,position INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS pending_steering_order ON pending_steering(sessionId,position);
 CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY,title TEXT NOT NULL,cwd TEXT NOT NULL,createdAt INTEGER NOT NULL,parentId TEXT);
 CREATE TABLE IF NOT EXISTS session_models(sessionId TEXT PRIMARY KEY,data TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS workspace_state(cwd TEXT PRIMARY KEY,sessionId TEXT NOT NULL);
@@ -38,14 +56,18 @@ CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(id UNINDEXED,text);
 CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,sessionId TEXT NOT NULL,task TEXT NOT NULL,runAt INTEGER NOT NULL,state TEXT NOT NULL,owner TEXT,leaseUntil INTEGER,error TEXT);
 CREATE TABLE IF NOT EXISTS leases(sessionId TEXT PRIMARY KEY,owner TEXT NOT NULL,expires INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS session_run_events ON events(sessionId,seq) WHERE type IN ('run.start','run.end');
+CREATE INDEX IF NOT EXISTS session_run_identity ON events(sessionId,json_extract(data,'$.runId'),type,seq) WHERE type IN ('run.start','run.end');
 CREATE TABLE IF NOT EXISTS rpc_commands(workspace TEXT NOT NULL,scope TEXT NOT NULL,id TEXT NOT NULL,method TEXT NOT NULL,digest TEXT NOT NULL,hostInstanceId TEXT NOT NULL,sessionId TEXT,status TEXT NOT NULL,runId TEXT,operationId TEXT,error TEXT,createdAt INTEGER NOT NULL,updatedAt INTEGER NOT NULL,PRIMARY KEY(workspace,scope,id)) WITHOUT ROWID;
-CREATE TABLE IF NOT EXISTS commands(id TEXT PRIMARY KEY,sessionId TEXT NOT NULL,createdAt INTEGER NOT NULL);`);
+CREATE TABLE IF NOT EXISTS commands(id TEXT PRIMARY KEY,sessionId TEXT NOT NULL,createdAt INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS child_tasks(id TEXT PRIMARY KEY,parentId TEXT NOT NULL,task TEXT NOT NULL,state TEXT NOT NULL,output TEXT NOT NULL,createdAt INTEGER NOT NULL,updatedAt INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS child_task_parent ON child_tasks(parentId,createdAt);
+CREATE TABLE IF NOT EXISTS terminal_records(id TEXT PRIMARY KEY,owner TEXT NOT NULL,command TEXT NOT NULL,state TEXT NOT NULL,exitCode INTEGER,output TEXT NOT NULL,createdAt INTEGER NOT NULL,updatedAt INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS terminal_record_owner ON terminal_records(owner,createdAt);`);
   db.exec(`CREATE TABLE IF NOT EXISTS shared_hosts(workspace TEXT PRIMARY KEY,instanceId TEXT NOT NULL,pid INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS session_access(workspace TEXT NOT NULL,sessionId TEXT NOT NULL,scope TEXT NOT NULL,role TEXT NOT NULL,PRIMARY KEY(workspace,sessionId,scope)) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS client_views(workspace TEXT NOT NULL,scope TEXT NOT NULL,sessionId TEXT NOT NULL,PRIMARY KEY(workspace,scope)) WITHOUT ROWID;`);
   if (
-    !db
-      .prepare("PRAGMA table_info(leases)")
+    !prepare("PRAGMA table_info(leases)")
       .all()
       .some((column) => column.name === "epoch")
   )
@@ -56,9 +78,9 @@ CREATE TABLE IF NOT EXISTS client_views(workspace TEXT NOT NULL,scope TEXT NOT N
   throw error;
 }
 function assertLease(sessionId, lease) {
-  const current = db
-    .prepare("SELECT owner,epoch,expires FROM leases WHERE sessionId=?")
-    .get(sessionId);
+  const current = prepare(
+    "SELECT owner,epoch,expires FROM leases WHERE sessionId=?",
+  ).get(sessionId);
   if (lease) {
     if (
       !current ||
@@ -83,10 +105,10 @@ const decodeSession = (row) => {
   };
 };
 function saveModel(sessionId, modelSelection) {
-  db.prepare(
+  prepare(
     "INSERT INTO session_models VALUES(?,?) ON CONFLICT(sessionId) DO UPDATE SET data=excluded.data",
   ).run(sessionId, JSON.stringify(modelSelection));
-  db.prepare(
+  prepare(
     "INSERT INTO events(sessionId,type,data,timestamp) VALUES(?,?,?,?)",
   ).run(
     sessionId,
@@ -103,7 +125,7 @@ function insertSession({ cwd, title, parentId, modelSelection }) {
     createdAt: Date.now(),
     parentId,
   };
-  db.prepare("INSERT INTO sessions VALUES(?,?,?,?,?)").run(
+  prepare("INSERT INTO sessions VALUES(?,?,?,?,?)").run(
     session.id,
     session.title,
     cwd,
@@ -113,13 +135,39 @@ function insertSession({ cwd, title, parentId, modelSelection }) {
   if (modelSelection) saveModel(session.id, modelSelection);
   return { ...session, ...(modelSelection ? { modelSelection } : {}) };
 }
+function pendingQuestion({ id, sessionId, scope, workspace }) {
+  const row = prepare(
+    "SELECT data FROM pending_questions WHERE id=? AND sessionId=? AND scope=? AND status='pending'",
+  ).get(id, sessionId, scope);
+  if (!row) throw Error("Question expired or belongs to another identity");
+  if (workspace) {
+    if (
+      !prepare("SELECT 1 FROM sessions WHERE id=? AND cwd=?").get(
+        sessionId,
+        workspace,
+      )
+    )
+      throw Error("Session access denied");
+    if (!scope.startsWith("local:")) {
+      const role = handlers.sessionRole({ workspace, sessionId, scope });
+      if (role !== "owner" && role !== "control")
+        throw Error("Session access denied");
+    }
+  }
+  return JSON.parse(row.data);
+}
 const handlers = {
+  ...steeringHandlers(db, prepare, assertLease),
+  ...executionHistoryHandlers(db, prepare),
+  ...childTaskHandlers(prepare),
+  ...terminalRecordHandlers(prepare),
+  ...questionDraftHandlers(db, prepare, pendingQuestion),
   claimHost({ workspace, instanceId }) {
     db.exec("BEGIN IMMEDIATE");
     try {
-      const previous = db
-        .prepare("SELECT * FROM shared_hosts WHERE workspace=?")
-        .get(workspace);
+      const previous = prepare(
+        "SELECT * FROM shared_hosts WHERE workspace=?",
+      ).get(workspace);
       if (previous) {
         let alive = true;
         try {
@@ -134,7 +182,7 @@ const handlers = {
           );
         }
       }
-      db.prepare(
+      prepare(
         "INSERT INTO shared_hosts VALUES(?,?,?) ON CONFLICT(workspace) DO UPDATE SET instanceId=excluded.instanceId,pid=excluded.pid",
       ).run(workspace, instanceId, process.pid);
       db.exec("COMMIT");
@@ -145,41 +193,38 @@ const handlers = {
     }
   },
   releaseHost({ workspace, instanceId }) {
-    db.prepare(
+    prepare(
       "DELETE FROM shared_hosts WHERE workspace=? AND instanceId=? AND pid=?",
     ).run(workspace, instanceId, process.pid);
   },
   setSessionAccess({ workspace, sessionId, scope, role }) {
     if (
-      !db
-        .prepare("SELECT 1 FROM sessions WHERE id=? AND cwd=?")
-        .get(sessionId, workspace)
+      !prepare("SELECT 1 FROM sessions WHERE id=? AND cwd=?").get(
+        sessionId,
+        workspace,
+      )
     )
       throw Error("Session is outside this workspace");
     if (role === null)
-      db.prepare(
+      prepare(
         "DELETE FROM session_access WHERE workspace=? AND sessionId=? AND scope=?",
       ).run(workspace, sessionId, scope);
     else
-      db.prepare(
+      prepare(
         "INSERT INTO session_access VALUES(?,?,?,?) ON CONFLICT(workspace,sessionId,scope) DO UPDATE SET role=excluded.role",
       ).run(workspace, sessionId, scope, role);
   },
   sessionRole({ workspace, sessionId, scope }) {
     return (
-      db
-        .prepare(
-          "SELECT role FROM session_access WHERE workspace=? AND sessionId=? AND scope=?",
-        )
-        .get(workspace, sessionId, scope)?.role ?? null
+      prepare(
+        "SELECT role FROM session_access WHERE workspace=? AND sessionId=? AND scope=?",
+      ).get(workspace, sessionId, scope)?.role ?? null
     );
   },
   sessionAccess({ workspace, sessionId }) {
-    return db
-      .prepare(
-        "SELECT scope,role FROM session_access WHERE workspace=? AND sessionId=?",
-      )
-      .all(workspace, sessionId);
+    return prepare(
+      "SELECT scope,role FROM session_access WHERE workspace=? AND sessionId=?",
+    ).all(workspace, sessionId);
   },
   attachView({ workspace, scope, sessionId, local }) {
     db.exec("BEGIN IMMEDIATE");
@@ -195,26 +240,25 @@ const handlers = {
     }
   },
   saveClientView({ workspace, scope, sessionId }) {
-    db.prepare(
+    prepare(
       "INSERT INTO client_views VALUES(?,?,?) ON CONFLICT(workspace,scope) DO UPDATE SET sessionId=excluded.sessionId",
     ).run(workspace, scope, sessionId);
   },
   clientView({ workspace, scope }) {
     return (
-      db
-        .prepare(
-          "SELECT sessionId FROM client_views WHERE workspace=? AND scope=?",
-        )
-        .get(workspace, scope)?.sessionId ?? null
+      prepare(
+        "SELECT sessionId FROM client_views WHERE workspace=? AND scope=?",
+      ).get(workspace, scope)?.sessionId ?? null
     );
   },
   revokeScope({ workspace, scope }) {
     db.exec("BEGIN IMMEDIATE");
     try {
-      db.prepare(
-        "DELETE FROM session_access WHERE workspace=? AND scope=?",
-      ).run(workspace, scope);
-      db.prepare("DELETE FROM client_views WHERE workspace=? AND scope=?").run(
+      prepare("DELETE FROM session_access WHERE workspace=? AND scope=?").run(
+        workspace,
+        scope,
+      );
+      prepare("DELETE FROM client_views WHERE workspace=? AND scope=?").run(
         workspace,
         scope,
       );
@@ -227,58 +271,180 @@ const handlers = {
   rememberSession({ id }) {
     const session = handlers.session({ id });
     if (!session) throw Error("Session not found");
-    db.prepare(
+    prepare(
       "INSERT INTO workspace_state VALUES(?,?) ON CONFLICT(cwd) DO UPDATE SET sessionId=excluded.sessionId",
     ).run(session.cwd, id);
   },
   lastSession({ cwd }) {
-    const row = db
-      .prepare("SELECT sessionId FROM workspace_state WHERE cwd=?")
-      .get(cwd);
+    const row = prepare(
+      "SELECT sessionId FROM workspace_state WHERE cwd=?",
+    ).get(cwd);
     return row ? handlers.session({ id: row.sessionId }) : undefined;
   },
   renameSession({ id, title }) {
     if (typeof title !== "string" || !title.trim() || title.length > 120)
       throw Error("Session title must contain 1–120 characters");
     if (
-      !db
-        .prepare("UPDATE sessions SET title=? WHERE id=?")
-        .run(title.trim(), id).changes
+      !prepare("UPDATE sessions SET title=? WHERE id=?").run(title.trim(), id)
+        .changes
     )
       throw Error("Session not found");
     return handlers.session({ id });
   },
   draft({ id }) {
     return (
-      db.prepare("SELECT text FROM session_drafts WHERE sessionId=?").get(id)
+      prepare("SELECT text FROM session_drafts WHERE sessionId=?").get(id)
         ?.text ?? ""
     );
   },
   saveDraft({ id, text }) {
     if (typeof text !== "string" || text.length > 100000)
       throw Error("Draft exceeds 100,000 characters");
-    if (!db.prepare("SELECT 1 FROM sessions WHERE id=?").get(id))
+    if (!prepare("SELECT 1 FROM sessions WHERE id=?").get(id))
       throw Error("Session not found");
     if (text)
-      db.prepare(
+      prepare(
         "INSERT INTO session_drafts VALUES(?,?) ON CONFLICT(sessionId) DO UPDATE SET text=excluded.text",
       ).run(id, text);
-    else db.prepare("DELETE FROM session_drafts WHERE sessionId=?").run(id);
+    else prepare("DELETE FROM session_drafts WHERE sessionId=?").run(id);
+  },
+  saveQuestion({ question }) {
+    const result = prepare(
+      "INSERT INTO pending_questions SELECT ?,id,?,?,'pending',NULL,? FROM sessions WHERE id=?",
+    ).run(
+      question.id,
+      question.scope,
+      JSON.stringify(question),
+      Date.now(),
+      question.sessionId,
+    );
+    if (!result.changes) throw Error("Session not found");
+  },
+  pendingQuestions({ sessionId, scope }) {
+    return prepare(
+      "SELECT data FROM pending_questions WHERE sessionId=? AND scope=? AND status='pending' ORDER BY createdAt,id LIMIT 32",
+    )
+      .all(sessionId, scope)
+      .map((row) => JSON.parse(row.data));
+  },
+  settleQuestion({
+    id,
+    sessionId,
+    scope,
+    hostInstanceId,
+    answers,
+    workspace,
+    recover,
+    draftRevision,
+  }) {
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      const question = pendingQuestion({ id, sessionId, scope, workspace });
+      if (draftRevision !== undefined)
+        assertDraftRevision(
+          draftRevision,
+          prepare(
+            "SELECT revision FROM question_drafts WHERE id=? AND sessionId=? AND scope=?",
+          ).get(id, sessionId, scope)?.revision ?? 0,
+        );
+      const recovered =
+        question.hostInstanceId !== hostInstanceId || recover === true;
+      if (
+        answers &&
+        (Object.keys(answers).length !== question.questions.length ||
+          question.questions.some(
+            (q) => typeof answers[q.id] !== "string" || !answers[q.id].trim(),
+          ))
+      )
+        throw Error("Answer every question explicitly");
+      // Recovery adds model context only when no execution owns this session.
+      // Live responses are audit metadata; their tool result supplies context.
+      if (recovered) assertLease(sessionId);
+      const timestamp = Date.now();
+      prepare("UPDATE pending_questions SET status=?,answers=? WHERE id=?").run(
+        answers ? "answered" : "cancelled",
+        answers ? JSON.stringify(answers) : null,
+        id,
+      );
+      prepare(
+        "DELETE FROM question_drafts WHERE id=? AND sessionId=? AND scope=?",
+      ).run(id, sessionId, scope);
+      prepare(
+        "INSERT INTO events(sessionId,type,data,timestamp) VALUES(?,?,?,?)",
+      ).run(
+        sessionId,
+        "question.response",
+        JSON.stringify({ question, answers, cancelled: !answers, recovered }),
+        timestamp,
+      );
+      if (recovered && answers) {
+        const text =
+          "Answers to questions recovered after execution interruption. No previous operation was resumed.\n\n" +
+          question.questions
+            .map((q) => q.question + "\n" + answers[q.id])
+            .join("\n\n");
+        prepare(
+          "INSERT INTO events(sessionId,type,data,timestamp) VALUES(?,?,?,?)",
+        ).run(
+          sessionId,
+          "message",
+          JSON.stringify({ message: { role: "user", text, timestamp } }),
+          timestamp,
+        );
+      }
+      db.exec("COMMIT");
+      return { recovered };
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
+  },
+  pendingPrompts({ sessionId }) {
+    return prepare(
+      "SELECT data FROM pending_prompts WHERE sessionId=? ORDER BY position,id",
+    )
+      .all(sessionId)
+      .map((row) => JSON.parse(row.data));
+  },
+  insertPendingPrompt({ sessionId, item }) {
+    if (!prepare("SELECT 1 FROM sessions WHERE id=?").get(sessionId))
+      throw Error("Session not found");
+    prepare(
+      "INSERT INTO pending_prompts SELECT ?,?,?,COALESCE(MAX(position),0)+1 FROM pending_prompts WHERE sessionId=?",
+    ).run(sessionId, item.id, JSON.stringify(item), sessionId);
+  },
+  updatePendingPrompt({ sessionId, id, text }) {
+    const result = prepare(
+      "UPDATE pending_prompts SET data=json_set(data,'$.text',?) WHERE sessionId=? AND id=?",
+    ).run(text, sessionId, id);
+    if (!result.changes)
+      throw Error("Message is no longer queued; refresh the list.");
+  },
+  prioritizePendingPrompt({ sessionId, id }) {
+    const result = prepare(
+      "UPDATE pending_prompts SET position=(SELECT COALESCE(MIN(position),0)-1 FROM pending_prompts WHERE sessionId=?) WHERE sessionId=? AND id=?",
+    ).run(sessionId, sessionId, id);
+    if (!result.changes)
+      throw Error("Message is no longer queued; refresh the list.");
+  },
+  takePendingPrompt({ sessionId, id }) {
+    return !!prepare(
+      "DELETE FROM pending_prompts WHERE sessionId=? AND id=?",
+    ).run(sessionId, id).changes;
   },
   deleteSession({ id }) {
     db.exec("BEGIN IMMEDIATE");
     try {
-      if (!db.prepare("SELECT 1 FROM sessions WHERE id=?").get(id))
+      if (!prepare("SELECT 1 FROM sessions WHERE id=?").get(id))
         throw Error("Session not found");
       if (
-        db
-          .prepare("SELECT 1 FROM leases WHERE sessionId=? AND expires>?")
-          .get(id, Date.now()) ||
-        db
-          .prepare(
-            "SELECT 1 FROM jobs WHERE sessionId=? AND state='running' AND leaseUntil>?",
-          )
-          .get(id, Date.now())
+        prepare("SELECT 1 FROM leases WHERE sessionId=? AND expires>?").get(
+          id,
+          Date.now(),
+        ) ||
+        prepare(
+          "SELECT 1 FROM jobs WHERE sessionId=? AND state='running' AND leaseUntil>?",
+        ).get(id, Date.now())
       )
         throw Error("Stop the active run before deleting this session");
       for (const table of [
@@ -288,14 +454,20 @@ const handlers = {
         "leases",
         "jobs",
         "context_checkpoints",
+        "pending_prompts",
+        "pending_steering",
+        "pending_questions",
+        "question_drafts",
         "session_access",
         "client_views",
       ])
-        db.prepare(`DELETE FROM ${table} WHERE sessionId=?`).run(id);
-      db.prepare("UPDATE sessions SET parentId=NULL WHERE parentId=?").run(id);
+        prepare(`DELETE FROM ${table} WHERE sessionId=?`).run(id);
+      prepare("DELETE FROM child_tasks WHERE id=? OR parentId=?").run(id, id);
+      prepare("DELETE FROM terminal_records WHERE owner=?").run(id);
+      prepare("UPDATE sessions SET parentId=NULL WHERE parentId=?").run(id);
       for (const table of ["session_drafts", "workspace_state"])
-        db.prepare(`DELETE FROM ${table} WHERE sessionId=?`).run(id);
-      db.prepare("DELETE FROM sessions WHERE id=?").run(id);
+        prepare(`DELETE FROM ${table} WHERE sessionId=?`).run(id);
+      prepare("DELETE FROM sessions WHERE id=?").run(id);
       db.exec("COMMIT");
     } catch (e) {
       db.exec("ROLLBACK");
@@ -316,12 +488,13 @@ const handlers = {
   setSessionModel({ sessionId, modelSelection }) {
     db.exec("BEGIN IMMEDIATE");
     try {
-      if (!db.prepare("SELECT 1 FROM sessions WHERE id=?").get(sessionId))
+      if (!prepare("SELECT 1 FROM sessions WHERE id=?").get(sessionId))
         throw Error("Session not found");
       if (
-        db
-          .prepare("SELECT 1 FROM leases WHERE sessionId=? AND expires>?")
-          .get(sessionId, Date.now())
+        prepare("SELECT 1 FROM leases WHERE sessionId=? AND expires>?").get(
+          sessionId,
+          Date.now(),
+        )
       )
         throw Error("Stop the active run before changing its model settings");
       saveModel(sessionId, modelSelection);
@@ -362,12 +535,11 @@ const handlers = {
       );
       args.push(text, text);
     }
-    return db
-      .prepare(
-        sessionQuery +
-          (where.length ? " WHERE " + where.join(" AND ") : "") +
-          " ORDER BY s.createdAt DESC, s.rowid DESC LIMIT ? OFFSET ?",
-      )
+    return prepare(
+      sessionQuery +
+        (where.length ? " WHERE " + where.join(" AND ") : "") +
+        " ORDER BY s.createdAt DESC, s.rowid DESC LIMIT ? OFFSET ?",
+    )
       .all(...args, Math.min(limit, 100), offset)
       .map(decodeSession);
   },
@@ -382,7 +554,7 @@ const handlers = {
         parentId: id,
         modelSelection: source.modelSelection,
       });
-      db.prepare(
+      prepare(
         "INSERT INTO events(sessionId,type,data,timestamp) SELECT ?,type,data,timestamp FROM events WHERE sessionId=? AND type='message' ORDER BY seq",
       ).run(target.id, id);
       db.exec("COMMIT");
@@ -393,26 +565,57 @@ const handlers = {
     }
   },
   session({ id }) {
-    return decodeSession(db.prepare(sessionQuery + " WHERE s.id=?").get(id));
+    return decodeSession(prepare(sessionQuery + " WHERE s.id=?").get(id));
   },
   latestSeq({ sessionId }) {
-    return db
-      .prepare(
-        "SELECT COALESCE(MAX(seq),0) AS seq FROM events WHERE sessionId=?",
-      )
-      .get(sessionId).seq;
+    return prepare(
+      "SELECT COALESCE(MAX(seq),0) AS seq FROM events WHERE sessionId=?",
+    ).get(sessionId).seq;
+  },
+  searchMessages({
+    sessionId,
+    query,
+    before = Number.MAX_SAFE_INTEGER,
+    limit = 20,
+  }) {
+    if (
+      typeof query !== "string" ||
+      !query.trim() ||
+      query.length > 256 ||
+      !Number.isSafeInteger(before) ||
+      before < 0 ||
+      !Number.isSafeInteger(limit) ||
+      limit < 1 ||
+      limit > 50
+    )
+      throw Error("Invalid message search");
+    // Literal substring matching: %, _ and regex syntax are ordinary text.
+    // Search the complete body in SQLite; only bounded excerpts cross the worker boundary.
+    const rows =
+      prepare(`SELECT seq, json_extract(data,'$.message.role') AS role,
+      substr(json_extract(data,'$.message.text'),
+        max(1, instr(lower(json_extract(data,'$.message.text')), lower(?)) - 80), 240) AS snippet
+      FROM events WHERE sessionId=? AND type='message' AND seq<?
+      AND instr(lower(json_extract(data,'$.message.text')), lower(?))>0
+      ORDER BY seq DESC LIMIT ?`).all(
+        query,
+        sessionId,
+        before,
+        query,
+        limit + 1,
+      );
+    const items = rows.slice(0, limit);
+    return { items, nextBefore: rows.length > limit ? items.at(-1).seq : null };
   },
   messagePage({ sessionId, before, after, limit = 20, bounded = false }) {
     const ascending = after !== undefined;
-    const rows = db
-      .prepare(
-        `SELECT seq,data FROM events WHERE sessionId=? AND type='message' AND seq ${ascending ? ">" : "<"} ? ORDER BY seq ${ascending ? "ASC" : "DESC"} LIMIT ?`,
-      )
-      .iterate(
-        sessionId,
-        ascending ? after : (before ?? Number.MAX_SAFE_INTEGER),
-        Math.min(limit, 100),
-      );
+    const rows = prepare(
+      `SELECT seq,data FROM events WHERE sessionId=? AND type='message' AND seq ${ascending ? ">" : "<"} ? ORDER BY seq ${ascending ? "ASC" : "DESC"} LIMIT ?`,
+    ).iterate(
+      sessionId,
+      ascending ? after : (before ?? Number.MAX_SAFE_INTEGER),
+      Math.min(limit, 100),
+    );
     const items = [];
     let bytes = 0;
     for (const r of rows) {
@@ -458,24 +661,69 @@ const handlers = {
     if (!ascending) items.reverse();
     const hasOlder =
       items.length > 0 &&
-      !!db
-        .prepare(
-          "SELECT 1 FROM events WHERE sessionId=? AND type='message' AND seq<? LIMIT 1",
-        )
-        .get(sessionId, items[0].seq);
+      !!prepare(
+        "SELECT 1 FROM events WHERE sessionId=? AND type='message' AND seq<? LIMIT 1",
+      ).get(sessionId, items[0].seq);
     const hasNewer =
       items.length > 0 &&
-      !!db
-        .prepare(
-          "SELECT 1 FROM events WHERE sessionId=? AND type='message' AND seq>? LIMIT 1",
-        )
-        .get(sessionId, items.at(-1).seq);
+      !!prepare(
+        "SELECT 1 FROM events WHERE sessionId=? AND type='message' AND seq>? LIMIT 1",
+      ).get(sessionId, items.at(-1).seq);
     return { items, hasOlder, hasNewer };
   },
+  toolArtifactPage({ sessionId, after, through, limit = 100 }) {
+    if (
+      ![after, through, limit].every(Number.isSafeInteger) ||
+      after < 0 ||
+      through < after ||
+      limit < 1
+    )
+      throw Error("Invalid tool artifact range");
+    limit = Math.min(limit, 100);
+    // Project only known references, never the potentially large/private result.
+    const rows = prepare(`SELECT seq,
+      substr(CASE WHEN json_type(data,'$.name')='text' THEN json_extract(data,'$.name') ELSE '' END,1,256) AS name,
+      substr(CASE WHEN json_type(data,'$.callId')='text' THEN json_extract(data,'$.callId') ELSE '' END,1,128) AS callId,
+      json_type(data,'$.result.data.artifact') AS artifactType,
+      CASE WHEN json_type(data,'$.result.data.artifact')='text'
+        AND length(CAST(json_extract(data,'$.result.data.artifact') AS BLOB)) BETWEEN 1 AND 16384
+        AND instr(json_extract(data,'$.result.data.artifact'),char(0))=0
+        AND length(json_extract(data,'$.result.data.artifact'))<=4096
+        THEN json_extract(data,'$.result.data.artifact') END AS artifact,
+      json_type(data,'$.result.data.process.artifact') AS processType,
+      CASE WHEN json_type(data,'$.result.data.process.artifact')='text'
+        AND length(CAST(json_extract(data,'$.result.data.process.artifact') AS BLOB)) BETWEEN 1 AND 16384
+        AND instr(json_extract(data,'$.result.data.process.artifact'),char(0))=0
+        AND length(json_extract(data,'$.result.data.process.artifact'))<=4096
+        THEN json_extract(data,'$.result.data.process.artifact') END AS processArtifact
+      FROM events WHERE sessionId=? AND type='tool.end' AND seq>? AND seq<=? ORDER BY seq LIMIT ?`).all(
+      sessionId,
+      after,
+      through,
+      limit + 1,
+    );
+    const scanned = rows.slice(0, limit);
+    return {
+      items: scanned.flatMap((row) => {
+        const references = [];
+        for (const [type, path] of [
+          [row.artifactType, row.artifact],
+          [row.processType, row.processArtifact],
+        ])
+          if (type !== null)
+            references.push(path === null ? { invalid: true } : { path });
+        return references.length
+          ? [{ seq: row.seq, name: row.name, callId: row.callId, references }]
+          : [];
+      }),
+      after: scanned.at(-1)?.seq ?? after,
+      hasMore: rows.length > limit,
+    };
+  },
   messageContent({ sessionId, seq, field, offset, limit, image }) {
-    const row = db
-      .prepare("SELECT type,data FROM events WHERE sessionId=? AND seq=?")
-      .get(sessionId, seq);
+    const row = prepare(
+      "SELECT type,data FROM events WHERE sessionId=? AND seq=?",
+    ).get(sessionId, seq);
     if (!row) throw Error("Content not found in this session");
     const event = JSON.parse(row.data);
     if (field === "artifact") {
@@ -517,13 +765,11 @@ const handlers = {
       // successor cannot take over between the check and the event commit.
       assertLease(sessionId, lease);
       const timestamp = Date.now();
-      const r = db
-        .prepare(
-          "INSERT INTO events(sessionId,type,data,timestamp) VALUES(?,?,?,?)",
-        )
-        .run(sessionId, type, JSON.stringify(data), timestamp);
+      const r = prepare(
+        "INSERT INTO events(sessionId,type,data,timestamp) VALUES(?,?,?,?)",
+      ).run(sessionId, type, JSON.stringify(data), timestamp);
       if (type === "message" && data.message?.role === "user")
-        db.prepare(
+        prepare(
           "UPDATE sessions SET title=? WHERE id=? AND title='New session'",
         ).run(data.message.text.slice(0, 80), sessionId);
       db.exec("COMMIT");
@@ -540,19 +786,16 @@ const handlers = {
     }
   },
   events({ sessionId, after = 0, limit = 200 }) {
-    return db
-      .prepare(
-        "SELECT * FROM events WHERE sessionId=? AND seq>? ORDER BY seq LIMIT ?",
-      )
+    return prepare(
+      "SELECT * FROM events WHERE sessionId=? AND seq>? ORDER BY seq LIMIT ?",
+    )
       .all(sessionId, after, Math.min(limit, 1000))
       .map(decode);
   },
   messages({ sessionId, limit = 200 }) {
-    const rows = db
-      .prepare(
-        "SELECT data FROM events WHERE sessionId=? AND type='message' ORDER BY seq DESC LIMIT ?",
-      )
-      .iterate(sessionId, Math.min(limit, 1000));
+    const rows = prepare(
+      "SELECT data FROM events WHERE sessionId=? AND type='message' ORDER BY seq DESC LIMIT ?",
+    ).iterate(sessionId, Math.min(limit, 1000));
     const result = [];
     let bytes = 0;
     for (const row of rows) {
@@ -573,11 +816,9 @@ const handlers = {
       limit < 1
     )
       throw Error("Invalid context source range");
-    const rows = db
-      .prepare(
-        "SELECT seq,data FROM events WHERE sessionId=? AND type='message' AND seq>? AND seq<=? ORDER BY seq LIMIT ?",
-      )
-      .iterate(sessionId, after, through, Math.min(limit, 100));
+    const rows = prepare(
+      "SELECT seq,data FROM events WHERE sessionId=? AND type='message' AND seq>? AND seq<=? ORDER BY seq LIMIT ?",
+    ).iterate(sessionId, after, through, Math.min(limit, 100));
     const items = [];
     let bytes = 0;
     for (const row of rows) {
@@ -625,16 +866,12 @@ const handlers = {
       if (cancelled && Atomics.load(cancelled, 0) === 1)
         throw Error("Context checkpoint cancelled");
       assertLease(sessionId, lease);
-      const previous = db
-        .prepare(
-          "SELECT seq,throughSeq FROM context_checkpoints WHERE sessionId=?",
-        )
-        .get(sessionId);
-      const latest = db
-        .prepare(
-          "SELECT COALESCE(MAX(seq),0) AS seq FROM events WHERE sessionId=? AND type='message'",
-        )
-        .get(sessionId).seq;
+      const previous = prepare(
+        "SELECT seq,throughSeq FROM context_checkpoints WHERE sessionId=?",
+      ).get(sessionId);
+      const latest = prepare(
+        "SELECT COALESCE(MAX(seq),0) AS seq FROM events WHERE sessionId=? AND type='message'",
+      ).get(sessionId).seq;
       if (
         (previous?.seq ?? 0) !== expectedCheckpointSeq ||
         latest !== expectedLastMessageSeq
@@ -643,18 +880,14 @@ const handlers = {
       if (
         throughSeq <= (previous?.throughSeq ?? 0) ||
         throughSeq >= latest ||
-        !db
-          .prepare(
-            "SELECT 1 FROM events WHERE sessionId=? AND type='message' AND seq>? AND seq<=? LIMIT 1",
-          )
-          .get(sessionId, previous?.throughSeq ?? 0, throughSeq)
+        !prepare(
+          "SELECT 1 FROM events WHERE sessionId=? AND type='message' AND seq>? AND seq<=? LIMIT 1",
+        ).get(sessionId, previous?.throughSeq ?? 0, throughSeq)
       )
         throw Error("Checkpoint must advance over completed source messages");
-      const next = db
-        .prepare(
-          "SELECT data FROM events WHERE sessionId=? AND type='message' AND seq>? ORDER BY seq LIMIT 1",
-        )
-        .get(sessionId, throughSeq);
+      const next = prepare(
+        "SELECT data FROM events WHERE sessionId=? AND type='message' AND seq>? ORDER BY seq LIMIT 1",
+      ).get(sessionId, throughSeq);
       if (!next || JSON.parse(next.data).message.role !== "user")
         throw Error("Checkpoint must end at a user-turn boundary");
       const timestamp = Date.now();
@@ -664,13 +897,11 @@ const handlers = {
         previousCheckpointSeq: expectedCheckpointSeq,
         summary,
       };
-      const event = db
-        .prepare(
-          "INSERT INTO events(sessionId,type,data,timestamp) VALUES(?,?,?,?)",
-        )
-        .run(sessionId, "context.checkpoint", JSON.stringify(data), timestamp);
+      const event = prepare(
+        "INSERT INTO events(sessionId,type,data,timestamp) VALUES(?,?,?,?)",
+      ).run(sessionId, "context.checkpoint", JSON.stringify(data), timestamp);
       const seq = Number(event.lastInsertRowid);
-      db.prepare(
+      prepare(
         "INSERT INTO context_checkpoints VALUES(?,?,?,?,?) ON CONFLICT(sessionId) DO UPDATE SET seq=excluded.seq,throughSeq=excluded.throughSeq,summary=excluded.summary,timestamp=excluded.timestamp",
       ).run(sessionId, seq, throughSeq, summary, timestamp);
       // Atomically choose commit or cancellation. Cancellation after this point
@@ -687,17 +918,13 @@ const handlers = {
   contextHistory({ sessionId, after = 0 }) {
     if (!Number.isSafeInteger(after) || after < 0)
       throw Error("Invalid context cursor");
-    const checkpoint = db
-      .prepare(
-        "SELECT seq,throughSeq,summary,timestamp FROM context_checkpoints WHERE sessionId=?",
-      )
-      .get(sessionId);
+    const checkpoint = prepare(
+      "SELECT seq,throughSeq,summary,timestamp FROM context_checkpoints WHERE sessionId=?",
+    ).get(sessionId);
     const boundary = Math.max(after, checkpoint?.throughSeq ?? 0);
-    const rows = db
-      .prepare(
-        "SELECT seq,data FROM events WHERE sessionId=? AND type='message' AND seq>? ORDER BY seq DESC",
-      )
-      .iterate(sessionId, boundary);
+    const rows = prepare(
+      "SELECT seq,data FROM events WHERE sessionId=? AND type='message' AND seq>? ORDER BY seq DESC",
+    ).iterate(sessionId, boundary);
     const messages = [];
     let bytes = 0,
       truncated = false,
@@ -720,11 +947,9 @@ const handlers = {
         "Current turn exceeds the history capacity. Start a branch or compact the session.",
       );
     messages.splice(0, firstUser);
-    const total = db
-      .prepare(
-        "SELECT COUNT(*) AS count FROM events WHERE sessionId=? AND type='message' AND seq>?",
-      )
-      .get(sessionId, boundary).count;
+    const total = prepare(
+      "SELECT COUNT(*) AS count FROM events WHERE sessionId=? AND type='message' AND seq>?",
+    ).get(sessionId, boundary).count;
     return {
       messages,
       omitted: total - messages.length,
@@ -735,17 +960,17 @@ const handlers = {
   indexReplace({ workspace, path, chunks }) {
     db.exec("BEGIN IMMEDIATE");
     try {
-      const old = db
-        .prepare("SELECT id FROM chunks WHERE workspace=? AND path=?")
-        .all(workspace, path);
+      const old = prepare(
+        "SELECT id FROM chunks WHERE workspace=? AND path=?",
+      ).all(workspace, path);
       for (const row of old)
-        db.prepare("DELETE FROM chunks_fts WHERE id=?").run(row.id);
-      db.prepare("DELETE FROM chunks WHERE workspace=? AND path=?").run(
+        prepare("DELETE FROM chunks_fts WHERE id=?").run(row.id);
+      prepare("DELETE FROM chunks WHERE workspace=? AND path=?").run(
         workspace,
         path,
       );
       for (const c of chunks) {
-        db.prepare("INSERT INTO chunks VALUES(?,?,?,?,?,?,?,?)").run(
+        prepare("INSERT INTO chunks VALUES(?,?,?,?,?,?,?,?)").run(
           c.id,
           workspace,
           path,
@@ -755,7 +980,7 @@ const handlers = {
           c.vector ? JSON.stringify(c.vector) : null,
           c.model ?? null,
         );
-        db.prepare("INSERT INTO chunks_fts(id,text) VALUES(?,?)").run(
+        prepare("INSERT INTO chunks_fts(id,text) VALUES(?,?)").run(
           c.id,
           c.text,
         );
@@ -767,20 +992,18 @@ const handlers = {
     }
   },
   indexFiles({ workspace }) {
-    return db
-      .prepare(
-        "SELECT path,hash FROM chunks WHERE workspace=? GROUP BY path,hash",
-      )
-      .all(workspace);
+    return prepare(
+      "SELECT path,hash FROM chunks WHERE workspace=? GROUP BY path,hash",
+    ).all(workspace);
   },
   indexPrune({ workspace, paths }) {
     const keep = new Set(paths);
-    for (const row of db
-      .prepare("SELECT id,path FROM chunks WHERE workspace=?")
-      .all(workspace)) {
+    for (const row of prepare(
+      "SELECT id,path FROM chunks WHERE workspace=?",
+    ).all(workspace)) {
       if (!keep.has(row.path)) {
-        db.prepare("DELETE FROM chunks WHERE id=?").run(row.id);
-        db.prepare("DELETE FROM chunks_fts WHERE id=?").run(row.id);
+        prepare("DELETE FROM chunks WHERE id=?").run(row.id);
+        prepare("DELETE FROM chunks_fts WHERE id=?").run(row.id);
       }
     }
   },
@@ -791,21 +1014,17 @@ const handlers = {
       .slice(0, 20)
       .map((w) => '"' + w + '"')
       .join(" OR ");
-    const lexical = db
-      .prepare(
-        "SELECT c.* FROM chunks_fts f JOIN chunks c ON c.id=f.id WHERE chunks_fts MATCH ? AND c.workspace=? ORDER BY rank LIMIT 24",
-      )
-      .all(expression, workspace);
+    const lexical = prepare(
+      "SELECT c.* FROM chunks_fts f JOIN chunks c ON c.id=f.id WHERE chunks_fts MATCH ? AND c.workspace=? ORDER BY rank LIMIT 24",
+    ).all(expression, workspace);
     const scores = new Map(
       lexical.map((c, i) => [c.id, { chunk: c, score: 1 / (60 + i) }]),
     );
     if (vector) {
       const norm = Math.hypot(...vector);
-      const rows = db
-        .prepare(
-          "SELECT * FROM chunks WHERE workspace=? AND model=? AND vector IS NOT NULL LIMIT 2000",
-        )
-        .all(workspace, model);
+      const rows = prepare(
+        "SELECT * FROM chunks WHERE workspace=? AND model=? AND vector IS NOT NULL LIMIT 2000",
+      ).all(workspace, model);
       const ranked = rows
         .map((c) => {
           const v = JSON.parse(c.vector);
@@ -834,26 +1053,24 @@ const handlers = {
       .map(({ chunk }) => ({ ...chunk, vector: undefined }));
   },
   putJob(job) {
-    db.prepare(
+    prepare(
       "INSERT INTO jobs(id,sessionId,task,runAt,state) VALUES(?,?,?,?,?)",
     ).run(job.id, job.sessionId, job.task, job.runAt, job.state);
   },
   jobs() {
-    return db.prepare("SELECT * FROM jobs ORDER BY runAt DESC LIMIT 200").all();
+    return prepare("SELECT * FROM jobs ORDER BY runAt DESC LIMIT 200").all();
   },
   claimJob({ owner, cwd }) {
     const now = Date.now();
-    db.prepare(
+    prepare(
       "UPDATE jobs SET state='interrupted',error='Execution lease expired; inspect before retrying' WHERE state='running' AND leaseUntil<?",
     ).run(now);
-    return db
-      .prepare(
-        "UPDATE jobs SET state='running',owner=?,leaseUntil=? WHERE id=(SELECT jobs.id FROM jobs JOIN sessions ON sessions.id=jobs.sessionId WHERE jobs.state='queued' AND jobs.runAt<=? AND (? IS NULL OR sessions.cwd=?) ORDER BY jobs.runAt LIMIT 1) RETURNING *",
-      )
-      .get(owner, now + 30000, now, cwd ?? null, cwd ?? null);
+    return prepare(
+      "UPDATE jobs SET state='running',owner=?,leaseUntil=? WHERE id=(SELECT jobs.id FROM jobs JOIN sessions ON sessions.id=jobs.sessionId WHERE jobs.state='queued' AND jobs.runAt<=? AND (? IS NULL OR sessions.cwd=?) ORDER BY jobs.runAt LIMIT 1) RETURNING *",
+    ).get(owner, now + 30000, now, cwd ?? null, cwd ?? null);
   },
   finishJob({ id, owner, state, error }) {
-    db.prepare("UPDATE jobs SET state=?,error=? WHERE id=? AND owner=?").run(
+    prepare("UPDATE jobs SET state=?,error=? WHERE id=? AND owner=?").run(
       state,
       error ?? null,
       id,
@@ -862,11 +1079,9 @@ const handlers = {
   },
   renewJob({ id, owner }) {
     return (
-      db
-        .prepare(
-          "UPDATE jobs SET leaseUntil=? WHERE id=? AND owner=? AND state='running'",
-        )
-        .run(Date.now() + 30000, id, owner).changes > 0
+      prepare(
+        "UPDATE jobs SET leaseUntil=? WHERE id=? AND owner=? AND state='running'",
+      ).run(Date.now() + 30000, id, owner).changes > 0
     );
   },
   acquire({ sessionId, owner }) {
@@ -876,19 +1091,15 @@ const handlers = {
     db.exec("BEGIN IMMEDIATE");
     try {
       let lease;
-      if (db.prepare("SELECT 1 FROM sessions WHERE id=?").get(sessionId)) {
+      if (prepare("SELECT 1 FROM sessions WHERE id=?").get(sessionId)) {
         const now = Date.now();
-        lease = db
-          .prepare(
-            "INSERT INTO leases(sessionId,owner,expires,epoch) VALUES(?,?,?,1) ON CONFLICT(sessionId) DO UPDATE SET owner=excluded.owner,expires=excluded.expires,epoch=leases.epoch+1 WHERE leases.expires<=? AND leases.owner<>? RETURNING owner,epoch",
-          )
-          .get(sessionId, owner, now + 30000, now, owner);
+        lease = prepare(
+          "INSERT INTO leases(sessionId,owner,expires,epoch) VALUES(?,?,?,1) ON CONFLICT(sessionId) DO UPDATE SET owner=excluded.owner,expires=excluded.expires,epoch=leases.epoch+1 WHERE leases.expires<=? AND leases.owner<>? RETURNING owner,epoch",
+        ).get(sessionId, owner, now + 30000, now, owner);
         // Repeated acquisition is idempotent while live; renewal is separate.
-        lease ??= db
-          .prepare(
-            "SELECT owner,epoch FROM leases WHERE sessionId=? AND owner=? AND expires>?",
-          )
-          .get(sessionId, owner, now);
+        lease ??= prepare(
+          "SELECT owner,epoch FROM leases WHERE sessionId=? AND owner=? AND expires>?",
+        ).get(sessionId, owner, now);
       }
       db.exec("COMMIT");
       return lease;
@@ -904,11 +1115,9 @@ const handlers = {
       // resurrect a lease that expired while the connection was waiting.
       const now = Date.now();
       const renewed =
-        db
-          .prepare(
-            "UPDATE leases SET expires=? WHERE sessionId=? AND owner=? AND epoch=? AND expires>?",
-          )
-          .run(now + 30000, sessionId, lease.owner, lease.epoch, now).changes >
+        prepare(
+          "UPDATE leases SET expires=? WHERE sessionId=? AND owner=? AND epoch=? AND expires>?",
+        ).run(now + 30000, sessionId, lease.owner, lease.epoch, now).changes >
         0;
       db.exec("COMMIT");
       return renewed;
@@ -921,31 +1130,34 @@ const handlers = {
     assertLease(sessionId, lease);
   },
   releaseLease({ sessionId, lease }) {
-    db.prepare(
+    prepare(
       "UPDATE leases SET expires=0 WHERE sessionId=? AND owner=? AND epoch=?",
     ).run(sessionId, lease.owner, lease.epoch);
   },
   release({ sessionId, owner }) {
     // Retain the epoch even after release, otherwise an old token can become valid.
-    db.prepare("UPDATE leases SET expires=0 WHERE sessionId=? AND owner=?").run(
+    prepare("UPDATE leases SET expires=0 WHERE sessionId=? AND owner=?").run(
       sessionId,
       owner,
     );
   },
+  recentRunEvents({ sessionId }) {
+    return prepare(
+      "SELECT * FROM events WHERE sessionId=? AND type IN ('run.start','run.end') ORDER BY seq DESC LIMIT 200",
+    )
+      .all(sessionId)
+      .map(decode);
+  },
   latestRunEvent({ sessionId }) {
-    const row = db
-      .prepare(
-        "SELECT * FROM events WHERE sessionId=? AND type IN ('run.start','run.end') ORDER BY seq DESC LIMIT 1",
-      )
-      .get(sessionId);
+    const row = prepare(
+      "SELECT * FROM events WHERE sessionId=? AND type IN ('run.start','run.end') ORDER BY seq DESC LIMIT 1",
+    ).get(sessionId);
     return row && decode(row);
   },
   commandReceipt({ workspace, scope, id, hostInstanceId }) {
-    const row = db
-      .prepare(
-        "SELECT * FROM rpc_commands WHERE workspace=? AND scope=? AND id=?",
-      )
-      .get(workspace, scope, id);
+    const row = prepare(
+      "SELECT * FROM rpc_commands WHERE workspace=? AND scope=? AND id=?",
+    ).get(workspace, scope, id);
     if (row) {
       const { workspace: _, ...receipt } = row;
       if (
@@ -959,11 +1171,9 @@ const handlers = {
     }
     // Legacy IDs were global and had no scope or digest. Suppress execution
     // without exposing the original scope's session or claiming equivalence.
-    const legacy = db
-      .prepare(
-        "SELECT c.createdAt FROM commands c JOIN sessions s ON s.id=c.sessionId WHERE c.id=? AND s.cwd=?",
-      )
-      .get(id, workspace);
+    const legacy = prepare(
+      "SELECT c.createdAt FROM commands c JOIN sessions s ON s.id=c.sessionId WHERE c.id=? AND s.cwd=?",
+    ).get(id, workspace);
     return legacy
       ? {
           id,
@@ -1003,13 +1213,13 @@ const handlers = {
         return { inserted: false, receipt };
       }
       if (
-        db
-          .prepare("SELECT count(*) AS n FROM rpc_commands WHERE workspace=?")
-          .get(workspace).n >= 100000
+        prepare("SELECT count(*) AS n FROM rpc_commands WHERE workspace=?").get(
+          workspace,
+        ).n >= 100000
       )
         throw Error("Command receipt capacity exceeded; existing IDs retained");
       const now = Date.now();
-      db.prepare(
+      prepare(
         "INSERT INTO rpc_commands(workspace,scope,id,method,digest,hostInstanceId,sessionId,status,operationId,createdAt,updatedAt) VALUES(?,?,?,?,?,?,?,'accepted',?,?,?)",
       ).run(
         workspace,
@@ -1049,30 +1259,30 @@ const handlers = {
       (typeof error !== "string" || error.length > 4096)
     )
       throw Error("Command error capacity exceeded");
-    const changed = db
-      .prepare(
-        "UPDATE rpc_commands SET status=?,sessionId=coalesce(?,sessionId),runId=coalesce(?,runId),operationId=coalesce(?,operationId),error=?,updatedAt=? WHERE workspace=? AND scope=? AND id=? AND hostInstanceId=? AND status='accepted'",
-      )
-      .run(
-        status,
-        sessionId ?? null,
-        runId ?? null,
-        operationId ?? null,
-        error ?? null,
-        Date.now(),
-        workspace,
-        scope,
-        id,
-        hostInstanceId,
-      ).changes;
+    const changed = prepare(
+      "UPDATE rpc_commands SET status=?,sessionId=coalesce(?,sessionId),runId=coalesce(?,runId),operationId=coalesce(?,operationId),error=?,updatedAt=? WHERE workspace=? AND scope=? AND id=? AND hostInstanceId=? AND status='accepted'",
+    ).run(
+      status,
+      sessionId ?? null,
+      runId ?? null,
+      operationId ?? null,
+      error ?? null,
+      Date.now(),
+      workspace,
+      scope,
+      id,
+      hostInstanceId,
+    ).changes;
     if (!changed)
       throw Error("Command receipt ownership lost or already settled");
   },
   claim({ commandId, sessionId }) {
     return (
-      db
-        .prepare("INSERT OR IGNORE INTO commands VALUES(?,?,?)")
-        .run(commandId, sessionId, Date.now()).changes > 0
+      prepare("INSERT OR IGNORE INTO commands VALUES(?,?,?)").run(
+        commandId,
+        sessionId,
+        Date.now(),
+      ).changes > 0
     );
   },
   close() {

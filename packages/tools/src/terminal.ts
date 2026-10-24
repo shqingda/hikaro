@@ -13,9 +13,22 @@ type TerminalRecord = {
   previewDropped: number;
   stopping: boolean;
   exitCode?: number;
+  exitSignal?: number;
+  cleanupConfirmed?: boolean;
+  stopError?: string;
+  stopTask?: Promise<void>;
 };
 export class TerminalManager {
   readonly records = new Map<string, TerminalRecord>();
+  /** Notified after start, exit and stop outcomes so a host can keep a record. */
+  onChange?: (id: string) => void;
+  changed(id: string) {
+    try {
+      this.onChange?.(id);
+    } catch {
+      // Record keeping must never break terminal control.
+    }
+  }
   find(owner: string, id: string) {
     const term = this.records.get(id);
     if (!term || term.owner !== owner)
@@ -35,11 +48,21 @@ export class TerminalManager {
       output: t.preview,
       dropped: t.previewDropped,
       exitCode: t.exitCode,
-      state:
-        t.exitCode !== undefined
-          ? "exited"
+      exitSignal: t.exitSignal,
+      cleanup: t.stopError
+        ? "failed"
+        : t.cleanupConfirmed
+          ? "confirmed"
           : t.stopping
-            ? "stopping"
+            ? "pending"
+            : "not requested",
+      stopError: t.stopError,
+      state: t.stopError
+        ? "stop_failed"
+        : t.stopping && !t.cleanupConfirmed
+          ? "stopping"
+          : t.exitCode !== undefined
+            ? "exited"
             : "running",
     };
   }
@@ -52,13 +75,64 @@ export class TerminalManager {
   }
   stop(owner: string, id: string) {
     const t = this.find(owner, id);
-    if (t.exitCode !== undefined || t.stopping) return;
-    t.pty.kill();
+    if (
+      t.stopTask ||
+      t.cleanupConfirmed ||
+      (t.exitCode !== undefined && !t.stopping)
+    )
+      return;
     t.stopping = true;
+    t.stopError = undefined;
+    t.stopTask = this.stopGroup(t)
+      .catch((error: unknown) => {
+        t.stopError = error instanceof Error ? error.message : String(error);
+      })
+      .finally(() => {
+        t.stopTask = undefined;
+        const id = [...this.records].find(([, row]) => row === t)?.[0];
+        if (id) this.changed(id);
+        this.prune();
+      });
+  }
+  private async stopGroup(t: TerminalRecord) {
+    const pid = t.pty.pid;
+    if (process.platform === "win32" || pid <= 1)
+      throw Error("Cannot safely stop this terminal process group");
+    const signal = (value: NodeJS.Signals | 0) => {
+      try {
+        process.kill(-pid, value);
+        return true;
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === "ESRCH") return false;
+        // EPERM on an existence probe does not prove that the group is gone.
+        // Keep waiting; actual termination signals must still report errors.
+        if (value === 0 && code === "EPERM") return true;
+        throw error;
+      }
+    };
+    const wait = async (ms: number) => {
+      const deadline = Date.now() + ms;
+      do {
+        if (!signal(0) && t.exitCode !== undefined) return true;
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      } while (Date.now() < deadline);
+      return false;
+    };
+    signal("SIGTERM");
+    if (!(await wait(1000))) {
+      signal("SIGKILL");
+      if (!(await wait(2000)))
+        throw Error(
+          "Terminal process group termination could not be confirmed; retry stop",
+        );
+    }
+    t.cleanupConfirmed = true;
   }
   prune() {
     const exited = [...this.records].filter(
-      ([, t]) => t.exitCode !== undefined,
+      ([, t]) =>
+        t.exitCode !== undefined && (!t.stopping || t.cleanupConfirmed),
     );
     for (const [id] of exited.slice(0, Math.max(0, exited.length - 32)))
       this.records.delete(id);
@@ -89,8 +163,10 @@ export function terminalPlugin(
         async execute(args, ctx) {
           const unrestricted = args.unrestricted || fullAccess();
           if (
-            [...terminals.values()].filter((t) => t.exitCode === undefined)
-              .length >= 8
+            [...terminals.values()].filter(
+              (t) =>
+                t.exitCode === undefined || (t.stopping && !t.cleanupConfirmed),
+            ).length >= 8
           )
             throw Error("Terminal concurrency limit reached");
           if (
@@ -144,6 +220,7 @@ export function terminalPlugin(
             exitCode: undefined as number | undefined,
           };
           terminals.set(id, term);
+          manager.changed(id);
           pty.onData((data) => {
             term.output += data;
             term.preview += data;
@@ -158,6 +235,8 @@ export function terminalPlugin(
           });
           pty.onExit((event) => {
             term.exitCode = event.exitCode;
+            term.exitSignal = event.signal;
+            manager.changed(id);
             manager.prune();
           });
           return {
@@ -184,7 +263,11 @@ export function terminalPlugin(
             data: {
               id,
               exitCode: t.exitCode,
-              running: t.exitCode === undefined,
+              running: manager.detail(ctx.sessionId, id).state !== "exited",
+              state: manager.detail(ctx.sessionId, id).state,
+              cleanup: manager.detail(ctx.sessionId, id).cleanup,
+              stopError: t.stopError,
+              exitSignal: t.exitSignal,
               dropped,
             },
           };
@@ -213,9 +296,14 @@ export function terminalPlugin(
         },
       });
       return async () => {
-        for (const t of terminals.values())
-          if (t.exitCode === undefined) t.pty.kill();
-        terminals.clear();
+        const pending = [...terminals.entries()];
+        for (const [id, t] of pending) manager.stop(t.owner, id);
+        await Promise.all(pending.map(([, t]) => t.stopTask));
+        for (const [id, t] of pending) {
+          if (t.stopError)
+            console.error(`Terminal ${id} cleanup failed: ${t.stopError}`);
+          else terminals.delete(id);
+        }
       };
     },
   };

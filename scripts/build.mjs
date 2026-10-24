@@ -2,10 +2,11 @@ import { build } from "esbuild";
 import { mkdir, copyFile, chmod, readdir, unlink } from "node:fs/promises";
 import { buildSecureFileHelper } from "./build-native.mjs";
 import { cliBuildOptions } from "./build-options.mjs";
+import { copyStorageWorker } from "./build-storage.mjs";
 await buildSecureFileHelper();
 await mkdir("dist", { recursive: true });
 const result = await build(cliBuildOptions());
-await copyFile("packages/storage/src/worker.mjs", "dist/worker.mjs");
+await copyStorageWorker("dist");
 await copyFile(
   "packages/tools/src/secure-file-helper",
   "dist/secure-file-helper",

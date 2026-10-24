@@ -1,21 +1,33 @@
 import type { ClientConnection } from "../../../packages/client-core/src/connection.ts";
 import type { HikaroView } from "../../../packages/tui/src/index.ts";
-import type { RpcMethod } from "../../../packages/protocol/src/contracts.ts";
+import type {
+  RpcMethod,
+  QuestionDraftSnapshot,
+  QuestionDraftSaveResult,
+} from "../../../packages/protocol/src/contracts.ts";
+import { QuestionDraftSaver } from "../../../packages/tui/src/question-drafts.ts";
 import { openChangeReview } from "../../../packages/tui/src/change-review.ts";
 import { openExecutionControl } from "../../../packages/tui/src/execution-control.ts";
 import {
-  askQuestions,
+  browseExecutionHistory,
+  type ExecutionHistorySource,
+} from "../../../packages/tui/src/execution-history.ts";
+import {
+  answerQuestion,
   reviewPlan,
+  browsePlanHistory,
+  browsePlanProgress,
 } from "../../../packages/tui/src/planning.ts";
 import type { FileChange } from "../../../packages/tools/src/changes.ts";
 import type {
   Plan,
+  PlanProgress,
   Questions,
 } from "../../../packages/runtime/src/planning.ts";
 import type { ExecutionItem } from "../../../packages/runtime/src/execution-items.ts";
 export class AttachedWorkflows {
   private modal?: string;
-  private question?: { id: string; abort: AbortController };
+  private question?: { id: string; recovered: boolean; abort: AbortController };
   private seenPlans = new Set<string>();
   private polling = false;
   private stopped = false;
@@ -34,18 +46,28 @@ export class AttachedWorkflows {
     method: RpcMethod,
     sessionId: string,
     params: Record<string, unknown> = {},
+    signal?: AbortSignal,
   ): Promise<T> {
     const epoch = this.epoch;
-    const current = () =>
-      !this.stopped &&
-      epoch === this.epoch &&
-      this.client.state.canAct &&
-      this.client.state.session?.id === sessionId;
+    const current = () => {
+      if (signal?.aborted || this.stopped || epoch !== this.epoch) return false;
+      const state = this.client.state;
+      return state.canAct && state.session?.id === sessionId;
+    };
     if (!current())
       throw Error(
         "Connection or session changed; reopen the panel. No action was replayed.",
       );
-    const result = await this.client.request(method, { ...params, sessionId });
+    const result = await this.client.request(
+      method,
+      { ...params, sessionId },
+      {
+        beforeSend: () => {
+          if (!current())
+            throw Error("Connection or session changed; command was not sent.");
+        },
+      },
+    );
     if (!current())
       throw Error(
         "Connection or session changed; inspect current state before retrying. No action was replayed.",
@@ -77,41 +99,40 @@ export class AttachedWorkflows {
     }
   }
   private async poll() {
+    const state = this.client.state;
     if (
       this.modal === "menu" ||
       this.stopped ||
       this.polling ||
-      !this.client.state.canAct ||
-      !this.client.state.session ||
-      this.client.state.sessionRole === "view"
+      !state.canAct ||
+      !state.session ||
+      state.sessionRole === "view"
     )
       return;
     this.polling = true;
-    const id = this.client.state.session.id;
+    const id = state.session.id;
     try {
-      const q = await this.request<{ id: string; questions: Questions } | null>(
-        "questions.read",
-        id,
-      );
+      const q = await this.request<{
+        id: string;
+        questions: Questions;
+        recovered?: boolean;
+      } | null>("questions.read", id);
       if (this.modal === "menu") return;
-      if (this.question && this.question.id !== q?.id)
+      if (
+        this.question &&
+        (this.question.id !== q?.id ||
+          this.question.recovered !== !!q?.recovered)
+      )
         this.question.abort.abort();
       if (q && !this.question) {
         this.view.closeModelPanel();
         const abort = new AbortController();
-        this.question = { id: q.id, abort };
+        this.question = { id: q.id, recovered: !!q.recovered, abort };
         this.modal = "questions";
-        void askQuestions(this.view, q.questions, abort.signal)
-          .then(async (answers) => {
-            if (!abort.signal.aborted)
-              await this.request("questions.respond", id, {
-                id: q.id,
-                ...(answers ? { answers } : { cancelled: true }),
-              });
-          })
+        void this.answer(q, id, abort.signal)
           .catch((error) => this.view.setError(String(error)))
           .finally(() => {
-            if (this.question?.id === q.id) {
+            if (this.question?.abort === abort) {
               this.question = undefined;
               this.modal = undefined;
             }
@@ -145,6 +166,67 @@ export class AttachedWorkflows {
       this.polling = false;
     }
   }
+  private async answer(
+    question: { id: string; questions: Questions; recovered?: boolean },
+    sessionId: string,
+    signal: AbortSignal,
+  ) {
+    let draft: QuestionDraftSaver | undefined;
+    try {
+      if (
+        this.client.supports("questions.draft.read") &&
+        this.client.supports("questions.draft.save")
+      ) {
+        const snapshot = await this.request<QuestionDraftSnapshot>(
+          "questions.draft.read",
+          sessionId,
+          { id: question.id },
+          signal,
+        );
+        signal.throwIfAborted();
+        draft = new QuestionDraftSaver(
+          snapshot,
+          (expectedRevision, draft) => {
+            signal.throwIfAborted();
+            return this.request<QuestionDraftSaveResult>(
+              "questions.draft.save",
+              sessionId,
+              { id: question.id, expectedRevision, draft },
+              signal,
+            );
+          },
+          (error) => {
+            if (!signal.aborted)
+              this.view.setError(`Answer draft not saved: ${String(error)}`);
+          },
+        );
+      }
+      signal.throwIfAborted();
+      await answerQuestion(
+        this.view,
+        question,
+        signal,
+        (answers, draftRevision) => {
+          signal.throwIfAborted();
+          return this.request(
+            "questions.respond",
+            sessionId,
+            {
+              id: question.id,
+              ...(draftRevision === undefined ? {} : { draftRevision }),
+              ...(answers ? { answers } : { cancelled: true }),
+            },
+            signal,
+          );
+        },
+        draft,
+      );
+    } catch (error) {
+      if (!signal.aborted) throw error;
+    } finally {
+      draft?.stop();
+    }
+  }
   private async review(id: string, plan: Plan) {
     this.modal = "plan";
     try {
@@ -172,6 +254,30 @@ export class AttachedWorkflows {
     if (command === "/plan") {
       this.modal = "plan";
       try {
+        if (arg === "progress") {
+          await browsePlanProgress(this.view, async () => {
+            const state = await this.request<{
+              progress?: PlanProgress | null;
+            }>("plan.read", id);
+            if (state.progress === undefined)
+              throw Error("Upgrade the host to read plan progress.");
+            return state.progress;
+          });
+          return;
+        }
+        if (arg === "history") {
+          if (
+            !this.client.supports("plan.history") ||
+            !this.client.supports("plan.version")
+          )
+            throw Error("Upgrade the host to browse plan history.");
+          await browsePlanHistory(this.view, {
+            list: (before) => this.request("plan.history", id, { before }),
+            detail: (version) =>
+              this.request("plan.version", id, { id: version }),
+          });
+          return;
+        }
         if (arg === "cancel") {
           this.modal = "plan";
           const { panel, close } = this.view.openModelPanel();
@@ -272,13 +378,44 @@ export class AttachedWorkflows {
             signal.throwIfAborted();
             await this.request("changes.rollback", id, { id: changeId });
           },
+          redo: this.client.supports("changes.redo")
+            ? async (changeId, signal) => {
+                signal.throwIfAborted();
+                await this.request("changes.redo", id, { id: changeId });
+              }
+            : undefined,
         });
       } else {
+        const history: ExecutionHistorySource | undefined =
+          this.client.supports("execution.history") &&
+          this.client.supports("execution.history.detail")
+            ? {
+                list: (cursor, signal) =>
+                  this.request("execution.history", id, cursor, signal),
+                detail: (runId, snapshot, signal) =>
+                  this.request(
+                    "execution.history.detail",
+                    id,
+                    { id: runId, snapshot },
+                    signal,
+                  ),
+              }
+            : undefined;
+        const requested = /^history(?:\s+(.+))?$/u.exec(arg.trim());
+        if (requested) {
+          if (!history)
+            throw Error(
+              "Upgrade the host for complete saved history. /tasks still provides recent execution history.",
+            );
+          await browseExecutionHistory(this.view, history, requested[1]);
+          return;
+        }
         let token: string | undefined;
         let renewal: ReturnType<typeof setInterval> | undefined;
         let renewing = false;
         let holding = false;
         await openExecutionControl(this.view, {
+          history,
           hold: async () => {
             token = (
               await this.request<{ token: string }>("execution.hold", id)

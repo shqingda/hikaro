@@ -4,7 +4,7 @@
 pnpm dev:sim
 ```
 
-复用原有 **iPhone 18 Pro／iOS 27.0**（`498E27B7-5192-48CE-9B13-F4A27F10F806`），自动启动／复用 Metro 和 serve-sim，并打开 [localhost:3200](http://localhost:3200/)。不启动 DeviceHub 窗口，不创建或克隆设备，不下载 iOS runtime，不安装测试证书。模拟器或原生 App 缺失时明确报错，不创建替代设备。
+复用原有 **iPhone 18 Pro／iOS 27.0**（`498E27B7-5192-48CE-9B13-F4A27F10F806`），自动启动／复用 Metro 和 serve-sim。就绪后在 Codex 内置浏览器打开 [localhost:3200](http://localhost:3200/)，脚本默认不打开系统浏览器。需要系统默认浏览器时显式运行 `pnpm dev:sim --open-browser`。不启动 DeviceHub 窗口，不创建或克隆设备，不下载 iOS runtime，不安装测试证书。模拟器或原生 App 缺失时明确报错，不创建替代设备。
 
 日常只需这一个命令。服务在后台运行，终端退出后浏览器预览仍可用；不需要一直开着 DeviceHub。如果它之前已接管输入，脚本会恢复 serve-sim 输入通道，App 数据保留。
 
