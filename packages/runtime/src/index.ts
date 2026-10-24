@@ -184,13 +184,26 @@ export class Runtime {
       child?: Agent;
     }
   >();
+  /** Every delegated descendant of `parent`, depth-first in start order. */
   childTasks(parent: string) {
-    return [...this.children.values()]
-      .filter((item) => item.parent === parent)
-      .map((item) => {
+    const items = [...this.children.values()];
+    const tree: Array<{
+      id: string;
+      parentId: string;
+      depth: number;
+      task: string;
+      state: string;
+      output: string;
+    }> = [];
+    const visit = (owner: string, depth: number) => {
+      // Delegation stops at depth 2; the bound also guards against bad links.
+      if (depth > 4) return;
+      for (const item of items.filter((row) => row.parent === owner)) {
         const snapshot = item.child?.snapshot();
-        return {
+        tree.push({
           id: item.id,
+          parentId: item.parent,
+          depth,
           task: item.task,
           state:
             item.stopping && snapshot?.busy
@@ -199,12 +212,16 @@ export class Runtime {
                 ? "starting"
                 : (snapshot?.runStatus ?? item.state),
           output: snapshot?.stream || item.output,
-        };
-      });
+        });
+        visit(item.id, depth + 1);
+      }
+    };
+    visit(parent, 1);
+    return tree;
   }
   stopChild(parent: string, id: string) {
     const item = this.children.get(id);
-    if (!item || item.parent !== parent)
+    if (!item || !this.childTasks(parent).some((row) => row.id === id))
       throw Error("Child task not found in this session");
     if (!item.child?.busy) return;
     item.stopping = true;

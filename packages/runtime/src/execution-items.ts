@@ -80,9 +80,10 @@ export function executionItems(
     }));
   return runtime.childTasks(session).map((t) => ({
     id: t.id,
-    title: t.task,
-    state: t.state,
-    detail: `Task: ${t.task}\nState: ${t.state}\n\n${t.output || "No text output yet. Refresh to check progress."}`,
+    // Indent nested delegations so the tree shape survives a flat list.
+    title: `${"  ".repeat(t.depth - 1)}${t.depth > 1 ? "↳ " : ""}${t.task}`,
+    state: t.depth > 1 ? `${t.state} · level ${t.depth}` : t.state,
+    detail: `Task: ${t.task}\nState: ${t.state}${t.depth > 1 ? `\nDelegated by child agent ${t.parentId.slice(0, 8)} (level ${t.depth})` : ""}\n\n${t.output || "No text output yet. Refresh to check progress."}`,
     actions: ["running", "starting"].includes(t.state)
       ? [{ value: "stop", label: "Stop child agent…" }]
       : [],
