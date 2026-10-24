@@ -19,6 +19,7 @@ export class PluginExecutions {
       scope: string;
       controller: AbortController;
       name: string;
+      committing: boolean;
     }
   >();
   get busy() {
@@ -30,7 +31,11 @@ export class PluginExecutions {
       run && {
         invocationId: run.invocationId,
         name: run.name,
-        state: run.controller.signal.aborted ? "cancelling" : "running",
+        state: run.committing
+          ? "committing"
+          : run.controller.signal.aborted
+            ? "cancelling"
+            : "running",
       }
     );
   }
@@ -38,6 +43,8 @@ export class PluginExecutions {
     const run = this.active.get(sessionId);
     if (!run || run.invocationId !== invocationId || run.scope !== scope)
       throw Error("Plugin invocation not found for this owner and session");
+    if (run.committing)
+      throw Error("Plugin result is committing and cannot be cancelled");
     run.controller.abort(
       Error("Plugin cancelled; execution has not yet settled"),
     );
@@ -45,7 +52,7 @@ export class PluginExecutions {
   }
   close() {
     for (const run of this.active.values())
-      run.controller.abort(Error("Runtime is closing"));
+      if (!run.committing) run.controller.abort(Error("Runtime is closing"));
   }
   constructor(
     private store: SQLiteStore,
@@ -66,12 +73,14 @@ export class PluginExecutions {
     if (!lease) throw Error("Session is running elsewhere");
     const invocationId = origin.invocationId ?? randomUUID();
     const controller = new AbortController();
-    this.active.set(session.id, {
+    const run = {
       invocationId,
       scope: origin.scope ?? "local",
       controller,
       name,
-    });
+      committing: false,
+    };
+    this.active.set(session.id, run);
     let plan:
       import("../../core/src/change-evidence.ts").PlanReference | undefined;
     let lost = false;
@@ -146,6 +155,10 @@ export class PluginExecutions {
         throw Error(
           "Plugin outcome unknown: session lease lost; inspect host before retrying",
         );
+      // Recheck after awaiting checkpoint, then close cancellation synchronously
+      // before either result write can yield to a new cancellation request.
+      controller.signal.throwIfAborted();
+      run.committing = true;
       await this.store.append(
         session.id,
         "message",
