@@ -75,4 +75,4 @@ else if (pending.size && !progressed) throw Error("Scheduler made no progress");
 - 真正的依赖环仍在启动前被拒绝。
 - 回归测试在修复前失败、修复后通过。
 
-教学版复现与修正见 `~/Downloads/hikaro-course/labs/07-task-graph.mjs`（`originalRunTaskGraph` / `runTaskGraph`）。
+教学版复现与修正见 [`tutorial/labs/07-task-graph.mjs`](../../tutorial/labs/07-task-graph.mjs)（`originalRunTaskGraph` / `runTaskGraph`）。
