@@ -14,7 +14,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run && pnpm test:scripts",
     "test:scripts": "node --test scripts/*.test.mjs",
-    "check": "pnpm typecheck && pnpm test && pnpm build",
+    "check": "pnpm typecheck && pnpm build && pnpm test",
     "check:install": "node scripts/check-install.mjs",
     "check:upgrade": "node scripts/check-upgrade.mjs",
     "bench": "node scripts/bench.mjs",
