@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { it, expect, vi } from "vitest";
 import { mobileLifecycle } from "../apps/mobile/src/lifecycle.ts";
 import {
@@ -59,6 +60,7 @@ function fixture(
     dropMethod = "";
   let nextList: (() => Promise<unknown>) | undefined;
   let messageItems: unknown[] | undefined;
+  let planRead: ((params: any) => Promise<unknown>) | undefined;
   const readList = () => {
     const read = nextList;
     nextList = undefined;
@@ -141,48 +143,50 @@ function fixture(
           const rpcResult =
             frame.method === "messages.content" && content
               ? content(frame.params)
-              : hooks
-                ? hooks.request(frame)
-                : frame.method === "hello"
-                  ? capabilities
-                  : frame.method === "session.current"
-                    ? {
-                        session: selected,
-                        sessionRole: "view",
-                        busy: false,
-                        stream: "",
-                        streamTruncated: false,
-                        cursor: 2,
-                        revision,
-                        runId: "run1",
-                        runStatus: "completed",
-                        approvals: [],
-                        ...snapshotPatch,
-                      }
-                    : frame.method === "session.list"
-                      ? readList()
-                      : frame.method === "messages.read"
-                        ? {
-                            items: messageItems ?? [
-                              {
-                                seq: 2,
-                                message: {
-                                  role: "assistant",
-                                  text: "已恢复的结果",
-                                  timestamp: 1,
+              : frame.method === "plan.read" && planRead
+                ? planRead(frame.params)
+                : hooks
+                  ? hooks.request(frame)
+                  : frame.method === "hello"
+                    ? capabilities
+                    : frame.method === "session.current"
+                      ? {
+                          session: selected,
+                          sessionRole: "view",
+                          busy: false,
+                          stream: "",
+                          streamTruncated: false,
+                          cursor: 2,
+                          revision,
+                          runId: "run1",
+                          runStatus: "completed",
+                          approvals: [],
+                          ...snapshotPatch,
+                        }
+                      : frame.method === "session.list"
+                        ? readList()
+                        : frame.method === "messages.read"
+                          ? {
+                              items: messageItems ?? [
+                                {
+                                  seq: 2,
+                                  message: {
+                                    role: "assistant",
+                                    text: "已恢复的结果",
+                                    timestamp: 1,
+                                  },
                                 },
-                              },
-                            ],
-                            hasOlder: false,
-                            hasNewer: false,
-                          }
-                        : frame.method === "session.resume"
-                          ? (selected = session)
-                          : frame.method === "run.cancel"
-                            ? { accepted: true, runId: frame.params.runId }
-                            : frame.method === "push.register"
-                              ? { ok: true }
-                              : { receipt: null };
+                              ],
+                              hasOlder: false,
+                              hasNewer: false,
+                            }
+                          : frame.method === "session.resume"
+                            ? (selected = session)
+                            : frame.method === "run.cancel"
+                              ? { accepted: true, runId: frame.params.runId }
+                              : frame.method === "push.register"
+                                ? { ok: true }
+                                : { receipt: null };
           void Promise.resolve(rpcResult).then(
             (result) => {
               if (dropMethod === frame.method) {
@@ -248,6 +252,9 @@ function fixture(
     },
     setMessages: (items: unknown[]) => {
       messageItems = items;
+    },
+    setPlanRead: (read: (params: any) => Promise<unknown>) => {
+      planRead = read;
     },
     uri: () => "hikaro://pair#" + encodeURIComponent(JSON.stringify(pairing)),
     dropResume: () => {
@@ -1893,6 +1900,75 @@ it("does not repopulate task data when a notification refresh loses its pairing"
     expect(await oldRefresh).toBe(false);
     expect(app.state.phase).toBe("unpaired");
     expect(app.state.sessions).toEqual([]);
+  } finally {
+    app.dispose();
+  }
+});
+
+it("reads model-reported plan progress read-only and reports old hosts without guessing", async () => {
+  const f = fixture();
+  const progress = {
+    planId: randomUUID(),
+    title: "手机计划",
+    steps: [
+      { text: "修改文件", status: "completed", note: "已写入" },
+      { text: "运行测试", status: "in_progress" },
+    ],
+  };
+  let reply: unknown = { active: false, progress };
+  let gate: Promise<void> | undefined;
+  f.setPlanRead(async () => {
+    await gate;
+    return reply;
+  });
+  const app = new MobileController(f.store, f.options);
+  try {
+    app.review(f.uri());
+    await app.confirm();
+    await vi.waitFor(() => expect(app.state.phase).toBe("connected"));
+    await app.readPlanProgress();
+    expect(app.state.plan).toMatchObject({
+      status: "ready",
+      progress: { title: "手机计划", steps: [{ status: "completed" }, {}] },
+    });
+    const frame = f.sent.filter((s) => s.method === "plan.read").at(-1);
+    expect(frame.params.sessionId).toBeTruthy();
+
+    reply = { active: true, progress: null };
+    await app.readPlanProgress();
+    expect(app.state.plan).toMatchObject({ status: "none" });
+
+    reply = { active: false };
+    await app.readPlanProgress();
+    expect(app.state.plan).toMatchObject({ status: "unsupported" });
+
+    reply = {
+      active: false,
+      progress: { ...progress, steps: [{ text: "x", status: "done" }] },
+    };
+    await expect(app.readPlanProgress()).rejects.toThrow();
+    expect(app.state.plan).toMatchObject({ status: "error" });
+
+    // A late response must not reappear after the panel closes.
+    reply = { active: false, progress };
+    let open!: () => void;
+    gate = new Promise<void>((done) => (open = done));
+    const reads = f.sent.filter((s) => s.method === "plan.read").length;
+    const late = app.readPlanProgress();
+    await vi.waitFor(() =>
+      expect(f.sent.filter((s) => s.method === "plan.read").length).toBe(
+        reads + 1,
+      ),
+    );
+    app.closePlan();
+    open();
+    await late.catch(() => {});
+    expect(app.state.plan).toBeNull();
+    expect(
+      f.sent.some((s) =>
+        ["plan.set", "plan.execute", "prompt", "steer"].includes(s.method),
+      ),
+    ).toBe(false);
   } finally {
     app.dispose();
   }

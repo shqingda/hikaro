@@ -68,6 +68,16 @@ export default function Task() {
           )}
           {online && (
             <Action
+              title="查看计划进度"
+              quiet
+              onPress={() => {
+                void controller.readPlanProgress().catch(() => {});
+                router.push("/plan");
+              }}
+            />
+          )}
+          {online && (
+            <Action
               title="查看文件修改"
               quiet
               disabled={!state.inspection.canChanges}

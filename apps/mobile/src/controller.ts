@@ -81,6 +81,30 @@ export type MobileSnapshot = z.infer<typeof snapshotSchema>;
 export type MobileMessage = z.infer<typeof itemSchema>;
 export type MobileSession = z.infer<typeof sessionSchema>;
 export type MobileContentField = "text" | "toolCalls";
+const planProgressSchema = z.object({
+  planId: z.string().uuid(),
+  title: z.string().max(200),
+  steps: z
+    .array(
+      z.object({
+        text: z.string().max(4000),
+        status: z.enum([
+          "pending",
+          "in_progress",
+          "completed",
+          "blocked",
+          "skipped",
+        ]),
+        note: z.string().max(500).optional(),
+      }),
+    )
+    .max(12),
+});
+// Older hosts omit `progress`; null means no approved plan is executing.
+const planReadSchema = z.object({
+  progress: planProgressSchema.nullable().optional(),
+});
+export type MobilePlanProgress = z.infer<typeof planProgressSchema>;
 export interface MobileStorage {
   read(): Promise<string | null>;
   write(credential: string): Promise<void>;
@@ -108,6 +132,7 @@ const allowed = new Set([
   "messages.search",
   "push.register",
   "messages.content",
+  "plan.read",
   "changes.list",
   "changes.diff",
   "session.resume",
@@ -177,6 +202,12 @@ export type MobileState = {
   } | null;
   contentLoading: boolean;
   contentError: string | null;
+  /** Model-reported step status; read-only and never a verification result. */
+  plan: {
+    sessionId: string;
+    status: "loading" | "ready" | "none" | "unsupported" | "error";
+    progress?: MobilePlanProgress;
+  } | null;
 };
 const empty = (phase: MobileState["phase"]): MobileState => ({
   phase,
@@ -213,6 +244,7 @@ const empty = (phase: MobileState["phase"]): MobileState => ({
   content: null,
   contentLoading: false,
   contentError: null,
+  plan: null,
 });
 /** Only explicit, authority-checked operations expose mutation-capable transport. */
 export class MobileController {
@@ -223,6 +255,7 @@ export class MobileController {
   private historyEpoch = 0;
   private listEpoch = 0;
   private contentEpoch = 0;
+  private planEpoch = 0;
   private credentialQueue: Promise<unknown> = Promise.resolve();
   private pendingPairing?: Pairing;
   private pairing?: Pairing;
@@ -303,11 +336,13 @@ export class MobileController {
     this.steering.bind(null);
     this.composer.hide();
     this.contentEpoch++;
+    this.planEpoch++;
     this.value = {
       ...this.value,
       content: null,
       contentLoading: false,
       contentError: null,
+      plan: null,
       approvals: [],
       sessionRole: null,
       canStopRun: false,
@@ -923,6 +958,41 @@ export class MobileController {
       throw error;
     } finally {
       if (epoch === this.epoch) this.update({ actionPending: null });
+    }
+  }
+  closePlan() {
+    this.planEpoch++;
+    this.update({ plan: null });
+  }
+  async readPlanProgress() {
+    const client = this.client,
+      epoch = this.epoch,
+      sessionId = client?.state.session?.id;
+    if (!client?.state.canAct || !sessionId)
+      throw Error("Not connected to a task");
+    const read = ++this.planEpoch;
+    const current = () =>
+      epoch === this.epoch &&
+      read === this.planEpoch &&
+      client === this.client &&
+      sessionId === client.state.session?.id;
+    this.update({ plan: { sessionId, status: "loading" } });
+    try {
+      const { progress } = planReadSchema.parse(
+        await client.request("plan.read", { sessionId }),
+      );
+      if (current())
+        this.update({
+          plan:
+            progress === undefined
+              ? { sessionId, status: "unsupported" }
+              : progress === null
+                ? { sessionId, status: "none" }
+                : { sessionId, status: "ready", progress },
+        });
+    } catch (error) {
+      if (current()) this.update({ plan: { sessionId, status: "error" } });
+      throw error;
     }
   }
   closeMessage() {
