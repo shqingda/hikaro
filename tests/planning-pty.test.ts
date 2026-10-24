@@ -184,7 +184,8 @@ it("explores read-only, answers a question, revises and approves a plan before w
     expect(await readFile(join(cwd, "sample.txt"), "utf8")).toBe("original");
     await wait("Plan review", send("/plan\r"));
     await wait("Changes to the plan", send("\x1b[B".repeat(2) + "\r"));
-    await wait("Revised plan", send("Keep it focused\r"));
+    // The revised review panel opens after the turn ends, not when its text streams.
+    await wait("Approve and execute", send("Keep it focused\r"));
     await wait("Confirm plan execution", send("\x1b[B\r"));
     await wait("Plan review", send("\x1b"));
     expect(await readFile(join(cwd, "sample.txt"), "utf8")).toBe("original");
