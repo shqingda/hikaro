@@ -24,6 +24,8 @@
 
 `update_plan_step` 只在会话有已批准、正在执行的计划时才发给模型，Plan 只读阶段和普通会话都不提供，避免无关请求多占 token 或误导模型。`tests/plan-progress.test.ts` 用真实 runtime 的工具策略验证：普通会话、只读计划阶段为否，批准后为是，其他工具不受影响。`pnpm check`：117 个文件、620 项测试通过，日志 `/tmp/hikaro-check-20261024-plan-tool.log`。
 
+附着 TUI 真实 PTY（`tests/attached-workflows-pty.test.ts`）：在共享 host 上批准并执行计划后输入 `/plan progress`，看到“Plan progress · reported by the model”、步骤完成数和批准后修改条数，Esc 返回编辑器。连续两次运行通过。
+
 ## 未覆盖
 
-真实模型是否可靠调用该工具、模型报告与实际修改的逐步自动核对（目前只有修改条数对照）、附着端真实 PTY、移动端显示及历史计划版本的进度均未验证或未实现。本轮未调整发布百分比。
+真实模型是否可靠调用该工具、模型报告与实际修改的逐步自动核对（目前只有修改条数对照）、移动端显示及历史计划版本的进度均未验证或未实现。本轮未调整发布百分比。
