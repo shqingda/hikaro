@@ -44,3 +44,9 @@ Use `host.registerTools(tools)` for a discovered batch. It checks every name bef
 Provider factories use `registerProvider(id, async () => adapter)`. Adapters stream normalized text and one final message. They do not control the execution loop. Tool parameters must validate before side effects. `context.invoke()` composes tools with inherited permissions, cancellation, shared budgets, and parent call IDs.
 
 Text views are currently exposed as TUI commands. A native arbitrary-component UI plugin ABI is intentionally not exposed to all clients.
+
+## Cooperative command and view cancellation
+
+Commands receive `(args, context)` and views receive `(context)`. Existing callbacks that ignore the extra argument remain compatible with API v1. `context` contains `invocationId`, `sessionId`, `cwd`, `signal`, and asynchronous `checkpoint()` (cancellation and lease validation). Check it before side effects and after waits. Plugin tools retain their existing `ToolContext.signal`.
+
+The TUI shows each invocation ID. Ctrl+C in a running plugin panel requests cancellation; Esc only closes the view. `/plugin-stop ID` requests cancellation after closing the panel. Attached clients use `plugins.cancel` with the selected session and invocation ID; only the initiating local scope can cancel it. Cancellation is a durable control request, never an automatic replay. The execution lease remains held until the callback settles. Ignoring the signal does not produce a stopped result. A cancelled callback's late return value is not saved as a successful result. Runtime shutdown requests cancellation but cannot forcibly isolate trusted in-process code.

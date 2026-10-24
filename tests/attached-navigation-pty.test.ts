@@ -29,7 +29,7 @@ it("navigates sessions, model/defaults, settings, resources and login from the a
   );
   await writeFile(
     join(home, "plugin.mjs"),
-    `export default {id:'pty-proof',apiVersion:1,setup(api){api.registerCommand('pty-proof',async args=>'PLUGIN-COMMAND:'+args);api.registerView('pty-view',async()=>'PLUGIN-VIEW:ready')}}`,
+    `export default {id:'pty-proof',apiVersion:1,setup(api){api.registerCommand('pty-proof',async args=>'PLUGIN-COMMAND:'+args);api.registerView('pty-view',async()=>'PLUGIN-VIEW:ready');api.registerCommand('pty-wait',async (_,ctx)=>new Promise(resolve=>ctx.signal.addEventListener('abort',()=>resolve('late-result'),{once:true})))}}`,
   );
   await writeFile(
     join(home, "config.json"),
@@ -168,6 +168,8 @@ it("navigates sessions, model/defaults, settings, resources and login from the a
     expect((await probe.request("session.current")).session.title).toBe(
       "Renamed target",
     );
+    await wait("Running pty-wait", send("/pty-wait\r"));
+    await wait("Plugin cancelled", send("\x03"));
     await wait("PLUGIN-COMMAND:direct", send("/pty-proof direct\r"));
     await wait("Host plugins", send("/plugins\r"));
     await wait("pty-view", send("pty-view"));

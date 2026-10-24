@@ -1,6 +1,7 @@
+import { randomUUID } from "node:crypto";
 import { parseManualCommand } from "../../../packages/tui/src/manual-command.ts";
 import type { AttachedWorkflows } from "./attached-workflows.ts";
-import { randomUUID } from "node:crypto";
+import { openPluginExecution } from "../../../packages/tui/src/plugin-execution.ts";
 import { SharedHostClient } from "../../../packages/host/src/client.ts";
 import { ClientFiles } from "../../../packages/host/src/client-files.ts";
 import { ClientConnection } from "../../../packages/client-core/src/connection.ts";
@@ -568,16 +569,33 @@ export async function attachTui(options: {
           await client.connected();
           await client.reconcile();
           return;
-        default: {
-          const result = await client.request("plugins.invoke", {
+        case "/plugin-stop":
+          await client.request("plugins.cancel", {
             sessionId: client.state.session?.id,
-            name: command!.slice(1),
-            args: rest,
+            invocationId: rest.trim(),
           });
-          if (result && typeof result === "object" && "duplicate" in result)
-            return "Command already received; inspect receipts before retrying.";
-          await refresh();
-          return (result as { text: string }).text;
+          return "Plugin cancellation requested; wait for execution to settle.";
+        default: {
+          const sessionId = client.state.session?.id;
+          return openPluginExecution(
+            view,
+            command!.slice(1),
+            async (invocationId) => {
+              const result = await client.request("plugins.invoke", {
+                sessionId,
+                invocationId,
+                name: command!.slice(1),
+                args: rest,
+              });
+              if (result && typeof result === "object" && "duplicate" in result)
+                return "Command already received; inspect receipts before retrying.";
+              return (result as { text: string }).text;
+            },
+            client.supports("plugins.cancel")
+              ? (invocationId) =>
+                  client.request("plugins.cancel", { sessionId, invocationId })
+              : undefined,
+          );
         }
       }
     },

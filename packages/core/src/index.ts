@@ -11,6 +11,8 @@ import type {
   Message,
   PermissionRequest,
   Plugin,
+  PluginCommand,
+  PluginView,
   ProviderAdapter,
   Session,
   Tool,
@@ -70,7 +72,7 @@ export class ToolRegistry {
 }
 export class PluginHost {
   readonly providers = new Map<string, () => Promise<ProviderAdapter>>();
-  readonly views = new Map<string, () => Promise<string>>();
+  readonly views = new Map<string, PluginView>();
   private eventListeners: Array<(e: AgentEvent) => void> = [];
   dispatch(event: AgentEvent) {
     for (const listener of this.eventListeners) {
@@ -81,7 +83,7 @@ export class PluginHost {
       }
     }
   }
-  readonly commands = new Map<string, (args: string) => Promise<string>>();
+  readonly commands = new Map<string, PluginCommand>();
   private cleanups: Array<() => Promise<void>> = [];
   constructor(readonly tools: ToolRegistry) {}
   async load(plugin: Plugin) {

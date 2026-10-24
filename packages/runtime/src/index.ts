@@ -1,4 +1,7 @@
-import { PluginExecutions } from "./plugin-executions.ts";
+import {
+  PluginExecutions,
+  type PluginInvocation,
+} from "./plugin-executions.ts";
 import { ChildTasks } from "./child-tasks.ts";
 import {
   executionHistory,
@@ -985,8 +988,9 @@ export class Runtime {
     name: string,
     kind: "command" | "view",
     args: string,
+    origin?: PluginInvocation,
   ) {
-    return this.pluginRuns.invoke(session, name, kind, args);
+    return this.pluginRuns.invoke(session, name, kind, args, origin);
   }
   async exportSession(id: string, includeThinking = false) {
     const session = await this.session(id);
@@ -1183,6 +1187,7 @@ export class Runtime {
   }
   private async shutdown(beforeStoreClose?: () => Promise<void>) {
     this.lifecycle.abort(Error("Runtime is closing"));
+    this.pluginExecution?.close();
     await this.scheduler?.stop();
     for (const agent of this.agents.values()) agent.cancel(true);
     await Promise.all(
@@ -1192,6 +1197,7 @@ export class Runtime {
     while (
       (this.initializingAgents.size > 0 ||
         this.pendingSubagents > 0 ||
+        this.pluginExecution?.busy ||
         [...this.agents.values()].some((a) => a.busy)) &&
       Date.now() < deadline
     )

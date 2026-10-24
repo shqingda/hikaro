@@ -20,6 +20,7 @@ export const isControlMethod = (method: string) =>
     "command.receipt",
     "cancel",
     "run.cancel",
+    "plugins.cancel",
     "tool.manual",
     "approval.respond",
     "questions.respond",

@@ -210,6 +210,7 @@ export class HikaroView {
   private draftText = "";
   private nextMessage = 1;
   private busy = false;
+  private panelCancel?: () => void;
   private activity = "Working";
   private disposed = false;
   private approval?: {
@@ -452,6 +453,10 @@ export class HikaroView {
         return { consume: true };
       }
       if (this.modelPanel) {
+        if (matchesKey(data, "ctrl+c") && this.panelCancel) {
+          this.panelCancel();
+          return { consume: true };
+        }
         if (matchesKey(data, "escape") && this.modelPanel.cancelStep())
           return { consume: true };
         if (matchesKey(data, "escape") || matchesKey(data, "ctrl+c")) {
@@ -488,6 +493,7 @@ export class HikaroView {
     this.modelController?.abort();
   }
   openModelPanel(options?: {
+    onCancel?: () => void;
     yieldToApproval?: boolean;
     interruptYielding?: boolean;
   }) {
@@ -516,6 +522,7 @@ export class HikaroView {
           ),
         ),
     );
+    this.panelCancel = options?.onCancel;
     this.modelController = controller;
     this.modelPanel = panel;
     this.modelSlot.addChild(panel);
@@ -527,6 +534,7 @@ export class HikaroView {
       this.modelSlot.clear();
       this.modelPanel = undefined;
       this.modelController = undefined;
+      this.panelCancel = undefined;
       controller.abort();
       this.tui.setFocus(this.editor);
       this.updateFooter();

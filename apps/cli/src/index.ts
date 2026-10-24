@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { openPluginExecution } from "../../../packages/tui/src/plugin-execution.ts";
 import { parseManualCommand } from "../../../packages/tui/src/manual-command.ts";
 import { execFile } from "node:child_process";
 import { parseArgs } from "node:util";
@@ -877,10 +878,29 @@ async function main() {
             throw Error(
               "Plugin commands and views are unavailable in read-only Plan mode",
             );
-          if (runtime.plugins.commands.has(command!))
-            return runtime.plugins.commands.get(command!)!(arg);
-          if (runtime.plugins.views.has(command!))
-            return runtime.plugins.views.get(command!)!();
+          if (command === "plugin-stop") {
+            runtime.pluginRuns.cancel(session.id, arg.trim());
+            return "Plugin cancellation requested; wait for execution to settle.";
+          }
+          if (
+            runtime.plugins.commands.has(command!) ||
+            runtime.plugins.views.has(command!)
+          ) {
+            return openPluginExecution(
+              view,
+              command!,
+              (invocationId) =>
+                runtime.invokePlugin(
+                  session,
+                  command!,
+                  runtime.plugins.commands.has(command!) ? "command" : "view",
+                  arg,
+                  { invocationId },
+                ),
+              async (invocationId) =>
+                runtime.pluginRuns.cancel(session.id, invocationId),
+            );
+          }
           throw Error(`Unknown command: /${command}`);
       }
     },

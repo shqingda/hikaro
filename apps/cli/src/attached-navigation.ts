@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { pluginResult } from "../../../packages/tui/src/plugin-execution.ts";
 import type { ClientConnection } from "../../../packages/client-core/src/connection.ts";
 import type { ClientFiles } from "../../../packages/host/src/client-files.ts";
 import type { HikaroView } from "../../../packages/tui/src/index.ts";
@@ -213,7 +215,21 @@ export class AttachedNavigation {
       return;
     }
     if (command === "/plugins") {
-      const { panel, signal, close } = this.view.openModelPanel();
+      let invocationId: string | undefined;
+      const { panel, signal, close } = this.view.openModelPanel({
+        onCancel: () => {
+          if (!invocationId || !this.client.supports("plugins.cancel")) return;
+          panel.progress(
+            "Cancellation requested; waiting for plugin to settle…",
+          );
+          void this.request("plugins.cancel", {
+            sessionId: id,
+            invocationId,
+          }).catch((error) => {
+            if (!signal.aborted) this.view.setError(String(error));
+          });
+        },
+      });
       try {
         panel.progress("Loading host plugins…");
         const { items } = await this.request<{
@@ -248,11 +264,23 @@ export class AttachedNavigation {
           );
           if (confirmation.value !== "run") continue;
           this.selected(id);
-          panel.progress("Running host plugin…");
-          const result = await this.request<{ text: string }>(
-            "plugins.invoke",
-            { sessionId: id, ...item, args },
+          invocationId = randomUUID();
+          this.view.notice(
+            `Plugin ${invocationId}. Stop with /plugin-stop ${invocationId}.`,
           );
+          panel.progress(
+            "Running host plugin… Ctrl+C requests cancellation; Esc closes the view.",
+          );
+          const result = await pluginResult(
+            this.request<{ text: string }>("plugins.invoke", {
+              sessionId: id,
+              ...item,
+              args,
+              invocationId,
+            }),
+            signal,
+          );
+          invocationId = undefined;
           signal.throwIfAborted();
           await this.synchronize();
           await panel.readDocument(

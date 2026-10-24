@@ -220,11 +220,23 @@ export interface Plugin {
     host: PluginHost,
   ): Promise<void | (() => Promise<void>)> | void | (() => Promise<void>);
 }
+export interface PluginExecutionContext {
+  invocationId: string;
+  sessionId: string;
+  cwd: string;
+  signal: AbortSignal;
+  checkpoint(): Promise<void>;
+}
+export type PluginCommand = (
+  args: string,
+  context: PluginExecutionContext,
+) => Promise<string>;
+export type PluginView = (context: PluginExecutionContext) => Promise<string>;
 export interface PluginHost {
   registerProvider(id: string, factory: () => Promise<ProviderAdapter>): void;
   onEvent(listener: (event: AgentEvent) => void): void;
-  registerView(id: string, render: () => Promise<string>): void;
+  registerView(id: string, render: PluginView): void;
   registerTool(tool: Tool): void;
   registerTools(tools: Tool[]): void;
-  registerCommand(name: string, run: (args: string) => Promise<string>): void;
+  registerCommand(name: string, run: PluginCommand): void;
 }

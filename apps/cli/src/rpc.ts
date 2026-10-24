@@ -382,6 +382,7 @@ export async function serveRpc(
             "resources.list",
             "plugins.list",
             "plugins.invoke",
+            "plugins.cancel",
             "tool.manual",
             "session.export.file",
           ].includes(command.method) &&
@@ -396,8 +397,10 @@ export async function serveRpc(
             "steer",
             "cancel",
             "run.cancel",
+            "plugins.cancel",
             "tool.manual",
             "plugins.invoke",
+            "plugins.cancel",
           ].includes(command.method) ||
           /^(changes|execution|plan|questions)\./.test(command.method)
         ) {
@@ -472,6 +475,16 @@ export async function serveRpc(
           if (Buffer.byteLength(JSON.stringify(result)) > 256000)
             throw Error("Plugin catalog exceeds display capacity");
           break;
+        case "plugins.cancel": {
+          const session = await selected();
+          requireSameSelection();
+          result = runtime.pluginRuns.cancel(
+            session.id,
+            z.string().min(1).max(128).parse(p.invocationId),
+            scope,
+          );
+          break;
+        }
         case "plugins.invoke": {
           const session = await selected();
           if (state.session?.id !== session.id) throw Error("Session changed");
@@ -492,6 +505,14 @@ export async function serveRpc(
                 .string()
                 .max(100000)
                 .parse(p.args ?? ""),
+              {
+                invocationId: z
+                  .string()
+                  .min(1)
+                  .max(128)
+                  .parse(p.invocationId ?? id),
+                scope,
+              },
             ),
           };
           break;
@@ -1079,6 +1100,7 @@ export async function serveRpc(
         const critical = [
           "cancel",
           "run.cancel",
+          "plugins.cancel",
           "approval.respond",
           "questions.respond",
           "client.detach",

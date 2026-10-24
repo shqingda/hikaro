@@ -4,6 +4,7 @@ export const protocolVersion = 2;
 export const rpcMethods = [
   "plugins.list",
   "plugins.invoke",
+  "plugins.cancel",
   "tool.manual",
   "session.export.file",
   "model.capabilities",
