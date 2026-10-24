@@ -91,7 +91,7 @@
 
 ## 最终交付证据
 
-最终候选来自干净提交 `7fbe09a1aa7d7a98f72b5282c2aff465813e7606`，包含 `97efb31` 取消竞争修复与 `e370fb5` 精简。SHA-256 为 `29748c60c74c3341e130bc9f326b654a104e0fcf6ed2043d1ca0fd4ca0f1d016`。包位于本机 `artifacts/release/hikaro-0.2.1-darwin-arm64.tgz`；之后提交只更新验收文档与截图。
+最终候选来自干净提交 `7fbe09a1aa7d7a98f72b5282c2aff465813e7606`，包含 `97efb31` 取消竞争修复与 `e370fb5` 精简。SHA-256 为 `29748c60c74c3341e130bc9f326b654a104e0fcf6ed2043d1ca0fd4ca0f1d016`。本轮包已归档至本机 `artifacts/release/hikaro-0.2.1-darwin-arm64-7fbe09a.tgz`；`5411801` 更新验收文档与截图。之后的进程探测候选及其独立证据见 [后代观察](terminal-process-observation.md)。
 
 - [最终包来源](evidence-20261024/final-release-manifest.json)
 - [最终安装与恢复验收](evidence-20261024/final-release-install.json)
