@@ -9,6 +9,7 @@
 - 本轮检查：654 项应用测试、16 项脚本检查通过；最后首帧改动后另有 3 个真实附着 PTY 场景及类型检查通过，应用构建通过。最新已记录的 macOS arm64 候选来自 `d49e5a5`，空缓存安装与恢复验收通过；未包含其后依赖升级，该候选没有公开发布。真实订阅计划执行与取消证据属于此前 `7fbe09a` 候选，不能转用为最新包证据。
 - 移动端：iOS 模拟器计划、来源、工具全文、任务隔离及断线恢复已有原生证据；Android/真机、真实 relay 接续、生产通知与发布性能仍待验。
 - 后续：provider 能力声明、资源安装/热加载、MCP 状态管理、Pi 安装升级与兼容边界、通用附件、快照保留期限，以及当前构建的性能与稳定性验收。本轮附着 p95 连续三轮 188.103/191.405/173.007 ms，通过原 200 ms 门槛；普通最后两组 203.977/283.297 ms，仍未稳定达标。按用户要求收尾，撤回无明确收益的 worker 并行试验，见 [启动优化证据](docs/validation/startup-optimization-20261024.md)。输入通过；前轮存储/流式、连续 30 分钟功能稳定性（94 轮任务）及两轮闲置内存基线属于优化前构建，内存预算仍待评估，见 [前轮证据](docs/validation/performance-current-20261024.md)。不得用历史百分比表示整体完成率。
+- 待修：`runTaskGraph()` 在节点倒序传入且上游失败时误报依赖环，`task_graph` 会把这条误导性错误交给模型，见 [复现与修复建议](docs/validation/task-graph-false-cycle.md)。
 
 证据：[批量回退](docs/validation/change-batch-rollback.md)、[集成交付](docs/validation/implementation-2026-10-24.md)、[后台后代观察](docs/validation/terminal-process-observation.md)、[前台边界及最新候选](docs/validation/foreground-process-boundary.md)。
 
