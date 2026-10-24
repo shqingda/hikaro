@@ -1,3 +1,5 @@
+import { PluginExecutions } from "./plugin-executions.ts";
+import { ChildTasks } from "./child-tasks.ts";
 import {
   executionHistory,
   executionHistoryPage,
@@ -113,7 +115,9 @@ export class Runtime {
   private constructor(
     readonly options: RuntimeOptions,
     readonly store: SQLiteStore,
-  ) {}
+  ) {
+    this.childRecords = new ChildTasks(store);
+  }
   private planningState?: Planning;
   get planning() {
     return (this.planningState ??= new Planning(this.options.home!));
@@ -236,122 +240,15 @@ export class Runtime {
       }));
     return [...restored, ...live.map((t) => ({ ...t, restored: false }))];
   }
-  private children = new Map<
-    string,
-    {
-      id: string;
-      parent: string;
-      task: string;
-      state: string;
-      output: string;
-      stopping: boolean;
-      child?: Agent;
-    }
-  >();
-  /** Saved outcomes from earlier hosts; live records in `children` win. */
-  private restoredChildren = new Map<
-    string,
-    { id: string; parent: string; task: string; state: string; output: string }
-  >();
-  async loadChildTasks(parent: string) {
-    const rows = await this.store.childTaskTree(parent);
-    const owned = new Set(rows.map((row) => row.id));
-    for (const [id, row] of this.restoredChildren)
-      if (!owned.has(id) && this.isDescendant(parent, row.parent))
-        this.restoredChildren.delete(id);
-    for (const row of rows)
-      this.restoredChildren.set(row.id, {
-        id: row.id,
-        parent: row.parentId,
-        task: row.task,
-        // A record still running in storage belonged to a host that exited.
-        state: ["starting", "running", "stopping"].includes(row.state)
-          ? "interrupted"
-          : row.state,
-        output: row.output,
-      });
+  private childRecords: ChildTasks;
+  loadChildTasks(parent: string) {
+    return this.childRecords.load(parent);
   }
-  private isDescendant(root: string, owner: string) {
-    for (let id: string | undefined = owner, hops = 0; id && hops < 6; hops++) {
-      if (id === root) return true;
-      id =
-        this.children.get(id)?.parent ?? this.restoredChildren.get(id)?.parent;
-    }
-    return false;
-  }
-  private persistChild(record: {
-    id: string;
-    parent: string;
-    task: string;
-    state: string;
-    output: string;
-  }) {
-    // History is best effort: losing it must not fail the delegated work.
-    return this.store
-      .saveChildTask({
-        id: record.id,
-        parentId: record.parent,
-        task: record.task,
-        state: record.state,
-        output: record.output,
-      })
-      .catch(() => {});
-  }
-  /** Every delegated descendant of `parent`, depth-first in start order. */
   childTasks(parent: string) {
-    const items = [
-      ...[...this.restoredChildren.values()].filter(
-        (row) => !this.children.has(row.id),
-      ),
-      ...this.children.values(),
-    ] as Array<{
-      id: string;
-      parent: string;
-      task: string;
-      state: string;
-      output: string;
-      stopping?: boolean;
-      child?: Agent;
-    }>;
-    const tree: Array<{
-      id: string;
-      parentId: string;
-      depth: number;
-      task: string;
-      state: string;
-      output: string;
-    }> = [];
-    const visit = (owner: string, depth: number) => {
-      // Delegation stops at depth 2; the bound also guards against bad links.
-      if (depth > 4) return;
-      for (const item of items.filter((row) => row.parent === owner)) {
-        const snapshot = item.child?.snapshot();
-        tree.push({
-          id: item.id,
-          parentId: item.parent,
-          depth,
-          task: item.task,
-          state:
-            item.stopping && snapshot?.busy
-              ? "stopping"
-              : snapshot?.runStatus === "idle"
-                ? "starting"
-                : (snapshot?.runStatus ?? item.state),
-          output: snapshot?.stream || item.output,
-        });
-        visit(item.id, depth + 1);
-      }
-    };
-    visit(parent, 1);
-    return tree;
+    return this.childRecords.list(parent);
   }
   stopChild(parent: string, id: string) {
-    const item = this.children.get(id);
-    if (!item || !this.childTasks(parent).some((row) => row.id === id))
-      throw Error("Child task not found in this session");
-    if (!item.child?.busy) return;
-    item.stopping = true;
-    item.child.cancel();
+    this.childRecords.stop(parent, id);
   }
   private changeJournal?: ChangeJournal;
   get changes() {
@@ -674,14 +571,14 @@ export class Runtime {
               ctx.depth + 1,
               ctx.budget,
             );
-            const completed = [...runtime.children.values()].filter(
+            const completed = [...runtime.childRecords.live.values()].filter(
               (item) => !item.child,
             );
             for (const item of completed.slice(
               0,
               Math.max(0, completed.length - 99),
             ))
-              runtime.children.delete(item.id);
+              runtime.childRecords.live.delete(item.id);
             const record = {
               id: session.id,
               parent: ctx.sessionId,
@@ -691,8 +588,8 @@ export class Runtime {
               stopping: false,
               child: child as Agent | undefined,
             };
-            runtime.children.set(session.id, record);
-            await runtime.persistChild(record);
+            runtime.childRecords.live.set(session.id, record);
+            await runtime.childRecords.persist(record);
             try {
               await runtime.withCancellation(child, ctx.signal, () => {
                 const work = child.prompt(task, undefined, {
@@ -710,7 +607,7 @@ export class Runtime {
               record.state = child.snapshot().runStatus;
               record.output = child.snapshot().stream || record.output;
               record.child = undefined;
-              void runtime.persistChild(record);
+              void runtime.childRecords.persist(record);
             }
             const messages = await runtime.store.messages(session.id);
             record.output =
@@ -718,7 +615,7 @@ export class Runtime {
                 .filter((m) => m.role === "assistant")
                 .at(-1)
                 ?.text.slice(-64000) ?? record.output;
-            await runtime.persistChild(record);
+            await runtime.childRecords.persist(record);
             return {
               text:
                 messages.filter((m) => m.role === "assistant").at(-1)?.text ??
@@ -1074,63 +971,22 @@ export class Runtime {
     if (agent) agent.options.session = updated;
     return updated;
   }
-  async invokePlugin(
+  private pluginExecution?: PluginExecutions;
+  get pluginRuns() {
+    return (this.pluginExecution ??= new PluginExecutions(
+      this.store,
+      this.plugins,
+      this.planning,
+      (session) => this.planningIdle(session),
+    ));
+  }
+  invokePlugin(
     session: Session,
     name: string,
     kind: "command" | "view",
     args: string,
   ) {
-    await this.planningIdle(session);
-    const lease = await this.store.acquireLease(session.id, randomUUID());
-    if (!lease) throw Error("Session is running elsewhere");
-    let lost = false;
-    const timer = setInterval(() => {
-      void this.store.renewLease(session.id, lease).then(
-        (ok) => {
-          if (!ok) lost = true;
-        },
-        () => {
-          lost = true;
-        },
-      );
-    }, 10000);
-    timer.unref();
-    try {
-      await this.planning.load(session.id, true);
-      if (this.planning.get(session.id).active)
-        throw Error(
-          "Plugin commands and views are unavailable in read-only Plan mode",
-        );
-      const run =
-        kind === "command"
-          ? this.plugins.commands.get(name)
-          : this.plugins.views.get(name);
-      if (!run) throw Error(`Unknown plugin ${kind}: ${name}`);
-      const text = await run(args);
-      if (lost)
-        throw Error(
-          "Plugin outcome unknown: session lease lost; inspect host before retrying",
-        );
-      await this.store.append(
-        session.id,
-        "message",
-        {
-          message: {
-            role: "assistant",
-            text: `Plugin ${kind} /${name} result:\n\n${text}`,
-            timestamp: Date.now(),
-          },
-        },
-        lease,
-      );
-      return text.length > 60000
-        ? text.slice(0, 60000) +
-            "\n\n[Preview limited; full result is saved in session history and /export.]"
-        : text;
-    } finally {
-      clearInterval(timer);
-      await this.store.releaseLease(session.id, lease);
-    }
+    return this.pluginRuns.invoke(session, name, kind, args);
   }
   async exportSession(id: string, includeThinking = false) {
     const session = await this.session(id);
