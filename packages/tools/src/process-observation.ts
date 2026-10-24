@@ -25,7 +25,7 @@ const execute = promisify(execFile);
 type ProcessIdentity = z.infer<typeof identity>;
 
 /** Read-only observations; these identities are never used as signal targets. */
-export class TerminalProcesses {
+export class ProcessObservation {
   private known = new Map<number, ProcessIdentity>();
   private current: ProcessIdentity[] = [];
   private timer?: ReturnType<typeof setTimeout>;
@@ -37,7 +37,7 @@ export class TerminalProcesses {
   private supported = process.platform === "darwin";
   constructor(
     private readonly root: number,
-    private readonly changed: () => void,
+    private readonly changed: () => void = () => {},
   ) {}
   get survivors() {
     return this.valid

@@ -3,10 +3,12 @@ import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import type { Plugin, ToolContext } from "../../core/src/types.ts";
 import type { IPty } from "node-pty";
-import { TerminalProcesses } from "./terminal-processes.ts";
+import { ProcessObservation } from "./process-observation.ts";
+import { ProcessGroup } from "./process-group.ts";
 type TerminalRecord = {
   pty: IPty;
-  processes: TerminalProcesses;
+  processes: ProcessObservation;
+  group: ProcessGroup;
   owner: string;
   command: string;
   output: string;
@@ -17,7 +19,6 @@ type TerminalRecord = {
   exitCode?: number;
   exitSignal?: number;
   cleanupConfirmed?: boolean;
-  groupGone?: boolean;
   stopError?: string;
   stopTask?: Promise<void>;
 };
@@ -103,43 +104,8 @@ export class TerminalManager {
       });
   }
   private async stopGroup(t: TerminalRecord) {
-    const pid = t.pty.pid;
-    if (process.platform === "win32" || pid <= 1)
-      throw Error("Cannot safely stop this terminal process group");
     await t.processes.sample();
-    const signal = (value: NodeJS.Signals | 0) => {
-      if (t.groupGone) return false;
-      try {
-        process.kill(-pid, value);
-        return true;
-      } catch (error) {
-        const code = (error as NodeJS.ErrnoException).code;
-        if (code === "ESRCH") {
-          t.groupGone = true;
-          return false;
-        }
-        // EPERM on an existence probe does not prove that the group is gone.
-        // Keep waiting; actual termination signals must still report errors.
-        if (value === 0 && code === "EPERM") return true;
-        throw error;
-      }
-    };
-    const wait = async (ms: number) => {
-      const deadline = Date.now() + ms;
-      do {
-        if (!signal(0) && t.exitCode !== undefined) return true;
-        await new Promise((resolve) => setTimeout(resolve, 25));
-      } while (Date.now() < deadline);
-      return false;
-    };
-    signal("SIGTERM");
-    if (!(await wait(1000))) {
-      signal("SIGKILL");
-      if (!(await wait(2000)))
-        throw Error(
-          "Terminal process group termination could not be confirmed; retry stop",
-        );
-    }
+    await t.group.stop(() => t.exitCode !== undefined);
     t.cleanupConfirmed = true;
     await t.processes.sample();
   }
@@ -234,7 +200,8 @@ export function terminalPlugin(
             previewDropped: 0,
             stopping: false,
             pty,
-            processes: new TerminalProcesses(pty.pid, () =>
+            group: new ProcessGroup(pty.pid),
+            processes: new ProcessObservation(pty.pid, () =>
               manager.changed(id),
             ),
             owner: ctx.sessionId,
