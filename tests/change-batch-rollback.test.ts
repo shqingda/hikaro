@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -158,6 +158,25 @@ it("groups recorded edits by run and rolls back only the chosen run", async () =
     await expect(readFile(b, "utf8")).rejects.toThrow();
     expect(await readFile(c, "utf8")).toBe("legacy-c");
   } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("keeps creation order for edits recorded within the same millisecond", async () => {
+  const root = await realpath(
+    await mkdtemp(join(tmpdir(), "hikaro-change-order-")),
+  );
+  const now = vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
+  try {
+    const journal = new ChangeJournal(join(root, "journal"));
+    const signal = new AbortController().signal;
+    const paths = Array.from({ length: 6 }, (_, i) => join(root, `${i}.txt`));
+    for (const path of paths)
+      await journal.update("s", path, signal, () => "x");
+    const list = await journal.list("s");
+    expect(list.map((row) => row.path)).toEqual([...paths].reverse());
+  } finally {
+    now.mockRestore();
     await rm(root, { recursive: true, force: true });
   }
 });

@@ -25,6 +25,12 @@ export type FileChange = z.infer<typeof recordSchema>;
 /** Journal files are private local data. Snapshots never enter model context. */
 export class ChangeJournal {
   constructor(private readonly home: string) {}
+  private lastTimestamp = 0;
+  /** Strictly increasing per process, so newest-first order never ties. */
+  private nextTimestamp() {
+    this.lastTimestamp = Math.max(Date.now(), this.lastTimestamp + 1);
+    return this.lastTimestamp;
+  }
   private root?: string;
   private async initialize(create = false) {
     if (this.root) return;
@@ -151,7 +157,7 @@ export class ChangeJournal {
           entry = {
             id: randomUUID(),
             path,
-            timestamp: Date.now(),
+            timestamp: this.nextTimestamp(),
             before:
               before === undefined
                 ? null
