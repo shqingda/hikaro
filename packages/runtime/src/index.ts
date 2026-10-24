@@ -184,9 +184,71 @@ export class Runtime {
       child?: Agent;
     }
   >();
+  /** Saved outcomes from earlier hosts; live records in `children` win. */
+  private restoredChildren = new Map<
+    string,
+    { id: string; parent: string; task: string; state: string; output: string }
+  >();
+  async loadChildTasks(parent: string) {
+    const rows = await this.store.childTaskTree(parent);
+    const owned = new Set(rows.map((row) => row.id));
+    for (const [id, row] of this.restoredChildren)
+      if (!owned.has(id) && this.isDescendant(parent, row.parent))
+        this.restoredChildren.delete(id);
+    for (const row of rows)
+      this.restoredChildren.set(row.id, {
+        id: row.id,
+        parent: row.parentId,
+        task: row.task,
+        // A record still running in storage belonged to a host that exited.
+        state: ["starting", "running", "stopping"].includes(row.state)
+          ? "interrupted"
+          : row.state,
+        output: row.output,
+      });
+  }
+  private isDescendant(root: string, owner: string) {
+    for (let id: string | undefined = owner, hops = 0; id && hops < 6; hops++) {
+      if (id === root) return true;
+      id =
+        this.children.get(id)?.parent ?? this.restoredChildren.get(id)?.parent;
+    }
+    return false;
+  }
+  private persistChild(record: {
+    id: string;
+    parent: string;
+    task: string;
+    state: string;
+    output: string;
+  }) {
+    // History is best effort: losing it must not fail the delegated work.
+    return this.store
+      .saveChildTask({
+        id: record.id,
+        parentId: record.parent,
+        task: record.task,
+        state: record.state,
+        output: record.output,
+      })
+      .catch(() => {});
+  }
   /** Every delegated descendant of `parent`, depth-first in start order. */
   childTasks(parent: string) {
-    const items = [...this.children.values()];
+    const items = [
+      ...[...this.restoredChildren.values()].filter(
+        (row) => !this.children.has(row.id),
+      ),
+      ...this.children.values(),
+    ] as Array<{
+      id: string;
+      parent: string;
+      task: string;
+      state: string;
+      output: string;
+      stopping?: boolean;
+      child?: Agent;
+    }>;
     const tree: Array<{
       id: string;
       parentId: string;
@@ -565,6 +627,7 @@ export class Runtime {
               child: child as Agent | undefined,
             };
             runtime.children.set(session.id, record);
+            await runtime.persistChild(record);
             try {
               await runtime.withCancellation(child, ctx.signal, () => {
                 const work = child.prompt(task, undefined, {
@@ -582,6 +645,7 @@ export class Runtime {
               record.state = child.snapshot().runStatus;
               record.output = child.snapshot().stream || record.output;
               record.child = undefined;
+              void runtime.persistChild(record);
             }
             const messages = await runtime.store.messages(session.id);
             record.output =
@@ -589,6 +653,7 @@ export class Runtime {
                 .filter((m) => m.role === "assistant")
                 .at(-1)
                 ?.text.slice(-64000) ?? record.output;
+            await runtime.persistChild(record);
             return {
               text:
                 messages.filter((m) => m.role === "assistant").at(-1)?.text ??

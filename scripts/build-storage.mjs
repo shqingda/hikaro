@@ -10,6 +10,7 @@ export async function copyStorageWorker(directory) {
     "statement-cache.mjs",
     "question-drafts.mjs",
     "execution-history.mjs",
+    "child-tasks.mjs",
   ])
     await copyFile(
       new URL("../packages/storage/src/" + name, import.meta.url),

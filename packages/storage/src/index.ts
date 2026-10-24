@@ -134,6 +134,27 @@ export class SQLiteStore implements EventStore {
   pendingPrompts(sessionId: string) {
     return this.request<PendingPrompt[]>("pendingPrompts", { sessionId });
   }
+  saveChildTask(record: {
+    id: string;
+    parentId: string;
+    task: string;
+    state: string;
+    output: string;
+  }) {
+    return this.request<void>("saveChildTask", record);
+  }
+  childTaskTree(parentId: string) {
+    return this.request<
+      Array<{
+        id: string;
+        parentId: string;
+        task: string;
+        state: string;
+        output: string;
+        createdAt: number;
+      }>
+    >("childTaskTree", { parentId });
+  }
   pendingSteering(sessionId: string) {
     return this.request<PendingSteering[]>("pendingSteering", { sessionId });
   }
