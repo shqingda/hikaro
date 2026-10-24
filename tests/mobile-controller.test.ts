@@ -61,6 +61,7 @@ function fixture(
   let nextList: (() => Promise<unknown>) | undefined;
   let messageItems: unknown[] | undefined;
   let planRead: ((params: any) => Promise<unknown>) | undefined;
+  let executionRead: ((params: any) => Promise<unknown>) | undefined;
   const readList = () => {
     const read = nextList;
     nextList = undefined;
@@ -145,48 +146,50 @@ function fixture(
               ? content(frame.params)
               : frame.method === "plan.read" && planRead
                 ? planRead(frame.params)
-                : hooks
-                  ? hooks.request(frame)
-                  : frame.method === "hello"
-                    ? capabilities
-                    : frame.method === "session.current"
-                      ? {
-                          session: selected,
-                          sessionRole: "view",
-                          busy: false,
-                          stream: "",
-                          streamTruncated: false,
-                          cursor: 2,
-                          revision,
-                          runId: "run1",
-                          runStatus: "completed",
-                          approvals: [],
-                          ...snapshotPatch,
-                        }
-                      : frame.method === "session.list"
-                        ? readList()
-                        : frame.method === "messages.read"
-                          ? {
-                              items: messageItems ?? [
-                                {
-                                  seq: 2,
-                                  message: {
-                                    role: "assistant",
-                                    text: "已恢复的结果",
-                                    timestamp: 1,
+                : frame.method === "execution.read" && executionRead
+                  ? executionRead(frame.params)
+                  : hooks
+                    ? hooks.request(frame)
+                    : frame.method === "hello"
+                      ? capabilities
+                      : frame.method === "session.current"
+                        ? {
+                            session: selected,
+                            sessionRole: "view",
+                            busy: false,
+                            stream: "",
+                            streamTruncated: false,
+                            cursor: 2,
+                            revision,
+                            runId: "run1",
+                            runStatus: "completed",
+                            approvals: [],
+                            ...snapshotPatch,
+                          }
+                        : frame.method === "session.list"
+                          ? readList()
+                          : frame.method === "messages.read"
+                            ? {
+                                items: messageItems ?? [
+                                  {
+                                    seq: 2,
+                                    message: {
+                                      role: "assistant",
+                                      text: "已恢复的结果",
+                                      timestamp: 1,
+                                    },
                                   },
-                                },
-                              ],
-                              hasOlder: false,
-                              hasNewer: false,
-                            }
-                          : frame.method === "session.resume"
-                            ? (selected = session)
-                            : frame.method === "run.cancel"
-                              ? { accepted: true, runId: frame.params.runId }
-                              : frame.method === "push.register"
-                                ? { ok: true }
-                                : { receipt: null };
+                                ],
+                                hasOlder: false,
+                                hasNewer: false,
+                              }
+                            : frame.method === "session.resume"
+                              ? (selected = session)
+                              : frame.method === "run.cancel"
+                                ? { accepted: true, runId: frame.params.runId }
+                                : frame.method === "push.register"
+                                  ? { ok: true }
+                                  : { receipt: null };
           void Promise.resolve(rpcResult).then(
             (result) => {
               if (dropMethod === frame.method) {
@@ -255,6 +258,9 @@ function fixture(
     },
     setPlanRead: (read: (params: any) => Promise<unknown>) => {
       planRead = read;
+    },
+    setExecutionRead: (read: (params: any) => Promise<unknown>) => {
+      executionRead = read;
     },
     uri: () => "hikaro://pair#" + encodeURIComponent(JSON.stringify(pairing)),
     dropResume: () => {
@@ -1969,6 +1975,68 @@ it("reads model-reported plan progress read-only and reports old hosts without g
         ["plan.set", "plan.execute", "prompt", "steer"].includes(s.method),
       ),
     ).toBe(false);
+  } finally {
+    app.dispose();
+  }
+});
+
+it("reads child agents and background terminals read-only without holding the queue", async () => {
+  const f = fixture();
+  f.setExecutionRead(async (params) =>
+    params.kind === "children"
+      ? [
+          {
+            id: "c1",
+            title: "Child task",
+            state: "completed",
+            detail: "Task: Child task",
+            actions: [{ value: "stop", label: "Stop child agent…" }],
+          },
+          {
+            id: "c2",
+            title: "  ↳ Grandchild",
+            state: "interrupted · level 2",
+            detail: "Task: Grandchild",
+            actions: [],
+          },
+        ]
+      : [
+          {
+            id: "t1",
+            title: "npm test",
+            state: "unknown after host restart",
+            detail: "Saved by an earlier host.",
+            actions: [],
+          },
+        ],
+  );
+  const app = new MobileController(f.store, f.options);
+  try {
+    app.review(f.uri());
+    await app.confirm();
+    await vi.waitFor(() => expect(app.state.phase).toBe("connected"));
+    await app.readBackground();
+    expect(app.state.background).toMatchObject({
+      status: "ready",
+      children: [
+        { title: "Child task", state: "completed" },
+        { title: "  ↳ Grandchild", state: "interrupted · level 2" },
+      ],
+      terminals: [{ title: "npm test", state: "unknown after host restart" }],
+    });
+    const reads = f.sent.filter((s) => s.method === "execution.read");
+    expect(reads.map((s) => s.params.kind).sort()).toEqual([
+      "children",
+      "terminals",
+    ]);
+    expect(reads.every((s) => s.params.token === undefined)).toBe(true);
+    expect(
+      f.sent.some((s) =>
+        ["execution.hold", "execution.action", "prompt"].includes(s.method),
+      ),
+    ).toBe(false);
+    app.closeBackground();
+    expect(app.state.background).toBeNull();
   } finally {
     app.dispose();
   }

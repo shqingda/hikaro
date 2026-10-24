@@ -106,6 +106,18 @@ const planReadSchema = z.object({
   progress: planProgressSchema.nullable().optional(),
 });
 export type MobilePlanProgress = z.infer<typeof planProgressSchema>;
+const backgroundItemsSchema = z
+  .array(
+    z.object({
+      id: z.string().max(128),
+      title: z.string().max(240),
+      state: z.string().max(200),
+    }),
+  )
+  .max(200);
+export type MobileBackgroundItem = z.infer<
+  typeof backgroundItemsSchema
+>[number];
 export interface MobileStorage {
   read(): Promise<string | null>;
   write(credential: string): Promise<void>;
@@ -209,6 +221,13 @@ export type MobileState = {
     status: "loading" | "ready" | "none" | "unsupported" | "error";
     progress?: MobilePlanProgress;
   } | null;
+  /** Child agents and terminals, read without a queue hold or any action. */
+  background: {
+    sessionId: string;
+    status: "loading" | "ready" | "error";
+    children: MobileBackgroundItem[];
+    terminals: MobileBackgroundItem[];
+  } | null;
 };
 const empty = (phase: MobileState["phase"]): MobileState => ({
   phase,
@@ -246,6 +265,7 @@ const empty = (phase: MobileState["phase"]): MobileState => ({
   contentLoading: false,
   contentError: null,
   plan: null,
+  background: null,
 });
 /** Only explicit, authority-checked operations expose mutation-capable transport. */
 export class MobileController {
@@ -257,6 +277,7 @@ export class MobileController {
   private listEpoch = 0;
   private contentEpoch = 0;
   private planEpoch = 0;
+  private backgroundEpoch = 0;
   private credentialQueue: Promise<unknown> = Promise.resolve();
   private pendingPairing?: Pairing;
   private pairing?: Pairing;
@@ -338,8 +359,10 @@ export class MobileController {
     this.composer.hide();
     this.contentEpoch++;
     this.planEpoch++;
+    this.backgroundEpoch++;
     this.value = {
       ...this.value,
+      background: null,
       content: null,
       contentLoading: false,
       contentError: null,
@@ -959,6 +982,51 @@ export class MobileController {
       throw error;
     } finally {
       if (epoch === this.epoch) this.update({ actionPending: null });
+    }
+  }
+  closeBackground() {
+    this.backgroundEpoch++;
+    this.update({ background: null });
+  }
+  async readBackground() {
+    const client = this.client,
+      epoch = this.epoch,
+      sessionId = client?.state.session?.id;
+    if (!client?.state.canAct || !sessionId)
+      throw Error("Not connected to a task");
+    const read = ++this.backgroundEpoch;
+    const current = () =>
+      epoch === this.epoch &&
+      read === this.backgroundEpoch &&
+      client === this.client &&
+      sessionId === client.state.session?.id;
+    this.update({
+      background: { sessionId, status: "loading", children: [], terminals: [] },
+    });
+    const list = async (kind: "children" | "terminals") =>
+      backgroundItemsSchema.parse(
+        await client.request("execution.read", { sessionId, kind }),
+      );
+    try {
+      const [children, terminals] = await Promise.all([
+        list("children"),
+        list("terminals"),
+      ]);
+      if (current())
+        this.update({
+          background: { sessionId, status: "ready", children, terminals },
+        });
+    } catch (error) {
+      if (current())
+        this.update({
+          background: {
+            sessionId,
+            status: "error",
+            children: [],
+            terminals: [],
+          },
+        });
+      throw error;
     }
   }
   closePlan() {

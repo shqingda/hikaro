@@ -68,6 +68,16 @@ export default function Task() {
           )}
           {online && (
             <Action
+              title="查看后台任务"
+              quiet
+              onPress={() => {
+                void controller.readBackground().catch(() => {});
+                router.push("/background");
+              }}
+            />
+          )}
+          {online && (
+            <Action
               title="查看计划进度"
               quiet
               onPress={() => {
