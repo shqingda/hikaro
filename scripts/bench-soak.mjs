@@ -1,13 +1,17 @@
 import { spawn as spawnProcess, execFileSync } from "node:child_process";
 import { spawn } from "node-pty";
-import { mkdtemp, rm, readFile, readdir } from "node:fs/promises";
-import { createHash } from "node:crypto";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { stripVTControlCharacters } from "node:util";
 import { createServer } from "node:http";
 import { DatabaseSync } from "node:sqlite";
-import { environment, integerSetting, saveReport } from "./bench-support.mjs";
+import {
+  environment,
+  integerSetting,
+  saveReport,
+  benchmarkFingerprint,
+} from "./bench-support.mjs";
 
 import {
   createMemorySampler,
@@ -24,22 +28,13 @@ const warmupMinutes = integerSetting(
 const check = process.argv.includes("--check");
 if (check && minutes < 30)
   throw Error("--check requires at least 30 measured minutes");
+const fingerprint = await benchmarkFingerprint();
 const home = await mkdtemp(join(tmpdir(), "hikaro-soak-"));
 const entry = resolve("dist/hikaro.mjs");
 const reportPath =
   process.env.HIKARO_SOAK_OUTPUT ?? "artifacts/benchmark-soak.json";
-const bundleFiles = {};
-for (const file of (await readdir("dist")).sort()) {
-  if (file.endsWith(".mjs") || file === "secure-file-helper")
-    bundleFiles[file] = createHash("sha256")
-      .update(await readFile(join("dist", file)))
-      .digest("hex");
-}
 const report = {
-  bundleSha256: createHash("sha256")
-    .update(JSON.stringify(bundleFiles))
-    .digest("hex"),
-  bundleFiles,
+  ...fingerprint,
   schemaVersion: 2,
   assessmentScope: "functional-soak",
   memoryAssessment: "pending-platform-baseline",

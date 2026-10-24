@@ -13,6 +13,7 @@
 - Linux 使用 smaps_rollup 的 PSS，按共享页映射者比例分摊；记录 SwapPss，避免把换出当成优化。PSS 与 macOS footprint 不混用阈值。
 - 分开测独立 TUI、host 空闲、host + 一个客户端、增加第二客户端的成本，以及持续工作负载。产品启动的工具/子进程单列，测试驱动和 fixture 排除；不能隐藏真实产品子进程开销。
 - 报告必须含平台、Node 版本、构建指纹、进程集合、采样方法与原始样本。取样失败标为不可用，不回退到 RSS 冒充 footprint/PSS。
+- 构建指纹覆盖发布目录的全部 `.mjs`、`secure-file-helper` 和 `process-snapshot-helper`；原生 helper 缺失时直接失败，不能静默省略。2026-10-24 之前的基准脚本漏记进程探针，旧报告保留原样，补充核验另记采集时间与范围。
 
 ## 发布决策
 

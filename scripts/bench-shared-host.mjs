@@ -1,11 +1,10 @@
 import { spawn, execFileSync } from "node:child_process";
 import { once } from "node:events";
 import { resolve } from "node:path";
-import { readFile, readdir } from "node:fs/promises";
-import { createHash } from "node:crypto";
 import { startupSample, STARTUP_BUDGETS } from "./bench.mjs";
 import {
   environment,
+  benchmarkFingerprint,
   evaluateBudgets,
   integerSetting,
   percentile,
@@ -105,16 +104,8 @@ export async function main() {
   const check = process.argv.includes("--check");
   if (check && (runs < 30 || warmups < 3))
     throw Error("--check requires 30 runs and 3 warmups");
-  const before = environment(),
-    bundleFiles = {};
-  for (const file of (await readdir("dist")).sort())
-    if (file.endsWith(".mjs") || file === "secure-file-helper")
-      bundleFiles[file] = createHash("sha256")
-        .update(await readFile("dist/" + file))
-        .digest("hex");
-  const bundleSha256 = createHash("sha256")
-    .update(JSON.stringify(bundleFiles))
-    .digest("hex");
+  const before = environment();
+  const { bundleFiles, bundleSha256 } = await benchmarkFingerprint();
   const firstLaunch = await attachedSample();
   for (let n = 0; n < warmups; n++) await attachedSample();
   const samples = [];

@@ -1,5 +1,13 @@
 import { execFileSync } from "node:child_process";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  rm,
+  writeFile,
+  readFile,
+  readdir,
+} from "node:fs/promises";
+import { createHash } from "node:crypto";
 import {
   arch,
   cpus,
@@ -95,6 +103,28 @@ export function environment() {
 export async function saveReport(path, report) {
   await mkdir(dirname(resolve(path)), { recursive: true });
   await writeFile(path, JSON.stringify(report, null, 2) + "\n");
+}
+
+export async function benchmarkFingerprint(directory = "dist") {
+  const bundleFiles = {};
+  // Native helpers affect execution too. Read them explicitly so a missing
+  // helper fails provenance collection instead of silently shrinking its scope.
+  const files = [
+    ...(await readdir(directory)).filter((file) => file.endsWith(".mjs")),
+    "secure-file-helper",
+    "process-snapshot-helper",
+  ];
+  for (const file of files.sort()) {
+    bundleFiles[file] = createHash("sha256")
+      .update(await readFile(join(directory, file)))
+      .digest("hex");
+  }
+  return {
+    bundleFiles,
+    bundleSha256: createHash("sha256")
+      .update(JSON.stringify(bundleFiles))
+      .digest("hex"),
+  };
 }
 
 export function isMain(url) {

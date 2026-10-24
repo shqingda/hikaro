@@ -1,11 +1,10 @@
 import { spawn } from "node-pty";
 import { execFileSync } from "node:child_process";
-import { readFile, readdir } from "node:fs/promises";
-import { createHash } from "node:crypto";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import { stripVTControlCharacters } from "node:util";
 import {
   environment,
+  benchmarkFingerprint,
   evaluateBudgets,
   integerSetting,
   isMain,
@@ -130,16 +129,7 @@ export async function main() {
   if (!["cold", "warm", "disabled"].includes(cacheMode))
     throw Error("HIKARO_BENCH_CACHE must be cold, warm, or disabled");
   const initialEnvironment = environment();
-  const bundleFiles = {};
-  for (const file of (await readdir("dist")).sort()) {
-    if (!file.endsWith(".mjs") && file !== "secure-file-helper") continue;
-    bundleFiles[file] = createHash("sha256")
-      .update(await readFile(join("dist", file)))
-      .digest("hex");
-  }
-  const bundleSha256 = createHash("sha256")
-    .update(JSON.stringify(bundleFiles))
-    .digest("hex");
+  const { bundleFiles, bundleSha256 } = await benchmarkFingerprint();
   const { samples, firstLaunch } = await withBenchmarkHome(
     async (cacheRoot) => {
       const sample = async () => {
