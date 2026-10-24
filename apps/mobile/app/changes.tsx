@@ -137,6 +137,7 @@ export default function Changes() {
               <Note>
                 {item.before === null ? "新建" : "编辑"} · {states[item.state]}{" "}
                 · {new Date(item.timestamp).toLocaleString()}
+                {item.runId ? ` · 运行 ${item.runId.slice(0, 8)}` : ""}
               </Note>
               <Action
                 title={readable(item.path)}

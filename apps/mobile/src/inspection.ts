@@ -31,6 +31,7 @@ const entrySchema = z.object({
     .nullable(),
   after: z.string().regex(/^[a-f0-9]{64}$/),
   state: z.enum(["prepared", "committed", "reverting", "reverted"]),
+  runId: z.string().max(128).optional(),
 });
 export type ChangeEntry = z.infer<typeof entrySchema>;
 type InspectionConnection = Pick<ClientConnection, "request" | "supports"> & {

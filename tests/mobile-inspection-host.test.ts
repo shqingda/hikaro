@@ -59,6 +59,8 @@ it("reads complete images and paged diffs through a view-only device and rejects
     file,
     new AbortController().signal,
     () => after,
+    undefined,
+    "run-mobile-1234",
   );
   const host = await serveSharedHost({ home, cwd, demo: true });
   const owner = await SharedHostClient.connect({
@@ -100,6 +102,7 @@ it("reads complete images and paged diffs through a view-only device and rejects
     expect(methods.filter((m) => m === "messages.content")).toHaveLength(3);
     await reader.listChanges();
     const entry = reader.state.changes!.items[0]!;
+    expect(entry.runId).toBe("run-mobile-1234");
     const pages: string[] = [];
     for (let offset = 0; ;) {
       await reader.readDiff(entry.id, offset);
