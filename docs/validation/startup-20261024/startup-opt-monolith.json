@@ -1,0 +1,245 @@
+{
+  "schemaVersion": 3,
+  "assessmentScope": "startup-timing",
+  "memoryAssessment": "pending-platform-baseline",
+  "measuredAt": "2026-10-24T13:55:13.261Z",
+  "mode": "offline demo, no provider request",
+  "environment": {
+    "runtime": "v26.12.1",
+    "platform": "darwin",
+    "arch": "arm64",
+    "osRelease": "27.0.0",
+    "cpu": "Apple M3 Pro",
+    "logicalCpus": 11,
+    "loadAverage": [
+      3.888671875,
+      4.40869140625,
+      5.9404296875
+    ],
+    "freeMemoryMiB": 965.765625,
+    "revision": "43d6ce62726ac425af4d3cb6f2cf796bb7982163",
+    "dirty": false
+  },
+  "endingEnvironment": {
+    "runtime": "v26.12.1",
+    "platform": "darwin",
+    "arch": "arm64",
+    "osRelease": "27.0.0",
+    "cpu": "Apple M3 Pro",
+    "logicalCpus": 11,
+    "loadAverage": [
+      3.9775390625,
+      4.41845703125,
+      5.9345703125
+    ],
+    "freeMemoryMiB": 532.3125,
+    "revision": "43d6ce62726ac425af4d3cb6f2cf796bb7982163",
+    "dirty": false
+  },
+  "bundleSha256": "44e739c3a50afbfe0f32b19a276c3f45c7078f01b3beb9c61e362f5237073251",
+  "bundleFiles": {
+    "child-tasks.mjs": "d154ec395bb424f28aaa0d614edec081564407c46223d9fc54851a722e51f5af",
+    "codemode-worker.mjs": "7a70287905ec208be04d52b6d9157fa5068366cb73371be8fca76cd82c64ddd5",
+    "execution-history.mjs": "6b2cd8d0fdedad89a617e5e1fda2cf903d87ee94044056cfe069122bcbdde69b",
+    "hikaro.mjs": "08c1f587d3c26e5e274ce2602e884a85d3fe4a51988d148ee27ee9ab9cee1caf",
+    "pending-steering.mjs": "bf8edc038eac25e5993c1464492e851a3ae4b93636dcb73f20060359d458aa48",
+    "plan-evidence.mjs": "55fe615af10e05efe22dbdd84e2b77891b9776a8dd14790288f658fef5b62f17",
+    "process-snapshot-helper": "ec693c2941bab7c586ca975973e4e16837cf5a9d073ebc64d7ceb51d0174e0ce",
+    "question-drafts.mjs": "b778e165b91edfdc1bd8c3bc58fd0297fd1e82598039272e30d7f6748e793502",
+    "sandbox-runner.mjs": "f79151e4405bc24d2adcc1e05a792967a18156eedcb4481cdb6985e3ea7ab7d3",
+    "secure-file-helper": "f4c4f8c381a37a44c50dddf939a7f34959d9687c75c99246a75d23823df4b02c",
+    "statement-cache.mjs": "8c8caa0a0ed1307c3358316b11f126fc8c344b9bada45fe0fe04e04b4c939f90",
+    "terminal-records.mjs": "a3ddda42a4073bcffbbcde5762c95b213bca7ad7020f3ca6f0ac7f00b5dc9462",
+    "worker.mjs": "41e6ebf0b3c109e013c4a4ed19bc778dfe5f4026a7263a758483d7f7e087125f"
+  },
+  "cacheMode": "cold",
+  "firstLaunch": {
+    "startupMs": 824.770792,
+    "rssMiB": 99.71875,
+    "inputMs": [
+      3.3449170000000095,
+      2.5572499999999536,
+      0.7689169999999876,
+      0.6749579999999469,
+      0.5740839999999707,
+      0.7891250000000127,
+      0.47783300000003237,
+      0.5347500000000309,
+      0.7122909999999365,
+      0.5662500000000819,
+      0.5474159999999983,
+      0.4864579999999705,
+      0.5167089999999916,
+      0.6492500000000518,
+      0.5385830000000169,
+      0.5136250000000473,
+      0.6567499999999882,
+      0.5242499999999382,
+      0.5542500000000246,
+      0.7868750000000091
+    ]
+  },
+  "runs": 5,
+  "warmups": 1,
+  "inputSamplesPerRun": 20,
+  "startupP50Ms": 261.2362499999999,
+  "startupP95Ms": 266.46341700000016,
+  "inputP50Ms": 0.6080419999998412,
+  "inputP95Ms": 3.303875000000062,
+  "rssP95MiB": 100.0625,
+  "budget": {
+    "passed": false,
+    "checks": {
+      "startupP95Ms": {
+        "value": 266.46341700000016,
+        "max": 200,
+        "passed": false
+      },
+      "inputP95Ms": {
+        "value": 3.303875000000062,
+        "max": 16,
+        "passed": true
+      }
+    }
+  },
+  "samples": [
+    {
+      "startupMs": 248.07400000000007,
+      "rssMiB": 99.390625,
+      "inputMs": [
+        3.704250000000002,
+        2.359625000000051,
+        0.7450839999999062,
+        0.6466670000002068,
+        0.615624999999909,
+        0.9184159999999792,
+        0.5302080000001297,
+        0.5291250000000218,
+        0.5460410000000593,
+        0.5699160000001484,
+        0.5033339999999953,
+        0.45041599999990467,
+        0.5607499999998709,
+        0.5105839999998807,
+        0.535415999999941,
+        0.5395840000001044,
+        0.6788750000000618,
+        0.49758300000007694,
+        0.5054170000000795,
+        0.5267080000000988
+      ]
+    },
+    {
+      "startupMs": 266.46341700000016,
+      "rssMiB": 99.546875,
+      "inputMs": [
+        4.628583000000162,
+        2.9298330000001442,
+        1.3497080000001915,
+        0.8295830000001843,
+        1.1744579999999587,
+        1.6526249999997162,
+        1.1408329999999296,
+        1.1077080000000024,
+        1.872584000000188,
+        5.0128749999998945,
+        3.262083000000075,
+        3.303875000000062,
+        2.322457999999642,
+        0.6736670000000231,
+        0.8036250000000109,
+        1.2651660000001357,
+        2.6051250000000437,
+        0.5800830000002861,
+        0.5197499999999309,
+        0.5637500000002547
+      ]
+    },
+    {
+      "startupMs": 261.2362499999999,
+      "rssMiB": 100.0625,
+      "inputMs": [
+        3.3993749999999636,
+        0.7080000000000837,
+        2.2196249999997235,
+        0.6146250000001601,
+        0.8166249999999309,
+        0.7857079999998859,
+        0.5079579999996895,
+        0.5731249999998909,
+        0.6485410000000229,
+        0.6047080000003007,
+        0.6784589999997479,
+        0.48154199999999037,
+        0.6080419999998412,
+        0.640625,
+        0.5958340000001954,
+        0.5106249999998909,
+        0.5004170000001977,
+        0.9352499999999964,
+        0.6407500000000255,
+        0.5613749999997708
+      ]
+    },
+    {
+      "startupMs": 249.6839170000003,
+      "rssMiB": 99.234375,
+      "inputMs": [
+        3.2669169999999212,
+        0.6977919999999358,
+        2.285374999999931,
+        0.5957499999999527,
+        0.5891249999999673,
+        0.8655829999997877,
+        0.48170799999979863,
+        0.5872910000002776,
+        0.5747919999998885,
+        0.5241249999999127,
+        0.4912920000001577,
+        0.5579999999999927,
+        0.544709000000239,
+        0.5160000000000764,
+        0.5608750000001237,
+        0.5525840000000244,
+        0.5595419999999649,
+        0.554374999999709,
+        0.6300420000002305,
+        0.5161250000001019
+      ]
+    },
+    {
+      "startupMs": 261.27291700000023,
+      "rssMiB": 99.25,
+      "inputMs": [
+        3.9662909999997282,
+        2.5859999999997854,
+        0.7339999999999236,
+        0.5551659999996446,
+        0.7732919999998558,
+        1.5090000000000146,
+        0.5467499999999745,
+        0.6399169999999685,
+        0.6016669999999067,
+        0.5601249999999709,
+        0.5851659999998446,
+        0.6084169999999176,
+        0.5857499999997344,
+        0.6839169999998376,
+        0.7707089999998971,
+        1.0838330000001406,
+        0.5910420000000158,
+        0.5925000000002001,
+        0.5347499999998035,
+        0.5499589999999444
+      ]
+    }
+  ],
+  "limitations": [
+    "Warm OS caches; fresh Hikaro data home per launch. Current workspace and user skill discovery remain enabled.",
+    "Compile cache state is explicit: cold uses an empty temporary cache per launch; warm shares one isolated cache; disabled turns V8 caching off. firstLaunch precedes warmups and is not a percentile or a cold-disk measurement.",
+    "Startup measures PTY spawn to the first ready /help frame. Input measures PTY write to echoed editor content, not physical display pixels.",
+    "RSS is sampled at readiness, includes the SQLite worker and excludes external tools. The benchmark driver is a separate process.",
+    "No live request, streaming-to-terminal latency, 10k history rendering, or 30-minute stability measurement. Run bench:harness separately for storage/core bursts.",
+    "Nearest-rank percentiles. Concurrent build/test work and OS load affect results; compare raw samples on the same host/runtime."
+  ]
+}

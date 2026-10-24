@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased — startup latency
+
+- Empty TUI sessions initialize Markdown when the first message is rendered, preserving full formatting on restored history.
+- Attached clients avoid rewriting unchanged durable operation journals and paint the first ready frame immediately after restoring session, history and drafts. Standalone startup tail latency remains above the target in some measured runs; see [validation](docs/validation/startup-optimization-20261024.md).
+
 ## Unreleased — change reapplication
 
 - TUI `/changes` can reapply a reverted edit after explicit confirmation. Reapplication refuses conflicting newer contents and creates a new undoable journal entry. Shared hosts advertise `changes.redo`; older hosts do not show this action.

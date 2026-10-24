@@ -1,0 +1,62 @@
+diff --git a/apps/cli/src/index.ts b/apps/cli/src/index.ts
+index 8b22bd9..26a3cc2 100644
+--- a/apps/cli/src/index.ts
++++ b/apps/cli/src/index.ts
+@@ -186,8 +186,8 @@ async function main() {
+     process.once("SIGHUP", leave);
+     return;
+   }
+-  const { Runtime } = await import("../../../packages/runtime/src/index.ts");
+   if (values.prompt) {
++    const { Runtime } = await import("../../../packages/runtime/src/index.ts");
+     const runtime = await Runtime.open({
+       ...options,
+       approve: async () => false,
+@@ -223,8 +223,8 @@ async function main() {
+     options.cwd,
+   );
+   const { openInteractive } = await import("./interactive-startup.ts");
+-  // Start the storage worker before evaluating the TUI's synchronous module
+-  // graph, so schema initialization can progress while the main thread loads UI.
++  // Start the storage worker before evaluating the Runtime and TUI module
++  // graphs, so schema initialization can progress while the main thread loads them.
+   const { SQLiteStore } =
+     await import("../../../packages/storage/src/index.ts");
+   const startupStore = await SQLiteStore.open(
+@@ -232,19 +232,23 @@ async function main() {
+   );
+   const { view: ui, runtime } = await openInteractive(
+     import("../../../packages/tui/src/index.ts"),
+-    Runtime.open(
+-      {
+-        ...options,
+-        permissionMode,
+-        approve: (r, s) => view.approve(r, s),
+-        askUser: (questions, signal, executionSessionId, scope) =>
+-          localQuestions.ask(questions, signal, executionSessionId, scope),
+-      },
+-      startupStore,
+-    ).catch(async (error) => {
+-      await startupStore.close();
+-      throw error;
+-    }),
++    import("../../../packages/runtime/src/index.ts")
++      .then(({ Runtime }) =>
++        Runtime.open(
++          {
++            ...options,
++            permissionMode,
++            approve: (r, s) => view.approve(r, s),
++            askUser: (questions, signal, executionSessionId, scope) =>
++              localQuestions.ask(questions, signal, executionSessionId, scope),
++          },
++          startupStore,
++        ),
++      )
++      .catch(async (error) => {
++        await startupStore.close();
++        throw error;
++      }),
+   );
+   const { createTerminal, HikaroView } = ui;
+   const tui = createTerminal();
