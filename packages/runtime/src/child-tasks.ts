@@ -16,7 +16,7 @@ export class ChildTasks {
       child?: Agent;
     }
   >();
-  /** Saved outcomes from earlier hosts; live records in `children` win. */
+  /** Saved outcomes from earlier hosts; live records in `live` win. */
   private restoredChildren = new Map<
     string,
     { id: string; parent: string; task: string; state: string; output: string }

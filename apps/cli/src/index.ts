@@ -6,7 +6,7 @@ import { parseArgs } from "node:util";
 const cliArgs = process.argv.slice(2);
 // Accept the separator forwarded by package-manager run commands.
 if (cliArgs[0] === "--") cliArgs.shift();
-const { values, positionals } = parseArgs({
+const { values } = parseArgs({
   args: cliArgs,
   allowPositionals: true,
   options: {

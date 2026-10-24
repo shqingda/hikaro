@@ -167,7 +167,6 @@ it.each(["index_codebase", "semantic_search"])(
       cwd,
       parent,
       tools,
-      context,
       invoke,
       swap,
       assertOutsideUntouched,

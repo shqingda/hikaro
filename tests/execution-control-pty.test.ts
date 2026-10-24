@@ -1,7 +1,7 @@
 import { expect, it, vi } from "vitest";
 import { spawn } from "node-pty";
 import { createServer } from "node:http";
-import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { stripVTControlCharacters } from "node:util";

@@ -3,7 +3,7 @@ import {
   MobileController,
   pairingScope,
 } from "../apps/mobile/src/controller.ts";
-import { fixture, clock } from "./helpers/mobile-controller.ts";
+import { fixture } from "./helpers/mobile-controller.ts";
 import { randomUUID } from "node:crypto";
 import { mobileLifecycle } from "../apps/mobile/src/lifecycle.ts";
 import { rpcCapabilities } from "../packages/protocol/src/contracts.ts";

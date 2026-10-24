@@ -2,8 +2,6 @@ import { describe, it, expect } from "vitest";
 import {
   SecureChannel,
   createIdentity,
-  open,
-  seal,
 } from "../packages/crypto/src/index.ts";
 function pair() {
   const a = createIdentity(),
