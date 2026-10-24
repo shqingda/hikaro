@@ -621,6 +621,9 @@ export async function attachTui(options: {
     tui.setLayoutRoot(view.layout);
     tui.setFocus(view.editor);
     tui.start();
+    // Session, history and draft are ready; do not wait for a throttled frame
+    // left over from the connection's earlier status updates.
+    tui.requestRender(true);
     view.startTheme();
     process.once("SIGTERM", leave);
     process.once("SIGHUP", leave);
