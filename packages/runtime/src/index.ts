@@ -1,3 +1,5 @@
+import { ChangeReview } from "./change-review.ts";
+import { ChangeObservations } from "../../tools/src/change-observations.ts";
 import {
   PluginExecutions,
   type PluginInvocation,
@@ -253,6 +255,14 @@ export class Runtime {
   stopChild(parent: string, id: string) {
     this.childRecords.stop(parent, id);
   }
+  private changeReview?: ChangeReview;
+  get review() {
+    return (this.changeReview ??= new ChangeReview(
+      this.store,
+      this.changes,
+      new ChangeObservations(this.options.home!),
+    ));
+  }
   private changeJournal?: ChangeJournal;
   get changes() {
     return (this.changeJournal ??= new ChangeJournal(this.options.home!));
@@ -498,7 +508,7 @@ export class Runtime {
           const module = await import(
             pathToFileURL(resolve(home, entry.path)).href
           );
-          await runtime.plugins.load(module.default);
+          await runtime.plugins.load(module.default, true);
         }
         if (config.browser?.enabled) {
           const { browserPlugin } = await import("../../tools/src/browser.ts");
@@ -528,6 +538,7 @@ export class Runtime {
             await import("../../tools/src/mcp.ts");
           await runtime.plugins.load(
             mcpPlugin(MCPConfig.parse(config.mcpServers)),
+            true,
           );
         }
       } catch (e) {
@@ -864,6 +875,26 @@ export class Runtime {
     this.lifecycle.signal.throwIfAborted();
     await this.planning.load(session.id);
     const agent = new Agent({
+      executeTool: (tool, args, context) => {
+        const run = async () => {
+          await context.checkpoint?.();
+          return tool.execute(args, context);
+        };
+        return tool.name === "shell" || this.plugins.observedTools.has(tool)
+          ? this.review.observations.capture(
+              context.sessionId,
+              context.cwd,
+              {
+                source: tool.name === "shell" ? "shell" : "plugin",
+                callId: context.callId,
+                tool: tool.name,
+                runId: context.runId,
+                ...(context.plan ? { plan: context.plan } : {}),
+              },
+              run,
+            )
+          : run();
+      },
       toolPolicy: {
         refresh: () => this.planning.load(session.id, true),
         allowed: (tool) =>
@@ -981,6 +1012,7 @@ export class Runtime {
       this.plugins,
       this.planning,
       (session) => this.planningIdle(session),
+        this.review.observations,
     ));
   }
   invokePlugin(
@@ -1120,6 +1152,7 @@ export class Runtime {
       try {
         await Promise.all([
           this.changes.removeSession(session.id),
+          this.review.observations.removeSession(session.id),
           this.planning.removeSession(session.id),
           ...["outputs", "artifacts"].map((folder) =>
             rm(join(this.options.home!, folder, session.id), {

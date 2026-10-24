@@ -146,6 +146,8 @@ const allowed = new Set([
   "push.register",
   "messages.content",
   "plan.read",
+  "changes.review.list",
+  "changes.review.diff",
   "changes.list",
   "changes.diff",
   "session.resume",

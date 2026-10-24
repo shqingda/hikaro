@@ -18,7 +18,7 @@ function fixture() {
   const client = {
     state: { canAct: true, session: { id: "one" } },
     request,
-    supports: () => true,
+    supports: (method: string) => !method.startsWith("changes.review."),
   };
   const reader = new MobileInspection(() => {});
   reader.bind(client);
@@ -36,7 +36,8 @@ it("keeps image reading available on older hosts while refusing unsupported diff
   const f = fixture();
   const legacy = {
     ...f.client,
-    supports: (method: string) => method !== "changes.diff",
+    supports: (method: string) =>
+      !method.startsWith("changes.review.") && method !== "changes.diff",
   };
   f.reader.bind(legacy);
   expect(f.reader.state.canImages).toBe(true);
@@ -210,4 +211,46 @@ it("refuses unsupported search and malformed non-advancing cursors", async () =>
   f.reader.bind({ ...f.client, supports: () => false });
   await expect(f.reader.searchMessages("match")).rejects.toThrow(/尚不支持/);
   expect(f.request).toHaveBeenCalledTimes(1);
+});
+
+it("negotiates descendant observations and reads deletions through the review API", async () => {
+  const f = fixture();
+  f.client.supports = () => true;
+  const observed = {
+    ...entry,
+    after: null,
+    state: "observed",
+    source: "shell",
+    sessionId: "child",
+    depth: 1,
+    readOnly: true,
+    callId: "invocation",
+  };
+  f.request.mockImplementation(async (method) =>
+    method === "changes.review.list"
+      ? { items: [observed], more: false, warnings: ["Incomplete snapshot"] }
+      : {
+          entry: observed,
+          data: "--- file\n+++ /dev/null\n-before",
+          total: 30,
+          encoding: "utf16",
+          nextOffset: null,
+        },
+  );
+  await f.reader.listChanges();
+  expect(f.reader.state.changes?.warnings).toEqual(["Incomplete snapshot"]);
+  f.request.mockResolvedValue({
+    entry: observed,
+    data: "-before",
+    total: 7,
+    encoding: "utf16",
+    nextOffset: null,
+  });
+  await f.reader.readDiff(entry.id);
+  expect(f.request.mock.calls.at(-1)).toMatchObject([
+    "changes.review.diff",
+    { sessionId: "one", owner: "child", source: "shell" },
+    { beforeSend: expect.any(Function) },
+  ]);
+  expect(f.reader.state.diff?.entry.after).toBeNull();
 });

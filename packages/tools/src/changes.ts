@@ -1,3 +1,7 @@
+import {
+  changeOriginSchema,
+  type ChangeOrigin,
+} from "../../core/src/change-evidence.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, open, readdir, realpath, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -19,6 +23,7 @@ const recordSchema = z.object({
   state: z.enum(["prepared", "committed", "reverting", "reverted"]),
   /** The model run that made the edit; absent for older records and redo. */
   runId: z.string().max(128).optional(),
+  origin: changeOriginSchema.optional(),
 });
 export type FileChange = z.infer<typeof recordSchema>;
 
@@ -138,6 +143,7 @@ export class ChangeJournal {
     replace: (current: string | undefined) => string,
     checkpoint?: () => Promise<void>,
     runId?: string,
+    origin?: ChangeOrigin,
   ) {
     await this.initialize(true);
     let entry: FileChange | undefined,
@@ -165,6 +171,7 @@ export class ChangeJournal {
             after: await this.snapshot(session, after),
             state: "prepared",
             ...(runId ? { runId } : {}),
+            ...(origin ? { origin } : {}),
           };
           await this.saveRecord(session, entry);
         }

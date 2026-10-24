@@ -71,6 +71,7 @@ export class ToolRegistry {
   }
 }
 export class PluginHost {
+  readonly observedTools = new WeakSet<Tool>();
   readonly providers = new Map<string, () => Promise<ProviderAdapter>>();
   readonly views = new Map<string, PluginView>();
   private eventListeners: Array<(e: AgentEvent) => void> = [];
@@ -86,7 +87,7 @@ export class PluginHost {
   readonly commands = new Map<string, PluginCommand>();
   private cleanups: Array<() => Promise<void>> = [];
   constructor(readonly tools: ToolRegistry) {}
-  async load(plugin: Plugin) {
+  async load(plugin: Plugin, observeChanges = false) {
     if (plugin.apiVersion !== 1)
       throw Error(`Unsupported plugin API: ${plugin.id}`);
     const names = this.tools.names(),
@@ -105,8 +106,15 @@ export class PluginHost {
           if (this.views.has(id)) throw Error(`Duplicate view: ${id}`);
           this.views.set(id, render);
         },
-        registerTool: (t) => this.tools.register(t),
-        registerTools: (tools) => this.tools.registerAll(tools),
+        registerTool: (t) => {
+          this.tools.register(t);
+          if (observeChanges) this.observedTools.add(t);
+        },
+        registerTools: (tools) => {
+          this.tools.registerAll(tools);
+          if (observeChanges)
+            for (const tool of tools) this.observedTools.add(tool);
+        },
         registerCommand: (n, r) => {
           if (this.commands.has(n)) throw Error(`Duplicate command: ${n}`);
           this.commands.set(n, r);
@@ -258,6 +266,11 @@ export class Agent implements AgentBackend {
       budget?: RunBudget;
       outputDirectory?: string;
       readonlyResources?: readonly string[];
+      executeTool?: (
+        tool: Tool,
+        args: unknown,
+        context: ToolContext,
+      ) => Promise<ToolResult>;
       saveArtifact?: (callId: string, result: ToolResult) => Promise<string>;
     },
   ) {
@@ -1016,7 +1029,9 @@ export class Agent implements AgentBackend {
     let result: ToolResult;
     try {
       await this.checkExecution(signal);
-      result = await tool.execute(parsed.data, context);
+      result = await (this.options.executeTool
+        ? this.options.executeTool(tool, parsed.data, context)
+        : tool.execute(parsed.data, context));
     } catch (e) {
       result = {
         text: e instanceof Error ? e.message : String(e),
@@ -1035,7 +1050,13 @@ export class Agent implements AgentBackend {
         data: artifact ? { artifact } : undefined,
       };
     }
-    await this.emit("tool.end", { callId, name, result });
+    await this.emit("tool.end", {
+      callId,
+      name,
+      result,
+      runId: this.runId,
+      ...(context.plan ? { plan: context.plan } : {}),
+    });
     return result;
   }
   private async run(text: string, images?: ImageInput[]) {

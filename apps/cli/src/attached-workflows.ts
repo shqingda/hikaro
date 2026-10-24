@@ -1,3 +1,5 @@
+import type { DisplayChange } from "../../../packages/tui/src/change-review.ts";
+import type { ReviewEntry } from "../../../packages/runtime/src/change-review.ts";
 import type { ClientConnection } from "../../../packages/client-core/src/connection.ts";
 import type { HikaroView } from "../../../packages/tui/src/index.ts";
 import type {
@@ -329,22 +331,74 @@ export class AttachedWorkflows {
     this.modal = command;
     try {
       if (command === "/changes") {
+        const unified =
+          this.client.supports("changes.review.list") &&
+          this.client.supports("changes.review.diff");
+        let reviewRows: DisplayChange[] = [];
+        let warnings: string[] = [];
         await openChangeReview(this.view, {
           cwd: this.cwd,
           list: async () => {
-            const all: FileChange[] = [];
+            const all: DisplayChange[] = [];
             for (let offset = 0; ;) {
               const page = await this.request<{
-                items: FileChange[];
+                items: DisplayChange[];
                 more: boolean;
-              }>("changes.list", id, { offset });
+                warnings?: string[];
+              }>(unified ? "changes.review.list" : "changes.list", id, {
+                offset,
+              });
+              warnings = page.warnings ?? [];
               all.push(...page.items);
-              if (!page.more) return all;
+              if (!page.more) {
+                reviewRows = all;
+                return all;
+              }
               if (!page.items.length) throw Error("Incomplete change list");
               offset += page.items.length;
             }
           },
+          warnings: unified ? () => warnings : undefined,
           detail: async (changeId) => {
+            const row = reviewRows.find((row) => row.id === changeId);
+            if (row && "readOnly" in row && row.readOnly) {
+              let offset = 0,
+                diff = "",
+                entry: ReviewEntry | undefined;
+              for (;;) {
+                const part = await this.request<{
+                  entry: ReviewEntry;
+                  data: string;
+                  nextOffset: number | null;
+                }>("changes.review.diff", id, {
+                  id: changeId,
+                  owner: row.sessionId,
+                  source: row.source,
+                  offset,
+                  limit: 16000,
+                });
+                if (
+                  entry &&
+                  JSON.stringify(entry) !== JSON.stringify(part.entry)
+                )
+                  throw Error("Change record changed; refresh the list");
+                entry = part.entry;
+                diff += part.data;
+                if (part.nextOffset === null) break;
+                if (
+                  part.nextOffset <= offset ||
+                  diff.length > 128 * 1024 * 1024
+                )
+                  throw Error("Invalid change diff page");
+                offset = part.nextOffset;
+              }
+              return {
+                entry: entry!,
+                before: undefined,
+                after: undefined,
+                diff,
+              };
+            }
             let entry: FileChange | undefined;
             const texts = { before: "", after: "" };
             for (const field of ["before", "after"] as const) {

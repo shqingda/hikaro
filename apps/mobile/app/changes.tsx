@@ -12,6 +12,7 @@ import { Action, Note } from "@/ui";
 import { colors, readable } from "@/theme";
 import { CONTENT_STEP } from "@/content";
 const states = {
+  observed: "执行期间观察到",
   committed: "已记录",
   prepared: "结果待核对",
   reverting: "回退结果待核对",
@@ -40,8 +41,13 @@ export default function Changes() {
       <Note>
         {diff
           ? `${states[diff.entry.state]} · 第 ${diff.offset / CONTENT_STEP + 1} 段`
-          : "仅包含本任务记录的文件工具修改，不包含 Shell、插件或其他任务的未记录修改。"}
+          : changes?.warnings !== undefined
+            ? "汇总本任务及子任务的文件修改。Shell／插件差异仅为执行期间观察结果，可能不完整。此页只读。"
+            : "仅包含本任务记录的文件工具修改，电脑版本尚不支持其他来源。"}
       </Note>
+      {changes?.warnings?.map((warning) => (
+        <Note key={warning}>{readable(warning)}</Note>
+      ))}
       {diff && (
         <Note>这是修改时保存的前后快照，当前工作区可能已变化。此页只读。</Note>
       )}
@@ -135,9 +141,18 @@ export default function Changes() {
           renderItem={({ item }) => (
             <View style={{ gap: 6 }}>
               <Note>
-                {item.before === null ? "新建" : "编辑"} · {states[item.state]}{" "}
-                · {new Date(item.timestamp).toLocaleString()}
+                {item.after === null
+                  ? "删除"
+                  : item.before === null
+                    ? "新建"
+                    : "编辑"}{" "}
+                · {states[item.state]} ·{" "}
+                {new Date(item.timestamp).toLocaleString()}
                 {item.runId ? ` · 运行 ${item.runId.slice(0, 8)}` : ""}
+                {item.source
+                  ? ` · ${item.source === "file" ? "文件工具" : item.source}`
+                  : ""}
+                {item.depth ? ` · 子任务 ${item.sessionId?.slice(0, 8)}` : ""}
               </Note>
               <Action
                 title={readable(item.path)}

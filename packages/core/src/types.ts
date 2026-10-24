@@ -1,3 +1,4 @@
+import type { PlanReference } from "./change-evidence.ts";
 import type { z } from "zod";
 export type Usage = { input: number; output: number; cost: number };
 export type RunBudget = {
@@ -77,6 +78,7 @@ export interface ToolContext {
   callId: string;
   /** Current model run, when the call belongs to one. */
   runId?: string;
+  plan?: PlanReference;
   depth: number;
   budget: RunBudget;
   scope?: string;

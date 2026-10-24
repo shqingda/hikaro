@@ -38,6 +38,13 @@ export function codingPlugin(options: {
               replace,
               ctx.checkpoint,
               ctx.runId,
+              ctx.callId
+                ? {
+                    callId: ctx.callId,
+                    tool: "file",
+                    ...(ctx.plan ? { plan: ctx.plan } : {}),
+                  }
+                : undefined,
             )
           : updateTextFile(path, ctx.signal, replace, ctx.checkpoint);
       host.registerTool({

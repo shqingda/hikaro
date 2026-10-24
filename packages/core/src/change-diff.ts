@@ -2,11 +2,11 @@
 export function changeDiff(
   path: string,
   before: string | undefined,
-  after: string,
+  after: string | undefined,
 ) {
   const lines = (text: string) => text.match(/[^\n]*\n|[^\n]+$/g) ?? [];
   const old = lines(before ?? "");
-  const next = lines(after);
+  const next = lines(after ?? "");
   const display = (prefix: string, line: string) =>
     line.endsWith("\n")
       ? prefix + line.slice(0, -1)
@@ -30,7 +30,7 @@ export function changeDiff(
   const newEnd = Math.min(next.length, next.length - end + 3);
   return [
     `--- ${before === undefined ? "/dev/null" : path}`,
-    `+++ ${path}`,
+    `+++ ${after === undefined ? "/dev/null" : path}`,
     `@@ -${oldEnd === from ? from : from + 1},${oldEnd - from} +${newEnd === from ? from : from + 1},${newEnd - from} @@`,
     ...old.slice(from, start).map((line) => display(" ", line)),
     ...old.slice(start, old.length - end).map((line) => display("-", line)),

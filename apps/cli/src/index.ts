@@ -694,10 +694,23 @@ async function main() {
             throw Error("Finish or cancel the run before reviewing changes.");
           const { openChangeReview } =
             await import("../../../packages/tui/src/change-review.ts");
+          let reviewRows: import("../../../packages/runtime/src/change-review.ts").ReviewEntry[] =
+            [];
+          let warnings: string[] = [];
           await openChangeReview(view, {
             cwd: session.cwd,
-            list: () => runtime.changes.list(session.id),
-            detail: (id) => runtime.changes.detail(session.id, id),
+            list: async () => {
+              const page = await runtime.review.list(session.id);
+              reviewRows = page.items;
+              warnings = page.warnings;
+              return reviewRows;
+            },
+            warnings: () => warnings,
+            detail: (id) => {
+              const row = reviewRows.find((row) => row.id === id);
+              if (!row) throw Error("Change not found; refresh the list");
+              return runtime.review.detail(session.id, row);
+            },
             rollback: (id, signal) =>
               runtime.rollbackChange(session, id, signal),
             redo: (id, signal) => runtime.redoChange(session, id, signal),

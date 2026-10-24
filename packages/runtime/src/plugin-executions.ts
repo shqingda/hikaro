@@ -1,3 +1,4 @@
+import type { ChangeObservations } from "../../tools/src/change-observations.ts";
 import { randomUUID } from "node:crypto";
 import type {
   PluginHost,
@@ -51,6 +52,7 @@ export class PluginExecutions {
     private plugins: PluginHost,
     private planning: Planning,
     private idle: (session: Session) => Promise<void>,
+    private observations: ChangeObservations,
   ) {}
   async invoke(
     session: Session,
@@ -122,10 +124,15 @@ export class PluginExecutions {
       const view = this.plugins.views.get(name);
       if (kind === "command" ? !command : !view)
         throw Error(`Unknown plugin ${kind}: ${name}`);
-      const text =
-        kind === "command"
-          ? await command!(args, context)
-          : await view!(context);
+      const text = await this.observations.capture(
+        session.id,
+        session.cwd,
+        { source: "plugin", callId: invocationId, tool: name },
+        async () => {
+          await checkpoint();
+          return kind === "command" ? command!(args, context) : view!(context);
+        },
+      );
       await checkpoint();
       if (lost)
         throw Error(

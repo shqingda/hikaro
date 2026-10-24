@@ -29,9 +29,17 @@ const entrySchema = z.object({
     .string()
     .regex(/^[a-f0-9]{64}$/)
     .nullable(),
-  after: z.string().regex(/^[a-f0-9]{64}$/),
-  state: z.enum(["prepared", "committed", "reverting", "reverted"]),
+  after: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .nullable(),
+  state: z.enum(["prepared", "committed", "reverting", "reverted", "observed"]),
   runId: z.string().max(128).optional(),
+  sessionId: z.string().max(128).optional(),
+  depth: z.number().int().min(0).max(4).optional(),
+  source: z.enum(["file", "shell", "plugin"]).optional(),
+  readOnly: z.boolean().optional(),
+  callId: z.string().max(128).optional(),
 });
 export type ChangeEntry = z.infer<typeof entrySchema>;
 type InspectionConnection = Pick<ClientConnection, "request" | "supports"> & {
@@ -64,6 +72,7 @@ export const emptyInspection = () => ({
     offset: number;
     more: boolean;
     previous: number[];
+    warnings?: string[];
   } | null,
   diff: null as {
     entry: ChangeEntry;
@@ -98,8 +107,10 @@ export class MobileInspection {
       canImages: !!sessionId && !!client?.supports("messages.content"),
       canChanges:
         !!sessionId &&
-        !!client?.supports("changes.list") &&
-        !!client?.supports("changes.diff"),
+        ((!!client?.supports("changes.review.list") &&
+          !!client?.supports("changes.review.diff")) ||
+          (!!client?.supports("changes.list") &&
+            !!client?.supports("changes.diff"))),
     });
   }
   close() {
@@ -109,7 +120,12 @@ export class MobileInspection {
   }
   private begin(
     method:
-      "messages.content" | "messages.search" | "changes.list" | "changes.diff",
+      | "messages.content"
+      | "messages.search"
+      | "changes.list"
+      | "changes.diff"
+      | "changes.review.list"
+      | "changes.review.diff",
   ) {
     const client = this.client,
       sessionId = this.sessionId;
@@ -258,7 +274,12 @@ export class MobileInspection {
   async listChanges(offset = 0) {
     if (!Number.isSafeInteger(offset) || offset < 0 || offset > 10000)
       throw Error("Invalid change page");
-    const c = this.begin("changes.list"),
+    const method =
+      this.client?.supports("changes.review.list") &&
+      this.client?.supports("changes.review.diff")
+        ? "changes.review.list"
+        : "changes.list";
+    const c = this.begin(method),
       current = this.state.changes;
     const previous = !offset
       ? []
@@ -274,10 +295,14 @@ export class MobileInspection {
     });
     try {
       const page = z
-        .object({ items: z.array(entrySchema).max(100), more: z.boolean() })
+        .object({
+          items: z.array(entrySchema).max(100),
+          more: z.boolean(),
+          warnings: z.array(z.string().max(300)).max(100).optional(),
+        })
         .parse(
           await c.client.request(
-            "changes.list",
+            method,
             { sessionId: c.sessionId, offset },
             { beforeSend: c.guard },
           ),
@@ -296,12 +321,16 @@ export class MobileInspection {
   }
   async readDiff(id: string, offset = 0) {
     z.uuid().parse(id);
-    const requestOffset = contentRequestOffset(offset),
-      c = this.begin("changes.diff");
+    const requestOffset = contentRequestOffset(offset);
     const expected =
       this.state.diff?.entry.id === id
         ? this.state.diff.entry
         : this.state.changes?.items.find((e) => e.id === id);
+    const method =
+      expected?.source && expected.sessionId
+        ? "changes.review.diff"
+        : "changes.diff";
+    const c = this.begin(method);
     this.update({
       kind: "changes",
       loading: true,
@@ -311,8 +340,16 @@ export class MobileInspection {
     });
     try {
       const raw = await c.client.request(
-        "changes.diff",
-        { sessionId: c.sessionId, id, offset: requestOffset, limit: 8192 },
+        method,
+        {
+          sessionId: c.sessionId,
+          id,
+          offset: requestOffset,
+          limit: 8192,
+          ...(method === "changes.review.diff"
+            ? { owner: expected!.sessionId, source: expected!.source }
+            : {}),
+        },
         { beforeSend: c.guard },
       );
       c.guard();

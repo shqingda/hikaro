@@ -543,6 +543,8 @@ export async function serveRpc(
           break;
         }
 
+        case "changes.review.list":
+        case "changes.review.diff":
         case "changes.list":
         case "changes.detail":
         case "changes.diff":

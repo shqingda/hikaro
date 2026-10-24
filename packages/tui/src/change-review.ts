@@ -1,9 +1,11 @@
+import type { ReviewEntry } from "../../runtime/src/change-review.ts";
 import { realpath } from "node:fs/promises";
 import { relative } from "node:path";
 import type { FileChange } from "../../tools/src/changes.ts";
 import type { HikaroView } from "./index.ts";
 
 import { changeDiff } from "../../core/src/change-diff.ts";
+export type DisplayChange = FileChange | ReviewEntry;
 export { changeDiff } from "../../core/src/change-diff.ts";
 /**
  * Committed changes from the newest through `id`, newest first. Rolling them
@@ -59,11 +61,13 @@ export async function openChangeReview(
   view: HikaroView,
   source: {
     cwd: string;
-    list(): Promise<FileChange[]>;
+    list(): Promise<DisplayChange[]>;
+    warnings?(): string[];
     detail(id: string): Promise<{
-      entry: FileChange;
+      entry: DisplayChange;
+      diff?: string;
       before: string | undefined;
-      after: string;
+      after: string | undefined;
     }>;
     rollback(id: string, signal: AbortSignal): Promise<void>;
     redo?(id: string, signal: AbortSignal): Promise<void>;
@@ -117,15 +121,31 @@ export async function openChangeReview(
   let page = 0,
     selected: string | undefined,
     message = "";
+  let sourceFilter = "all",
+    ownerFilter = "",
+    runFilter = "";
   try {
     for (;;) {
-      const entries = await source.list();
+      const allEntries = await source.list();
+      const reliable = allEntries.filter(
+        (entry): entry is FileChange =>
+          entry.state !== "observed" &&
+          !("readOnly" in entry && entry.readOnly),
+      );
+      const entries = allEntries.filter(
+        (entry) =>
+          (sourceFilter === "all" ||
+            ("source" in entry ? entry.source : "file") === sourceFilter) &&
+          (!ownerFilter ||
+            ("sessionId" in entry && entry.sessionId === ownerFilter)) &&
+          (!runFilter || entry.runId === runFilter),
+      );
       signal.throwIfAborted();
       page = Math.min(page, Math.max(0, Math.ceil(entries.length / 20) - 1));
       const items = entries.slice(page * 20, (page + 1) * 20).map((entry) => ({
         value: entry.id,
         label: relative(cwd, entry.path) || entry.path,
-        description: `${entry.before === null ? "Created" : "Edited"} · ${entry.state} · ${new Date(entry.timestamp).toLocaleTimeString()}${entry.runId ? ` · run ${entry.runId.slice(0, 8)}` : ""}`,
+        description: `${entry.after === null ? "Deleted" : entry.before === null ? "Created" : "Edited"} · ${entry.state} · ${new Date(entry.timestamp).toLocaleTimeString()}${entry.runId ? ` · run ${entry.runId.slice(0, 8)}` : ""}${"source" in entry ? ` · ${entry.source}${entry.depth ? ` · child ${entry.sessionId.slice(0, 8)}` : ""}` : ""}`,
       }));
       if (page)
         items.push({
@@ -139,6 +159,12 @@ export async function openChangeReview(
           label: "Next page",
           description: "Older changes",
         });
+      if (allEntries.some((entry) => "source" in entry))
+        items.push({
+          value: "filter",
+          label: "Filter by source, task or run…",
+          description: `${sourceFilter} · ${ownerFilter || "all tasks"} · ${runFilter || "all runs"}`,
+        });
       items.push({
         value: "close",
         label: "Close",
@@ -148,13 +174,37 @@ export async function openChangeReview(
         `File changes · page ${page + 1}`,
         items,
         message ||
-          (entries.length
-            ? "Recorded file-tool edits only. Shell, plugins and other sessions are not covered. Undo newest edits first."
-            : "No recorded file edits in this session. Shell/plugin changes and edits from before this version are not captured."),
+          (source.warnings
+            ? [
+                `${allEntries.filter((e) => e.state !== "observed").length} reliable records · ${allEntries.filter((e) => e.state === "observed").length} observations. File-tool records can be undone in their own task. Child records are read-only. Shell/plugin differences were observed during execution; they do not prove authorship or complete coverage.`,
+                ...source.warnings(),
+              ].join("\n")
+            : entries.length
+              ? "Recorded file-tool edits only. Shell, plugins and other sessions are not covered. Undo newest edits first."
+              : "No recorded file edits in this session. Shell/plugin changes and edits from before this version are not captured."),
         undefined,
         { search: false, selectedValue: selected, enterAction: "open" },
       );
       if (choice.value === "close") return;
+      if (choice.value === "filter") {
+        const filter = await panel.choose(
+          "Change source",
+          ["all", "file", "shell", "plugin"].map((value) => ({
+            value,
+            label: value,
+          })),
+          "Choose a source; leave task/run empty for all.",
+          undefined,
+          { search: false },
+        );
+        sourceFilter = filter.value;
+        ownerFilter =
+          (await panel.prompt("Task ID (empty for all)"))?.trim() ?? "";
+        runFilter =
+          (await panel.prompt("Run ID (empty for all)"))?.trim() ?? "";
+        page = 0;
+        continue;
+      }
       if (choice.value === "next") {
         page++;
         continue;
@@ -165,42 +215,44 @@ export async function openChangeReview(
       }
       selected = choice.value;
       try {
-        const { entry, before, after } = await source.detail(selected);
+        const { entry, before, after, diff } = await source.detail(selected);
         signal.throwIfAborted();
         const path = relative(cwd, entry.path) || entry.path;
         let batch: FileChange[] = [];
         try {
-          batch = batchRollbackTargets(entries, entry.id);
+          batch = batchRollbackTargets(reliable, entry.id);
         } catch {
           // Unfinished newer work only hides the batch action; single rollback still checks it.
         }
-        const run = runRollbackTargets(entries, entry.id);
+        const run = runRollbackTargets(reliable, entry.id);
         const action = await panel.readDocument(
           `${path} · ${entry.state}`,
-          changeDiff(path, before, after),
-          entry.state === "reverted" && source.redo
-            ? [{ value: "redo", label: "Reapply this edit…" }]
-            : batch.length || run.length
-              ? [
-                  { value: "rollback", label: "Roll back this edit…" },
-                  ...(run.length
-                    ? [
-                        {
-                          value: "run",
-                          label: `Roll back this run (${run.length} changes)…`,
-                        },
-                      ]
-                    : []),
-                  ...(batch.length
-                    ? [
-                        {
-                          value: "batch",
-                          label: `Roll back to here (${batch.length} changes)…`,
-                        },
-                      ]
-                    : []),
-                ]
-              : entry.state === "committed",
+          diff ?? changeDiff(path, before, after),
+          "readOnly" in entry && entry.readOnly
+            ? []
+            : entry.state === "reverted" && source.redo
+              ? [{ value: "redo", label: "Reapply this edit…" }]
+              : batch.length || run.length
+                ? [
+                    { value: "rollback", label: "Roll back this edit…" },
+                    ...(run.length
+                      ? [
+                          {
+                            value: "run",
+                            label: `Roll back this run (${run.length} changes)…`,
+                          },
+                        ]
+                      : []),
+                    ...(batch.length
+                      ? [
+                          {
+                            value: "batch",
+                            label: `Roll back to here (${batch.length} changes)…`,
+                          },
+                        ]
+                      : []),
+                  ]
+                : entry.state === "committed",
         );
         if (action.value === "batch" || action.value === "run") {
           message = await confirmBatchRollback(

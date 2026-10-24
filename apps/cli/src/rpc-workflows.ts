@@ -75,15 +75,28 @@ export class RpcWorkflows {
     scope: string,
   ): Promise<unknown> {
     switch (method) {
+      case "changes.review.list":
       case "changes.list": {
-        const entries = await this.runtime.changes.list(session.id);
+        const review =
+          method === "changes.review.list"
+            ? await this.runtime.review.list(session.id, {
+                source: z
+                  .enum(["file", "shell", "plugin"])
+                  .optional()
+                  .parse(p.source),
+                owner: z.string().max(128).optional().parse(p.owner),
+                runId: z.string().max(128).optional().parse(p.runId),
+              })
+            : undefined;
+        const entries =
+          review?.items ?? (await this.runtime.changes.list(session.id));
         const offset = z
           .number()
           .int()
           .min(0)
           .max(10000)
           .parse(p.offset ?? 0);
-        const items: typeof entries = [];
+        const items: Array<(typeof entries)[number]> = [];
         let bytes = 0;
         for (const entry of entries.slice(offset, offset + 100)) {
           const size = Buffer.byteLength(JSON.stringify(entry)) + 1;
@@ -93,13 +106,25 @@ export class RpcWorkflows {
         }
         if (offset < entries.length && !items.length)
           throw Error("Change record exceeds response limit");
-        return { items, more: offset + items.length < entries.length };
+        return {
+          items,
+          more: offset + items.length < entries.length,
+          ...(review ? { warnings: review.warnings } : {}),
+        };
       }
+      case "changes.review.diff":
       case "changes.diff": {
-        const detail = await this.runtime.changes.detail(
-          session.id,
-          z.string().uuid().parse(p.id),
-        );
+        const detail =
+          method === "changes.review.diff"
+            ? await this.runtime.review.detail(session.id, {
+                id: z.string().uuid().parse(p.id),
+                sessionId: z.string().min(1).max(128).parse(p.owner),
+                source: z.enum(["file", "shell", "plugin"]).parse(p.source),
+              })
+            : await this.runtime.changes.detail(
+                session.id,
+                z.string().uuid().parse(p.id),
+              );
         const offset = z
           .number()
           .int()
