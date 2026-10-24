@@ -7,11 +7,15 @@ import { randomUUID } from "node:crypto";
 export async function buildSecureFileHelper() {
   if (!["darwin", "linux"].includes(process.platform))
     throw Error("Secure file operations require macOS or Linux");
+  await buildHelper("secure-file", "secure file");
+}
+
+async function buildHelper(name, description) {
   const source = fileURLToPath(
-    new URL("../packages/tools/native/secure-file.c", import.meta.url),
+    new URL(`../packages/tools/native/${name}.c`, import.meta.url),
   );
   const output = fileURLToPath(
-    new URL("../packages/tools/src/secure-file-helper", import.meta.url),
+    new URL(`../packages/tools/src/${name}-helper`, import.meta.url),
   );
   const temporary = output + "." + randomUUID();
   try {
@@ -28,7 +32,7 @@ export async function buildSecureFileHelper() {
     await rename(temporary, output);
   } catch (error) {
     throw new Error(
-      "Cannot build the secure file helper. Install a C11 compiler (Xcode Command Line Tools on macOS or build-essential on Linux).",
+      `Cannot build the ${description} helper. Install a C11 compiler (Xcode Command Line Tools on macOS or build-essential on Linux).`,
       { cause: error },
     );
   } finally {
