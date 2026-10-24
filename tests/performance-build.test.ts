@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { execFile } from "node:child_process";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { build } from "esbuild";
 
@@ -28,6 +28,47 @@ async function fixtureDirectory() {
 }
 
 describe("production startup packaging", () => {
+  it("initializes Markdown only when a message is rendered, with full CJK formatting on that first frame", async () => {
+    const { cliBuildOptions } = await import(buildOptionsPath);
+    const directory = await fixtureDirectory();
+    const input = join(directory, "fixture.ts");
+    await writeFile(
+      input,
+      `export { MessageComponent } from ${JSON.stringify(resolve("packages/tui/src/index.ts"))};`,
+    );
+    await build({
+      ...cliBuildOptions(),
+      entryPoints: { fixture: input },
+      outdir: directory,
+    });
+    const { stdout } = await execute(process.execPath, [
+      "--input-type=module",
+      "-e",
+      `
+      let cjkExpressions = 0;
+      const original = globalThis.RegExp;
+      globalThis.RegExp = new Proxy(original, {
+        construct(target, args) {
+          if (String(args[0]).includes("\\\\u1100-\\\\u11ff")) cjkExpressions++;
+          return Reflect.construct(target, args);
+        }
+      });
+      const { MessageComponent } = await import(${JSON.stringify(pathToFileURL(join(directory, "fixture.mjs")).href)});
+      const before = cjkExpressions;
+      const message = new MessageComponent(1, "assistant", "中文**加粗**测试");
+      const output = message.render(80).join("\\n");
+      globalThis.RegExp = original;
+      console.log(JSON.stringify({ before, after: cjkExpressions, output }));
+    `,
+    ]);
+    const value = JSON.parse(stdout);
+    expect(value.before).toBe(0);
+    expect(value.after).toBeGreaterThan(0);
+    expect(value.output).toContain("\x1b[1m加粗");
+    expect(value.output).toContain("中文");
+    expect(value.output).not.toContain("**");
+  });
+
   it("preserves external plugin Zod metadata, validation, Unicode width and native helper lookup", async () => {
     const { cliBuildOptions } = await import(buildOptionsPath);
     const directory = await fixtureDirectory();

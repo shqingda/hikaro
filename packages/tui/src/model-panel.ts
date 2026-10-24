@@ -10,7 +10,7 @@ import {
   visibleWidth,
   type Component,
   type SelectItem,
-} from "@earendil-works/pi-tui";
+} from "./primitives.ts";
 const accent = (v: string) => `\x1b[38;2;196;85;72m${clean(v)}\x1b[39m`;
 const dim = (v: string) => `\x1b[90m${clean(v)}\x1b[39m`;
 const red = (v: string) => `\x1b[31m${clean(v)}\x1b[39m`;

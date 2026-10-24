@@ -5,7 +5,7 @@ import {
   CombinedAutocompleteProvider,
   fuzzyFilter,
   type AutocompleteSuggestions,
-} from "@earendil-works/pi-tui";
+} from "./primitives.ts";
 
 /** Search only on demand; never scan the workspace on the startup path. */
 export class FileAutocompleteProvider extends CombinedAutocompleteProvider {

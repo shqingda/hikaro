@@ -6,13 +6,13 @@ import {
   Container,
   ScrollView,
   VStack,
-  Markdown,
   matchesKey,
   isKeyRelease,
   visibleWidth,
   type Component,
   type MarkdownTheme,
-} from "@earendil-works/pi-tui";
+} from "./primitives.ts";
+import { createMarkdown } from "./markdown.cjs";
 import { ModelPanel } from "./model-panel.ts";
 import { ActivityEditor } from "./activity-editor.ts";
 import { ApprovalPanel } from "./approval-panel.ts";
@@ -120,7 +120,7 @@ export class MessageComponent implements Component {
       this.body.addChild(
         this.role === "tool"
           ? new Text(muted(text), 1, 1)
-          : new Markdown(sanitize(text), 1, 1, theme),
+          : createMarkdown(sanitize(text), 1, 1, theme),
       );
       if (this.streaming && this.text.length > MESSAGE_PAGE_CHARS) {
         this.body.addChild(

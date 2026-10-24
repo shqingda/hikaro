@@ -1,4 +1,4 @@
-import { Editor, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { Editor, truncateToWidth, visibleWidth } from "./primitives.ts";
 
 const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 

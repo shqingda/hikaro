@@ -3,7 +3,7 @@ import {
   matchesKey,
   isKeyRelease,
   type Component,
-} from "@earendil-works/pi-tui";
+} from "./primitives.ts";
 import type { PermissionRequest } from "../../core/src/types.ts";
 import { sanitize } from "./text.ts";
 
