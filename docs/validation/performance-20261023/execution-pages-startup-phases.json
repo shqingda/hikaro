@@ -1,0 +1,1290 @@
+{
+  "sourceBundleSha256": "ccff679b81d15fac8baa4d4b70d01f63f20cfcd362ef0d62a012571bb7b4e06b",
+  "endingSourceBundleSha256": "ccff679b81d15fac8baa4d4b70d01f63f20cfcd362ef0d62a012571bb7b4e06b",
+  "environment": {
+    "at": "2026-10-23T11:53:41.275Z",
+    "loadAverage": [
+      4.7734375,
+      4.96240234375,
+      4.396484375
+    ],
+    "freeMemoryMiB": 189.78125
+  },
+  "endingEnvironment": {
+    "at": "2026-10-23T11:53:44.002Z",
+    "loadAverage": [
+      4.7734375,
+      4.96240234375,
+      4.396484375
+    ],
+    "freeMemoryMiB": 121.625
+  },
+  "samples": [
+    {
+      "index": 1,
+      "startedAt": "2026-10-23T11:53:41.432Z",
+      "finishedAt": "2026-10-23T11:53:41.720Z",
+      "startupMs": 192.07104099999998,
+      "timeOrigin": 1792756421516.199,
+      "rows": [
+        {
+          "name": "entry-eval",
+          "ms": 16.810459
+        },
+        {
+          "name": "main.import:start",
+          "ms": 16.848
+        },
+        {
+          "name": "attach.import:start",
+          "ms": 20.541917
+        },
+        {
+          "name": "main.import:end",
+          "ms": 26.74975
+        },
+        {
+          "name": "attach.import:end",
+          "ms": 28.999667
+        },
+        {
+          "name": "attach.function:start",
+          "ms": 29.196375
+        },
+        {
+          "name": "ui.modules:start",
+          "ms": 31.136625
+        },
+        {
+          "name": "transport.connect:start",
+          "ms": 38.7375
+        },
+        {
+          "name": "ui.modules:end",
+          "ms": 65.835334
+        },
+        {
+          "name": "transport.connect:end",
+          "ms": 68.441042
+        },
+        {
+          "name": "clientfiles.open:start",
+          "ms": 68.4485
+        },
+        {
+          "name": "clientfiles.open:end",
+          "ms": 68.682125
+        },
+        {
+          "name": "preferences.module:start",
+          "ms": 68.719584
+        },
+        {
+          "name": "preferences.module:end",
+          "ms": 69.0215
+        },
+        {
+          "name": "preferences.read:start",
+          "ms": 69.022875
+        },
+        {
+          "name": "preferences.read:end",
+          "ms": 69.098417
+        },
+        {
+          "name": "view.construct:start",
+          "ms": 69.301417
+        },
+        {
+          "name": "view.construct:end",
+          "ms": 71.133375
+        },
+        {
+          "name": "client.connected:start",
+          "ms": 71.2285
+        },
+        {
+          "name": "rpc:hello:start",
+          "ms": 71.49075
+        },
+        {
+          "name": "rpc:session.current:start",
+          "ms": 74.437625
+        },
+        {
+          "name": "rpc:hello:end",
+          "ms": 74.49925
+        },
+        {
+          "name": "rpc:session.current:end",
+          "ms": 75.17175
+        },
+        {
+          "name": "client.connected:end",
+          "ms": 81.753584
+        },
+        {
+          "name": "rpc:session.create:start",
+          "ms": 81.757792
+        },
+        {
+          "name": "rpc:session.current:start",
+          "ms": 89.774709
+        },
+        {
+          "name": "rpc:messages.read:start",
+          "ms": 90.160459
+        },
+        {
+          "name": "rpc:session.current:end",
+          "ms": 90.2525
+        },
+        {
+          "name": "rpc:command.receipt:start",
+          "ms": 90.257167
+        },
+        {
+          "name": "rpc:command.receipt:end",
+          "ms": 90.660917
+        },
+        {
+          "name": "rpc:session.create:end",
+          "ms": 90.661625
+        },
+        {
+          "name": "initial.refresh:start",
+          "ms": 90.662792
+        },
+        {
+          "name": "rpc:messages.read:start",
+          "ms": 90.673042
+        },
+        {
+          "name": "rpc:messages.read:end",
+          "ms": 90.761292
+        },
+        {
+          "name": "draft.flush:start",
+          "ms": 90.762167
+        },
+        {
+          "name": "draft.flush:end",
+          "ms": 90.790167
+        },
+        {
+          "name": "draft.read:start",
+          "ms": 90.790667
+        },
+        {
+          "name": "rpc:messages.read:end",
+          "ms": 91.158709
+        },
+        {
+          "name": "draft.flush:start",
+          "ms": 91.15975
+        },
+        {
+          "name": "draft.flush:end",
+          "ms": 91.16075
+        },
+        {
+          "name": "draft.read:start",
+          "ms": 91.161125
+        },
+        {
+          "name": "draft.read:end",
+          "ms": 91.192084
+        },
+        {
+          "name": "draft.read:end",
+          "ms": 91.203
+        },
+        {
+          "name": "initial.refresh:end",
+          "ms": 91.353625
+        },
+        {
+          "name": "ready.notice",
+          "ms": 91.35425
+        },
+        {
+          "name": "ui.start:before",
+          "ms": 91.422792
+        },
+        {
+          "name": "ui.start:after",
+          "ms": 91.884834
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "startedAt": "2026-10-23T11:53:41.884Z",
+      "finishedAt": "2026-10-23T11:53:42.180Z",
+      "startupMs": 200.38266699999997,
+      "timeOrigin": 1792756421973.532,
+      "rows": [
+        {
+          "name": "entry-eval",
+          "ms": 15.333292
+        },
+        {
+          "name": "main.import:start",
+          "ms": 15.3745
+        },
+        {
+          "name": "attach.import:start",
+          "ms": 19.296709
+        },
+        {
+          "name": "main.import:end",
+          "ms": 26.647209
+        },
+        {
+          "name": "attach.import:end",
+          "ms": 29.086084
+        },
+        {
+          "name": "attach.function:start",
+          "ms": 29.289917
+        },
+        {
+          "name": "ui.modules:start",
+          "ms": 31.553959
+        },
+        {
+          "name": "transport.connect:start",
+          "ms": 39.574792
+        },
+        {
+          "name": "ui.modules:end",
+          "ms": 67.998542
+        },
+        {
+          "name": "transport.connect:end",
+          "ms": 71.167375
+        },
+        {
+          "name": "clientfiles.open:start",
+          "ms": 71.177792
+        },
+        {
+          "name": "clientfiles.open:end",
+          "ms": 71.538542
+        },
+        {
+          "name": "preferences.module:start",
+          "ms": 71.584459
+        },
+        {
+          "name": "preferences.module:end",
+          "ms": 71.9755
+        },
+        {
+          "name": "preferences.read:start",
+          "ms": 71.9785
+        },
+        {
+          "name": "preferences.read:end",
+          "ms": 72.07525
+        },
+        {
+          "name": "view.construct:start",
+          "ms": 72.329
+        },
+        {
+          "name": "view.construct:end",
+          "ms": 74.211209
+        },
+        {
+          "name": "client.connected:start",
+          "ms": 74.330209
+        },
+        {
+          "name": "rpc:hello:start",
+          "ms": 74.635959
+        },
+        {
+          "name": "rpc:session.current:start",
+          "ms": 77.914125
+        },
+        {
+          "name": "rpc:hello:end",
+          "ms": 77.995875
+        },
+        {
+          "name": "rpc:session.current:end",
+          "ms": 78.743584
+        },
+        {
+          "name": "client.connected:end",
+          "ms": 83.928417
+        },
+        {
+          "name": "rpc:session.create:start",
+          "ms": 83.943542
+        },
+        {
+          "name": "rpc:session.current:start",
+          "ms": 93.986209
+        },
+        {
+          "name": "rpc:messages.read:start",
+          "ms": 94.487334
+        },
+        {
+          "name": "rpc:session.current:end",
+          "ms": 94.588709
+        },
+        {
+          "name": "rpc:command.receipt:start",
+          "ms": 94.59275
+        },
+        {
+          "name": "rpc:command.receipt:end",
+          "ms": 95.1565
+        },
+        {
+          "name": "rpc:session.create:end",
+          "ms": 95.157167
+        },
+        {
+          "name": "initial.refresh:start",
+          "ms": 95.158542
+        },
+        {
+          "name": "rpc:messages.read:start",
+          "ms": 95.169875
+        },
+        {
+          "name": "rpc:messages.read:end",
+          "ms": 95.276084
+        },
+        {
+          "name": "draft.flush:start",
+          "ms": 95.278292
+        },
+        {
+          "name": "draft.flush:end",
+          "ms": 95.307209
+        },
+        {
+          "name": "draft.read:start",
+          "ms": 95.307792
+        },
+        {
+          "name": "draft.read:end",
+          "ms": 95.404459
+        },
+        {
+          "name": "rpc:messages.read:end",
+          "ms": 95.460834
+        },
+        {
+          "name": "draft.flush:start",
+          "ms": 95.462125
+        },
+        {
+          "name": "draft.flush:end",
+          "ms": 95.463375
+        },
+        {
+          "name": "draft.read:start",
+          "ms": 95.463792
+        },
+        {
+          "name": "draft.read:end",
+          "ms": 95.505167
+        },
+        {
+          "name": "initial.refresh:end",
+          "ms": 95.687125
+        },
+        {
+          "name": "ready.notice",
+          "ms": 95.687959
+        },
+        {
+          "name": "ui.start:before",
+          "ms": 95.762167
+        },
+        {
+          "name": "ui.start:after",
+          "ms": 96.291375
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "startedAt": "2026-10-23T11:53:42.331Z",
+      "finishedAt": "2026-10-23T11:53:42.612Z",
+      "startupMs": 188.02262499999983,
+      "timeOrigin": 1792756422412.386,
+      "rows": [
+        {
+          "name": "entry-eval",
+          "ms": 13.001667
+        },
+        {
+          "name": "main.import:start",
+          "ms": 13.038083
+        },
+        {
+          "name": "attach.import:start",
+          "ms": 16.698167
+        },
+        {
+          "name": "main.import:end",
+          "ms": 23.205958
+        },
+        {
+          "name": "attach.import:end",
+          "ms": 25.334833
+        },
+        {
+          "name": "attach.function:start",
+          "ms": 25.530458
+        },
+        {
+          "name": "ui.modules:start",
+          "ms": 27.454125
+        },
+        {
+          "name": "transport.connect:start",
+          "ms": 35.311333
+        },
+        {
+          "name": "ui.modules:end",
+          "ms": 62.919208
+        },
+        {
+          "name": "transport.connect:end",
+          "ms": 66.124417
+        },
+        {
+          "name": "clientfiles.open:start",
+          "ms": 66.137
+        },
+        {
+          "name": "clientfiles.open:end",
+          "ms": 66.4635
+        },
+        {
+          "name": "preferences.module:start",
+          "ms": 66.511083
+        },
+        {
+          "name": "preferences.module:end",
+          "ms": 66.950792
+        },
+        {
+          "name": "preferences.read:start",
+          "ms": 66.952375
+        },
+        {
+          "name": "preferences.read:end",
+          "ms": 67.043875
+        },
+        {
+          "name": "view.construct:start",
+          "ms": 67.276042
+        },
+        {
+          "name": "view.construct:end",
+          "ms": 69.068333
+        },
+        {
+          "name": "client.connected:start",
+          "ms": 69.163
+        },
+        {
+          "name": "rpc:hello:start",
+          "ms": 69.4395
+        },
+        {
+          "name": "rpc:session.current:start",
+          "ms": 72.54825
+        },
+        {
+          "name": "rpc:hello:end",
+          "ms": 72.615042
+        },
+        {
+          "name": "rpc:session.current:end",
+          "ms": 73.217417
+        },
+        {
+          "name": "client.connected:end",
+          "ms": 78.951417
+        },
+        {
+          "name": "rpc:session.create:start",
+          "ms": 78.956042
+        },
+        {
+          "name": "rpc:session.current:start",
+          "ms": 87.517667
+        },
+        {
+          "name": "rpc:messages.read:start",
+          "ms": 87.902833
+        },
+        {
+          "name": "rpc:session.current:end",
+          "ms": 87.988792
+        },
+        {
+          "name": "rpc:command.receipt:start",
+          "ms": 87.99275
+        },
+        {
+          "name": "rpc:command.receipt:end",
+          "ms": 88.455333
+        },
+        {
+          "name": "rpc:session.create:end",
+          "ms": 88.456083
+        },
+        {
+          "name": "initial.refresh:start",
+          "ms": 88.456917
+        },
+        {
+          "name": "rpc:messages.read:start",
+          "ms": 88.464542
+        },
+        {
+          "name": "rpc:messages.read:end",
+          "ms": 88.548083
+        },
+        {
+          "name": "draft.flush:start",
+          "ms": 88.548792
+        },
+        {
+          "name": "draft.flush:end",
+          "ms": 88.572625
+        },
+        {
+          "name": "draft.read:start",
+          "ms": 88.57475
+        },
+        {
+          "name": "rpc:messages.read:end",
+          "ms": 88.967042
+        },
+        {
+          "name": "draft.flush:start",
+          "ms": 88.9685
+        },
+        {
+          "name": "draft.flush:end",
+          "ms": 88.970083
+        },
+        {
+          "name": "draft.read:start",
+          "ms": 88.970583
+        },
+        {
+          "name": "draft.read:end",
+          "ms": 89.00675
+        },
+        {
+          "name": "draft.read:end",
+          "ms": 89.017625
+        },
+        {
+          "name": "initial.refresh:end",
+          "ms": 89.181542
+        },
+        {
+          "name": "ready.notice",
+          "ms": 89.182375
+        },
+        {
+          "name": "ui.start:before",
+          "ms": 89.253917
+        },
+        {
+          "name": "ui.start:after",
+          "ms": 89.714417
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "startedAt": "2026-10-23T11:53:42.775Z",
+      "finishedAt": "2026-10-23T11:53:43.061Z",
+      "startupMs": 193.7654590000002,
+      "timeOrigin": 1792756422859.124,
+      "rows": [
+        {
+          "name": "entry-eval",
+          "ms": 13.717583
+        },
+        {
+          "name": "main.import:start",
+          "ms": 13.756833
+        },
+        {
+          "name": "attach.import:start",
+          "ms": 17.998917
+        },
+        {
+          "name": "main.import:end",
+          "ms": 25.364417
+        },
+        {
+          "name": "attach.import:end",
+          "ms": 28.012
+        },
+        {
+          "name": "attach.function:start",
+          "ms": 28.256542
+        },
+        {
+          "name": "ui.modules:start",
+          "ms": 30.634875
+        },
+        {
+          "name": "transport.connect:start",
+          "ms": 38.771333
+        },
+        {
+          "name": "ui.modules:end",
+          "ms": 67.061083
+        },
+        {
+          "name": "transport.connect:end",
+          "ms": 69.899708
+        },
+        {
+          "name": "clientfiles.open:start",
+          "ms": 69.91
+        },
+        {
+          "name": "clientfiles.open:end",
+          "ms": 70.16475
+        },
+        {
+          "name": "preferences.module:start",
+          "ms": 70.206333
+        },
+        {
+          "name": "preferences.module:end",
+          "ms": 70.511875
+        },
+        {
+          "name": "preferences.read:start",
+          "ms": 70.513375
+        },
+        {
+          "name": "preferences.read:end",
+          "ms": 70.5815
+        },
+        {
+          "name": "view.construct:start",
+          "ms": 70.8045
+        },
+        {
+          "name": "view.construct:end",
+          "ms": 72.666792
+        },
+        {
+          "name": "client.connected:start",
+          "ms": 72.766792
+        },
+        {
+          "name": "rpc:hello:start",
+          "ms": 73.041958
+        },
+        {
+          "name": "rpc:session.current:start",
+          "ms": 76.035333
+        },
+        {
+          "name": "rpc:hello:end",
+          "ms": 76.100167
+        },
+        {
+          "name": "rpc:session.current:end",
+          "ms": 76.70975
+        },
+        {
+          "name": "client.connected:end",
+          "ms": 83.243375
+        },
+        {
+          "name": "rpc:session.create:start",
+          "ms": 83.259458
+        },
+        {
+          "name": "rpc:session.current:start",
+          "ms": 91.171542
+        },
+        {
+          "name": "rpc:messages.read:start",
+          "ms": 91.937083
+        },
+        {
+          "name": "rpc:session.current:end",
+          "ms": 92.084
+        },
+        {
+          "name": "rpc:command.receipt:start",
+          "ms": 92.088375
+        },
+        {
+          "name": "rpc:command.receipt:end",
+          "ms": 93.042625
+        },
+        {
+          "name": "rpc:session.create:end",
+          "ms": 93.044292
+        },
+        {
+          "name": "initial.refresh:start",
+          "ms": 93.046625
+        },
+        {
+          "name": "rpc:messages.read:start",
+          "ms": 93.06075
+        },
+        {
+          "name": "rpc:messages.read:end",
+          "ms": 93.192625
+        },
+        {
+          "name": "draft.flush:start",
+          "ms": 93.193458
+        },
+        {
+          "name": "draft.flush:end",
+          "ms": 93.228917
+        },
+        {
+          "name": "draft.read:start",
+          "ms": 93.229458
+        },
+        {
+          "name": "draft.read:end",
+          "ms": 93.353542
+        },
+        {
+          "name": "rpc:messages.read:end",
+          "ms": 93.482292
+        },
+        {
+          "name": "draft.flush:start",
+          "ms": 93.48375
+        },
+        {
+          "name": "draft.flush:end",
+          "ms": 93.485208
+        },
+        {
+          "name": "draft.read:start",
+          "ms": 93.485708
+        },
+        {
+          "name": "draft.read:end",
+          "ms": 93.551833
+        },
+        {
+          "name": "initial.refresh:end",
+          "ms": 93.738417
+        },
+        {
+          "name": "ready.notice",
+          "ms": 93.739583
+        },
+        {
+          "name": "ui.start:before",
+          "ms": 93.815042
+        },
+        {
+          "name": "ui.start:after",
+          "ms": 94.433583
+        }
+      ]
+    },
+    {
+      "index": 5,
+      "startedAt": "2026-10-23T11:53:43.203Z",
+      "finishedAt": "2026-10-23T11:53:43.486Z",
+      "startupMs": 186.38862500000027,
+      "timeOrigin": 1792756423285.131,
+      "rows": [
+        {
+          "name": "entry-eval",
+          "ms": 13.380084
+        },
+        {
+          "name": "main.import:start",
+          "ms": 13.417959
+        },
+        {
+          "name": "attach.import:start",
+          "ms": 17.075625
+        },
+        {
+          "name": "main.import:end",
+          "ms": 23.388292
+        },
+        {
+          "name": "attach.import:end",
+          "ms": 25.649959
+        },
+        {
+          "name": "attach.function:start",
+          "ms": 25.839542
+        },
+        {
+          "name": "ui.modules:start",
+          "ms": 27.814792
+        },
+        {
+          "name": "transport.connect:start",
+          "ms": 35.321417
+        },
+        {
+          "name": "ui.modules:end",
+          "ms": 61.594792
+        },
+        {
+          "name": "transport.connect:end",
+          "ms": 64.276709
+        },
+        {
+          "name": "clientfiles.open:start",
+          "ms": 64.286042
+        },
+        {
+          "name": "clientfiles.open:end",
+          "ms": 64.546875
+        },
+        {
+          "name": "preferences.module:start",
+          "ms": 64.583459
+        },
+        {
+          "name": "preferences.module:end",
+          "ms": 64.912917
+        },
+        {
+          "name": "preferences.read:start",
+          "ms": 64.914375
+        },
+        {
+          "name": "preferences.read:end",
+          "ms": 64.989625
+        },
+        {
+          "name": "view.construct:start",
+          "ms": 65.211084
+        },
+        {
+          "name": "view.construct:end",
+          "ms": 66.923209
+        },
+        {
+          "name": "client.connected:start",
+          "ms": 67.022875
+        },
+        {
+          "name": "rpc:hello:start",
+          "ms": 67.289417
+        },
+        {
+          "name": "rpc:session.current:start",
+          "ms": 70.3055
+        },
+        {
+          "name": "rpc:hello:end",
+          "ms": 70.370334
+        },
+        {
+          "name": "rpc:session.current:end",
+          "ms": 70.972334
+        },
+        {
+          "name": "client.connected:end",
+          "ms": 77.681959
+        },
+        {
+          "name": "rpc:session.create:start",
+          "ms": 77.687417
+        },
+        {
+          "name": "rpc:session.current:start",
+          "ms": 86.555834
+        },
+        {
+          "name": "rpc:messages.read:start",
+          "ms": 86.928375
+        },
+        {
+          "name": "rpc:session.current:end",
+          "ms": 87.034292
+        },
+        {
+          "name": "rpc:command.receipt:start",
+          "ms": 87.039
+        },
+        {
+          "name": "rpc:command.receipt:end",
+          "ms": 87.497542
+        },
+        {
+          "name": "rpc:session.create:end",
+          "ms": 87.498667
+        },
+        {
+          "name": "initial.refresh:start",
+          "ms": 87.499917
+        },
+        {
+          "name": "rpc:messages.read:start",
+          "ms": 87.509917
+        },
+        {
+          "name": "rpc:messages.read:end",
+          "ms": 87.622667
+        },
+        {
+          "name": "draft.flush:start",
+          "ms": 87.623417
+        },
+        {
+          "name": "draft.flush:end",
+          "ms": 87.651167
+        },
+        {
+          "name": "draft.read:start",
+          "ms": 87.651709
+        },
+        {
+          "name": "rpc:messages.read:end",
+          "ms": 87.745917
+        },
+        {
+          "name": "draft.flush:start",
+          "ms": 87.746917
+        },
+        {
+          "name": "draft.flush:end",
+          "ms": 87.747917
+        },
+        {
+          "name": "draft.read:start",
+          "ms": 87.748334
+        },
+        {
+          "name": "draft.read:end",
+          "ms": 87.777917
+        },
+        {
+          "name": "draft.read:end",
+          "ms": 88.061209
+        },
+        {
+          "name": "initial.refresh:end",
+          "ms": 88.214292
+        },
+        {
+          "name": "ready.notice",
+          "ms": 88.215042
+        },
+        {
+          "name": "ui.start:before",
+          "ms": 88.283625
+        },
+        {
+          "name": "ui.start:after",
+          "ms": 88.77325
+        }
+      ]
+    },
+    {
+      "index": 6,
+      "startedAt": "2026-10-23T11:53:43.689Z",
+      "finishedAt": "2026-10-23T11:53:43.993Z",
+      "startupMs": 208.70724999999993,
+      "timeOrigin": 1792756423779.795,
+      "rows": [
+        {
+          "name": "entry-eval",
+          "ms": 14.256042
+        },
+        {
+          "name": "main.import:start",
+          "ms": 14.293084
+        },
+        {
+          "name": "attach.import:start",
+          "ms": 18.163167
+        },
+        {
+          "name": "main.import:end",
+          "ms": 27.665042
+        },
+        {
+          "name": "attach.import:end",
+          "ms": 30.768334
+        },
+        {
+          "name": "attach.function:start",
+          "ms": 30.989667
+        },
+        {
+          "name": "ui.modules:start",
+          "ms": 33.845542
+        },
+        {
+          "name": "transport.connect:start",
+          "ms": 44.04075
+        },
+        {
+          "name": "ui.modules:end",
+          "ms": 74.226209
+        },
+        {
+          "name": "transport.connect:end",
+          "ms": 77.527334
+        },
+        {
+          "name": "clientfiles.open:start",
+          "ms": 77.540875
+        },
+        {
+          "name": "clientfiles.open:end",
+          "ms": 77.832334
+        },
+        {
+          "name": "preferences.module:start",
+          "ms": 77.877584
+        },
+        {
+          "name": "preferences.module:end",
+          "ms": 78.235917
+        },
+        {
+          "name": "preferences.read:start",
+          "ms": 78.2375
+        },
+        {
+          "name": "preferences.read:end",
+          "ms": 78.325375
+        },
+        {
+          "name": "view.construct:start",
+          "ms": 78.559834
+        },
+        {
+          "name": "view.construct:end",
+          "ms": 80.482084
+        },
+        {
+          "name": "client.connected:start",
+          "ms": 80.62775
+        },
+        {
+          "name": "rpc:hello:start",
+          "ms": 80.994667
+        },
+        {
+          "name": "rpc:session.current:start",
+          "ms": 85.064042
+        },
+        {
+          "name": "rpc:hello:end",
+          "ms": 85.212625
+        },
+        {
+          "name": "rpc:session.current:end",
+          "ms": 85.973459
+        },
+        {
+          "name": "client.connected:end",
+          "ms": 93.973334
+        },
+        {
+          "name": "rpc:session.create:start",
+          "ms": 93.990209
+        },
+        {
+          "name": "rpc:session.current:start",
+          "ms": 104.013542
+        },
+        {
+          "name": "rpc:messages.read:start",
+          "ms": 104.386417
+        },
+        {
+          "name": "rpc:session.current:end",
+          "ms": 104.492375
+        },
+        {
+          "name": "rpc:command.receipt:start",
+          "ms": 104.495709
+        },
+        {
+          "name": "rpc:command.receipt:end",
+          "ms": 104.9485
+        },
+        {
+          "name": "rpc:session.create:end",
+          "ms": 104.949375
+        },
+        {
+          "name": "initial.refresh:start",
+          "ms": 104.950709
+        },
+        {
+          "name": "rpc:messages.read:start",
+          "ms": 104.961042
+        },
+        {
+          "name": "rpc:messages.read:end",
+          "ms": 105.073709
+        },
+        {
+          "name": "draft.flush:start",
+          "ms": 105.0745
+        },
+        {
+          "name": "draft.flush:end",
+          "ms": 105.102917
+        },
+        {
+          "name": "draft.read:start",
+          "ms": 105.103459
+        },
+        {
+          "name": "draft.read:end",
+          "ms": 105.483084
+        },
+        {
+          "name": "rpc:messages.read:end",
+          "ms": 105.535
+        },
+        {
+          "name": "draft.flush:start",
+          "ms": 105.535959
+        },
+        {
+          "name": "draft.flush:end",
+          "ms": 105.537042
+        },
+        {
+          "name": "draft.read:start",
+          "ms": 105.5375
+        },
+        {
+          "name": "draft.read:end",
+          "ms": 105.585167
+        },
+        {
+          "name": "initial.refresh:end",
+          "ms": 105.793167
+        },
+        {
+          "name": "ready.notice",
+          "ms": 105.794292
+        },
+        {
+          "name": "ui.start:before",
+          "ms": 105.870542
+        },
+        {
+          "name": "ui.start:after",
+          "ms": 106.406084
+        }
+      ]
+    }
+  ],
+  "replacements": [
+    {
+      "file": "hikaro.mjs",
+      "from": "#!/usr/bin/env node\n",
+      "to": "#!/usr/bin/env node\nimport {writeFileSync as __phaseWrite} from \"node:fs\";\nglobalThis.__phaseRows=[];\nglobalThis.__mark=(name)=>globalThis.__phaseRows.push({name,ms:performance.now()});\nglobalThis.__span=async(name,work)=>{globalThis.__mark(name+\":start\");try{return await work()}finally{globalThis.__mark(name+\":end\")}};\nglobalThis.__mark(\"entry-eval\");\nprocess.once(\"exit\",()=>__phaseWrite(process.env.HIKARO_PHASE_LOG,JSON.stringify({timeOrigin:performance.timeOrigin,rows:globalThis.__phaseRows})));\n"
+    },
+    {
+      "file": "hikaro.mjs",
+      "from": "await import(\"./chunk-AGGZYPKV.mjs\")",
+      "to": "await globalThis.__span(\"main.import\",()=>import(\"./chunk-AGGZYPKV.mjs\"))"
+    },
+    {
+      "file": "chunk-AGGZYPKV.mjs",
+      "from": "await import(\"./chunk-QQXCA6GQ.mjs\")",
+      "to": "await globalThis.__span(\"attach.import\",()=>import(\"./chunk-QQXCA6GQ.mjs\"))"
+    },
+    {
+      "file": "chunk-QQXCA6GQ.mjs",
+      "from": "async function Qe(f){",
+      "to": "const __request=_.prototype.request;_.prototype.request=function(method,...args){return globalThis.__span(\"rpc:\"+method,()=>__request.apply(this,[method,...args]))};async function Qe(f){globalThis.__mark(\"attach.function:start\");"
+    },
+    {
+      "file": "chunk-QQXCA6GQ.mjs",
+      "from": "Promise.all([import(\"./chunk-SB5LGBMA.mjs\"),import(\"./chunk-QIOU63JP.mjs\")])",
+      "to": "globalThis.__span(\"ui.modules\",()=>Promise.all([import(\"./chunk-SB5LGBMA.mjs\"),import(\"./chunk-QIOU63JP.mjs\")]))"
+    },
+    {
+      "file": "chunk-QQXCA6GQ.mjs",
+      "from": "le.connect({...f,clientId:f.clientId??\"main\"})",
+      "to": "globalThis.__span(\"transport.connect\",()=>le.connect({...f,clientId:f.clientId??\"main\"}))"
+    },
+    {
+      "file": "chunk-QQXCA6GQ.mjs",
+      "from": "H.open(e.endpoint.home,e.endpoint.key,e.scope)",
+      "to": "globalThis.__span(\"clientfiles.open\",()=>H.open(e.endpoint.home,e.endpoint.key,e.scope))"
+    },
+    {
+      "file": "chunk-QQXCA6GQ.mjs",
+      "from": "await import(\"./chunk-OFGZJPO5.mjs\")",
+      "to": "await globalThis.__span(\"preferences.module\",()=>import(\"./chunk-OFGZJPO5.mjs\"))"
+    },
+    {
+      "file": "chunk-QQXCA6GQ.mjs",
+      "from": "w.preferences()",
+      "to": "globalThis.__span(\"preferences.read\",()=>w.preferences())"
+    },
+    {
+      "file": "chunk-QQXCA6GQ.mjs",
+      "from": "te=\"\";d=new u",
+      "to": "te=\"\";globalThis.__mark(\"view.construct:start\");d=new u"
+    },
+    {
+      "file": "chunk-QQXCA6GQ.mjs",
+      "from": "}),P=new I(i,d,e.endpoint.cwd)",
+      "to": "}),globalThis.__mark(\"view.construct:end\"),P=new I(i,d,e.endpoint.cwd)"
+    },
+    {
+      "file": "chunk-QQXCA6GQ.mjs",
+      "from": "try{await i.connected(),f.session",
+      "to": "try{await globalThis.__span(\"client.connected\",()=>i.connected()),f.session"
+    },
+    {
+      "file": "chunk-QQXCA6GQ.mjs",
+      "from": "await x(),d.notice(\"Attached to shared host.",
+      "to": "await globalThis.__span(\"initial.refresh\",()=>x()),globalThis.__mark(\"ready.notice\"),d.notice(\"Attached to shared host."
+    },
+    {
+      "file": "chunk-QQXCA6GQ.mjs",
+      "from": "h&&(await O.flush(),l=await w.draft(a))",
+      "to": "h&&(await globalThis.__span(\"draft.flush\",()=>O.flush()),l=await globalThis.__span(\"draft.read\",()=>w.draft(a)))"
+    },
+    {
+      "file": "chunk-QQXCA6GQ.mjs",
+      "from": "v.start(),d.startTheme()",
+      "to": "globalThis.__mark(\"ui.start:before\"),v.start(),globalThis.__mark(\"ui.start:after\"),d.startTheme()"
+    }
+  ],
+  "limitations": [
+    "Diagnostic only: six instrumented launches, no warmup percentile or gate.",
+    "Original host and isolated copied client dist; current product dist is unchanged.",
+    "Timing wrappers add promises and an in-memory trace; trace JSON writes only at process exit.",
+    "Client fresh data home and empty compile cache per launch, same workspace. No input latency samples.",
+    "Concurrent user applications remain active; timing attribution identifies observed phases, not uncontended performance."
+  ]
+}
