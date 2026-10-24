@@ -29,6 +29,7 @@ import {
   Planning,
   questionsSchema,
   proposalSchema,
+  stepStatusSchema,
   type Questions,
 } from "./planning.ts";
 import type { Tool } from "../../core/src/types.ts";
@@ -404,6 +405,31 @@ export class Runtime {
           return {
             text: `Plan saved for review (${plan.id}). End this turn; remain read-only until the user confirms.`,
             data: { plan },
+          };
+        },
+      });
+      runtime.tools.register({
+        name: "update_plan_step",
+        description:
+          "Report the status of one step of the approved plan while executing it. Call when a step starts and when it completes, is blocked or is skipped. This records your report for the user; it does not verify the work.",
+        schema: z.object({
+          plan_id: z.string().uuid(),
+          step: z.number().int().min(1).max(12),
+          status: stepStatusSchema,
+          note: z.string().min(1).max(500).optional(),
+        }),
+        execute: async ({ plan_id, step, status, note }, ctx) => {
+          await ctx.checkpoint?.();
+          await runtime.planning.load(ctx.sessionId, true);
+          const progress = await runtime.planning.updateStep(ctx.sessionId, {
+            planId: plan_id,
+            step,
+            status,
+            ...(note ? { note } : {}),
+          });
+          return {
+            text: `Step ${step} of ${progress.steps.length} recorded as ${status}.`,
+            data: { progress },
           };
         },
       });

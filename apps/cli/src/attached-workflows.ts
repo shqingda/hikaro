@@ -16,10 +16,12 @@ import {
   answerQuestion,
   reviewPlan,
   browsePlanHistory,
+  browsePlanProgress,
 } from "../../../packages/tui/src/planning.ts";
 import type { FileChange } from "../../../packages/tools/src/changes.ts";
 import type {
   Plan,
+  PlanProgress,
   Questions,
 } from "../../../packages/runtime/src/planning.ts";
 import type { ExecutionItem } from "../../../packages/runtime/src/execution-items.ts";
@@ -252,6 +254,17 @@ export class AttachedWorkflows {
     if (command === "/plan") {
       this.modal = "plan";
       try {
+        if (arg === "progress") {
+          await browsePlanProgress(this.view, async () => {
+            const state = await this.request<{
+              progress?: PlanProgress | null;
+            }>("plan.read", id);
+            if (state.progress === undefined)
+              throw Error("Upgrade the host to read plan progress.");
+            return state.progress;
+          });
+          return;
+        }
         if (arg === "history") {
           if (
             !this.client.supports("plan.history") ||

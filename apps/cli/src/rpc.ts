@@ -1,6 +1,6 @@
 import * as z from "zod";
 import { RpcWorkflows } from "./rpc-workflows.ts";
-import { planText } from "../../../packages/runtime/src/planning.ts";
+import { planExecutionPrompt } from "../../../packages/runtime/src/planning.ts";
 import { commandDigest, isMutation } from "./rpc-receipts.ts";
 import { randomUUID } from "node:crypto";
 import type { Readable, Writable } from "node:stream";
@@ -882,7 +882,7 @@ export async function serveRpc(
             );
             requireSameSelection();
             requireUncancelled();
-            p.text = `The user reviewed and approved plan ${approved.id}. Execute and verify:\n${planText(approved)}`;
+            p.text = planExecutionPrompt(approved);
           }
         case "prompt": {
           if (!state.agent || !state.session)

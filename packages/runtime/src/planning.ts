@@ -25,13 +25,46 @@ export const proposalSchema = z.object({
   validation: z.string().min(1).max(4000),
 });
 const planSchema = proposalSchema.extend({ id: z.string().uuid() });
+export const stepStatusSchema = z.enum([
+  "pending",
+  "in_progress",
+  "completed",
+  "blocked",
+  "skipped",
+]);
+export const stepUpdateSchema = z.object({
+  planId: z.string().uuid(),
+  step: z.number().int().min(1).max(12),
+  status: stepStatusSchema,
+  note: z.string().min(1).max(500).optional(),
+});
+const progressSchema = z.object({
+  planId: z.string().uuid(),
+  steps: z.array(
+    z.object({
+      status: stepStatusSchema,
+      note: z.string().max(500).optional(),
+    }),
+  ),
+});
 const stateSchema = z.object({
   active: z.boolean(),
   plan: planSchema.optional(),
   versions: z.array(z.string().uuid()).default([]),
   incomplete: z.boolean().default(false),
+  progress: progressSchema.optional(),
 });
 export type Plan = z.infer<typeof planSchema>;
+/** Step status as reported by the model; it is not independent verification. */
+export type PlanProgress = {
+  planId: string;
+  title: string;
+  steps: Array<{
+    text: string;
+    status: z.infer<typeof stepStatusSchema>;
+    note?: string;
+  }>;
+};
 export type PlanHistory = {
   items: Array<{ id: string; title: string; revision: number }>;
   nextBefore: number | null;
@@ -87,6 +120,37 @@ export class Planning {
       active: value.active,
       ...(value.plan ? { plan: value.plan } : {}),
     });
+  }
+  progress(session: string): PlanProgress | null {
+    const value = this.states.get(session);
+    if (!value) throw Error("Planning state not loaded");
+    const { plan, progress } = value;
+    if (value.active || !plan || progress?.planId !== plan.id) return null;
+    return {
+      planId: plan.id,
+      title: plan.title,
+      steps: plan.steps.map((text, index) => ({
+        text,
+        ...structuredClone(progress.steps[index]!),
+      })),
+    };
+  }
+  async updateStep(session: string, update: z.infer<typeof stepUpdateSchema>) {
+    const { planId, step, status, note } = stepUpdateSchema.parse(update);
+    const state = this.states.get(session);
+    if (!state) throw Error("Planning state not loaded");
+    if (state.active || !state.plan || state.progress?.planId !== state.plan.id)
+      throw Error("No approved plan is executing in this session");
+    if (state.plan.id !== planId)
+      throw Error("Plan changed; report progress for the approved plan only");
+    if (step > state.plan.steps.length)
+      throw Error(
+        `Plan has ${state.plan.steps.length} steps; step ${step} does not exist`,
+      );
+    const steps = structuredClone(state.progress.steps);
+    steps[step - 1] = { status, ...(note ? { note } : {}) };
+    await this.save(session, { ...state, progress: { planId, steps } });
+    return this.progress(session)!;
   }
   async removeSession(session: string) {
     this.writes.set(session, (this.writes.get(session) ?? 0) + 1);
@@ -190,7 +254,12 @@ export class Planning {
   }
   async setActive(session: string, active: boolean) {
     const state = await this.preserve(session);
-    await this.save(session, { ...state, active, plan: undefined });
+    await this.save(session, {
+      ...state,
+      active,
+      plan: undefined,
+      progress: undefined,
+    });
   }
   async propose(session: string, proposal: z.infer<typeof proposalSchema>) {
     if (!this.get(session).active)
@@ -203,6 +272,7 @@ export class Planning {
       active: true,
       plan,
       versions: [...state.versions, plan.id],
+      progress: undefined,
     });
     return plan;
   }
@@ -211,8 +281,16 @@ export class Planning {
     if (!state.active || state.plan?.id !== id)
       throw Error("Plan changed; review the current version before executing");
     const saved = await this.preserve(session);
-    await this.save(session, { ...saved, active: false, plan: state.plan });
+    await this.save(session, {
+      ...saved,
+      active: false,
+      plan: state.plan,
+      progress: {
+        planId: id,
+        steps: state.plan.steps.map(() => ({ status: "pending" as const })),
+      },
+    });
     return state.plan;
   }
 }
-export { planText } from "./plan-text.ts";
+export { planText, planExecutionPrompt } from "./plan-text.ts";

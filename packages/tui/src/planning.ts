@@ -1,5 +1,9 @@
 import { planText } from "../../runtime/src/plan-text.ts";
-import type { Plan, Questions } from "../../runtime/src/planning.ts";
+import type {
+  Plan,
+  PlanProgress,
+  Questions,
+} from "../../runtime/src/planning.ts";
 import type { HikaroView } from "./index.ts";
 import type { QuestionDraftSaver } from "./question-drafts.ts";
 export async function askQuestions(
@@ -294,6 +298,59 @@ export async function browsePlanHistory(
         planText(plan),
         [],
       );
+    }
+  } catch (error) {
+    if (!signal.aborted) view.setError(String(error));
+  } finally {
+    close();
+  }
+}
+
+const stepMarks = {
+  pending: "○ Pending",
+  in_progress: "◐ In progress",
+  completed: "✓ Completed",
+  blocked: "! Blocked",
+  skipped: "– Skipped",
+} as const;
+
+export function planProgressText(progress: PlanProgress) {
+  const done = progress.steps.filter(
+    (step) => step.status === "completed",
+  ).length;
+  return `${progress.title}\n${done}/${progress.steps.length} steps reported completed\n\n${progress.steps
+    .map(
+      (step, index) =>
+        `${index + 1}. ${stepMarks[step.status]} · ${step.text}${step.note ? `\n   ${step.note}` : ""}`,
+    )
+    .join(
+      "\n\n",
+    )}\n\nStatus is reported by the model while executing; check /changes and tests for actual results.`;
+}
+
+/** Read-only progress of the approved plan; refreshing never resumes execution. */
+export async function browsePlanProgress(
+  view: HikaroView,
+  read: () => Promise<PlanProgress | null>,
+) {
+  const { panel, signal, close } = view.openModelPanel();
+  try {
+    for (;;) {
+      panel.progress("Loading plan progress…");
+      const progress = await read();
+      signal.throwIfAborted();
+      if (!progress) {
+        view.notice(
+          "No approved plan in this session. Use /plan to review and approve one.",
+        );
+        return;
+      }
+      const choice = await panel.readDocument(
+        "Plan progress · reported by the model",
+        planProgressText(progress),
+        [{ value: "refresh", label: "Refresh" }],
+      );
+      if (choice.value !== "refresh") return;
     }
   } catch (error) {
     if (!signal.aborted) view.setError(String(error));

@@ -258,7 +258,10 @@ export class RpcWorkflows {
         );
       case "plan.read":
         await this.runtime.planning.load(session.id, true);
-        return this.runtime.planning.get(session.id);
+        return {
+          ...this.runtime.planning.get(session.id),
+          progress: this.runtime.planning.progress(session.id),
+        };
       case "plan.set":
         await this.runtime.setPlanning(session, z.boolean().parse(p.active));
         return this.runtime.planning.get(session.id);

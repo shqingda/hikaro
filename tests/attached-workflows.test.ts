@@ -413,3 +413,118 @@ function deferred<T>() {
   });
   return { promise, resolve };
 }
+
+it.each([
+  ["current host", true],
+  ["older host", false],
+] as const)(
+  "reads approved plan progress from the %s without entering Plan mode",
+  async (_label, current) => {
+    let panel: ModelPanel | undefined, controller: AbortController | undefined;
+    const request = vi.fn(async (method: string) => {
+      if (method !== "plan.read") return null;
+      return current
+        ? {
+            active: false,
+            progress: {
+              planId: randomUUID(),
+              title: "Attached plan",
+              steps: [
+                { text: "Edit file", status: "completed", note: "Done" },
+                { text: "Run tests", status: "in_progress" },
+              ],
+            },
+          }
+        : { active: false };
+    });
+    const client = {
+      state: { canAct: true, session: { id: "session" }, busy: true },
+      request,
+      supports: () => true,
+    } as unknown as ClientConnection;
+    const setError = vi.fn();
+    const view = {
+      openModelPanel() {
+        const next = new AbortController();
+        controller = next;
+        panel = new ModelPanel(next.signal, () => {});
+        return { panel, signal: next.signal, close: () => next.abort() };
+      },
+      closeModelPanel: () => controller?.abort(),
+      notice: vi.fn(),
+      setError,
+      setPermissionLabel: vi.fn(),
+    } as unknown as HikaroView;
+    const workflows = new AttachedWorkflows(client, view, "/tmp");
+    try {
+      const command = workflows.command("/plan", "progress");
+      await vi.waitFor(() =>
+        expect(request.mock.calls.some(([m]) => m === "plan.read")).toBe(true),
+      );
+      if (current) {
+        const screen = () =>
+          stripVTControlCharacters(panel!.render(110).join("\n"));
+        await vi.waitFor(() =>
+          expect(screen()).toContain("1/2 steps reported completed"),
+        );
+        expect(screen()).toContain("◐ In progress · Run tests");
+        panel!.handleInput("\r");
+      }
+      await command;
+      if (!current)
+        expect(String(setError.mock.calls[0]?.[0])).toContain(
+          "Upgrade the host to read plan progress",
+        );
+      else expect(setError).not.toHaveBeenCalled();
+      expect(
+        request.mock.calls.filter(([m]) => m === "plan.set" || m === "prompt"),
+      ).toEqual([]);
+    } finally {
+      workflows.close();
+    }
+  },
+);
+
+it("returns approved plan progress from the shared host plan.read", async () => {
+  const home = await realpath(
+    await mkdtemp(join(tmpdir(), "hikaro-plan-progress-rpc-")),
+  );
+  const runtime = await Runtime.open({
+    home,
+    cwd: home,
+    demo: true,
+    approve: async () => true,
+  });
+  const workflows = new RpcWorkflows(runtime);
+  try {
+    const session = await runtime.session();
+    const agent = await runtime.agent(session);
+    const read = async () =>
+      (
+        (await workflows.handle("plan.read", {}, session, agent, "one")) as {
+          progress: unknown;
+        }
+      ).progress;
+    await runtime.setPlanning(session, true);
+    const plan = await runtime.planning.propose(session.id, {
+      title: "Host plan",
+      steps: ["One"],
+      validation: "Check",
+    });
+    expect(await read()).toBeNull();
+    await runtime.approvePlan(session, plan.id);
+    await runtime.planning.updateStep(session.id, {
+      planId: plan.id,
+      step: 1,
+      status: "completed",
+    });
+    expect(await read()).toMatchObject({
+      planId: plan.id,
+      steps: [{ text: "One", status: "completed" }],
+    });
+  } finally {
+    workflows.close();
+    await runtime.close();
+    await rm(home, { recursive: true, force: true });
+  }
+});
