@@ -1090,6 +1090,34 @@ export class Agent implements AgentBackend {
         let delta = "";
         let thinking = "";
         let lastFlush = performance.now();
+        // Coalesce deltas for at most 24 ms. A timer flushes text that would
+        // otherwise wait for the next provider event when the stream pauses.
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        let emitted: Promise<void> = Promise.resolve();
+        const flush = () => {
+          clearTimeout(timer);
+          timer = undefined;
+          emitted = emitted.then(async () => {
+            if (thinking) {
+              const text = thinking;
+              thinking = "";
+              await this.emit("thinking.delta", { text });
+            }
+            if (delta) {
+              const text = delta;
+              delta = "";
+              await this.emit("text.delta", { text });
+            }
+            lastFlush = performance.now();
+          });
+          return emitted;
+        };
+        const schedule = () => {
+          const waited = performance.now() - lastFlush;
+          if (waited >= 24) return flush();
+          timer ??= setTimeout(() => void flush().catch(() => {}), 24 - waited);
+          return emitted;
+        };
         await this.checkExecution(signal);
         // Child agents share this budget. Recheck after the last await so only
         // one request can consume the final call, without charging failed fits.
@@ -1098,40 +1126,37 @@ export class Agent implements AgentBackend {
         if (this.budget.modelCallsLeft <= 0)
           throw Error("Shared model-call budget exhausted");
         this.budget.modelCallsLeft--;
-        for await (const event of this.options.provider.stream({
-          system,
-          messages: context.messages,
-          tools,
-          signal,
-          sessionId: this.options.session.id,
-        })) {
-          if (event.type === "text") {
-            if (thinking) {
-              await this.emit("thinking.delta", { text: thinking });
-              thinking = "";
+        try {
+          for await (const event of this.options.provider.stream({
+            system,
+            messages: context.messages,
+            tools,
+            signal,
+            sessionId: this.options.session.id,
+          })) {
+            if (event.type === "text") {
+              // Keep thinking before the text that follows it.
+              if (thinking) await flush();
+              delta += event.text;
+              await schedule();
+            } else if (event.type === "thinking") {
+              if (delta) await flush();
+              thinking += event.text;
+              await schedule();
+            } else if (event.type === "done") {
+              final = event.message;
+              this.usage.input += event.usage.input;
+              this.usage.output += event.usage.output;
+              this.usage.cost += event.usage.cost;
             }
-            delta += event.text;
-            if (performance.now() - lastFlush >= 24) {
-              await this.emit("text.delta", { text: delta });
-              delta = "";
-              lastFlush = performance.now();
-            }
-          } else if (event.type === "thinking") {
-            thinking += event.text;
-            if (performance.now() - lastFlush >= 24) {
-              await this.emit("thinking.delta", { text: thinking });
-              thinking = "";
-              lastFlush = performance.now();
-            }
-          } else if (event.type === "done") {
-            final = event.message;
-            this.usage.input += event.usage.input;
-            this.usage.output += event.usage.output;
-            this.usage.cost += event.usage.cost;
           }
+        } finally {
+          clearTimeout(timer);
+          timer = undefined;
+          // A timer flush already in progress must finish before the run ends.
+          await emitted.catch(() => {});
         }
-        if (delta) await this.emit("text.delta", { text: delta });
-        if (thinking) await this.emit("thinking.delta", { text: thinking });
+        await flush();
         signal.throwIfAborted();
         if (!final) throw Error("Provider ended without a final message");
         await this.message(final);

@@ -20,3 +20,9 @@ fixture 将回复拆成两段，发送间隔为 32 ms。原 `prompt()` 等待完
 ## 整合检查
 
 2026-10-24 11:12（Asia/Taipei）在 HEAD `d2611d7` 加本修正上运行 `pnpm check`，退出码 0：113 个应用测试文件、604 项测试全部通过，15 项 Node 脚本检查通过，根类型检查与 CLI 构建通过。日志 `/tmp/hikaro-check-20261024-pty-fixture.log`。单次全量通过不证明时序竞争已在所有负载下消失；上文强制 0 ms 时序的 RED/GREEN 才是本修正的主要证据。
+
+## 产品修复：流停顿时文本不显示（2026-10-24）
+
+PR CI 中 `pty.test.ts` 的取消用例两次在 `cancel-stream-started` 等待处超时。原因与上文同源：core 合并文本增量时，若距上次输出不足 24 ms，就只在“下一个事件”或流结束时输出。模型发出一段文字后停顿（等待工具、思考或网络延迟）时，这段文字会一直不显示。上文只修了 fixture，没有修正产品行为。
+
+现在缓冲时会安排一个计时器，最多 24 ms 后刷新；所有刷新经同一条 promise 链按序输出，thinking 与正文的先后顺序不变；流结束或出错时清除计时器，并等待正在进行的刷新完成，避免在运行结束后才输出。`tests/stream-coalescing.test.ts`：模型连续发两段后停住，修复前停顿期间显示为空，修复后显示完整的 `first second`。`pnpm check`：118 个文件、622 项测试通过，日志 `/tmp/hikaro-check-20261024-stream-flush.log`。另一项 `question-recovery-pty` 只在旧提交 `fac6350` 的 Linux 任务中失败过一次，之后的提交未再出现，本轮未改动。
