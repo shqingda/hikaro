@@ -206,6 +206,7 @@ export class Runtime {
       state: string;
       exitCode?: number;
       output: string;
+      processNote?: string;
     }
   >();
   private persistTerminal(id: string) {
@@ -221,6 +222,7 @@ export class Runtime {
         state: detail.state,
         exitCode: detail.exitCode,
         output: detail.output,
+        processNote: detail.processNote,
       })
       .catch(() => {});
   }
@@ -245,6 +247,9 @@ export class Runtime {
         exitSignal: undefined as number | undefined,
         cleanup: "not requested",
         stopError: undefined as string | undefined,
+        processNote: row.processNote
+          ? `Historical observation: ${row.processNote}`
+          : undefined,
         // Without an observed exit, the process outcome is unknown.
         state: row.state === "exited" ? "exited" : "unknown after host restart",
         restored: true,

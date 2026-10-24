@@ -3,8 +3,10 @@ import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import type { Plugin, ToolContext } from "../../core/src/types.ts";
 import type { IPty } from "node-pty";
+import { TerminalProcesses } from "./terminal-processes.ts";
 type TerminalRecord = {
   pty: IPty;
+  processes: TerminalProcesses;
   owner: string;
   command: string;
   output: string;
@@ -15,6 +17,7 @@ type TerminalRecord = {
   exitCode?: number;
   exitSignal?: number;
   cleanupConfirmed?: boolean;
+  groupGone?: boolean;
   stopError?: string;
   stopTask?: Promise<void>;
 };
@@ -57,12 +60,17 @@ export class TerminalManager {
             ? "pending"
             : "not requested",
       stopError: t.stopError,
+      processNote: t.processes.note,
       state: t.stopError
         ? "stop_failed"
         : t.stopping && !t.cleanupConfirmed
           ? "stopping"
           : t.exitCode !== undefined
-            ? "exited"
+            ? t.processes.survivors.length
+              ? "descendants_running"
+              : t.processes.unresolved
+                ? "descendants_unknown"
+                : "exited"
             : "running",
     };
   }
@@ -75,12 +83,12 @@ export class TerminalManager {
   }
   stop(owner: string, id: string) {
     const t = this.find(owner, id);
-    if (
-      t.stopTask ||
-      t.cleanupConfirmed ||
-      (t.exitCode !== undefined && !t.stopping)
-    )
+    if (t.stopTask) return;
+    if (t.cleanupConfirmed || (t.exitCode !== undefined && !t.stopping)) {
+      // A completed group must never be signaled again using a recycled PGID.
+      void t.processes.sample();
       return;
+    }
     t.stopping = true;
     t.stopError = undefined;
     t.stopTask = this.stopGroup(t)
@@ -98,13 +106,18 @@ export class TerminalManager {
     const pid = t.pty.pid;
     if (process.platform === "win32" || pid <= 1)
       throw Error("Cannot safely stop this terminal process group");
+    await t.processes.sample();
     const signal = (value: NodeJS.Signals | 0) => {
+      if (t.groupGone) return false;
       try {
         process.kill(-pid, value);
         return true;
       } catch (error) {
         const code = (error as NodeJS.ErrnoException).code;
-        if (code === "ESRCH") return false;
+        if (code === "ESRCH") {
+          t.groupGone = true;
+          return false;
+        }
         // EPERM on an existence probe does not prove that the group is gone.
         // Keep waiting; actual termination signals must still report errors.
         if (value === 0 && code === "EPERM") return true;
@@ -128,14 +141,19 @@ export class TerminalManager {
         );
     }
     t.cleanupConfirmed = true;
+    await t.processes.sample();
   }
   prune() {
     const exited = [...this.records].filter(
       ([, t]) =>
-        t.exitCode !== undefined && (!t.stopping || t.cleanupConfirmed),
+        t.exitCode !== undefined &&
+        (!t.stopping || t.cleanupConfirmed) &&
+        !t.processes.unresolved,
     );
-    for (const [id] of exited.slice(0, Math.max(0, exited.length - 32)))
+    for (const [id, t] of exited.slice(0, Math.max(0, exited.length - 32))) {
+      void t.processes.close();
       this.records.delete(id);
+    }
   }
 }
 export function terminalPlugin(
@@ -165,7 +183,9 @@ export function terminalPlugin(
           if (
             [...terminals.values()].filter(
               (t) =>
-                t.exitCode === undefined || (t.stopping && !t.cleanupConfirmed),
+                t.exitCode === undefined ||
+                (t.stopping && !t.cleanupConfirmed) ||
+                t.processes.unresolved,
             ).length >= 8
           )
             throw Error("Terminal concurrency limit reached");
@@ -214,6 +234,9 @@ export function terminalPlugin(
             previewDropped: 0,
             stopping: false,
             pty,
+            processes: new TerminalProcesses(pty.pid, () =>
+              manager.changed(id),
+            ),
             owner: ctx.sessionId,
             output: "",
             dropped: 0,
@@ -237,8 +260,9 @@ export function terminalPlugin(
             term.exitCode = event.exitCode;
             term.exitSignal = event.signal;
             manager.changed(id);
-            manager.prune();
+            void term.processes.sample().then(() => manager.prune());
           });
+          await term.processes.sample();
           return {
             text: `Terminal ${id} started. Read output with terminal_read; stop it explicitly when finished.`,
             data: { id },
@@ -256,6 +280,7 @@ export function terminalPlugin(
           t.output = "";
           const dropped = t.dropped;
           t.dropped = 0;
+          const detail = manager.detail(ctx.sessionId, id);
           const result = {
             text:
               (dropped ? `[${dropped} earlier characters omitted]\n` : "") +
@@ -263,9 +288,10 @@ export function terminalPlugin(
             data: {
               id,
               exitCode: t.exitCode,
-              running: manager.detail(ctx.sessionId, id).state !== "exited",
-              state: manager.detail(ctx.sessionId, id).state,
-              cleanup: manager.detail(ctx.sessionId, id).cleanup,
+              running: detail.state !== "exited",
+              state: detail.state,
+              cleanup: detail.cleanup,
+              processNote: detail.processNote,
               stopError: t.stopError,
               exitSignal: t.exitSignal,
               dropped,
@@ -299,6 +325,7 @@ export function terminalPlugin(
         const pending = [...terminals.entries()];
         for (const [id, t] of pending) manager.stop(t.owner, id);
         await Promise.all(pending.map(([, t]) => t.stopTask));
+        await Promise.all(pending.map(([, t]) => t.processes.close()));
         for (const [id, t] of pending) {
           if (t.stopError)
             console.error(`Terminal ${id} cleanup failed: ${t.stopError}`);

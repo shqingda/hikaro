@@ -10,6 +10,10 @@ export async function buildSecureFileHelper() {
   await buildHelper("secure-file", "secure file");
 }
 
+export async function buildProcessSnapshotHelper() {
+  await buildHelper("process-snapshot", "process snapshot");
+}
+
 async function buildHelper(name, description) {
   const source = fileURLToPath(
     new URL(`../packages/tools/native/${name}.c`, import.meta.url),

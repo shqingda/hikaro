@@ -67,7 +67,7 @@ export function executionItems(
       title: t.command,
       state:
         t.state + (t.exitCode === undefined ? "" : ` · exit ${t.exitCode}`),
-      detail: `${t.restored ? "Saved by an earlier host. This process was not stopped or verified after restart.\n" : ""}Command: ${t.command}\nState: ${t.state} · exit code: ${t.exitCode ?? "pending"}\nCleanup: ${t.cleanup}${t.exitSignal ? ` · signal ${t.exitSignal}` : ""}${t.stopError ? `\n${t.stopError}` : ""}\n${t.dropped ? `[${t.dropped} earlier characters omitted]\n` : ""}${t.output || "No output yet."}`,
+      detail: `${t.restored ? "Saved by an earlier host. This process was not stopped or verified after restart.\n" : ""}Command: ${t.command}\nState: ${t.state} · exit code: ${t.exitCode ?? "pending"}\nCleanup: ${t.cleanup}${t.exitSignal ? ` · signal ${t.exitSignal}` : ""}${t.stopError ? `\n${t.stopError}` : ""}${t.processNote ? `\n${t.processNote}` : ""}\n${t.dropped ? `[${t.dropped} earlier characters omitted]\n` : ""}${t.output || "No output yet."}`,
       actions:
         t.state === "running"
           ? [

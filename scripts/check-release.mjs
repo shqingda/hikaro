@@ -125,7 +125,11 @@ try {
   });
   await new Promise((done, reject) => {
     let output = "",
-      ready = false;
+      ready = false,
+      observed = false;
+    const exitWhenReady = () => {
+      if (ready && observed) terminal.write("\x04");
+    };
     const timer = setTimeout(() => {
       terminal.kill();
       reject(
@@ -139,14 +143,38 @@ try {
       output = (output + data).slice(-16000);
       if (!ready && stripVTControlCharacters(output).includes("/help")) {
         ready = true;
-        terminal.write("\x04");
+        exitWhenReady();
       }
     });
     terminal.onExit(({ exitCode }) => {
       clearTimeout(timer);
-      if (ready && exitCode === 0) done();
-      else reject(Error(`Installed TUI exit=${exitCode}, ready=${ready}`));
+      if (ready && observed && exitCode === 0) done();
+      else
+        reject(
+          Error(
+            `Installed TUI exit=${exitCode}, ready=${ready}, observed=${observed}`,
+          ),
+        );
     });
+    void exec(
+      join(prefix, "node_modules/hikaro/dist/process-snapshot-helper"),
+      [`${terminal.pid}:0:0`],
+      { cwd: workspace, timeout: 5000 },
+    )
+      .then(({ stdout }) => {
+        const observation = JSON.parse(stdout);
+        assert.equal(observation.supported, true);
+        assert.ok(
+          observation.processes.some((row) => row.pid === terminal.pid),
+        );
+        observed = true;
+        exitWhenReady();
+      })
+      .catch((error) => {
+        clearTimeout(timer);
+        terminal.kill();
+        reject(error);
+      });
   });
   const recovery = await verifyReleaseRecovery({ bin, spawn, home, workspace });
   const report = {
@@ -167,6 +195,7 @@ try {
       "installed bin version",
       "installed bin demo prompt",
       "packaged native file helper read",
+      "packaged process helper observes owned PTY identity",
       "installed node-pty TUI startup and clean exit",
       ...recovery,
     ],

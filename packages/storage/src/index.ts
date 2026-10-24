@@ -150,6 +150,7 @@ export class SQLiteStore implements EventStore {
     state: string;
     exitCode?: number;
     output: string;
+    processNote?: string;
   }) {
     return this.request<void>("saveTerminalRecord", record);
   }
@@ -162,6 +163,7 @@ export class SQLiteStore implements EventStore {
         state: string;
         exitCode?: number;
         output: string;
+        processNote?: string;
         createdAt: number;
       }>
     >("terminalRecords", { owner });

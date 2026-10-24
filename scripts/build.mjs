@@ -1,9 +1,13 @@
 import { build } from "esbuild";
 import { mkdir, copyFile, chmod, readdir, unlink } from "node:fs/promises";
-import { buildSecureFileHelper } from "./build-native.mjs";
+import {
+  buildSecureFileHelper,
+  buildProcessSnapshotHelper,
+} from "./build-native.mjs";
 import { cliBuildOptions } from "./build-options.mjs";
 import { copyStorageWorker } from "./build-storage.mjs";
 await buildSecureFileHelper();
+await buildProcessSnapshotHelper();
 await mkdir("dist", { recursive: true });
 const result = await build(cliBuildOptions());
 await copyStorageWorker("dist");
@@ -12,6 +16,11 @@ await copyFile(
   "dist/secure-file-helper",
 );
 await chmod("dist/secure-file-helper", 0o755);
+await copyFile(
+  "packages/tools/src/process-snapshot-helper",
+  "dist/process-snapshot-helper",
+);
+await chmod("dist/process-snapshot-helper", 0o755);
 await copyFile(
   "packages/tools/src/sandbox-runner.mjs",
   "dist/sandbox-runner.mjs",

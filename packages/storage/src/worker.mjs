@@ -63,7 +63,7 @@ CREATE TABLE IF NOT EXISTS rpc_commands(workspace TEXT NOT NULL,scope TEXT NOT N
 CREATE TABLE IF NOT EXISTS commands(id TEXT PRIMARY KEY,sessionId TEXT NOT NULL,createdAt INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS child_tasks(id TEXT PRIMARY KEY,parentId TEXT NOT NULL,task TEXT NOT NULL,state TEXT NOT NULL,output TEXT NOT NULL,createdAt INTEGER NOT NULL,updatedAt INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS child_task_parent ON child_tasks(parentId,createdAt);
-CREATE TABLE IF NOT EXISTS terminal_records(id TEXT PRIMARY KEY,owner TEXT NOT NULL,command TEXT NOT NULL,state TEXT NOT NULL,exitCode INTEGER,output TEXT NOT NULL,createdAt INTEGER NOT NULL,updatedAt INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS terminal_records(id TEXT PRIMARY KEY,owner TEXT NOT NULL,command TEXT NOT NULL,state TEXT NOT NULL,exitCode INTEGER,output TEXT NOT NULL,processNote TEXT,createdAt INTEGER NOT NULL,updatedAt INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS terminal_record_owner ON terminal_records(owner,createdAt);`);
   db.exec(`CREATE TABLE IF NOT EXISTS shared_hosts(workspace TEXT PRIMARY KEY,instanceId TEXT NOT NULL,pid INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS session_access(workspace TEXT NOT NULL,sessionId TEXT NOT NULL,scope TEXT NOT NULL,role TEXT NOT NULL,PRIMARY KEY(workspace,sessionId,scope)) WITHOUT ROWID;
@@ -74,6 +74,12 @@ CREATE TABLE IF NOT EXISTS client_views(workspace TEXT NOT NULL,scope TEXT NOT N
       .some((column) => column.name === "epoch")
   )
     db.exec("ALTER TABLE leases ADD COLUMN epoch INTEGER NOT NULL DEFAULT 0");
+  if (
+    !prepare("PRAGMA table_info(terminal_records)")
+      .all()
+      .some((column) => column.name === "processNote")
+  )
+    db.exec("ALTER TABLE terminal_records ADD COLUMN processNote TEXT");
   db.exec("COMMIT");
 } catch (error) {
   db.exec("ROLLBACK");

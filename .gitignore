@@ -9,6 +9,8 @@ coverage/
 *.tsbuildinfo
 packages/tools/src/secure-file-helper
 packages/tools/src/secure-file-helper.*
+packages/tools/src/process-snapshot-helper
+packages/tools/src/process-snapshot-helper.*
 artifacts/
 
 apps/mobile/.expo/
