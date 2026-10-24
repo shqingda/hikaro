@@ -172,6 +172,60 @@ export class Runtime {
     return executionHistoryDetail(this.store, sessionId, id, snapshot);
   }
   readonly terminals = new TerminalManager();
+  private restoredTerminals = new Map<
+    string,
+    {
+      id: string;
+      owner: string;
+      command: string;
+      state: string;
+      exitCode?: number;
+      output: string;
+    }
+  >();
+  private persistTerminal(id: string) {
+    const record = this.terminals.records.get(id);
+    if (!record) return;
+    const detail = this.terminals.detail(record.owner, id);
+    // Best effort: a lost history row must not affect the live terminal.
+    void this.store
+      .saveTerminalRecord({
+        id,
+        owner: record.owner,
+        command: detail.command,
+        state: detail.state,
+        exitCode: detail.exitCode,
+        output: detail.output,
+      })
+      .catch(() => {});
+  }
+  async loadTerminals(owner: string) {
+    const rows = await this.store.terminalRecords(owner);
+    for (const [id, row] of this.restoredTerminals)
+      if (row.owner === owner) this.restoredTerminals.delete(id);
+    for (const row of rows) this.restoredTerminals.set(row.id, row);
+  }
+  /** Live terminals plus saved ones from earlier hosts, which are read-only. */
+  terminalList(owner: string) {
+    const live = this.terminals.list(owner);
+    const ids = new Set(live.map((t) => t.id));
+    const restored = [...this.restoredTerminals.values()]
+      .filter((row) => row.owner === owner && !ids.has(row.id))
+      .map((row) => ({
+        id: row.id,
+        command: row.command,
+        output: row.output,
+        dropped: 0,
+        exitCode: row.exitCode,
+        exitSignal: undefined as number | undefined,
+        cleanup: "not requested",
+        stopError: undefined as string | undefined,
+        // Without an observed exit, the process outcome is unknown.
+        state: row.state === "exited" ? "exited" : "unknown after host restart",
+        restored: true,
+      }));
+    return [...restored, ...live.map((t) => ({ ...t, restored: false }))];
+  }
   private children = new Map<
     string,
     {
@@ -515,6 +569,7 @@ export class Runtime {
       for (const name of ["ask_user", "submit_plan"])
         runtime.planTools.add(runtime.tools.get(name)!);
       await runtime.plugins.load(codemodePlugin());
+      runtime.terminals.onChange = (id) => runtime.persistTerminal(id);
       const { terminalPlugin } = await import("../../tools/src/terminal.ts");
       await runtime.plugins.load(
         terminalPlugin(

@@ -143,6 +143,29 @@ export class SQLiteStore implements EventStore {
   }) {
     return this.request<void>("saveChildTask", record);
   }
+  saveTerminalRecord(record: {
+    id: string;
+    owner: string;
+    command: string;
+    state: string;
+    exitCode?: number;
+    output: string;
+  }) {
+    return this.request<void>("saveTerminalRecord", record);
+  }
+  terminalRecords(owner: string) {
+    return this.request<
+      Array<{
+        id: string;
+        owner: string;
+        command: string;
+        state: string;
+        exitCode?: number;
+        output: string;
+        createdAt: number;
+      }>
+    >("terminalRecords", { owner });
+  }
   childTaskTree(parentId: string) {
     return this.request<
       Array<{

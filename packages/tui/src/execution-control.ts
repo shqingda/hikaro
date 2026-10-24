@@ -31,6 +31,8 @@ type LocalSource = {
     | "terminals"
     | "childTasks"
     | "loadChildTasks"
+    | "terminalList"
+    | "loadTerminals"
     | "stopChild"
     | "executionHistory"
     | "executionHistoryPage"
@@ -62,11 +64,15 @@ export function localExecutionSource(source: LocalSource): ExecutionSource {
         return source.runtime.executionHistory(source.session);
       if (kind === "children")
         await source.runtime.loadChildTasks(source.session);
+      if (kind === "terminals")
+        await source.runtime.loadTerminals(source.session);
       return executionItems(source.agent, source.runtime, source.session, kind);
     },
     async detail(kind, id) {
       if (kind === "children")
         await source.runtime.loadChildTasks(source.session);
+      if (kind === "terminals")
+        await source.runtime.loadTerminals(source.session);
       const item = (
         kind === "history"
           ? await source.runtime.executionHistory(source.session)

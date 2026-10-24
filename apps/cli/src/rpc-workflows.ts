@@ -165,6 +165,7 @@ export class RpcWorkflows {
         if (p.token !== undefined) this.renew(scope, session.id, p.token);
         const kind = kindSchema.parse(p.kind);
         if (kind === "children") await this.runtime.loadChildTasks(session.id);
+        if (kind === "terminals") await this.runtime.loadTerminals(session.id);
         const items =
           kind === "history"
             ? await this.runtime.executionHistory(session.id)

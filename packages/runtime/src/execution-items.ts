@@ -12,7 +12,7 @@ export type ExecutionItem = {
 };
 export function executionItems(
   agent: Pick<Agent, "pendingPrompts" | "pendingSteering">,
-  runtime: Pick<Runtime, "terminals" | "childTasks">,
+  runtime: Pick<Runtime, "terminalList" | "childTasks">,
   session: string,
   kind: Exclude<ExecutionKind, "history">,
 ): ExecutionItem[] {
@@ -62,12 +62,12 @@ export function executionItems(
       ],
     }));
   if (kind === "terminals")
-    return runtime.terminals.list(session).map((t) => ({
+    return runtime.terminalList(session).map((t) => ({
       id: t.id,
       title: t.command,
       state:
         t.state + (t.exitCode === undefined ? "" : ` · exit ${t.exitCode}`),
-      detail: `Command: ${t.command}\nState: ${t.state} · exit code: ${t.exitCode ?? "pending"}\nCleanup: ${t.cleanup}${t.exitSignal ? ` · signal ${t.exitSignal}` : ""}${t.stopError ? `\n${t.stopError}` : ""}\n${t.dropped ? `[${t.dropped} earlier characters omitted]\n` : ""}${t.output || "No output yet."}`,
+      detail: `${t.restored ? "Saved by an earlier host. This process was not stopped or verified after restart.\n" : ""}Command: ${t.command}\nState: ${t.state} · exit code: ${t.exitCode ?? "pending"}\nCleanup: ${t.cleanup}${t.exitSignal ? ` · signal ${t.exitSignal}` : ""}${t.stopError ? `\n${t.stopError}` : ""}\n${t.dropped ? `[${t.dropped} earlier characters omitted]\n` : ""}${t.output || "No output yet."}`,
       actions:
         t.state === "running"
           ? [

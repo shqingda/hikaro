@@ -20,6 +20,15 @@ type TerminalRecord = {
 };
 export class TerminalManager {
   readonly records = new Map<string, TerminalRecord>();
+  /** Notified after start, exit and stop outcomes so a host can keep a record. */
+  onChange?: (id: string) => void;
+  changed(id: string) {
+    try {
+      this.onChange?.(id);
+    } catch {
+      // Record keeping must never break terminal control.
+    }
+  }
   find(owner: string, id: string) {
     const term = this.records.get(id);
     if (!term || term.owner !== owner)
@@ -80,6 +89,8 @@ export class TerminalManager {
       })
       .finally(() => {
         t.stopTask = undefined;
+        const id = [...this.records].find(([, row]) => row === t)?.[0];
+        if (id) this.changed(id);
         this.prune();
       });
   }
@@ -209,6 +220,7 @@ export function terminalPlugin(
             exitCode: undefined as number | undefined,
           };
           terminals.set(id, term);
+          manager.changed(id);
           pty.onData((data) => {
             term.output += data;
             term.preview += data;
@@ -224,6 +236,7 @@ export function terminalPlugin(
           pty.onExit((event) => {
             term.exitCode = event.exitCode;
             term.exitSignal = event.signal;
+            manager.changed(id);
             manager.prune();
           });
           return {

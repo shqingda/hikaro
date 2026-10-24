@@ -2,6 +2,7 @@ import { createStatementCache } from "./statement-cache.mjs";
 import { steeringHandlers } from "./pending-steering.mjs";
 import { executionHistoryHandlers } from "./execution-history.mjs";
 import { childTaskHandlers } from "./child-tasks.mjs";
+import { terminalRecordHandlers } from "./terminal-records.mjs";
 import {
   questionDraftHandlers,
   assertDraftRevision,
@@ -59,7 +60,9 @@ CREATE INDEX IF NOT EXISTS session_run_identity ON events(sessionId,json_extract
 CREATE TABLE IF NOT EXISTS rpc_commands(workspace TEXT NOT NULL,scope TEXT NOT NULL,id TEXT NOT NULL,method TEXT NOT NULL,digest TEXT NOT NULL,hostInstanceId TEXT NOT NULL,sessionId TEXT,status TEXT NOT NULL,runId TEXT,operationId TEXT,error TEXT,createdAt INTEGER NOT NULL,updatedAt INTEGER NOT NULL,PRIMARY KEY(workspace,scope,id)) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS commands(id TEXT PRIMARY KEY,sessionId TEXT NOT NULL,createdAt INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS child_tasks(id TEXT PRIMARY KEY,parentId TEXT NOT NULL,task TEXT NOT NULL,state TEXT NOT NULL,output TEXT NOT NULL,createdAt INTEGER NOT NULL,updatedAt INTEGER NOT NULL);
-CREATE INDEX IF NOT EXISTS child_task_parent ON child_tasks(parentId,createdAt);`);
+CREATE INDEX IF NOT EXISTS child_task_parent ON child_tasks(parentId,createdAt);
+CREATE TABLE IF NOT EXISTS terminal_records(id TEXT PRIMARY KEY,owner TEXT NOT NULL,command TEXT NOT NULL,state TEXT NOT NULL,exitCode INTEGER,output TEXT NOT NULL,createdAt INTEGER NOT NULL,updatedAt INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS terminal_record_owner ON terminal_records(owner,createdAt);`);
   db.exec(`CREATE TABLE IF NOT EXISTS shared_hosts(workspace TEXT PRIMARY KEY,instanceId TEXT NOT NULL,pid INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS session_access(workspace TEXT NOT NULL,sessionId TEXT NOT NULL,scope TEXT NOT NULL,role TEXT NOT NULL,PRIMARY KEY(workspace,sessionId,scope)) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS client_views(workspace TEXT NOT NULL,scope TEXT NOT NULL,sessionId TEXT NOT NULL,PRIMARY KEY(workspace,scope)) WITHOUT ROWID;`);
@@ -157,6 +160,7 @@ const handlers = {
   ...steeringHandlers(db, prepare, assertLease),
   ...executionHistoryHandlers(db, prepare),
   ...childTaskHandlers(prepare),
+  ...terminalRecordHandlers(prepare),
   ...questionDraftHandlers(db, prepare, pendingQuestion),
   claimHost({ workspace, instanceId }) {
     db.exec("BEGIN IMMEDIATE");
@@ -459,6 +463,7 @@ const handlers = {
       ])
         prepare(`DELETE FROM ${table} WHERE sessionId=?`).run(id);
       prepare("DELETE FROM child_tasks WHERE id=? OR parentId=?").run(id, id);
+      prepare("DELETE FROM terminal_records WHERE owner=?").run(id);
       prepare("UPDATE sessions SET parentId=NULL WHERE parentId=?").run(id);
       for (const table of ["session_drafts", "workspace_state"])
         prepare(`DELETE FROM ${table} WHERE sessionId=?`).run(id);

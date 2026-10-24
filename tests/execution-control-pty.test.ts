@@ -153,7 +153,7 @@ it("manages queued messages, terminal input/exit, and child cancellation from a 
     releaseRoot!();
     await vi.waitFor(() => expect(childStarted).toBe(true), { timeout: 8000 });
     await wait("Execution manager", send("/tasks\r"));
-    await wait("Background terminals", send("\x1b[B\r"));
+    await wait("Background terminals · page", send("\x1b[B\r"));
     await wait("Send a line", send("\r"));
     await wait("Send a line to terminal", send("\x1b[B\r"));
     await wait("Send terminal input?", send("hello\r"));
