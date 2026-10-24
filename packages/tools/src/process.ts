@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createWriteStream, type WriteStream } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -62,9 +62,7 @@ export async function runProcess(
     options.observe && child.pid
       ? new ProcessObservation(child.pid)
       : undefined;
-  let text = "",
-    truncated = false,
-    timedOut = false;
+  let timedOut = false;
   let exited = false,
     closed = false,
     finishing = false;
@@ -85,25 +83,6 @@ export async function runProcess(
   const leaderExited = new Promise<void>((resolve) => {
     leaderExitedDone = resolve;
   });
-  let writer: WriteStream | undefined,
-    artifact: string | undefined,
-    archiveError: string | undefined;
-  let archived = 0,
-    archiveTruncated = false;
-  // A bounded wait clears its timer even when the event wins immediately.
-  const waitFor = async (event: Promise<void>, ms: number) => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-      await Promise.race([
-        event,
-        new Promise<void>((resolve) => {
-          timer = setTimeout(resolve, ms);
-        }),
-      ]);
-    } finally {
-      clearTimeout(timer);
-    }
-  };
   const stop = () => {
     if (finishing || terminated) return;
     cleanup = "pending";
@@ -154,41 +133,11 @@ export async function runProcess(
   }, options.timeout ?? 60000);
   ctx.signal.addEventListener("abort", stop, { once: true });
   if (ctx.signal.aborted) stop();
-  const archive = (value: string) => {
-    if (!writer || archiveError) return;
-    const bytes = Buffer.from(value);
-    const part = bytes.subarray(0, Math.max(0, 50 * 1024 * 1024 - archived));
-    archived += part.length;
-    archiveTruncated ||= part.length < bytes.length;
-    if (part.length && !writer.write(part)) {
-      child.stdout.pause();
-      child.stderr.pause();
-      writer.once("drain", () => {
-        child.stdout.resume();
-        child.stderr.resume();
-      });
-    }
-  };
-  const append = (value: string) => {
-    const room = (options.limit ?? 48000) - text.length;
-    if (value.length > room && !writer && ctx.outputDirectory) {
-      artifact = join(ctx.outputDirectory, randomUUID() + ".log");
-      writer = createWriteStream(artifact, { flags: "wx", mode: 0o600 });
-      writer.on("error", (error) => {
-        archiveError = error.message;
-        child.stdout.resume();
-        child.stderr.resume();
-      });
-      archive(text);
-    }
-    if (writer) archive(value);
-    if (room > 0) text += value.slice(0, room);
-    if (value.length > room) truncated = true;
-  };
-  child.stdout.setEncoding("utf8");
-  child.stderr.setEncoding("utf8");
-  child.stdout.on("data", append);
-  child.stderr.on("data", append);
+  const output = captureProcessOutput(
+    child,
+    options.limit ?? 48000,
+    ctx.outputDirectory,
+  );
   void observation?.sample();
   await lifecycle;
   clearTimeout(timer);
@@ -206,24 +155,10 @@ export async function runProcess(
   child.stderr.destroy();
   if (!exited) child.unref();
   if (spawnError) {
-    writer?.destroy();
+    output.destroy();
     throw spawnError;
   }
-  if (writer && !archiveError) {
-    let flushed = false;
-    await waitFor(
-      new Promise<void>((resolve) => {
-        writer!.once("error", () => resolve());
-        writer!.end(() => {
-          flushed = true;
-          resolve();
-        });
-      }),
-      1000,
-    );
-    if (!flushed && !archiveError) archiveError = "Log flush timed out";
-  }
-  writer?.destroy();
+  const captured = await output.finish();
   const processNote = observation?.note;
   const warnings = [
     timedOut ? "[Timed out]" : "",
@@ -241,14 +176,7 @@ export async function runProcess(
   return {
     // Keep lifecycle conclusions before output so generic result truncation
     // cannot discard them. This is an observation at return, not later control.
-    text:
-      (warnings ? warnings + "\n" : "") +
-      text +
-      (truncated
-        ? `\n[Output truncated${artifact && !archiveError ? `; log: ${artifact}` : ""}]`
-        : "") +
-      (archiveTruncated ? "\n[Log limited to 50 MiB]" : "") +
-      (archiveError ? `\n[Log unavailable: ${archiveError}]` : ""),
+    text: (warnings ? warnings + "\n" : "") + captured.text,
     data: {
       exitCode,
       exitSignal,
@@ -256,8 +184,7 @@ export async function runProcess(
       stopError,
       outputIncomplete,
       processNote,
-      artifact: archiveError ? undefined : artifact,
-      archiveTruncated,
+      ...captured.data,
     },
     isError:
       exitCode !== 0 ||
@@ -265,5 +192,102 @@ export async function runProcess(
       ctx.signal.aborted ||
       Boolean(stopError) ||
       outputIncomplete,
+  };
+}
+
+// A bounded wait clears its timer even when the event wins immediately.
+async function waitFor(event: Promise<void>, ms: number) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      event,
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, ms);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function captureProcessOutput(
+  child: ChildProcessWithoutNullStreams,
+  limit: number,
+  outputDirectory?: string,
+) {
+  let text = "",
+    truncated = false;
+  let writer: WriteStream | undefined,
+    artifact: string | undefined,
+    archiveError: string | undefined;
+  let archived = 0,
+    archiveTruncated = false;
+  const archive = (value: string) => {
+    if (!writer || archiveError) return;
+    const bytes = Buffer.from(value);
+    const part = bytes.subarray(0, Math.max(0, 50 * 1024 * 1024 - archived));
+    archived += part.length;
+    archiveTruncated ||= part.length < bytes.length;
+    if (part.length && !writer.write(part)) {
+      child.stdout.pause();
+      child.stderr.pause();
+      writer.once("drain", () => {
+        child.stdout.resume();
+        child.stderr.resume();
+      });
+    }
+  };
+  const append = (value: string) => {
+    const room = limit - text.length;
+    if (value.length > room && !writer && outputDirectory) {
+      artifact = join(outputDirectory, randomUUID() + ".log");
+      writer = createWriteStream(artifact, { flags: "wx", mode: 0o600 });
+      writer.on("error", (error) => {
+        archiveError = error.message;
+        child.stdout.resume();
+        child.stderr.resume();
+      });
+      archive(text);
+    }
+    if (writer) archive(value);
+    if (room > 0) text += value.slice(0, room);
+    if (value.length > room) truncated = true;
+  };
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  child.stdout.on("data", append);
+  child.stderr.on("data", append);
+  return {
+    destroy: () => writer?.destroy(),
+    async finish() {
+      if (writer && !archiveError) {
+        let flushed = false;
+        await waitFor(
+          new Promise<void>((resolve) => {
+            writer!.once("error", () => resolve());
+            writer!.end(() => {
+              flushed = true;
+              resolve();
+            });
+          }),
+          1000,
+        );
+        if (!flushed && !archiveError) archiveError = "Log flush timed out";
+      }
+      writer?.destroy();
+      return {
+        text:
+          text +
+          (truncated
+            ? `\n[Output truncated${artifact && !archiveError ? `; log: ${artifact}` : ""}]`
+            : "") +
+          (archiveTruncated ? "\n[Log limited to 50 MiB]" : "") +
+          (archiveError ? `\n[Log unavailable: ${archiveError}]` : ""),
+        data: {
+          artifact: archiveError ? undefined : artifact,
+          archiveTruncated,
+        },
+      };
+    },
   };
 }

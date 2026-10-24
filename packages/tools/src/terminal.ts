@@ -5,6 +5,7 @@ import type { Plugin, ToolContext } from "../../core/src/types.ts";
 import type { IPty } from "node-pty";
 import { ProcessObservation } from "./process-observation.ts";
 import { ProcessGroup } from "./process-group.ts";
+import { cleanProcessEnv } from "./process.ts";
 type TerminalRecord = {
   pty: IPty;
   processes: ProcessObservation;
@@ -169,11 +170,7 @@ export function terminalPlugin(
           const { spawn } = await import("node-pty");
           await ctx.checkpoint?.();
           ctx.signal.throwIfAborted();
-          const env = Object.fromEntries(
-            ["PATH", "HOME", "TMPDIR", "LANG", "TERM"].flatMap((k) =>
-              process.env[k] ? [[k, process.env[k]!]] : [],
-            ),
-          );
+          const env = cleanProcessEnv();
           const pty = unrestricted
             ? spawn("/bin/zsh", ["-f", "-c", args.command], {
                 cwd: ctx.cwd,
