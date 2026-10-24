@@ -61,7 +61,7 @@
 - [x] 最近执行历史：普通/附着 `/tasks` 查看最多 100 次运行的持久终态、错误及用量；缺少结束记录显示未知，不重放。8 项不同定向用例含一个真实 host 重启/附着 PTY，类型检查与构建通过，见 [历史验收](docs/validation/execution-history.md)。
 - [x] steering 跨重启持久化：原身份确认、事务消费、取消/撤销写入竞争及真实构建 TUI 恢复通过，见 [验收记录](docs/validation/steering-queue.md)。尚未纳入新分发候选包。
 - [x] 全部已保留运行的分页与精确 ID 查询：普通/附着 `/tasks history [RUN_ID]` 直接只读且不暂停队列；225 次运行、12 页、重启和权限回归通过，见 [分页验收](docs/validation/execution-history-pagination.md)。
-- [ ] 嵌套子任务树与后台终端/子任务独立持久索引。
+- [x] 嵌套子任务树与后台终端/子任务持久记录：见 [子 agent 树与持久索引](docs/validation/nested-child-agents.md)、[终端记录](docs/validation/terminal-records.md)；跨重启的真实 PTY 与脱离进程组探测仍待验。
 - [ ] 后台终端忽略停止信号时的强制停止/进程树核对；当前保持 stopping，不虚报退出。长期运行、大输出性能和真实账号仍待验收。
 
 Plan 规格见 [planning-dialogue](docs/specs/planning-dialogue.md)，验证详情见 [Plan 验收](docs/validation/planning-dialogue.md)。
