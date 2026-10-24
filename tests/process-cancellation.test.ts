@@ -26,7 +26,9 @@ it("finishes cancelling descendants even when the process leader exits first", a
       expect(pid).toBeGreaterThan(0);
     });
     controller.abort();
-    expect((await work).text).toContain("Cancelled");
+    const result = await work;
+    expect(result.text).toContain("Cancelled");
+    expect(result.data).toMatchObject({ cleanup: "confirmed" });
     await vi.waitFor(
       () => {
         expect(() => process.kill(pid!, 0)).toThrow();

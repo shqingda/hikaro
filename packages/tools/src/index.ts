@@ -237,6 +237,7 @@ export function codingPlugin(options: {
           return runWorkspaceCommand(command, ctx, {
             unrestricted,
             timeout: timeoutMs,
+            observe: true,
           });
         },
       });

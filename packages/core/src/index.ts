@@ -1046,7 +1046,22 @@ export class Agent implements AgentBackend {
       };
     }
     if (JSON.stringify(result).length > 60000) {
-      await this.checkExecution(signal);
+      // Cancellation stops execution, not recording its completed outcome.
+      // The current lease must still authorize artifact and event writes.
+      await this.options.store.assertLease(
+        this.options.session.id,
+        this.activeLease,
+      );
+      const serializedData = JSON.stringify(result.data);
+      const data =
+        result.data !== null &&
+        typeof result.data === "object" &&
+        (Object.getPrototypeOf(result.data) === Object.prototype ||
+          Object.getPrototypeOf(result.data) === null) &&
+        serializedData !== undefined &&
+        Buffer.byteLength(serializedData) <= 8192
+          ? result.data
+          : undefined;
       const artifact = await this.options.saveArtifact?.(callId, result);
       result = {
         images: result.images,
@@ -1054,7 +1069,7 @@ export class Agent implements AgentBackend {
           result.text.slice(0, 48000) +
           `\n[Output truncated${artifact ? `; complete result: ${artifact}` : ""}]`,
         isError: result.isError,
-        data: artifact ? { artifact } : undefined,
+        data: artifact ? { ...data, artifact } : data,
       };
     }
     await this.emit("tool.end", {
