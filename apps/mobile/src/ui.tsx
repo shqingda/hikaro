@@ -54,7 +54,9 @@ export function Action({
         onPress={onPress}
         disabled={disabled}
         variant={quiet ? "text" : "filled"}
-        style={{ height: 48, paddingVertical: 6 }}
+        // No fixed height: it truncates labels at large Dynamic Type sizes.
+        // Host keeps the 48 pt minimum touch target.
+        style={{ paddingVertical: 6 }}
       />
     </Host>
   );

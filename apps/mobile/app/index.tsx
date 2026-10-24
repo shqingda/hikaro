@@ -45,8 +45,11 @@ export default function Connect() {
     >
       <View style={{ gap: 16, paddingVertical: 12 }}>
         <SunMark />
+        {/* The wordmark is decorative branding; cap scaling so it stays one word. */}
         <Text
           accessibilityRole="header"
+          maxFontSizeMultiplier={1.5}
+          numberOfLines={1}
           style={{
             fontFamily: Platform.OS === "ios" ? "Georgia" : "serif",
             fontSize: 48,
