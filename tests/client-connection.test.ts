@@ -10,6 +10,13 @@ it("uses a caller command ID and rechecks authority after the durable journal co
   const sent: any[] = [];
   let release: (() => void) | undefined;
   let next = 0;
+  const save = vi.fn((intents: unknown[]) =>
+    intents.length === 0
+      ? Promise.resolve()
+      : new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+  );
   const client = new ClientConnection(
     "device",
     {
@@ -53,19 +60,13 @@ it("uses a caller command ID and rechecks authority after the durable journal co
       schedule: () => () => {},
       intents: {
         load: async () => [],
-        save: () =>
-          new Promise<void>((resolve) => {
-            release = resolve;
-          }),
+        save,
       },
     },
   );
-  // No pending intents: the initial reconcile's journal flush still needs completing.
-  const connecting = client.connected();
-  await vi.waitFor(() => expect(release).toBeTypeOf("function"));
-  release!();
-  await connecting;
-  release = undefined;
+  // An already empty journal needs no write; mutations still wait for commit.
+  await client.connected();
+  expect(save).not.toHaveBeenCalled();
   let allowed = true;
   const guard = () => {
     if (!allowed) throw Error("selection changed");
@@ -94,6 +95,84 @@ it("uses a caller command ID and rechecks authority after the durable journal co
   await success;
   expect(sent.find((f) => f.id === "new-id")?.params).toEqual({ text: "new" });
   client.close();
+});
+
+it("retries failed journal writes and skips only successfully persisted identical intents", async () => {
+  let receive!: (frame: unknown) => void;
+  let next = 0;
+  let completed = false;
+  const sent: string[] = [];
+  const save = vi.fn(async (_intents: unknown[]) => {});
+  const client = new ClientConnection(
+    "device",
+    {
+      observe(fn) {
+        receive = fn;
+        return () => {};
+      },
+      send(frame) {
+        sent.push(frame.id);
+        const result =
+          frame.method === "hello"
+            ? rpcCapabilities()
+            : frame.method === "command.receipt"
+              ? {
+                  receipt: completed
+                    ? {
+                        id: "mutation",
+                        scope: "device",
+                        method: "approval.respond",
+                        digest: "a".repeat(64),
+                        hostInstanceId: "host",
+                        sessionId: null,
+                        status: "completed",
+                        createdAt: 1,
+                        updatedAt: 2,
+                      }
+                    : null,
+                }
+              : {
+                  session: null,
+                  busy: false,
+                  stream: "",
+                  streamTruncated: false,
+                  cursor: 0,
+                  revision: 0,
+                  approvals: [],
+                };
+        queueMicrotask(() =>
+          receive({ type: "response", scope: "device", id: frame.id, result }),
+        );
+      },
+    },
+    {
+      id: () => String(++next),
+      schedule: () => () => {},
+      intents: { load: async () => [], save },
+    },
+  );
+  try {
+    await client.connected();
+    expect(save).not.toHaveBeenCalled();
+    save.mockRejectedValueOnce(Error("disk full"));
+    await expect(
+      client.request("approval.respond", {}, { id: "mutation" }),
+    ).rejects.toThrow("disk full");
+    expect(sent).not.toContain("mutation");
+    await client.reconcile();
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(save.mock.calls[0]![0]).toEqual(save.mock.calls[1]![0]);
+    await client.reconcile();
+    expect(save).toHaveBeenCalledTimes(2);
+    completed = true;
+    await client.reconcile();
+    expect(save).toHaveBeenCalledTimes(3);
+    expect(save).toHaveBeenLastCalledWith([]);
+    await client.reconcile();
+    expect(save).toHaveBeenCalledTimes(3);
+  } finally {
+    client.close();
+  }
 });
 
 it("does not turn a successful mutation into a failure when an older host lacks receipt queries", async () => {

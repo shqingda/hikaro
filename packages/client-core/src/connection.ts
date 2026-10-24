@@ -34,6 +34,7 @@ export class ClientConnection {
   private initialization?: Promise<void>;
   private connectionAttempt = 0;
   private journalQueue: Promise<void> = Promise.resolve();
+  private persistedIntents?: string;
   private epoch = 0;
   private active = false;
   private disposed = false;
@@ -87,8 +88,11 @@ export class ClientConnection {
     const attempt = this.connectionAttempt;
     if (!this.initialization) {
       const init = (async () => {
-        if (this.options.intents)
-          this.view.restoreIntents(await this.options.intents.load());
+        if (this.options.intents) {
+          const intents = await this.options.intents.load();
+          this.view.restoreIntents(intents);
+          this.persistedIntents = JSON.stringify(intents);
+        }
       })();
       this.initialization = init;
       void init.catch(() => {
@@ -161,16 +165,20 @@ export class ClientConnection {
   }
   private persistIntents(): Promise<void> {
     if (!this.options.intents) return Promise.resolve();
-    const save = () =>
-      this.options.intents!.save(
-        this.receipts
-          .filter(
-            (r) =>
-              !rpcTransientMethods.has(r.method) &&
-              !["completed", "failed"].includes(r.status),
-          )
-          .map((r) => ({ id: r.id, method: r.method })),
-      );
+    const save = async () => {
+      const intents = this.receipts
+        .filter(
+          (r) =>
+            !rpcTransientMethods.has(r.method) &&
+            !["completed", "failed"].includes(r.status),
+        )
+        .map((r) => ({ id: r.id, method: r.method }));
+      const serialized = JSON.stringify(intents);
+      // Compare inside the journal queue; a failed or pending write is not durable.
+      if (serialized === this.persistedIntents) return;
+      await this.options.intents!.save(intents);
+      this.persistedIntents = serialized;
+    };
     const task = this.journalQueue.then(save, save);
     this.journalQueue = task;
     return task;
