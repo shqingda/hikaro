@@ -1,7 +1,9 @@
 {
-  "artifacts/check-final-20261024.log": "865bff32525f5ccfd5501fe0c05d9cc5206ec64879e4ee11769a95dd9c6c7933",
+  "artifacts/check-final-20261024.log": "c5a554362c48e76e1ec4d9f6c878ac54be8416fc33b6a10516da363dae2b461e",
   "artifacts/mobile-export-20261024.log": "91b85d967e7f39bcbf1cc7dba8258a1da7fcb325754a7b79a0c5b853920bddb6",
   "artifacts/change-tree-mutation-20261024.log": "b0521336e5fc35ab15a9a24ce008196f597dcffe20913f240972f0523c131b3c",
   "artifacts/check-live-plan-20261024.mjs": "23c3cfbe01584f1e6b98f1530374c15f5d1056bbabd8cce7a0b4ac605c4128af",
-  "artifacts/live-fetch-diagnostics.mjs": "a55bddfe4b0ceeb0c85f8f320e02fbe3da81f92ff314932c020e2c4e4ee83c62"
+  "artifacts/live-fetch-diagnostics.mjs": "a55bddfe4b0ceeb0c85f8f320e02fbe3da81f92ff314932c020e2c4e4ee83c62",
+  "artifacts/plugin-commit-pty-20261024.log": "2f4ab9bfd1b87e10f31177cf91d8b3ba71215d8274bcf867185fa18fef92d023",
+  "artifacts/live-plan-final-20261024.log": "96a28fc96e5c7f755b7f5767d53fabe1a3654b85dab0eeab895b5642380317ab"
 }

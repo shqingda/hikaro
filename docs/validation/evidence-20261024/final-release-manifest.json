@@ -1,0 +1,9 @@
+{
+  "artifact": "/Users/shqingda/Projects/hikaro/artifacts/release/hikaro-0.2.1-darwin-arm64.tgz",
+  "sha256": "29748c60c74c3341e130bc9f326b654a104e0fcf6ed2043d1ca0fd4ca0f1d016",
+  "platform": "darwin",
+  "arch": "arm64",
+  "node": "v26.12.1",
+  "sourceCommit": "7fbe09a1aa7d7a98f72b5282c2aff465813e7606",
+  "dirty": false
+}

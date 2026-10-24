@@ -1,0 +1,288 @@
+{
+  "status": "passed",
+  "artifact": "/Users/shqingda/Projects/hikaro/artifacts/release/hikaro-0.2.1-darwin-arm64.tgz",
+  "sha256": "29748c60c74c3341e130bc9f326b654a104e0fcf6ed2043d1ca0fd4ca0f1d016",
+  "directory": "/Users/shqingda/Projects/hikaro/artifacts/live-release-k0LKsf",
+  "node": "v26.12.1",
+  "platform": "darwin",
+  "arch": "arm64",
+  "authentication": "normal subscription credential store; XAI_API_KEY removed from child environment",
+  "startedAt": "2026-10-24T07:36:45.596Z",
+  "checks": [
+    "empty-cache installed artifact, version and patched forge signatures",
+    "installed TUI + subscription model reads, edits, tests and reviews diff; independent tests pass",
+    "Real approved plan binds reliable changes and tool results to its reported step",
+    "TUI rejects unrestricted shell; denied command has no file side effect",
+    "Ctrl+C cancels real model shell; cancelled run and process exit both confirmed"
+  ],
+  "forge": {
+    "version": "1.4.0",
+    "rsaSha256": "447c5441cea1b125e23661d7e27a8b1759cc3400241c0013b2d034b4ee1dbf50",
+    "verifiedNodeFiles": 49
+  },
+  "version": "hikaro 0.2.1",
+  "sessionId": "46fc79c8-91fb-45d3-80a5-fde1f773bf5c",
+  "approvedPlan": {
+    "title": "Fix sum.cjs addition",
+    "steps": [
+      "Read sum.cjs and sum.test.cjs, then edit only sum.cjs so sum(a, b) returns a + b (currently a - b). Do not modify sum.test.cjs or package.json. Do not read outside this workspace, use network tools, install packages, or delegate. Run exactly `node --test sum.test.cjs`, then inspect the change with git_diff. Finish with a brief description of what changed and the actual test result, including the marker RELEASE-TOOLS-PASSED."
+    ],
+    "validation": "\"Pass only if git_diff shows sum.cjs changed from subtraction to addition and tests/package.json are untouched, and `node --test sum.test.cjs` passes both assertions (sum(2, 3) === 5 and sum(-2, 3) === 1). The final response must include the actual test result and RELEASE-TOOLS-PASSED.\"",
+    "id": "4410036d-7a01-4f52-9605-5289bd7931c6"
+  },
+  "diff": "diff --git a/sum.cjs b/sum.cjs\nindex 0a92af8..a5a1121 100644\n--- a/sum.cjs\n+++ b/sum.cjs\n@@ -1 +1 @@\n-exports.sum = (a, b) => a - b;\n+exports.sum = (a, b) => a + b;\n",
+  "planProgress": {
+    "planId": "4410036d-7a01-4f52-9605-5289bd7931c6",
+    "title": "Fix sum.cjs addition",
+    "approvedAt": 1792827440748,
+    "steps": [
+      {
+        "text": "Read sum.cjs and sum.test.cjs, then edit only sum.cjs so sum(a, b) returns a + b (currently a - b). Do not modify sum.test.cjs or package.json. Do not read outside this workspace, use network tools, install packages, or delegate. Run exactly `node --test sum.test.cjs`, then inspect the change with git_diff. Finish with a brief description of what changed and the actual test result, including the marker RELEASE-TOOLS-PASSED.",
+        "status": "completed",
+        "note": "sum.cjs now adds; node --test passed; diff is addition only",
+        "evidence": {
+          "reliable": 1,
+          "observed": 0,
+          "tools": [
+            {
+              "sessionId": "46fc79c8-91fb-45d3-80a5-fde1f773bf5c",
+              "callId": "call-e86c9f1e-6714-41cb-9e23-08be26cb0dc8-10|fc_9f50427b-ab46-90ce-a420-c0eb2f39b04a_0",
+              "name": "update_plan_step",
+              "runId": "f6648cd0-d820-4fcb-ab7a-fdefbd78e064",
+              "step": 1,
+              "seq": 2376,
+              "status": "completed",
+              "preview": "Step 1 of 1 recorded as completed."
+            },
+            {
+              "sessionId": "46fc79c8-91fb-45d3-80a5-fde1f773bf5c",
+              "callId": "call-2e6a7299-a9f3-47cc-8c24-3ea2fbc935dc-9|fc_b57c5723-3c1b-9190-a51f-521b1e8fc2cd_1",
+              "name": "git_diff",
+              "runId": "f6648cd0-d820-4fcb-ab7a-fdefbd78e064",
+              "step": 1,
+              "seq": 2370,
+              "status": "completed",
+              "preview": "diff --git a/sum.cjs b/sum.cjs\nindex 0a92af8..a5a1121 100644\n--- a/sum.cjs\n+++ b/sum.cjs\n@@ -1 +1 @@\n-exports.sum = (a, b) => a - b;\n+exports.sum = (a, b) => a "
+            },
+            {
+              "sessionId": "46fc79c8-91fb-45d3-80a5-fde1f773bf5c",
+              "callId": "call-2e6a7299-a9f3-47cc-8c24-3ea2fbc935dc-8|fc_b57c5723-3c1b-9190-a51f-521b1e8fc2cd_0",
+              "name": "shell",
+              "runId": "f6648cd0-d820-4fcb-ab7a-fdefbd78e064",
+              "step": 1,
+              "seq": 2367,
+              "status": "completed",
+              "preview": "✔ sum (0.303875ms)\nℹ tests 1\nℹ suites 0\nℹ pass 1\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 104.399917\n"
+            },
+            {
+              "sessionId": "46fc79c8-91fb-45d3-80a5-fde1f773bf5c",
+              "callId": "call-16219b89-3742-44d7-985b-490a38f611e9-7|fc_f7efbb6e-e947-9f9d-bafb-8ffef22bf877_0",
+              "name": "edit_file",
+              "runId": "f6648cd0-d820-4fcb-ab7a-fdefbd78e064",
+              "step": 1,
+              "seq": 2363,
+              "status": "completed",
+              "preview": "Updated sum.cjs"
+            },
+            {
+              "sessionId": "46fc79c8-91fb-45d3-80a5-fde1f773bf5c",
+              "callId": "call-8c8e18f3-09ef-498b-b446-147736a0fe10-6|fc_8b194514-6251-9f3b-b360-10d20eb2c8b8_2",
+              "name": "read_file",
+              "runId": "f6648cd0-d820-4fcb-ab7a-fdefbd78e064",
+              "step": 1,
+              "seq": 2359,
+              "status": "completed",
+              "preview": "1: const {test}=require('node:test'); const assert=require('node:assert/strict'); const {sum}=require('./sum.cjs'); test('sum',()=>{assert.equal(sum(2,3),5);ass"
+            },
+            {
+              "sessionId": "46fc79c8-91fb-45d3-80a5-fde1f773bf5c",
+              "callId": "call-8c8e18f3-09ef-498b-b446-147736a0fe10-5|fc_8b194514-6251-9f3b-b360-10d20eb2c8b8_1",
+              "name": "read_file",
+              "runId": "f6648cd0-d820-4fcb-ab7a-fdefbd78e064",
+              "step": 1,
+              "seq": 2356,
+              "status": "completed",
+              "preview": "1: exports.sum = (a, b) => a - b;\n2: "
+            }
+          ]
+        }
+      }
+    ],
+    "unassigned": {
+      "reliable": 0,
+      "observed": 0,
+      "tools": [
+        {
+          "sessionId": "46fc79c8-91fb-45d3-80a5-fde1f773bf5c",
+          "callId": "call-8c8e18f3-09ef-498b-b446-147736a0fe10-4|fc_8b194514-6251-9f3b-b360-10d20eb2c8b8_0",
+          "name": "update_plan_step",
+          "runId": "f6648cd0-d820-4fcb-ab7a-fdefbd78e064",
+          "seq": 2353,
+          "status": "completed",
+          "preview": "Step 1 of 1 recorded as in_progress."
+        }
+      ]
+    },
+    "evidenceIncomplete": false,
+    "recordedEdits": 1
+  },
+  "events": [
+    {
+      "type": "run.start"
+    },
+    {
+      "type": "tool.start",
+      "name": "read_file"
+    },
+    {
+      "type": "tool.end",
+      "name": "read_file",
+      "status": "completed"
+    },
+    {
+      "type": "tool.start",
+      "name": "read_file"
+    },
+    {
+      "type": "tool.end",
+      "name": "read_file",
+      "status": "completed"
+    },
+    {
+      "type": "tool.start",
+      "name": "list_files"
+    },
+    {
+      "type": "tool.end",
+      "name": "list_files",
+      "status": "completed",
+      "isError": false
+    },
+    {
+      "type": "tool.start",
+      "name": "submit_plan"
+    },
+    {
+      "type": "tool.end",
+      "name": "submit_plan",
+      "status": "completed"
+    },
+    {
+      "type": "run.end",
+      "status": "completed"
+    },
+    {
+      "type": "run.start"
+    },
+    {
+      "type": "tool.start",
+      "name": "update_plan_step"
+    },
+    {
+      "type": "tool.end",
+      "name": "update_plan_step",
+      "status": "completed"
+    },
+    {
+      "type": "tool.start",
+      "name": "read_file"
+    },
+    {
+      "type": "tool.end",
+      "name": "read_file",
+      "status": "completed"
+    },
+    {
+      "type": "tool.start",
+      "name": "read_file"
+    },
+    {
+      "type": "tool.end",
+      "name": "read_file",
+      "status": "completed"
+    },
+    {
+      "type": "tool.start",
+      "name": "edit_file"
+    },
+    {
+      "type": "tool.end",
+      "name": "edit_file",
+      "status": "completed"
+    },
+    {
+      "type": "tool.start",
+      "name": "shell"
+    },
+    {
+      "type": "tool.end",
+      "name": "shell",
+      "status": "completed",
+      "isError": false
+    },
+    {
+      "type": "tool.start",
+      "name": "git_diff"
+    },
+    {
+      "type": "tool.end",
+      "name": "git_diff",
+      "status": "completed",
+      "isError": false
+    },
+    {
+      "type": "tool.start",
+      "name": "update_plan_step"
+    },
+    {
+      "type": "tool.end",
+      "name": "update_plan_step",
+      "status": "completed"
+    },
+    {
+      "type": "run.end",
+      "status": "completed"
+    },
+    {
+      "type": "run.start"
+    },
+    {
+      "type": "tool.start",
+      "name": "shell"
+    },
+    {
+      "type": "tool.end",
+      "name": "shell",
+      "status": "failed",
+      "isError": true
+    },
+    {
+      "type": "run.end",
+      "status": "failed"
+    },
+    {
+      "type": "run.start"
+    },
+    {
+      "type": "tool.start",
+      "name": "shell"
+    },
+    {
+      "type": "tool.end",
+      "name": "shell",
+      "status": "cancelled",
+      "isError": true
+    },
+    {
+      "type": "run.end",
+      "status": "cancelled"
+    }
+  ],
+  "finishedAt": "2026-10-24T07:37:36.850Z",
+  "limitations": [
+    "current macOS arm64 machine",
+    "physical IME not exercised",
+    "This run checks normal online plan execution and cancellation only; no network fault injection",
+    "not publicly published"
+  ]
+}
