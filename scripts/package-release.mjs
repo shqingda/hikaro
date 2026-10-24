@@ -23,6 +23,10 @@ export function releaseManifest(source, platform, arch) {
     files: ["dist", "postinstall.mjs", "README.md", "npm-shrinkwrap.json"],
     scripts: { postinstall: "node postinstall.mjs" },
     dependencies: source.dependencies,
+    // Preserve the source workspace's scoped security resolution in npm installs.
+    overrides: {
+      "@anthropic-ai/sandbox-runtime": { zod: source.dependencies.zod },
+    },
     bundledDependencies: ["@anthropic-ai/sandbox-runtime"],
   };
 }

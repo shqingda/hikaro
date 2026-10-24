@@ -7,14 +7,17 @@ test("release package has explicit platform, executable and production-only depe
       name: "hikaro",
       version: "0.1.0",
       engines: { node: ">=26.12.1" },
-      dependencies: { foo: "1.2.3" },
+      dependencies: { foo: "1.2.3", zod: "4.6.7" },
       devDependencies: { bar: "9" },
       scripts: { postinstall: "compile source" },
     },
     "darwin",
     "arm64",
   );
-  assert.deepEqual(result.dependencies, { foo: "1.2.3" });
+  assert.deepEqual(result.dependencies, { foo: "1.2.3", zod: "4.6.7" });
+  assert.deepEqual(result.overrides, {
+    "@anthropic-ai/sandbox-runtime": { zod: "4.6.7" },
+  });
   assert.equal(result.devDependencies, undefined);
   assert.deepEqual(result.bin, { hikaro: "dist/hikaro.mjs" });
   assert.equal(result.scripts.postinstall, "node postinstall.mjs");
