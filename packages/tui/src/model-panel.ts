@@ -139,9 +139,11 @@ export class ModelPanel implements Component {
       [
         {
           value: "back",
-          label: Array.isArray(canRollback)
-            ? "Back to list"
-            : "Back to changes",
+          label:
+            Array.isArray(canRollback) &&
+            !canRollback.some((item) => item.value === "rollback")
+              ? "Back to list"
+              : "Back to changes",
         },
         ...(Array.isArray(canRollback)
           ? canRollback
