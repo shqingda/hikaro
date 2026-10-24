@@ -26,4 +26,10 @@
 - 最终 `pnpm check`：126 个应用测试文件、652 项测试、15 项脚本检查通过；类型、构建、未使用绑定和残留引用检查通过。
 - `1fbe134` 构建产物的真实 TUI 手工 Shell：等待实际命令创建 PID 标记，再 Ctrl+C。持久 tool.end 为 cancelled、cleanup confirmed、观察摘要存在，Shell PID 已消失，Ctrl+D 干净退出。此项使用隔离 workspace 和 demo host，不调用真实模型。
 
-新候选包证据在收尾完成后补录。未改移动端，也未重复真实账号、原生移动或完整无障碍验收。
+## 候选包
+
+干净提交 `d49e5a5213b069e58b7fdecc3394f59cf4ccb410`，SHA-256 `8c8a5c66e93c8bd289f9adc37d1c59dc205ea562ccdf84f9f56677f424c79bec`。本机 macOS arm64 / Node 26.12.1，包为 `artifacts/release/hikaro-0.2.1-darwin-arm64.tgz`。
+
+[来源](evidence-20261024/foreground-release-manifest.json)与[实际空缓存安装验收](evidence-20261024/foreground-release-install.json)：发布审计、原生 helper、安装 TUI 启停及既有恢复流程通过。[首次安装](evidence-20261024/foreground-release-network-failure.json)在 npm 下载阶段报 ECONNRESET，尚未运行应用；同一 SHA 重试通过，没有改依赖或放宽检查。
+
+前台 Shell 取消的专项 PTY 证据来自上面的 `1fbe134` 本地构建；安装包检查验证其后仅文档变更的候选。未改移动端，也未重复真实账号、原生移动或完整无障碍验收；没有公开发布。

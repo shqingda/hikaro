@@ -1,0 +1,8 @@
+{
+  "status": "failed",
+  "stage": "npm install with empty cache",
+  "errorCode": "ECONNRESET",
+  "sha256": "8c8a5c66e93c8bd289f9adc37d1c59dc205ea562ccdf84f9f56677f424c79bec",
+  "applicationChecksStarted": false,
+  "logSha256": "5f0fda440c2015e784ddd6b63020ac734d156184c3822ae303e57fd88e531469"
+}
