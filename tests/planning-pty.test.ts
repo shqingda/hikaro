@@ -209,8 +209,12 @@ it("explores read-only, answers a question, revises and approves a plan before w
     await wait("1 file edits recorded since approval", progress);
     await wait("Inspect execution evidence", progress);
     await wait("Evidence by step", send("\x1b[B".repeat(2) + "\r"));
-    await wait("Execution evidence", send("\x1b[B\r"));
-    await wait("Inspect file differences", send("\x1b[F"));
+    const evidence = send("\x1b[B\r");
+    await wait("Execution evidence", evidence);
+    // The action can arrive in the same frame as the heading. End may not
+    // repaint an already visible row, so observe the whole panel transition.
+    send("\x1b[F");
+    await wait("Inspect file differences", evidence);
     await wait("Plan progress", send("\x1b"));
     await wait("Enter send", send("\x1b"));
     send("\x04");

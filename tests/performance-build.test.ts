@@ -93,6 +93,11 @@ describe("production startup packaging", () => {
         path.includes("marked/lib/"),
       ),
     ).toBe(true);
+    expect(
+      Object.keys(result.metafile!.inputs).some((path) =>
+        path.includes("marked-cjk-friendly/dist/"),
+      ),
+    ).toBe(true);
   });
 
   it("starts the production launcher with disabled or unavailable compile cache", async () => {

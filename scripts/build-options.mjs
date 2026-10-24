@@ -30,10 +30,14 @@ export function cliBuildOptions() {
           build.onResolve(
             {
               filter:
-                /^(?:zod(?:\/.*)?|@earendil-works\/pi-tui|marked|get-east-asian-width)$/,
+                /^(?:zod(?:\/.*)?|@earendil-works\/pi-tui|marked|marked-cjk-friendly|get-east-asian-width)$/,
             },
             ({ path }) => ({
-              path: ["marked", "get-east-asian-width"].includes(path)
+              path: [
+                "marked",
+                "marked-cjk-friendly",
+                "get-east-asian-width",
+              ].includes(path)
                 ? tuiRequire.resolve(path)
                 : fileURLToPath(import.meta.resolve(path)),
             }),
