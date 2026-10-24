@@ -3,6 +3,10 @@ import { sanitize } from "../packages/tui/src/text.ts";
 import { sanitize as publicSanitize } from "../packages/tui/src/index.ts";
 import { ModelPanel } from "../packages/tui/src/model-panel.ts";
 
+it("exports the same terminal sanitizer", () => {
+  expect(publicSanitize).toBe(sanitize);
+});
+
 it.each([
   ["", ""],
   ["中文 🙂\n\tsecond line", "中文 🙂\n\tsecond line"],
@@ -11,7 +15,6 @@ it.each([
   ["A\x00\x08\x0b\x0c\r\x7f\x80\x9fB", "AB"],
 ])("sanitizes terminal text %j", (input, expected) => {
   expect(sanitize(input)).toBe(expected);
-  expect(publicSanitize(input)).toBe(expected);
 });
 
 it("cleans picker labels and descriptions while preserving selection IDs", async () => {

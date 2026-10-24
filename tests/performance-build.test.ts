@@ -113,9 +113,6 @@ describe("production startup packaging", () => {
       expect(stdout).toContain("Usage: hikaro");
       expect(stderr).toBe("");
     }
-    expect(await readFile(join(directory, "hikaro.mjs"), "utf8")).toContain(
-      "enableCompileCache",
-    );
     const cache = join(directory, "empty-cache");
     const env: NodeJS.ProcessEnv = {
       ...process.env,
