@@ -1,0 +1,39 @@
+{
+  "status": "failed",
+  "artifact": "/Users/shqingda/Projects/hikaro/artifacts/release/hikaro-0.2.1-darwin-arm64.tgz",
+  "sha256": "3086e6e7d6449aebd28b519026b7285d445045b827f10fcbced00803fe39e5fe",
+  "directory": "/Users/shqingda/Projects/hikaro/artifacts/live-release-r1UD3B",
+  "node": "v26.12.1",
+  "platform": "darwin",
+  "arch": "arm64",
+  "authentication": "normal subscription credential store; XAI_API_KEY removed from child environment",
+  "startedAt": "2026-10-24T07:04:30.732Z",
+  "checks": [
+    "empty-cache installed artifact, version and patched forge signatures"
+  ],
+  "forge": {
+    "version": "1.4.0",
+    "rsaSha256": "447c5441cea1b125e23661d7e27a8b1759cc3400241c0013b2d034b4ee1dbf50",
+    "verifiedNodeFiles": 49
+  },
+  "version": "hikaro 0.2.1",
+  "sessionId": "7ae8d67a-5671-4e7f-8dd5-33db8f59943c",
+  "failedStep": "real model read/edit/test/diff",
+  "error": {
+    "name": "Error",
+    "timedOut": false,
+    "message": "Timeout: read-only plan proposal"
+  },
+  "events": [
+    {
+      "type": "run.start"
+    }
+  ],
+  "finishedAt": "2026-10-24T07:12:29.363Z",
+  "limitations": [
+    "current macOS arm64 machine",
+    "physical IME not exercised",
+    "network failures are process-local injections, not an actual provider outage or account rate limit",
+    "not publicly published"
+  ]
+}

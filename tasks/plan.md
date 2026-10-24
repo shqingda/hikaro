@@ -16,6 +16,8 @@
 
 接口：changes.review.list、changes.review.diff、PluginExecutionContext、plugins.cancel、可选 plan.read.progress 步骤证据；能力协商兼容旧端。
 
+无障碍范围（用户 2026-10-24 补充）：本轮只做基本的大字体阅读与操作检查；不扩展读屏、完整焦点或辅助技术专项。
+
 额度：遵照用户 2026-10-24 补充，在任务间检查可见账号额度，约 15% 剩余时汇报两端进度，接近 5% 前收尾；工具未提供的 5 小时窗口不推测。
 
 证据与复杂度清单见 docs/validation/implementation-2026-10-24.md。下方保留历史计划，不作为当前执行顺序。

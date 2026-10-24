@@ -55,3 +55,36 @@
 首次打包被新发布的 [Zod 公告](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5) 拦截：sandbox-runtime 的 `^3.25` 解析到被公告标记的版本。其代码明确通过 `zod/v3` 兼容入口工作；将该单一依赖对齐到现有 Zod 4.6.7，并在 npm 候选 manifest 保留同一覆盖。真实沙箱隔离回归和类型检查通过，重新打包安全检查通过；原 node-forge 已验证回补规则未放宽。
 
 范围说明：官方修复针对 v4 的集合长度检查；此调整不声称 v3 兼容入口获得同样的算法修复。Hikaro 的 sandbox 配置由 `sandbox-runner.mjs` 构造固定长度的数组，不接受远端或模型传入任意配置集合。见 [官方修复](https://github.com/colinhacks/zod/commit/a0ebf97)。
+
+## 全项目收尾审查
+
+沿调用关系检查了 CLI/RPC、Agent、Runtime、存储、TUI、移动读取和发布/模拟器脚本。根项目和移动项目额外启用 `noUnusedLocals` / `noUnusedParameters` 扫描；清除 7 个未使用绑定，未删除行为断言。构建与执行控制 PTY 通过。反转任务树详情权限判断后，现有“重启后只读后代”测试失败；恢复源码后与已通过版本逐字相同。
+
+后续复杂度清单（下次修改对应职责时处理，不以行数直接重写）：
+
+| 位置 | 具体职责问题 | 次序与处理方向 |
+| --- | --- | --- |
+| `apps/cli/src/rpc.ts` | 会话选择、授权、持久回执与大量方法分发同处；已有 `rpc-workflows` 可复用 | provider/资源切片前按领域收敛分发，保留统一授权与回执 |
+| `packages/core/src/index.ts` | Agent 队列、运行、工具回调与 PluginHost 同文件 | 协作/脱离进程切片时明确生命周期拥有者，避免再加一套队列 |
+| `packages/storage/src/worker.mjs` | 多领域 SQL 分发仍集中 | 延续 child-tasks、plan-evidence 的现有 handler 边界；不引入通用仓储框架 |
+| `packages/tui/src/index.ts` 与两个 CLI 入口 | 普通/附着面板生命周期仍各有编排 | 下一入口变更继续共用面板与解析器，分别保留 PTY 行为 |
+| 移动控制器及其测试 | 连接/草稿/通知/审批仍共用大控制器；真实 host 已独立归组 | 按能力继续收敛状态拥有权，不共享各页面的请求代次 |
+| `scripts/check-live-release.mjs` | 安装、账号、PTY、故障注入与清理串在一条显式验收流程 | 下次发布整理阶段诊断与有界清理，保留唯一包安装路径，避免复制整条 E2E |
+
+本轮未发现可以安全删除的独立用户能力；未为了减少文件数或测试数删除权限、恢复和取消场景。
+
+## 集成和候选包证据
+
+- 最终 `pnpm check`：123 个文件、631 项应用测试，15 项脚本检查，类型检查与构建通过。此前首次全量运行有一项批量回退 PTY 30 秒超时；单项和三项 PTY 组复核通过，未调整超时或断言。依赖修复后重跑全量才记为最终通过。
+- 移动类型检查、iOS/Android Hermes 导出通过。根和移动未使用代码扫描通过。
+- 候选包代码提交 `8acaa538e990b7b822e393248a862070d22aa607`，干净工作区；SHA-256 `3086e6e7d6449aebd28b519026b7285d445045b827f10fcbced00803fe39e5fe`。`e370fb5` 是其后的未使用绑定/注释整理，没有产品行为变化；不把该整理冒称已包含在候选包中。
+- [包来源](evidence-20261024/release-manifest.json)、[实际安装检查](evidence-20261024/release-install.json)、[真实账号计划和取消](evidence-20261024/live-plan.json)。本机 macOS arm64、Node 26.12.1；未新跑最低 Node CI、签名、公证或公开发布。
+- 实际安装包用正常 xAI 订阅凭据：模型提交计划，显式批准后读文件、修复加法、保持测试与 package.json 不变、执行测试并读 diff；第 1 步含 1 次可靠修改和 6 项工具结果。开始步骤的调用正确归入未关联。独立测试通过，拒绝越界命令无副作用，Ctrl+C 后 run.cancelled 与 Shell PID 退出均确认。
+- 首轮模型计划 120 秒未返回，[失败记录](evidence-20261024/live-plan-timeout.json)保留；一次重新安装失败后，另一次同包空缓存安装/在线验收成功。成功轮的诊断仅记录请求域名、路径、状态，未记录令牌、请求正文或刷新响应。未将首次超时归咎于已证实的产品缺陷。
+- 原始本机日志和临时验收驱动的 [SHA](evidence-20261024/local-evidence-sha256.json) 留档；测试工作区、会话与真实用户项目隔离。
+
+## 最终审阅补正
+
+独立审阅复现：插件最后 checkpoint 后，结果持久化期间仍接受取消，可能同时产生“取消已接受”和成功终态。`97efb31` 增加同步提交边界；保存开始后拒绝新取消，之前接受的取消继续持有租约并记为取消。两种保存窗口、最终 checkpoint、旧调用身份与关闭行为共 5 项定向回归及附着插件 PTY 通过。上方 `8acaa53` 的包是该补正之前的阶段证据；最终候选需在补正后重新核验。
+
+原生 iPhone 18 Pro / iOS 27 已在线确认：只读计划进度、两次可靠修改/两次观察差异、子任务 diff、工具结果分页到唯一尾标、后台任务状态。见 [计划页](../design/2026-10-24-native-evidence/plan-progress.png)、[来源](../design/2026-10-24-native-evidence/change-sources.png)、[工具末页](../design/2026-10-24-native-evidence/tool-result-tail.png)。系统最大辅助功能字号仅做文字换行、滚动和返回的基本检查，已恢复普通字号；按用户补充不展开读屏专项。任务切换与显式断线恢复收尾另记。
