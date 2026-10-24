@@ -40,6 +40,7 @@ export const stepUpdateSchema = z.object({
 });
 const progressSchema = z.object({
   planId: z.string().uuid(),
+  approvedAt: z.number().optional(),
   steps: z.array(
     z.object({
       status: stepStatusSchema,
@@ -59,6 +60,9 @@ export type Plan = z.infer<typeof planSchema>;
 export type PlanProgress = {
   planId: string;
   title: string;
+  approvedAt?: number;
+  /** File-tool edits recorded since approval, for comparison with the report. */
+  recordedEdits?: number;
   steps: Array<{
     text: string;
     status: z.infer<typeof stepStatusSchema>;
@@ -129,6 +133,9 @@ export class Planning {
     return {
       planId: plan.id,
       title: plan.title,
+      ...(progress.approvedAt === undefined
+        ? {}
+        : { approvedAt: progress.approvedAt }),
       steps: plan.steps.map((text, index) => ({
         text,
         ...structuredClone(progress.steps[index]!),
@@ -149,7 +156,10 @@ export class Planning {
       );
     const steps = structuredClone(state.progress.steps);
     steps[step - 1] = { status, ...(note ? { note } : {}) };
-    await this.save(session, { ...state, progress: { planId, steps } });
+    await this.save(session, {
+      ...state,
+      progress: { ...state.progress, planId, steps },
+    });
     return this.progress(session)!;
   }
   async removeSession(session: string) {
@@ -287,6 +297,7 @@ export class Planning {
       plan: state.plan,
       progress: {
         planId: id,
+        approvedAt: Date.now(),
         steps: state.plan.steps.map(() => ({ status: "pending" as const })),
       },
     });

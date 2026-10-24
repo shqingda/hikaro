@@ -579,7 +579,7 @@ async function main() {
               await import("../../../packages/tui/src/planning.ts");
             await browsePlanProgress(view, async () => {
               await runtime.planning.load(id, true);
-              return runtime.planning.progress(id);
+              return runtime.planProgress(id);
             });
             return;
           }

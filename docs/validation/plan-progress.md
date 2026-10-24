@@ -15,6 +15,13 @@
 - `tests/attached-workflows.test.ts` 新增 3 项：附着面板显示新 host 的进度，旧 host 提示升级，两者都不调用 `plan.set` 或 `prompt`；真实 `RpcWorkflows` 的 `plan.read` 在批准前返回 `null`，报告后返回对应状态。
 - 2026-10-24 `pnpm check` 退出码 0：114 个应用测试文件、609 项测试，15 项脚本检查，类型检查与构建通过。日志 `/tmp/hikaro-check-20261024-plan-progress.log`。
 
+## 补充：与实际修改对照（同日）
+
+批准时记录 `approvedAt`。`/plan progress` 和 host 的 `plan.read` 额外给出 `recordedEdits`，即批准后修改日志记录到的文件工具修改条数。TUI 显示“N file edits recorded since approval (see /changes)”，移动端显示“批准后实际记录到 N 次文件修改”。这只是条数对照，不能证明每一步的内容正确，也不包含 Shell 或插件修改。旧版本保存的进度没有批准时间，此时不显示条数。
+
+- `tests/plan-progress.test.ts`：批准写入 `approvedAt`。`tests/attached-workflows.test.ts`：真实 `RpcWorkflows` 在批准后的 0 次与 1 次修改时返回对应条数，附着面板显示条数。`tests/planning-pty.test.ts` 真实 PTY：执行阶段写 1 个文件后显示 `1 file edits recorded since approval`。
+- `pnpm check` 退出码 0：117 个应用测试文件、618 项测试，15 项脚本检查，类型检查与构建通过。日志 `/tmp/hikaro-check-20261024-plan-edits.log`。移动类型检查与 iOS/Android Hermes 导出通过，日志 `/tmp/hikaro-mobile-export-20261024-plan-edits.log`。
+
 ## 未覆盖
 
-真实模型是否可靠调用该工具、模型报告与实际修改的自动核对、附着端真实 PTY、移动端显示及历史计划版本的进度均未验证或未实现。本轮未调整发布百分比。
+真实模型是否可靠调用该工具、模型报告与实际修改的逐步自动核对（目前只有修改条数对照）、附着端真实 PTY、移动端显示及历史计划版本的进度均未验证或未实现。本轮未调整发布百分比。

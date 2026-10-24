@@ -65,6 +65,9 @@ export default function Plan() {
             {readable(progress.title)}
           </Text>
           <Note>{`模型报告已完成 ${done}/${progress.steps.length} 步`}</Note>
+          {progress.recordedEdits !== undefined && (
+            <Note>{`批准后实际记录到 ${progress.recordedEdits} 次文件修改，可在“查看文件修改”核对。`}</Note>
+          )}
           {progress.steps.map((step, index) => (
             <View
               key={index}

@@ -429,6 +429,7 @@ it.each([
             progress: {
               planId: randomUUID(),
               title: "Attached plan",
+              recordedEdits: 3,
               steps: [
                 { text: "Edit file", status: "completed", note: "Done" },
                 { text: "Run tests", status: "in_progress" },
@@ -468,6 +469,7 @@ it.each([
           expect(screen()).toContain("1/2 steps reported completed"),
         );
         expect(screen()).toContain("◐ In progress · Run tests");
+        expect(screen()).toContain("3 file edits recorded since approval");
         panel!.handleInput("\r");
       }
       await command;
@@ -518,8 +520,16 @@ it("returns approved plan progress from the shared host plan.read", async () => 
       step: 1,
       status: "completed",
     });
+    expect(await read()).toMatchObject({ recordedEdits: 0 });
+    await runtime.changes.update(
+      session.id,
+      join(home, "edited.txt"),
+      new AbortController().signal,
+      () => "after approval",
+    );
     expect(await read()).toMatchObject({
       planId: plan.id,
+      recordedEdits: 1,
       steps: [{ text: "One", status: "completed" }],
     });
   } finally {

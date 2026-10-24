@@ -206,6 +206,7 @@ it("explores read-only, answers a question, revises and approves a plan before w
     await wait("1/1 steps reported completed", progress);
     await wait("✓ Completed · Update sample.txt as requested", progress);
     await wait("sample.txt now reads implemented", progress);
+    await wait("1 file edits recorded since approval", progress);
     await wait("Enter send", send("\x1b"));
     send("\x04");
     expect(await exited).toBe(0);

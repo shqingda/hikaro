@@ -318,7 +318,11 @@ export function planProgressText(progress: PlanProgress) {
   const done = progress.steps.filter(
     (step) => step.status === "completed",
   ).length;
-  return `${progress.title}\n${done}/${progress.steps.length} steps reported completed\n\n${progress.steps
+  const edits =
+    progress.recordedEdits === undefined
+      ? ""
+      : `\n${progress.recordedEdits} file edits recorded since approval (see /changes)`;
+  return `${progress.title}\n${done}/${progress.steps.length} steps reported completed${edits}\n\n${progress.steps
     .map(
       (step, index) =>
         `${index + 1}. ${stepMarks[step.status]} · ${step.text}${step.note ? `\n   ${step.note}` : ""}`,

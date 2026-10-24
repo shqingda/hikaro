@@ -157,6 +157,16 @@ export class Runtime {
       this.planning.setActive(session.id, active),
     );
   }
+  /** Reported plan progress plus the edits actually recorded since approval. */
+  async planProgress(sessionId: string) {
+    const progress = this.planning.progress(sessionId);
+    if (!progress || progress.approvedAt === undefined) return progress;
+    const since = progress.approvedAt;
+    const recordedEdits = (await this.changes.list(sessionId)).filter(
+      (entry) => entry.timestamp >= since,
+    ).length;
+    return { ...progress, recordedEdits };
+  }
   async approvePlan(session: Session, id: string) {
     return this.changePlanning(session, () =>
       this.planning.approve(session.id, id),

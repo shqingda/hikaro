@@ -84,6 +84,7 @@ export type MobileContentField = "text" | "toolCalls";
 const planProgressSchema = z.object({
   planId: z.string().uuid(),
   title: z.string().max(200),
+  recordedEdits: z.number().int().nonnegative().optional(),
   steps: z
     .array(
       z.object({

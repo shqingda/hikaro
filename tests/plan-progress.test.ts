@@ -30,10 +30,13 @@ it("tracks reported step progress only for the approved plan and survives restar
       }),
     ).rejects.toThrow(/approved/);
 
+    const before = Date.now();
     await planning.approve("s", plan.id);
+    expect(planning.progress("s")!.approvedAt).toBeGreaterThanOrEqual(before);
     expect(planning.progress("s")).toEqual({
       planId: plan.id,
       title: "Ship progress",
+      approvedAt: expect.any(Number),
       steps: [
         { text: "Add storage", status: "pending" },
         { text: "Add tool", status: "pending" },
