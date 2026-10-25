@@ -125,9 +125,9 @@ function saveModel(sessionId, modelSelection) {
     Date.now(),
   );
 }
-function insertSession({ cwd, title, parentId, modelSelection }) {
+function insertSession({ id = randomUUID(), cwd, title, parentId, modelSelection }) {
   const session = {
-    id: randomUUID(),
+    id,
     title: title || "New session",
     cwd,
     createdAt: Date.now(),
@@ -552,20 +552,61 @@ const handlers = {
       .all(...args, Math.min(limit, 100), offset)
       .map(decodeSession);
   },
-  forkSession({ id }) {
+  deriveSession({ id, childId, summary }) {
+    if (
+      childId !== undefined &&
+      (typeof childId !== "string" ||
+        !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(
+          childId,
+        ))
+    )
+      throw Error("Invalid derived session ID");
+    if (
+      summary !== undefined &&
+      (typeof summary !== "string" ||
+        !summary.trim() ||
+        Buffer.byteLength(summary) > 65536)
+    )
+      throw Error("Invalid continuation summary");
     db.exec("BEGIN IMMEDIATE");
     try {
       const source = handlers.session({ id });
       if (!source) throw Error("Session not found");
       const target = insertSession({
+        id: childId,
         cwd: source.cwd,
-        title: "Branch: " + source.title,
+        title: `${summary === undefined ? "Branch" : "Continuation"}: ${source.title}`,
         parentId: id,
         modelSelection: source.modelSelection,
       });
-      prepare(
-        "INSERT INTO events(sessionId,type,data,timestamp) SELECT ?,type,data,timestamp FROM events WHERE sessionId=? AND type='message' ORDER BY seq",
-      ).run(target.id, id);
+      if (summary === undefined) {
+        prepare(
+          "INSERT INTO events(sessionId,type,data,timestamp) SELECT ?,type,data,timestamp FROM events WHERE sessionId=? AND type='message' ORDER BY seq",
+        ).run(target.id, id);
+      } else {
+        const timestamp = Date.now();
+        const append = prepare(
+          "INSERT INTO events(sessionId,type,data,timestamp) VALUES(?,?,?,?)",
+        );
+        append.run(
+          target.id,
+          "message",
+          JSON.stringify({
+            message: {
+              role: "user",
+              text: `Continuation summary from session ${id}:\n${summary}`,
+              timestamp,
+            },
+          }),
+          timestamp,
+        );
+        append.run(
+          target.id,
+          "context.compacted",
+          JSON.stringify({ source: id }),
+          timestamp,
+        );
+      }
       db.exec("COMMIT");
       return target;
     } catch (error) {

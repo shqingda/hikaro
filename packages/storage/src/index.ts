@@ -305,8 +305,11 @@ export class SQLiteStore implements EventStore {
   revokeScope(workspace: string, scope: string) {
     return this.request<void>("revokeScope", { workspace, scope });
   }
-  forkSession(id: string) {
-    return this.request<Session>("forkSession", { id });
+  forkSession(id: string, childId?: string) {
+    return this.request<Session>("deriveSession", { id, childId });
+  }
+  continueSession(id: string, childId: string, summary: string) {
+    return this.request<Session>("deriveSession", { id, childId, summary });
   }
   session(id: string) {
     return this.request<Session | undefined>("session", { id });

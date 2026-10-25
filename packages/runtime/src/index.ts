@@ -1005,22 +1005,41 @@ export class Runtime {
       this.defaultSelection(),
     );
   }
-  private async inheritPlanning(parent: Session, child: Session) {
-    await this.planning.load(parent.id, true);
-    const state = this.planning.get(parent.id);
-    await this.planning.load(child.id);
-    if (state.active) {
-      await this.planning.setActive(child.id, true);
-      if (state.plan) await this.planning.propose(child.id, state.plan);
+  private async deriveSession(
+    parent: Session,
+    summary?: string,
+    signal?: AbortSignal,
+  ) {
+    const childId = randomUUID();
+    try {
+      // Prepare read-only state before SQLite makes the child discoverable.
+      await this.planning.load(parent.id, true);
+      const state = this.planning.get(parent.id);
+      await this.planning.load(childId);
+      if (state.active) {
+        await this.planning.setActive(childId, true);
+        if (state.plan) await this.planning.propose(childId, state.plan);
+      }
+      signal?.throwIfAborted();
+      this.lifecycle.signal.throwIfAborted();
+      return await (summary === undefined
+        ? this.store.forkSession(parent.id, childId)
+        : this.store.continueSession(parent.id, childId, summary));
+    } catch (error) {
+      try {
+        // An interrupted worker reply may hide a committed child. Only remove
+        // its Plan files when the store confirms it was never published.
+        if (!(await this.store.session(childId)))
+          await this.planning.removeSession(childId);
+      } catch {
+        // Keep the prepared state if publication or cleanup is uncertain.
+      }
+      throw error;
     }
-    return child;
   }
   async fork(session: Session) {
     await this.session(session.id);
-    return this.inheritPlanning(
-      session,
-      await this.store.forkSession(session.id),
-    );
+    return this.deriveSession(session);
   }
   async renameSession(id: string, title: string) {
     await this.session(id);
@@ -1225,23 +1244,7 @@ export class Runtime {
       agent.compact(origin),
     );
     signal?.throwIfAborted();
-    const child = await this.store.createSession(
-      session.cwd,
-      `Continuation: ${session.title}`,
-      session.id,
-      (await this.session(session.id)).modelSelection,
-    );
-    await this.store.append(child.id, "message", {
-      message: {
-        role: "user",
-        text: `Continuation summary from session ${session.id}:\n${summary}`,
-        timestamp: Date.now(),
-      },
-    });
-    await this.store.append(child.id, "context.compacted", {
-      source: session.id,
-    });
-    return this.inheritPlanning(session, child);
+    return this.deriveSession(session, summary, signal);
   }
   close(beforeStoreClose?: () => Promise<void>) {
     return (this.closing ??= this.shutdown(beforeStoreClose));

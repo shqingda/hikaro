@@ -1,8 +1,9 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
+import { DatabaseSync } from "node:sqlite";
 import { Runtime } from "../packages/runtime/src/index.ts";
 import { SQLiteStore } from "../packages/storage/src/index.ts";
 import type { ProviderAdapter } from "../packages/core/src/index.ts";
@@ -245,6 +246,125 @@ it("cancels running compaction without saving a continuation", async () => {
   expect(
     events.filter((event) => event.type === "run.end").at(-1)?.data.status,
   ).toBe("cancelled");
+});
+
+it.each(["fork", "compact"] as const)(
+  "does not expose a %s session when inherited Plan initialization fails",
+  async (operation) => {
+    const { runtime } = await fixture();
+    const session = await runtime.session();
+    await runtime.store.append(session.id, "message", {
+      message: { role: "user", text: "Prior task", timestamp: 1 },
+    });
+    await runtime.setPlanning(session, true);
+    vi.spyOn(runtime.planning, "setActive").mockRejectedValueOnce(
+      Error("Plan storage unavailable"),
+    );
+
+    await expect(runtime[operation](session)).rejects.toThrow(
+      "Plan storage unavailable",
+    );
+    expect((await runtime.store.sessions()).map((item) => item.id)).toEqual([
+      session.id,
+    ]);
+  },
+);
+
+it("rolls back the continuation when its provenance cannot be stored", async () => {
+  const { runtime, home } = await fixture();
+  const session = await runtime.session();
+  await runtime.store.append(session.id, "message", {
+    message: { role: "user", text: "Prior task", timestamp: 1 },
+  });
+  const database = new DatabaseSync(join(home, "sessions.sqlite"));
+  try {
+    database.exec(`CREATE TRIGGER reject_continuation BEFORE INSERT ON events
+      WHEN NEW.type = 'context.compacted'
+      BEGIN SELECT RAISE(ABORT, 'Provenance storage unavailable'); END;`);
+    await expect(runtime.compact(session)).rejects.toThrow(
+      "Provenance storage unavailable",
+    );
+    expect((await runtime.store.sessions()).map((item) => item.id)).toEqual([
+      session.id,
+    ]);
+  } finally {
+    database.close();
+  }
+});
+
+it.each(["fork", "compact"] as const)(
+  "publishes a complete %s session with inherited read-only Plan after restart",
+  async (operation) => {
+    const { runtime, home } = await fixture();
+    const session = await runtime.session();
+    await runtime.store.append(session.id, "message", {
+      message: { role: "user", text: "Prior task", timestamp: 1 },
+    });
+    await runtime.setPlanning(session, true);
+    const plan = await runtime.planning.propose(session.id, {
+      title: "Read-only task",
+      steps: ["Inspect the project"],
+      validation: "Review findings",
+    });
+    const child = await runtime[operation](session);
+    await runtime.close();
+
+    const reopened = await Runtime.open({
+      home,
+      cwd: home,
+      demo: true,
+      approve: async () => false,
+    });
+    runtimes.add(reopened);
+    expect(await reopened.session(child.id)).toMatchObject({
+      parentId: session.id,
+      modelSelection: session.modelSelection,
+    });
+    await reopened.planning.load(child.id);
+    const inherited = reopened.planning.get(child.id);
+    expect(inherited).toMatchObject({ active: true, plan: { title: plan.title } });
+    expect(inherited.plan!.id).not.toBe(plan.id);
+    expect(await reopened.store.messages(child.id)).toEqual([
+      expect.objectContaining({
+        role: "user",
+        text:
+          operation === "fork"
+            ? "Prior task"
+            : `Continuation summary from session ${session.id}:\nFinished`,
+      }),
+    ]);
+    if (operation === "compact")
+      expect(await reopened.store.events(child.id)).toContainEqual(
+        expect.objectContaining({
+          type: "context.compacted",
+          data: { source: session.id },
+        }),
+      );
+  },
+);
+
+it("does not publish compaction cancelled while inherited Plan is saved", async () => {
+  const { runtime } = await fixture();
+  const session = await runtime.session();
+  await runtime.store.append(session.id, "message", {
+    message: { role: "user", text: "Prior task", timestamp: 1 },
+  });
+  await runtime.setPlanning(session, true);
+  const abort = new AbortController();
+  const setActive = runtime.planning.setActive.bind(runtime.planning);
+  vi.spyOn(runtime.planning, "setActive").mockImplementationOnce(
+    async (id, active) => {
+      const result = await setActive(id, active);
+      abort.abort();
+      return result;
+    },
+  );
+  await expect(runtime.compact(session, abort.signal)).rejects.toMatchObject({
+    name: "AbortError",
+  });
+  expect((await runtime.store.sessions()).map((item) => item.id)).toEqual([
+    session.id,
+  ]);
 });
 
 it("rejects unfinished Agent initialization when the Runtime closes", async () => {
