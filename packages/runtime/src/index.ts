@@ -88,10 +88,16 @@ export type RuntimeOptions = {
   ) => Promise<Record<string, string> | undefined>;
   approve: (r: PermissionRequest, signal: AbortSignal) => Promise<boolean>;
 };
-function sameModel(a: Pick<ModelSelection, "provider" | "model" | "baseUrl">, b: Pick<ModelSelection, "provider" | "model" | "baseUrl">) {
-  return a.provider === b.provider && a.model === b.model &&
+function sameModel(
+  a: Pick<ModelSelection, "provider" | "model" | "baseUrl">,
+  b: Pick<ModelSelection, "provider" | "model" | "baseUrl">,
+) {
+  return (
+    a.provider === b.provider &&
+    a.model === b.model &&
     (a.baseUrl ? normalizeEndpointUrl(a.baseUrl) : undefined) ===
-    (b.baseUrl ? normalizeEndpointUrl(b.baseUrl) : undefined);
+      (b.baseUrl ? normalizeEndpointUrl(b.baseUrl) : undefined)
+  );
 }
 export class Runtime {
   readonly tools = new ToolRegistry();
@@ -418,16 +424,23 @@ export class Runtime {
       const model =
         options.model ??
         (provider === selected.provider ? selected.model : undefined);
-      const baseUrl = options.baseUrl ?? (provider === selected.provider && model === selected.model ? selected.baseUrl : undefined);
-      const same = model !== undefined && sameModel(selected, { provider, model, baseUrl });
+      const baseUrl =
+        options.baseUrl ??
+        (provider === selected.provider && model === selected.model
+          ? selected.baseUrl
+          : undefined);
+      const same =
+        model !== undefined &&
+        sameModel(selected, { provider, model, baseUrl });
       options = {
         ...options,
         provider,
         model,
-        settings:
-          options.settings ?? (same ? selected.settings : undefined),
+        settings: options.settings ?? (same ? selected.settings : undefined),
         baseUrl,
-        endpointCapabilities: options.endpointCapabilities ?? (same ? selected.endpointCapabilities : undefined),
+        endpointCapabilities:
+          options.endpointCapabilities ??
+          (same ? selected.endpointCapabilities : undefined),
       };
     }
     const runtime = new Runtime(
@@ -779,32 +792,40 @@ export class Runtime {
           : {}),
       },
       ...(this.options.baseUrl ? { baseUrl: this.options.baseUrl } : {}),
-      ...(this.options.endpointCapabilities ? { endpointCapabilities: this.options.endpointCapabilities } : {}),
+      ...(this.options.endpointCapabilities
+        ? { endpointCapabilities: this.options.endpointCapabilities }
+        : {}),
     };
   }
   async provider(
     selection = this.defaultSelection(),
   ): Promise<ProviderAdapter> {
-    const custom = !selection.baseUrl && this.plugins.providers.get(selection.provider);
+    const custom =
+      !selection.baseUrl && this.plugins.providers.get(selection.provider);
     if (custom) return custom();
     const { createPiProvider, demoProvider } =
       await import("../../provider-pi/src/index.ts");
-    if (!selection.baseUrl && selection.provider === "demo" && selection.model === "offline") {
-      validateCapabilitySettings(await this.providerCatalog().capabilities(selection), selection.settings);
+    if (
+      !selection.baseUrl &&
+      selection.provider === "demo" &&
+      selection.model === "offline"
+    ) {
+      validateCapabilitySettings(
+        await this.providerCatalog().capabilities(selection),
+        selection.settings,
+      );
       return {
-          ...demoProvider(),
-          contextWindow: selection.settings.contextWindow ?? 32000,
-        };
+        ...demoProvider(),
+        contextWindow: selection.settings.contextWindow ?? 32000,
+      };
     }
     return await createPiProvider({
-          ...selection,
-          collection: this.catalog
-            ? await this.catalog.collection()
-            : undefined,
-          credentials: (this.credentials ??= new KeychainCredentials(
-            this.options.home!,
-          )),
-        });
+      ...selection,
+      collection: this.catalog ? await this.catalog.collection() : undefined,
+      credentials: (this.credentials ??= new KeychainCredentials(
+        this.options.home!,
+      )),
+    });
   }
   async setModel(
     session: Session,
@@ -829,7 +850,11 @@ export class Runtime {
     const defaults =
       (await readModelDefault(this.options.home!)) ?? this.defaultSelection();
     const target = { provider, model, baseUrl: endpoint };
-    const inherited = sameModel(previous, target) ? previous : sameModel(defaults, target) ? defaults : undefined;
+    const inherited = sameModel(previous, target)
+      ? previous
+      : sameModel(defaults, target)
+        ? defaults
+        : undefined;
     const selection: ModelSelection = {
       provider,
       model,
@@ -837,8 +862,11 @@ export class Runtime {
         ...(settings ?? inherited?.settings),
       },
       ...(endpoint ? { baseUrl: endpoint } : {}),
-      ...(endpointCapabilities ?? inherited?.endpointCapabilities
-        ? { endpointCapabilities: endpointCapabilities ?? inherited?.endpointCapabilities }
+      ...((endpointCapabilities ?? inherited?.endpointCapabilities)
+        ? {
+            endpointCapabilities:
+              endpointCapabilities ?? inherited?.endpointCapabilities,
+          }
         : {}),
     };
     const next = await this.provider(selection);
@@ -1189,6 +1217,51 @@ export class Runtime {
       await rm(temp, { force: true });
       await rm(assets, { recursive: true, force: true });
       throw e;
+    }
+  }
+  async previewCleanup(id: string) {
+    const session = await this.session(id);
+    const { previewStorageCleanup } = await import("./storage-cleanup.ts");
+    return (await previewStorageCleanup(this.options.home!, session.id))
+      .preview;
+  }
+  async cleanupStorage(id: string, token: string) {
+    if (!/^[a-f0-9]{64}$/.test(token))
+      throw Error("A confirmed cleanup preview is required");
+    const session = await this.session(id);
+    const idle = async () => {
+      const agent = this.agents.get(id);
+      if (
+        agent?.busy ||
+        agent?.pendingPrompts().length ||
+        this.initializingAgents.has(id) ||
+        this.pluginExecution?.current(id) ||
+        this.terminals.list(id).some((t) => t.state !== "exited") ||
+        this.childTasks(id).some((t) =>
+          ["starting", "running", "stopping"].includes(t.state),
+        )
+      )
+        throw Error(
+          "Stop active work and queued messages before cleaning storage",
+        );
+    };
+    await idle();
+    const lease = await this.store.acquireLease(id, randomUUID());
+    if (!lease) throw Error("Session is running elsewhere; cleanup refused");
+    try {
+      const { cleanStorageSnapshots } = await import("./storage-cleanup.ts");
+      return await cleanStorageSnapshots(
+        this.options.home!,
+        session.id,
+        token,
+        AbortSignal.any([this.lifecycle.signal, AbortSignal.timeout(25000)]),
+        async () => {
+          await idle();
+          await this.store.assertLease(id, lease);
+        },
+      );
+    } finally {
+      await this.store.releaseLease(id, lease);
     }
   }
   async deleteSession(id: string) {

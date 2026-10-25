@@ -51,12 +51,17 @@ async function main() {
       console.log(`${m.provider}/${m.id}\t${m.context}`);
     return;
   }
-  let endpointCapabilities: import("../../../packages/core/src/types.ts").EndpointCapabilities | undefined;
+  let endpointCapabilities:
+    | import("../../../packages/core/src/types.ts").EndpointCapabilities
+    | undefined;
   if (values["endpoint-capabilities"] !== undefined) {
     if (!values["base-url"])
       throw Error("--endpoint-capabilities requires an explicit --base-url");
-    const { endpointCapabilitiesSchema } = await import("../../../packages/provider-pi/src/settings.ts");
-    endpointCapabilities = endpointCapabilitiesSchema.parse(JSON.parse(values["endpoint-capabilities"]));
+    const { endpointCapabilitiesSchema } =
+      await import("../../../packages/provider-pi/src/settings.ts");
+    endpointCapabilities = endpointCapabilitiesSchema.parse(
+      JSON.parse(values["endpoint-capabilities"]),
+    );
   }
   const options = {
     cwd: values.cwd ?? process.cwd(),
@@ -452,6 +457,10 @@ async function main() {
     onPreferences: (patch) => applyPreferences({ ...preferences, ...patch }),
     onDraftChange: (text) => drafts.update(draftSessionId, text),
     commands: [
+      {
+        name: "storage",
+        description: "Preview session storage and explicitly clean snapshots",
+      },
       { name: "search", description: "Search full messages in this session" },
       { name: "questions", description: "Answer or dismiss saved questions" },
       {
@@ -755,10 +764,19 @@ async function main() {
         case "speed":
           await configureControl(command);
           return;
+        case "storage": {
+          const { storageCommand } =
+            await import("../../../packages/tui/src/storage.ts");
+          const id = session.id;
+          return storageCommand(arg, {
+            preview: () => runtime.previewCleanup(id),
+            clean: (token) => runtime.cleanupStorage(id, token),
+          });
+        }
         case "resources":
           return `Skills (${runtime.resources.skills.length}):\n${runtime.resources.skills.map((s) => s.name + " · " + s.path).join("\n")}\n\nInstructions:\n${runtime.resources.instructions.join("\n") || "None"}`;
         case "status":
-          return `Model (active): ${agent.options.provider.id}/${agent.options.provider.model}\nContext budget: ${agent.options.provider.contextWindow}\nReasoning: ${agent.options.session.modelSelection?.settings.reasoning ?? "auto"}\nSpeed: ${agent.options.session.modelSelection?.settings.speed ?? "default"}\nPermissions: ${runtime.permissionMode}\nSession: ${session.id}\nWorkspace: ${session.cwd}\nSkills: ${runtime.resources.skills.length}\nInput/output: ${agent.usage.input}/${agent.usage.output}\nEstimated API cost: $${agent.usage.cost.toFixed(4)}`;
+          return `Model (active): ${agent.options.provider.id}/${agent.options.provider.model}\nContext budget: ${agent.options.provider.contextWindow}\nReasoning: ${agent.options.session.modelSelection?.settings.reasoning ?? "auto"}\nSpeed: ${agent.options.session.modelSelection?.settings.speed ?? "default"}\nPermissions: ${runtime.permissionMode}\nSession: ${session.id}\nWorkspace: ${session.cwd}\nSkills: ${runtime.resources.skills.length}\nInput/output: ${agent.usage.input}/${agent.usage.output}\nEstimated API cost: $${agent.usage.cost.toFixed(4)}\nBudget: $${agent.budget.maxCost}; ${agent.budget.modelCallsLeft} model calls remain. Current Agent lifetime only; recreating the Agent or restarting resets usage and limits.`;
         case "quit":
           exit();
           return;
@@ -786,7 +804,7 @@ async function main() {
           return "Attachment added. Add your question and press Enter.";
         }
         case "help":
-          return '/plan [TASK] · Read-only exploration, questions and plan review\n/plan cancel · Leave without executing\n/plan history · Read saved plan versions\n/plan progress · Read reported step status of the approved plan\n/questions · Answer or dismiss saved questions\n/tasks · Manage queued messages, background terminals and child agents\n/tasks history [RUN_ID] · Read saved runs without pausing the queue\n/search [TEXT] · Search this session and read matching messages\n/changes · Review and roll back recorded file edits\n/new  /sessions  /resume [ID]  /rename TITLE  /export\n/fork  /compact  /model provider/model\n/attach PATH · @file or @"path with spaces" attaches text/images\n/settings  /permissions [ask|auto|full]\n/context [default]  /thinking [default]  /speed [default]\n/status  /resources\n/steer instructions  /tools  /older  /newer  /latest  /quit\n![--unrestricted] COMMAND follows the current permission mode. Ctrl+C cancels. Ctrl+D exits. Shift+Enter adds a line.\nNew prompts queue while the agent works.';
+          return '/plan [TASK] · Read-only exploration, questions and plan review\n/plan cancel · Leave without executing\n/plan history · Read saved plan versions\n/plan progress · Read reported step status of the approved plan\n/questions · Answer or dismiss saved questions\n/tasks · Manage queued messages, background terminals and child agents\n/tasks history [RUN_ID] · Read saved runs without pausing the queue\n/search [TEXT] · Search this session and read matching messages\n/changes · Review and roll back recorded file edits\n/new  /sessions  /resume [ID]  /rename TITLE  /export\n/fork  /compact  /model provider/model\n/attach PATH · @file or @"path with spaces" attaches text/images\n/settings  /permissions [ask|auto|full]\n/context [default]  /thinking [default]  /speed [default]\n/status  /resources  /storage\n/steer instructions  /tools  /older  /newer  /latest  /quit\n![--unrestricted] COMMAND follows the current permission mode. Ctrl+C cancels. Ctrl+D exits. Shift+Enter adds a line.\nNew prompts queue while the agent works.';
         case "new":
           await bind(await runtime.session());
           return;

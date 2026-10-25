@@ -342,6 +342,10 @@ export async function attachTui(options: {
     onExit: leave,
     detachOnCtrlD: true,
     commands: [
+      {
+        name: "storage",
+        description: "Preview host session storage and clean snapshots",
+      },
       { name: "search", description: "Search full messages in this session" },
       ...[
         "recovery",
@@ -484,11 +488,38 @@ export async function attachTui(options: {
           leave();
           return;
         case "/help":
-          return "Shared host: /recovery, /export, /plugins, ![--unrestricted] COMMAND (host approvals apply), /search [text], /changes, /tasks, /tasks history [RUN_ID], /plan [TASK], /plan cancel, /plan history, /plan progress · host workflows. /sessions [query], /resume ID, /new, /rename title, /compact, /fork, /steer text, /status, /access, /share DEVICE view|control|off, /model [PROVIDER/MODEL], /login, /settings, /permissions, /context [default], /thinking [default], /speed [default], /resources [query], /attach PATH. Ctrl+C stops the selected task; Ctrl+D detaches. Local files use the existing @ completion.";
+          return "Shared host: /recovery, /export, /plugins, ![--unrestricted] COMMAND (host approvals apply), /search [text], /changes, /tasks, /tasks history [RUN_ID], /plan [TASK], /plan cancel, /plan history, /plan progress · host workflows. /sessions [query], /resume ID, /new, /rename title, /compact, /fork, /steer text, /status, /access, /share DEVICE view|control|off, /model [PROVIDER/MODEL], /login, /settings, /permissions, /context [default], /thinking [default], /speed [default], /resources [query], /storage, /attach PATH. Ctrl+C stops the selected task; Ctrl+D detaches. Local files use the existing @ completion.";
+        case "/storage": {
+          const { storageCommand } =
+            await import("../../../packages/tui/src/storage.ts");
+          const id = client.status.session?.id;
+          if (!id || !client.status.canAct)
+            throw Error("Select a connected host session first");
+          if (
+            !client.supports("storage.preview") ||
+            !client.supports("storage.cleanup")
+          )
+            throw Error(
+              "This host does not support storage management; update the host first",
+            );
+          return storageCommand(rest, {
+            preview: async () =>
+              (await client.request("storage.preview", {
+                sessionId: id,
+              })) as import("../../../packages/tui/src/storage.ts").StoragePreview,
+            clean: async (token) =>
+              (await client.request("storage.cleanup", {
+                sessionId: id,
+                token,
+              })) as { files: number; bytes: number },
+          });
+        }
         case "/status":
           return JSON.stringify(
             {
-              ...client.state,
+              ...client.status,
+              budgetScope:
+                "Current host Agent lifetime. Recreating the Agent or restarting the host resets usage and limits; reconnecting a client does not.",
               stream: undefined,
               events: undefined,
               approvals: client.state.approvals.map((a) => a.id),

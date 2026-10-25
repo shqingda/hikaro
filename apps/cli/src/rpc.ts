@@ -380,6 +380,8 @@ export async function serveRpc(
             "permissions.set",
             "providers.reload",
             "resources.list",
+            "storage.preview",
+            "storage.cleanup",
             "plugins.list",
             "plugins.invoke",
             "plugins.cancel",
@@ -402,7 +404,7 @@ export async function serveRpc(
             "plugins.invoke",
             "plugins.cancel",
           ].includes(command.method) ||
-          /^(changes|execution|plan|questions)\./.test(command.method)
+          /^(changes|execution|plan|questions|storage)\./.test(command.method)
         ) {
           const sessionId = state.session?.id,
             agent = state.agent;
@@ -730,6 +732,23 @@ export async function serveRpc(
           const { configurationRequest } =
             await import("./rpc-configuration.ts");
           result = await configurationRequest(runtime, command.method, p);
+          break;
+        }
+        case "storage.preview":
+        case "storage.cleanup": {
+          const session = await selected();
+          requireUncancelled();
+          requireSameSelection();
+          result =
+            command.method === "storage.preview"
+              ? await runtime.previewCleanup(session.id)
+              : await runtime.cleanupStorage(
+                  session.id,
+                  z
+                    .string()
+                    .regex(/^[a-f0-9]{64}$/)
+                    .parse(p.token),
+                );
           break;
         }
         case "workspace.current":
