@@ -6,7 +6,7 @@ import {
   type TUI,
   type Component,
   type TuiMouseEvent,
-} from "../../tui/src/primitives.ts";
+} from "@earendil-works/pi-tui";
 import { sanitize } from "../../tui/src/text.ts";
 import type { PiTransport } from "./index.ts";
 

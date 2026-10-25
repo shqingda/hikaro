@@ -4,12 +4,13 @@ import {
   buildSecureFileHelper,
   buildProcessSnapshotHelper,
 } from "./build-native.mjs";
-import { cliBuildOptions } from "./build-options.mjs";
+import { cliBuildOptions, piExtensionBuildOptions } from "./build-options.mjs";
 import { copyStorageWorker } from "./build-storage.mjs";
 await buildSecureFileHelper();
 await buildProcessSnapshotHelper();
 await mkdir("dist", { recursive: true });
 const result = await build(cliBuildOptions());
+await build(piExtensionBuildOptions());
 await copyStorageWorker("dist");
 await copyFile(
   "packages/tools/src/secure-file-helper",

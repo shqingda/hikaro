@@ -96,21 +96,35 @@ The client reboot now includes `hello` capability negotiation, a portable `packa
 Hikaro uses `pi-ai` and `pi-tui`, but **does not use Pi's agent loop**.
 
 ```sh
-pnpm start --backend pi                    # Hikaro interface, external Pi execution
-pi -e /absolute/path/hikaro/extensions/pi/index.ts
+hikaro --install-pi                         # Persistent Pi entry; opens Hikaro by default
+hikaro --install-pi --pi-command /path/to/pi --home /path/to/hikaro-home
+pi                                         # Automatically enter the installed Hikaro view
+pi --pi-native                             # Stay in native Pi for this launch
+hikaro --backend pi                         # Hikaro interface, external Pi execution
 ```
 
-Inside Pi:
+For a source checkout, run `pnpm build`, then use `pnpm start --install-pi`.
+The installer probes `pi --version` and Pi's public `get_state` contract, then uses
+Pi's official `install` command to register a small owned entry in the selected
+Hikaro home. `--home` selects Hikaro data, not Pi's profile. Pi chooses its profile
+normally (or through `PI_CODING_AGENT_DIR`). Other Hikaro bridge settings are
+preserved, and automatic entry is enabled only after installation succeeds.
 
-```text
-/hikaro
-/hikaro default on
-/hikaro default off
-```
+The extension loads from the current Hikaro installation, without copying a
+second package or bundling Pi's TUI. **After upgrading or moving Hikaro, rerun the
+same `--install-pi` command with the same home** to update its entry. To remove the
+registration, run `pi remove /absolute/hikaro-home/pi-extension.mjs`.
 
-Persist the extension using Pi's package/extension settings if you want it loaded every launch. `pi --pi-native` skips automatic Hikaro entry when the extension is loaded. `/back` leaves the bridge. Automatic entry only runs in interactive Pi, once per process. No failure silently executes the prompt with another agent.
+Inside Pi, `/hikaro` opens the view, `/hikaro default on` and `/hikaro default off`
+control subsequent automatic entry, and `/back` returns to Pi. Automatic entry
+only runs in interactive Pi, once per process. A one-off source extension remains
+available with `pi -e /absolute/path/hikaro/extensions/pi/index.ts`.
 
-Compatibility targets Pi **1.2.0's public RPC and extension interfaces**. Arbitrary executable Pi extensions are not interchangeable with Hikaro plugins. External Pi owns its permissions and sandbox.
+Compatibility is validated against **Pi 1.4.0's public RPC and extension
+interfaces**. Other version lines display a warning and must pass the basic RPC
+contract before connecting. Failures never silently execute a prompt with another
+agent. Pi executable extensions are not interchangeable with Hikaro plugins;
+external Pi owns its permissions and sandbox.
 
 ## Optional integrations
 

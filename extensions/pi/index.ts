@@ -1,12 +1,14 @@
-import { readFile, mkdir, writeFile, rename, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import type { TUI, Component, OverlayOptions } from "@earendil-works/pi-tui";
 import { ProcessClient } from "../../packages/protocol/src/client.ts";
 import { PiBridgeView } from "../../packages/pi-bridge/src/view.ts";
 import type { PiTransport } from "../../packages/pi-bridge/src/index.ts";
+import {
+  readPiSettings,
+  setPiAutoOpen,
+} from "../../packages/pi-bridge/src/settings.ts";
 
 interface Context {
   mode: string;
@@ -58,7 +60,14 @@ export function hikaroLaunch(env: NodeJS.ProcessEnv = process.env) {
     // Pi's distributed executable is not Node, even though it has process.execPath.
     command: env.HIKARO_NODE ?? "node",
     args: [
-      fileURLToPath(new URL("../../dist/hikaro.mjs", import.meta.url)),
+      fileURLToPath(
+        new URL(
+          import.meta.url.endsWith(".ts")
+            ? "../../dist/hikaro.mjs"
+            : "./hikaro.mjs",
+          import.meta.url,
+        ),
+      ),
       "--rpc",
       ...(env.HIKARO_DEMO === "1" ? ["--demo"] : []),
     ],
@@ -76,7 +85,6 @@ export function createPiExtension(
   return (pi: PiHost) => {
     const home =
       options.home ?? process.env.HIKARO_HOME ?? join(homedir(), ".hikaro");
-    const settings = join(home, "pi-bridge.json");
     const state =
       options.state ??
       (processState[stateKey] ??= { opening: false, autoSeen: false });
@@ -84,24 +92,17 @@ export function createPiExtension(
       options.createClient ??
       ((cwd: string) => {
         const launch = hikaroLaunch();
-        return new ProcessClient(launch.command, launch.args, { cwd });
+        return new ProcessClient(
+          launch.command,
+          [...launch.args, "--home", home],
+          { cwd },
+        );
       });
     pi.registerFlag("pi-native", {
       description: "Skip the default Hikaro bridge for this launch",
       type: "boolean",
       default: false,
     });
-    const readSettings = async (): Promise<Record<string, unknown>> => {
-      try {
-        const value = JSON.parse(await readFile(settings, "utf8"));
-        if (!value || typeof value !== "object" || Array.isArray(value))
-          throw Error("Invalid Pi bridge settings");
-        return value;
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
-        throw error;
-      }
-    };
     const open = async (ctx: Context) => {
       if (ctx.mode !== "tui" || state.opening) return;
       state.opening = true;
@@ -137,20 +138,7 @@ export function createPiExtension(
       handler: async (input, ctx) => {
         const args = input.trim();
         if (args === "default on" || args === "default off") {
-          const current = await readSettings();
-          await mkdir(home, { recursive: true, mode: 0o700 });
-          const temporary = `${settings}.${randomUUID()}.tmp`;
-          try {
-            await writeFile(
-              temporary,
-              JSON.stringify({ ...current, autoOpen: args === "default on" }) +
-                "\n",
-              { mode: 0o600 },
-            );
-            await rename(temporary, settings);
-          } finally {
-            await rm(temporary, { force: true });
-          }
+          await setPiAutoOpen(home, args === "default on");
           ctx.ui.notify(
             `Hikaro default ${args === "default on" ? "on" : "off"}`,
             "info",
@@ -174,7 +162,7 @@ export function createPiExtension(
       state.autoSeen = true;
       if (pi.getFlag("pi-native") || state.opening) return;
       try {
-        if ((await readSettings()).autoOpen === true) {
+        if ((await readPiSettings(home)).autoOpen === true) {
           // Pi awaits session_start handlers. Do not await the lifetime of a persistent UI.
           void open(ctx);
         }

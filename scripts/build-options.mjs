@@ -47,3 +47,13 @@ export function cliBuildOptions() {
     ],
   };
 }
+
+// Pi supplies its own TUI classes and registries to extensions.
+export function piExtensionBuildOptions() {
+  return {
+    ...cliBuildOptions(),
+    entryPoints: { "pi-extension": "extensions/pi/index.ts" },
+    splitting: false,
+    plugins: [],
+  };
+}

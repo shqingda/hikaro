@@ -1,4 +1,6 @@
 import { ProcessClient } from "../../protocol/src/client.ts";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import type {
   AgentBackend,
   AgentEvent,
@@ -56,8 +58,23 @@ export class PiBackend implements AgentBackend {
   static async connect(
     command: string,
     cwd: string,
-    options: { args?: string[]; env?: NodeJS.ProcessEnv } = {},
+    options: {
+      args?: string[];
+      env?: NodeJS.ProcessEnv;
+      onWarning?: (message: string) => void;
+    } = {},
   ) {
+    const { stdout } = await promisify(execFile)(command, ["--version"], {
+      cwd,
+      env: options.env,
+      timeout: 10_000,
+      maxBuffer: 65_536,
+    });
+    const version = stdout.trim();
+    if (!/^1\.4\.\d+$/.test(version))
+      (options.onWarning ?? console.error)(
+        `Pi ${version || "(unknown version)"} is unverified; Hikaro targets Pi 1.4.x. Checking its RPC contract before continuing.`,
+      );
     const client = new ProcessClient(
       command,
       ["--mode", "rpc", ...(options.args ?? [])],
@@ -69,8 +86,21 @@ export class PiBackend implements AgentBackend {
     const backend = new PiBackend(client);
     try {
       const state = await client.request("get_state", {}, true);
-      if (typeof state.sessionId === "string")
-        backend.sessionId = state.sessionId;
+      if (
+        !state ||
+        typeof state.sessionId !== "string" ||
+        !state.sessionId ||
+        typeof state.isStreaming !== "boolean" ||
+        typeof state.isCompacting !== "boolean" ||
+        !Number.isSafeInteger(state.messageCount) ||
+        state.messageCount < 0 ||
+        !Number.isSafeInteger(state.pendingMessageCount) ||
+        state.pendingMessageCount < 0
+      )
+        throw Error(
+          "Pi get_state does not match the required RPC contract; no execution backend was changed",
+        );
+      backend.sessionId = state.sessionId;
       return backend;
     } catch (error) {
       await backend.close();
