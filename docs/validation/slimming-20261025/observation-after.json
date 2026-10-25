@@ -1,0 +1,268 @@
+{
+  "version": "after",
+  "source": "/Users/shqingda/Projects/hikaro/packages/tools/src/change-observations.ts",
+  "sha256": "e4482d0f059d603e3685a4e4862a7bd3e4852dea4b379e43aed5adfa927b7b3c",
+  "node": "v26.12.1",
+  "platform": "darwin",
+  "arch": "arm64",
+  "workload": "No-op capture, two automatic snapshots, 1KiB text files, 5s limit per snapshot, shared 64MiB budget",
+  "warmups": 1,
+  "runs": 3,
+  "measurements": [
+    {
+      "count": 100,
+      "samples": [
+        {
+          "warmup": true,
+          "ms": 51.975458,
+          "snapshots": [
+            {
+              "ms": 28.42670899999999,
+              "files": 100,
+              "present": 100,
+              "complete": true,
+              "warnings": []
+            },
+            {
+              "ms": 23.155834,
+              "files": 100,
+              "present": 100,
+              "complete": true,
+              "warnings": []
+            }
+          ]
+        },
+        {
+          "warmup": false,
+          "ms": 44.80066600000001,
+          "snapshots": [
+            {
+              "ms": 23.567207999999994,
+              "files": 100,
+              "present": 100,
+              "complete": true,
+              "warnings": []
+            },
+            {
+              "ms": 21.173749999999984,
+              "files": 100,
+              "present": 100,
+              "complete": true,
+              "warnings": []
+            }
+          ]
+        },
+        {
+          "warmup": false,
+          "ms": 42.66633299999998,
+          "snapshots": [
+            {
+              "ms": 22.311125000000004,
+              "files": 100,
+              "present": 100,
+              "complete": true,
+              "warnings": []
+            },
+            {
+              "ms": 20.28241700000001,
+              "files": 100,
+              "present": 100,
+              "complete": true,
+              "warnings": []
+            }
+          ]
+        },
+        {
+          "warmup": false,
+          "ms": 40.83016700000002,
+          "snapshots": [
+            {
+              "ms": 20.339499999999987,
+              "files": 100,
+              "present": 100,
+              "complete": true,
+              "warnings": []
+            },
+            {
+              "ms": 20.389584000000013,
+              "files": 100,
+              "present": 100,
+              "complete": true,
+              "warnings": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "count": 1000,
+      "samples": [
+        {
+          "warmup": true,
+          "ms": 317.32733299999995,
+          "snapshots": [
+            {
+              "ms": 154.91362499999997,
+              "files": 1000,
+              "present": 1000,
+              "complete": true,
+              "warnings": []
+            },
+            {
+              "ms": 161.99416700000006,
+              "files": 1000,
+              "present": 1000,
+              "complete": true,
+              "warnings": []
+            }
+          ]
+        },
+        {
+          "warmup": false,
+          "ms": 320.197,
+          "snapshots": [
+            {
+              "ms": 162.311958,
+              "files": 1000,
+              "present": 1000,
+              "complete": true,
+              "warnings": []
+            },
+            {
+              "ms": 157.51595800000007,
+              "files": 1000,
+              "present": 1000,
+              "complete": true,
+              "warnings": []
+            }
+          ]
+        },
+        {
+          "warmup": false,
+          "ms": 299.83425,
+          "snapshots": [
+            {
+              "ms": 150.64266599999996,
+              "files": 1000,
+              "present": 1000,
+              "complete": true,
+              "warnings": []
+            },
+            {
+              "ms": 148.96358299999997,
+              "files": 1000,
+              "present": 1000,
+              "complete": true,
+              "warnings": []
+            }
+          ]
+        },
+        {
+          "warmup": false,
+          "ms": 307.69454199999996,
+          "snapshots": [
+            {
+              "ms": 158.20945800000004,
+              "files": 1000,
+              "present": 1000,
+              "complete": true,
+              "warnings": []
+            },
+            {
+              "ms": 149.2293749999999,
+              "files": 1000,
+              "present": 1000,
+              "complete": true,
+              "warnings": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "count": 10000,
+      "samples": [
+        {
+          "warmup": true,
+          "ms": 3088.5625,
+          "snapshots": [
+            {
+              "ms": 1511.303084,
+              "files": 10000,
+              "present": 10000,
+              "complete": true,
+              "warnings": []
+            },
+            {
+              "ms": 1574.7532500000002,
+              "files": 10000,
+              "present": 10000,
+              "complete": true,
+              "warnings": []
+            }
+          ]
+        },
+        {
+          "warmup": false,
+          "ms": 3433.6944169999997,
+          "snapshots": [
+            {
+              "ms": 1534.6565410000003,
+              "files": 10000,
+              "present": 10000,
+              "complete": true,
+              "warnings": []
+            },
+            {
+              "ms": 1896.1180000000004,
+              "files": 10000,
+              "present": 10000,
+              "complete": true,
+              "warnings": []
+            }
+          ]
+        },
+        {
+          "warmup": false,
+          "ms": 3563.4935000000005,
+          "snapshots": [
+            {
+              "ms": 1784.934083,
+              "files": 10000,
+              "present": 10000,
+              "complete": true,
+              "warnings": []
+            },
+            {
+              "ms": 1773.7506250000006,
+              "files": 10000,
+              "present": 10000,
+              "complete": true,
+              "warnings": []
+            }
+          ]
+        },
+        {
+          "warmup": false,
+          "ms": 3652.984208,
+          "snapshots": [
+            {
+              "ms": 1973.0032499999998,
+              "files": 10000,
+              "present": 10000,
+              "complete": true,
+              "warnings": []
+            },
+            {
+              "ms": 1677.0278749999998,
+              "files": 10000,
+              "present": 10000,
+              "complete": true,
+              "warnings": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

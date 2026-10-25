@@ -1,0 +1,284 @@
+{
+  "version": "before",
+  "source": "/Users/shqingda/Projects/hikaro/artifacts/slimming-20261025/change-observations-before.ts",
+  "sha256": "5bc760da3536899c94dbbd5e00781f46d71ef7fc62811c4533118d0bbd29c5bd",
+  "node": "v26.12.1",
+  "platform": "darwin",
+  "arch": "arm64",
+  "workload": "No-op capture, two automatic snapshots, 1KiB text files, 5s limit per snapshot, shared 64MiB budget",
+  "warmups": 1,
+  "runs": 3,
+  "measurements": [
+    {
+      "count": 100,
+      "samples": [
+        {
+          "warmup": true,
+          "ms": 474.89970900000003,
+          "snapshots": [
+            {
+              "ms": 317.48,
+              "files": 100,
+              "present": 100,
+              "complete": true,
+              "warnings": []
+            },
+            {
+              "ms": 157.06941700000004,
+              "files": 100,
+              "present": 100,
+              "complete": true,
+              "warnings": []
+            }
+          ]
+        },
+        {
+          "warmup": false,
+          "ms": 357.094291,
+          "snapshots": [
+            {
+              "ms": 182.92937500000005,
+              "files": 100,
+              "present": 100,
+              "complete": true,
+              "warnings": []
+            },
+            {
+              "ms": 174.08425,
+              "files": 100,
+              "present": 100,
+              "complete": true,
+              "warnings": []
+            }
+          ]
+        },
+        {
+          "warmup": false,
+          "ms": 335.1407499999999,
+          "snapshots": [
+            {
+              "ms": 162.56404199999997,
+              "files": 100,
+              "present": 100,
+              "complete": true,
+              "warnings": []
+            },
+            {
+              "ms": 172.49612500000012,
+              "files": 100,
+              "present": 100,
+              "complete": true,
+              "warnings": []
+            }
+          ]
+        },
+        {
+          "warmup": false,
+          "ms": 314.41499999999996,
+          "snapshots": [
+            {
+              "ms": 165.50420899999995,
+              "files": 100,
+              "present": 100,
+              "complete": true,
+              "warnings": []
+            },
+            {
+              "ms": 148.844875,
+              "files": 100,
+              "present": 100,
+              "complete": true,
+              "warnings": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "count": 1000,
+      "samples": [
+        {
+          "warmup": true,
+          "ms": 2850.679833,
+          "snapshots": [
+            {
+              "ms": 1416.8702080000003,
+              "files": 1000,
+              "present": 1000,
+              "complete": true,
+              "warnings": []
+            },
+            {
+              "ms": 1433.3880000000004,
+              "files": 1000,
+              "present": 1000,
+              "complete": true,
+              "warnings": []
+            }
+          ]
+        },
+        {
+          "warmup": false,
+          "ms": 2985.942,
+          "snapshots": [
+            {
+              "ms": 1541.1861250000002,
+              "files": 1000,
+              "present": 1000,
+              "complete": true,
+              "warnings": []
+            },
+            {
+              "ms": 1444.4290410000003,
+              "files": 1000,
+              "present": 1000,
+              "complete": true,
+              "warnings": []
+            }
+          ]
+        },
+        {
+          "warmup": false,
+          "ms": 2894.3634170000005,
+          "snapshots": [
+            {
+              "ms": 1437.6980000000003,
+              "files": 1000,
+              "present": 1000,
+              "complete": true,
+              "warnings": []
+            },
+            {
+              "ms": 1456.3073750000003,
+              "files": 1000,
+              "present": 1000,
+              "complete": true,
+              "warnings": []
+            }
+          ]
+        },
+        {
+          "warmup": false,
+          "ms": 2959.5040420000005,
+          "snapshots": [
+            {
+              "ms": 1478.817332999999,
+              "files": 1000,
+              "present": 1000,
+              "complete": true,
+              "warnings": []
+            },
+            {
+              "ms": 1480.2716249999994,
+              "files": 1000,
+              "present": 1000,
+              "complete": true,
+              "warnings": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "count": 10000,
+      "samples": [
+        {
+          "warmup": true,
+          "ms": 10004.691958000001,
+          "snapshots": [
+            {
+              "ms": 5001.365999999998,
+              "files": 3514,
+              "present": 3515,
+              "complete": false,
+              "warnings": [
+                "Some files could not be read safely within the snapshot limit."
+              ]
+            },
+            {
+              "ms": 5000.163708,
+              "files": 3532,
+              "present": 3533,
+              "complete": false,
+              "warnings": [
+                "Some files could not be read safely within the snapshot limit."
+              ]
+            }
+          ]
+        },
+        {
+          "warmup": false,
+          "ms": 10001.486708999997,
+          "snapshots": [
+            {
+              "ms": 4999.776249999999,
+              "files": 3450,
+              "present": 3451,
+              "complete": false,
+              "warnings": [
+                "Some files could not be read safely within the snapshot limit."
+              ]
+            },
+            {
+              "ms": 4999.939625000003,
+              "files": 3513,
+              "present": 3514,
+              "complete": false,
+              "warnings": [
+                "Some files could not be read safely within the snapshot limit."
+              ]
+            }
+          ]
+        },
+        {
+          "warmup": false,
+          "ms": 10002.695166000005,
+          "snapshots": [
+            {
+              "ms": 5000.817499999997,
+              "files": 3417,
+              "present": 3418,
+              "complete": false,
+              "warnings": [
+                "Some files could not be read safely within the snapshot limit."
+              ]
+            },
+            {
+              "ms": 5000.361375,
+              "files": 3299,
+              "present": 3300,
+              "complete": false,
+              "warnings": [
+                "Some files could not be read safely within the snapshot limit."
+              ]
+            }
+          ]
+        },
+        {
+          "warmup": false,
+          "ms": 10001.986708999997,
+          "snapshots": [
+            {
+              "ms": 4999.745666999996,
+              "files": 3467,
+              "present": 3468,
+              "complete": false,
+              "warnings": [
+                "Some files could not be read safely within the snapshot limit."
+              ]
+            },
+            {
+              "ms": 5000.680165999998,
+              "files": 3320,
+              "present": 3321,
+              "complete": false,
+              "warnings": [
+                "Some files could not be read safely within the snapshot limit."
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
