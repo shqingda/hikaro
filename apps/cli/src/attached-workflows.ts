@@ -19,6 +19,7 @@ import {
   reviewPlan,
   browsePlanHistory,
   browsePlanProgress,
+  confirmLeavePlan,
 } from "../../../packages/tui/src/planning.ts";
 import type { FileChange } from "../../../packages/tools/src/changes.ts";
 import type {
@@ -277,34 +278,19 @@ export class AttachedWorkflows {
                     this.modal = undefined;
                     await this.command("/changes", "", { planId, step });
                   },
-                  tool: async (planId, tool) => {
-                    let offset = 0,
-                      text = "";
-                    for (;;) {
-                      const part = await this.request<{
-                        data: string;
-                        nextOffset: number | null;
-                        truncated: boolean;
-                      }>("plan.evidence", id, {
+                  tool: (planId, tool, offset, limit, signal) =>
+                    this.request(
+                      "plan.evidence",
+                      id,
+                      {
                         planId,
                         owner: tool.sessionId,
                         seq: tool.seq,
                         offset,
-                        limit: 16000,
-                      });
-                      text += part.data;
-                      if (part.nextOffset === null)
-                        return (
-                          text +
-                          (part.truncated
-                            ? "\n[Result preview limited; see session history.]"
-                            : "")
-                        );
-                      if (part.nextOffset <= offset || text.length > 128000)
-                        throw Error("Invalid evidence page");
-                      offset = part.nextOffset;
-                    }
-                  },
+                        limit,
+                      },
+                      signal,
+                    ),
                 }
               : undefined,
           );
@@ -324,29 +310,9 @@ export class AttachedWorkflows {
           return;
         }
         if (arg === "cancel") {
-          this.modal = "plan";
-          const { panel, close } = this.view.openModelPanel();
-          try {
-            const choice = await panel.choose(
-              "Leave Plan mode?",
-              [
-                { value: "keep", label: "Stay read-only" },
-                { value: "leave", label: "Leave without executing" },
-              ],
-              "Future prompts may edit under host permissions. No task starts now.",
-              undefined,
-              {
-                search: false,
-                cancelValue: "keep",
-                requireNoticeVisible: true,
-              },
-            );
-            if (choice.value === "leave")
-              await this.request("plan.set", id, { active: false });
-          } finally {
-            close();
-            if (this.modal === "plan") this.modal = undefined;
-          }
+          await confirmLeavePlan(this.view, () =>
+            this.request("plan.set", id, { active: false }),
+          );
           return;
         }
         const state = await this.request<{ active: boolean; plan?: Plan }>(

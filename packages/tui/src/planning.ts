@@ -238,6 +238,63 @@ export async function reviewPlan(
   }
 }
 
+export async function confirmLeavePlan(
+  view: HikaroView,
+  leave: () => Promise<unknown>,
+) {
+  const { panel, signal, close } = view.openModelPanel();
+  try {
+    const choice = await panel.choose(
+      "Leave Plan mode?",
+      [
+        { value: "keep", label: "Stay read-only" },
+        { value: "leave", label: "Leave without executing" },
+      ],
+      "Future prompts may edit under the current permissions. No task starts now.",
+      undefined,
+      { search: false, cancelValue: "keep", requireNoticeVisible: true },
+    );
+    signal.throwIfAborted();
+    if (choice.value === "leave") await leave();
+  } finally {
+    close();
+  }
+}
+
+/** Both backends page the same bounded, UTF-16 tool preview. */
+type EvidencePage = {
+  data: string;
+  nextOffset: number | null;
+  truncated: boolean;
+};
+export async function readPlanEvidence(
+  read: (offset: number, limit: number) => Promise<EvidencePage>,
+  signal: AbortSignal,
+) {
+  let text = "",
+    truncated = false;
+  for (;;) {
+    signal.throwIfAborted();
+    const part = await read(text.length, 16000);
+    signal.throwIfAborted();
+    if (
+      typeof part.data !== "string" ||
+      text.length + part.data.length > 128000 ||
+      (part.nextOffset !== null &&
+        (!part.data.length ||
+          part.nextOffset !== text.length + part.data.length))
+    )
+      throw Error("Invalid evidence page");
+    text += part.data;
+    truncated ||= part.truncated;
+    if (part.nextOffset === null)
+      return (
+        text +
+        (truncated ? "\n[Result preview limited; see session history.]" : "")
+      );
+  }
+}
+
 /** History is inspection only; approval always belongs to the current plan. */
 export async function browsePlanHistory(
   view: HikaroView,
@@ -341,7 +398,10 @@ export async function browsePlanProgress(
     tool(
       planId: string,
       tool: import("../../core/src/change-evidence.ts").ToolEvidence,
-    ): Promise<string>;
+      offset: number,
+      limit: number,
+      signal: AbortSignal,
+    ): Promise<EvidencePage>;
   },
 ) {
   const { panel, signal, close } = view.openModelPanel();
@@ -406,7 +466,11 @@ export async function browsePlanProgress(
         const tool = proof.tools.find((t) => String(t.seq) === action.value);
         if (tool) {
           panel.progress("Loading tool result…");
-          const text = await evidence.tool(progress.planId, tool);
+          const text = await readPlanEvidence(
+            (offset, limit) =>
+              evidence.tool(progress.planId, tool, offset, limit, signal),
+            signal,
+          );
           signal.throwIfAborted();
           await panel.readDocument(`${tool.name} · ${tool.status}`, text, []);
         }

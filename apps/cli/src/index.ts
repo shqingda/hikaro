@@ -545,35 +545,22 @@ async function main() {
           throw Error(
             "Finish or cancel the run before changing model settings.",
           );
-        const { openModelControl, parseModelControl } =
+        const { openModelControl } =
           await import("../../../packages/tui/src/model-settings.ts");
-        const { scope, supplied, key, value } = parseModelControl(field, arg);
         const active = agent.options.session.modelSelection!;
         const defaults =
           (await runtime.providerCatalog().readDefault()) ??
           runtime.defaultSelection();
-        if (supplied) {
-          const selected = scope === "active" ? active : defaults;
-          const settings = {
-            ...selected.settings,
-            [key]: value,
-          } as typeof active.settings;
-          if (scope === "active") await applyActiveModel(settings);
-          else await runtime.saveDefaultSelection({ ...selected, settings });
-          view.notice(
-            `/${field}: ${scope === "active" ? "applied to this session" : "saved for new sessions"}.`,
-          );
-        } else
-          await openModelControl(
-            view,
-            runtime.providerCatalog(),
-            field,
-            active,
-            defaults,
-            applyActiveModel,
-            (next) => runtime.saveDefaultSelection(next),
-            scope,
-          );
+        await openModelControl(
+          view,
+          runtime.providerCatalog(),
+          field,
+          active,
+          defaults,
+          applyActiveModel,
+          (next) => runtime.saveDefaultSelection(next),
+          arg,
+        );
       };
       switch (command) {
         case "questions": {
@@ -612,30 +599,17 @@ async function main() {
               },
               {
                 changes: (planId, step) => reviewChanges({ planId, step }),
-                tool: async (planId, tool) => {
+                tool: async (planId, tool, offset, limit) => {
                   if (!(await runtime.review.owners(id)).has(tool.sessionId))
                     throw Error("Task tree changed");
-                  let offset = 0,
-                    text = "";
-                  for (;;) {
-                    const part = await runtime.store.planEvidenceContent(
-                      tool.sessionId,
-                      id,
-                      planId,
-                      tool.seq,
-                      offset,
-                      16000,
-                    );
-                    text += part.data;
-                    if (part.nextOffset === null)
-                      return (
-                        text +
-                        (part.truncated
-                          ? "\n[Result preview limited; see session history.]"
-                          : "")
-                      );
-                    offset = part.nextOffset;
-                  }
+                  return runtime.store.planEvidenceContent(
+                    tool.sessionId,
+                    id,
+                    planId,
+                    tool.seq,
+                    offset,
+                    limit,
+                  );
                 },
               },
             );
@@ -660,30 +634,13 @@ async function main() {
             );
           await runtime.planning.load(session.id, true);
           if (arg.trim() === "cancel") {
-            const { panel, close } = view.openModelPanel();
-            try {
-              const result = await panel.choose(
-                "Leave Plan mode?",
-                [
-                  { value: "keep", label: "Stay read-only" },
-                  { value: "leave", label: "Leave without executing" },
-                ],
-                "Leaving allows future prompts to edit under the current permissions. No task starts now.",
-                undefined,
-                {
-                  search: false,
-                  requireNoticeVisible: true,
-                  cancelValue: "keep",
-                },
-              );
-              if (result.value === "leave") {
-                await runtime.setPlanning(session, false);
-                updateStatus();
-                view.notice("Plan cancelled; no execution started.");
-              }
-            } finally {
-              close();
-            }
+            const { confirmLeavePlan } =
+              await import("../../../packages/tui/src/planning.ts");
+            await confirmLeavePlan(view, async () => {
+              await runtime.setPlanning(session, false);
+              updateStatus();
+              view.notice("Plan cancelled; no execution started.");
+            });
             return;
           }
           if (!runtime.planning.get(session.id).active)

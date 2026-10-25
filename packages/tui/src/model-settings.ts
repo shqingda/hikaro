@@ -41,8 +41,24 @@ export async function openModelControl(
   defaults: ModelSelection,
   apply: (settings: ModelSettings) => Promise<void>,
   saveDefault: (selection: ModelSelection) => Promise<void>,
-  requestedScope: "active" | "default" = "active",
+  argument = "",
 ) {
+  const {
+    scope: requestedScope,
+    supplied,
+    key,
+    value,
+  } = parseModelControl(field, argument);
+  if (supplied) {
+    const selection = requestedScope === "active" ? active : defaults;
+    const settings = { ...selection.settings, [key]: value } as ModelSettings;
+    if (requestedScope === "active") await apply(settings);
+    else await saveDefault({ ...selection, settings });
+    view.notice(
+      `/${field}: ${requestedScope === "active" ? "applied to this session" : "saved for new sessions"}.`,
+    );
+    return;
+  }
   const { panel, signal, close } = view.openModelPanel();
   let scope = requestedScope,
     warning = "";
@@ -53,12 +69,6 @@ export async function openModelControl(
         selection.provider,
         selection.model,
       );
-      const key =
-        field === "thinking"
-          ? "reasoning"
-          : field === "context"
-            ? "contextWindow"
-            : "speed";
       const current =
         selection.settings[key] ?? (field === "speed" ? "default" : undefined);
       const chosenMark = (value: unknown, label: string) =>

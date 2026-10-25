@@ -1,4 +1,4 @@
-import { it, expect } from "vitest";
+import { it, expect, vi } from "vitest";
 import {
   modelCapabilities,
   validateModelSettings,
@@ -6,7 +6,61 @@ import {
 import { authenticationUrl } from "../packages/tui/src/auth-browser.ts";
 import { MessageComponent } from "../packages/tui/src/index.ts";
 import type { Model, Api } from "@earendil-works/pi-ai";
-import { parseModelControl } from "../packages/tui/src/model-settings.ts";
+import {
+  openModelControl,
+  parseModelControl,
+} from "../packages/tui/src/model-settings.ts";
+import type { HikaroView } from "../packages/tui/src/index.ts";
+import type { ModelSelection } from "../packages/core/src/types.ts";
+
+it.each(["active", "default"])(
+  "applies direct model controls through the same %s source as the picker",
+  async (scope) => {
+    const view = {
+      notice: vi.fn(),
+      openModelPanel: vi.fn(),
+    } as unknown as HikaroView;
+    const catalog = { capabilities: vi.fn() };
+    const apply = vi.fn().mockResolvedValue(undefined);
+    const saveDefault = vi.fn().mockResolvedValue(undefined);
+    const active: ModelSelection = {
+      provider: "active-provider",
+      model: "a",
+      settings: { reasoning: "high" },
+    };
+    const defaults: ModelSelection = {
+      provider: "default-provider",
+      model: "b",
+      settings: { reasoning: "low" },
+    };
+    await openModelControl(
+      view,
+      catalog,
+      "context",
+      active,
+      defaults,
+      apply,
+      saveDefault,
+      `128k ${scope}`,
+    );
+    if (scope === "active") {
+      expect(apply).toHaveBeenCalledExactlyOnceWith({
+        reasoning: "high",
+        contextWindow: 128000,
+      });
+      expect(saveDefault).not.toHaveBeenCalled();
+    } else {
+      expect(saveDefault).toHaveBeenCalledExactlyOnceWith({
+        ...defaults,
+        settings: { reasoning: "low", contextWindow: 128000 },
+      });
+      expect(apply).not.toHaveBeenCalled();
+    }
+    expect(view.openModelPanel).not.toHaveBeenCalled();
+    expect(catalog.capabilities).not.toHaveBeenCalled();
+    expect(view.notice).toHaveBeenCalledOnce();
+  },
+);
 it("parses direct model controls consistently and rejects ambiguous or unsafe sizes", () => {
   expect(parseModelControl("context", "128k default")).toEqual({
     scope: "default",

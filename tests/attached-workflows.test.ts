@@ -414,6 +414,93 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+it("reads attached plan evidence through the shared bounded reader while retaining task identity", async () => {
+  const tool = {
+    sessionId: "child",
+    callId: "call",
+    name: "shell",
+    seq: 77,
+    status: "completed",
+    preview: "first",
+  };
+  const proof = { reliable: 0, observed: 0, tools: [tool] };
+  const request = vi.fn(
+    async (method: string, params: Record<string, unknown>) => {
+      if (method === "plan.read")
+        return {
+          progress: {
+            planId: "plan",
+            title: "Read evidence",
+            steps: [{ text: "Test", status: "completed", evidence: proof }],
+            unassigned: proof,
+          },
+        };
+      return params.offset === 0
+        ? { data: "first", nextOffset: 5, truncated: false }
+        : { data: "tail", nextOffset: null, truncated: false };
+    },
+  );
+  const client = {
+    state: { canAct: true, session: { id: "session" } },
+    request,
+    supports: () => true,
+  } as unknown as ClientConnection;
+  const controller = new AbortController();
+  const readDocument = vi
+    .fn()
+    .mockResolvedValueOnce({ value: "evidence" })
+    .mockResolvedValueOnce({ value: "77" })
+    .mockResolvedValue({ value: "back" });
+  const setError = vi.fn();
+  const view = {
+    openModelPanel: () => ({
+      panel: {
+        progress: vi.fn(),
+        choose: async () => ({ value: "1" }),
+        readDocument,
+      },
+      signal: controller.signal,
+      close: () => controller.abort(),
+    }),
+    closeModelPanel: () => controller.abort(),
+    setError,
+  } as unknown as HikaroView;
+  const workflows = new AttachedWorkflows(client, view, "/tmp");
+  try {
+    await workflows.command("/plan", "progress");
+    expect(setError).not.toHaveBeenCalled();
+    expect(readDocument).toHaveBeenCalledWith(
+      "shell · completed",
+      "firsttail",
+      [],
+    );
+    expect(
+      request.mock.calls
+        .filter(([method]) => method === "plan.evidence")
+        .map(([, params]) => params),
+    ).toEqual([
+      {
+        sessionId: "session",
+        planId: "plan",
+        owner: "child",
+        seq: 77,
+        offset: 0,
+        limit: 16000,
+      },
+      {
+        sessionId: "session",
+        planId: "plan",
+        owner: "child",
+        seq: 77,
+        offset: 5,
+        limit: 16000,
+      },
+    ]);
+  } finally {
+    workflows.close();
+  }
+});
+
 it.each([
   ["current host", true],
   ["older host", false],
