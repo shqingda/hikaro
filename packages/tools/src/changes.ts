@@ -5,8 +5,13 @@ import {
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, open, readdir, realpath, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { constants } from "node:os";
 import * as z from "zod";
-import { readFileBytesBatch, readTextFile } from "./secure-files.ts";
+import {
+  readFileBytesBatch,
+  readTextFile,
+  SecureFileError,
+} from "./secure-files.ts";
 import { updateTextFile } from "./workspace.ts";
 
 const digest = (value: string) =>
@@ -141,7 +146,19 @@ export class ChangeJournal {
         join(this.folder(session), `${hash}.txt`),
         AbortSignal.timeout(10000),
         16 * 1024 * 1024,
-      );
+      ).catch((error: unknown) => {
+        if (
+          (error instanceof SecureFileError &&
+            error.errno === constants.errno.ENOENT) ||
+          (error instanceof Error &&
+            ((error as NodeJS.ErrnoException).code === "ENOENT" ||
+              error.message === "File does not exist"))
+        )
+          throw Error(
+            "Snapshot unavailable (removed or cleaned); diff, rollback and redo are unavailable.",
+          );
+        throw error;
+      });
       if (digest(text) !== hash)
         throw Error("Change snapshot is damaged; rollback refused");
       return text;

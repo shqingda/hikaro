@@ -74,6 +74,10 @@ async function fixture(kind: Kind, count = 1) {
         : kind === "observations"
           ? observations.list(session)
           : observations.warnings(session),
+    detail: () =>
+      kind === "journal"
+        ? journal.detail(session, id(0))
+        : observations.detail(session, id(0)),
   };
 }
 
@@ -158,6 +162,17 @@ it.each(
   }
   await expect(list()).rejects.toThrow();
 });
+
+it.each(["journal", "observations"] as const)(
+  "reports unavailable %s snapshots while retaining their history record",
+  async (kind) => {
+    const { list, detail } = await fixture(kind);
+    expect(await list()).toHaveLength(1);
+    await expect(detail()).rejects.toThrow(
+      "Snapshot unavailable (removed or cleaned); diff, rollback and redo are unavailable.",
+    );
+  },
+);
 
 it.each(["journal", "observations"] as const)(
   "preserves %s filename and record identity validation",

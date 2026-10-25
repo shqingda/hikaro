@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { constants } from "node:os";
 import {
   lstat,
   mkdir,
@@ -17,6 +18,7 @@ import {
   readFileBytes,
   readFileBytesBatch,
   readTextFile,
+  SecureFileError,
 } from "./secure-files.ts";
 
 const execute = promisify(execFile);
@@ -401,7 +403,19 @@ export class ChangeObservations {
         join(this.folder(session), digest + ".txt"),
         AbortSignal.timeout(5000),
         fileLimit,
-      );
+      ).catch((error: unknown) => {
+        if (
+          (error instanceof SecureFileError &&
+            error.errno === constants.errno.ENOENT) ||
+          (error instanceof Error &&
+            ((error as NodeJS.ErrnoException).code === "ENOENT" ||
+              error.message === "File does not exist"))
+        )
+          throw Error(
+            "Snapshot unavailable (removed or cleaned); diff, rollback and redo are unavailable.",
+          );
+        throw error;
+      });
       if (hash(text) !== digest) throw Error("Observation snapshot is damaged");
       return text;
     };
