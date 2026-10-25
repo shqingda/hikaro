@@ -27,6 +27,7 @@ export async function runTaskGraph<T>(
   const failures = new Map<string, unknown>();
   while (pending.size || running.size) {
     signal.throwIfAborted();
+    const pendingBefore = pending.size;
     for (const [id, node] of pending) {
       if (running.size >= concurrency) break;
       if (node.dependsOn.some((d) => failures.has(d))) {
@@ -53,7 +54,7 @@ export async function runTaskGraph<T>(
         });
       running.set(id, work);
     }
-    if (!running.size && pending.size)
+    if (!running.size && pending.size && pending.size === pendingBefore)
       throw Error("Task graph has a dependency cycle");
     if (running.size) await Promise.race(running.values());
   }
