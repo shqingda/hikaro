@@ -1141,8 +1141,8 @@ export class Agent implements AgentBackend {
         let delta = "";
         let thinking = "";
         let lastFlush = performance.now();
-        // Coalesce deltas for at most 24 ms. A timer flushes text that would
-        // otherwise wait for the next provider event when the stream pauses.
+        // Leave room for the TUI's 16 ms frame after coalescing. A timer flushes
+        // text that would otherwise wait when the provider stream pauses.
         let timer: ReturnType<typeof setTimeout> | undefined;
         let emitted: Promise<void> = Promise.resolve();
         const flush = () => {
@@ -1165,8 +1165,8 @@ export class Agent implements AgentBackend {
         };
         const schedule = () => {
           const waited = performance.now() - lastFlush;
-          if (waited >= 24) return flush();
-          timer ??= setTimeout(() => void flush().catch(() => {}), 24 - waited);
+          if (waited >= 12) return flush();
+          timer ??= setTimeout(() => void flush().catch(() => {}), 12 - waited);
           return emitted;
         };
         await this.checkExecution(signal);

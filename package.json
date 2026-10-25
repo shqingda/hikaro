@@ -20,6 +20,7 @@
     "bench": "node scripts/bench.mjs",
     "bench:check": "node scripts/bench.mjs --check",
     "bench:attach:check": "node scripts/bench-shared-host.mjs --check",
+    "bench:stream:check": "node scripts/bench-stream.mjs --check",
     "bench:soak": "node scripts/bench-soak.mjs",
     "bench:soak:check": "node scripts/bench-soak.mjs --check",
     "bench:harness": "node --import tsx scripts/bench-harness.mjs",

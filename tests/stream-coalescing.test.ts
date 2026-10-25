@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,19 +9,23 @@ import {
   type ProviderAdapter,
 } from "../packages/core/src/index.ts";
 
-it("shows coalesced text while the provider stream pauses", async () => {
+it("shows coalesced text within 12 ms while the provider stream pauses", async () => {
   const dir = await mkdtemp(join(tmpdir(), "hikaro-coalesce-"));
   const store = await SQLiteStore.open(join(dir, "sessions.sqlite"));
   let resume!: () => void;
   const paused = new Promise<void>((done) => (resume = done));
+  let notifyPaused!: () => void;
+  const providerPaused = new Promise<void>((done) => (notifyPaused = done));
+  let run: Promise<void> | undefined;
   const provider: ProviderAdapter = {
     id: "test",
     model: "test",
     contextWindow: 10000,
     async *stream() {
       yield { type: "text", text: "first " };
-      // Within the 24 ms coalescing window, then the model goes quiet.
+      // Both chunks arrive together, then the model goes quiet.
       yield { type: "text", text: "second" };
+      notifyPaused();
       await paused;
       yield {
         type: "done",
@@ -43,16 +47,20 @@ it("shows coalesced text while the provider stream pauses", async () => {
     agent.subscribe((event) => {
       if (event.type === "text.delta") shown += String(event.data.text);
     });
-    const run = agent.prompt("Task");
-    const deadline = Date.now() + 1000;
-    while (!shown.includes("second") && Date.now() < deadline)
-      await new Promise((done) => setTimeout(done, 10));
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+    run = agent.prompt("Task");
+    await providerPaused;
+    await vi.advanceTimersByTimeAsync(12);
+    // Wait for the SQLite worker to publish the queued delta.
+    await store.events(session.id);
     expect(shown).toBe("first second");
     resume();
     await run;
     expect(shown).toBe("first second");
   } finally {
     resume();
+    await run;
+    vi.useRealTimers();
     await store.close();
     await rm(dir, { recursive: true, force: true });
   }
