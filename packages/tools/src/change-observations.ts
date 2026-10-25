@@ -13,7 +13,11 @@ import {
 import { join, relative, resolve, isAbsolute } from "node:path";
 import * as z from "zod";
 import { sensitivePath } from "./workspace.ts";
-import { readFileBytes, readTextFile } from "./secure-files.ts";
+import {
+  readFileBytes,
+  readFileBytesBatch,
+  readTextFile,
+} from "./secure-files.ts";
 
 const execute = promisify(execFile);
 const hash = (value: string) =>
@@ -45,7 +49,8 @@ type Snapshot = {
   warnings: string[];
 };
 const fileLimit = 16 * 1024 * 1024,
-  totalLimit = 64 * 1024 * 1024;
+  totalLimit = 64 * 1024 * 1024,
+  batchFileLimit = 2_000_000;
 
 /** Best-effort observations are never a write journal or proof of authorship. */
 export class ChangeObservations {
@@ -114,6 +119,47 @@ export class ChangeObservations {
     }
     const root = await realpath(cwd),
       home = await realpath(this.home);
+    const unreadable = () =>
+      warn("Some files could not be read safely within the snapshot limit.");
+    const accept = (path: string, buffer: Buffer) => {
+      budget.remaining -= buffer.length;
+      if (buffer.includes(0)) {
+        warn("Binary files were excluded.");
+        return;
+      }
+      try {
+        snapshot.files.set(
+          path,
+          new TextDecoder("utf-8", { fatal: true }).decode(buffer),
+        );
+      } catch {
+        warn("Non-UTF-8 files were excluded.");
+      }
+    };
+    let pending: string[] = [];
+    const flush = async () => {
+      if (!pending.length) return;
+      const paths = pending;
+      pending = [];
+      try {
+        await readFileBytesBatch(
+          paths,
+          signal,
+          (result, index) => {
+            if (result.status === "fulfilled")
+              accept(paths[index]!, result.value);
+            else unreadable();
+          },
+          Math.min(batchFileLimit, budget.remaining),
+        );
+      } catch {
+        // Callback data is provisional until the whole helper request succeeds.
+        // Consumed bytes still count against the shared before/after budget.
+        for (const path of paths) snapshot.files.delete(path);
+        snapshot.complete = false;
+        unreadable();
+      }
+    };
 
     for (const name of names) {
       const path = resolve(root, name),
@@ -149,32 +195,38 @@ export class ChangeObservations {
           warn("Snapshot exceeds the 16 MiB file or 64 MiB total limit.");
           continue;
         }
-        const buffer = await readFileBytes(
-          path,
-          signal,
-          Math.min(fileLimit, budget.remaining),
-        );
-        budget.remaining -= buffer.length;
-        if (buffer.includes(0)) {
-          warn("Binary files were excluded.");
-          continue;
+        if (stat.size <= batchFileLimit) {
+          pending.push(path);
+          const limit = Math.min(batchFileLimit, budget.remaining);
+          // Reserve each entry's full read limit, not its earlier stat size:
+          // files may grow before opening, but the batch must fit the budget.
+          const count = limit ? Math.floor(budget.remaining / limit) : 100;
+          if (pending.length >= Math.min(100, count)) await flush();
+        } else {
+          await flush();
+          if (stat.size > budget.remaining) {
+            warn("Snapshot exceeds the 16 MiB file or 64 MiB total limit.");
+            continue;
+          }
+          accept(
+            path,
+            await readFileBytes(
+              path,
+              signal,
+              Math.min(fileLimit, budget.remaining),
+            ),
+          );
         }
-        let text: string;
-        try {
-          text = new TextDecoder("utf-8", { fatal: true }).decode(buffer);
-        } catch {
-          warn("Non-UTF-8 files were excluded.");
-          continue;
-        }
-        snapshot.files.set(path, text);
       } catch {
-        warn("Some files could not be read safely within the snapshot limit.");
+        unreadable();
       }
       if (signal.aborted) {
         snapshot.complete = false;
         break;
       }
     }
+    await flush();
+    if (signal.aborted) snapshot.complete = false;
     return snapshot;
   }
   async capture<T>(
