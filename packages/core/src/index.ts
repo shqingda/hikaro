@@ -361,15 +361,21 @@ export class Agent implements AgentBackend {
     }
     return event;
   }
+  private assertImagesSupported(images?: ImageInput[]) {
+    if (!images?.length || this.options.provider.supportsImages === true)
+      return;
+    throw Error(
+      this.options.provider.supportsImages === false
+        ? "The selected model does not support image input. Choose an image-capable model."
+        : "Image support is unknown. Choose an image-capable model or configure the custom endpoint with --endpoint-capabilities '{\"images\":true}'.",
+    );
+  }
   async prompt(
     text: string,
     images?: ImageInput[],
     origin?: { scope?: string; commandId?: string },
   ) {
-    if (images?.length && this.options.provider.supportsImages === false)
-      throw Error(
-        "The selected model does not support image input. Choose an image-capable model.",
-      );
+    this.assertImagesSupported(images);
     if (this.compacting)
       throw Error(
         "Wait for compaction to finish before sending another prompt.",
@@ -384,10 +390,7 @@ export class Agent implements AgentBackend {
     images?: ImageInput[],
     origin?: { scope?: string; commandId?: string },
   ) {
-    if (images?.length && this.options.provider.supportsImages === false)
-      throw Error(
-        "The selected model does not support image input. Choose an image-capable model.",
-      );
+    this.assertImagesSupported(images);
     if (this.compacting)
       throw Error(
         "Wait for compaction to finish before sending another prompt.",
@@ -451,10 +454,7 @@ export class Agent implements AgentBackend {
       if (!item.recovered) throw Error("Message is already queued");
       if (item.origin?.scope !== scope)
         throw Error("Restore from the original client identity");
-      if (item.images?.length && this.options.provider.supportsImages === false)
-        throw Error(
-          "The selected model does not support image input. Choose an image-capable model.",
-        );
+      this.assertImagesSupported(item.images);
       item.recovered = false;
     });
     void this.drain();

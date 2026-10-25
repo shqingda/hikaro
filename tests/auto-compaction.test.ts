@@ -501,19 +501,26 @@ describe("automatic compaction", () => {
     expect((await store.contextHistory(session.id)).checkpoint).toBeUndefined();
   });
 
-  it("rejects known unsupported images before persisting or queuing a turn", async () => {
-    const { store, session, agent, provider, summaries, requests } =
-      await agentFixture();
-    provider.supportsImages = false;
-    const before = await store.events(session.id);
-    await expect(
-      agent.prompt("Inspect image", [
-        { mimeType: "image/png", data: "aGVsbG8=" },
-      ]),
-    ).rejects.toThrow(/does not support image/i);
-    expect(await store.events(session.id)).toEqual(before);
-    expect(summaries).toHaveLength(0);
-    expect(requests).toHaveLength(0);
-    expect(agent.busy).toBe(false);
-  });
+  it.each([false, undefined])(
+    "rejects images with support %s before persisting or queuing a turn",
+    async (supportsImages) => {
+      const { store, session, agent, provider, summaries, requests } =
+        await agentFixture();
+      provider.supportsImages = supportsImages;
+      const before = await store.events(session.id);
+      await expect(
+        agent.prompt("Inspect image", [
+          { mimeType: "image/png", data: "aGVsbG8=" },
+        ]),
+      ).rejects.toThrow(
+        supportsImages === false
+          ? /does not support image/i
+          : /endpoint-capabilities.*images.*true/,
+      );
+      expect(await store.events(session.id)).toEqual(before);
+      expect(summaries).toHaveLength(0);
+      expect(requests).toHaveLength(0);
+      expect(agent.busy).toBe(false);
+    },
+  );
 });

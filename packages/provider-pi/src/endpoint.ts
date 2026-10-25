@@ -58,8 +58,8 @@ export function endpointModel(
         levels.includes(level) ? (level === "off" ? "none" : level) : null,
       ]),
     ),
-    // Unknown legacy endpoints retain image passthrough; absence is not a claim of support.
-    input: declared.images === false ? ["text"] : ["text", "image"],
+    // Unknown legacy configurations remain readable without claiming image support.
+    input: declared.images === true ? ["text", "image"] : ["text"],
     contextWindow: declared.contextWindow ?? contextWindow ?? 32768,
     maxTokens: declared.maxOutputTokens ?? 8192,
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },

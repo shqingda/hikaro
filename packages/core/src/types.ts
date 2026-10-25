@@ -35,7 +35,7 @@ export interface ProviderAdapter {
   contextWindow: number;
   /** Maximum completion tokens actually requested by this adapter. */
   maxOutputTokens?: number;
-  /** Undefined means a custom provider cannot determine image support locally. */
+  /** Images require true; undefined is unknown and must not imply support. */
   supportsImages?: boolean;
   stream(input: {
     system: string;

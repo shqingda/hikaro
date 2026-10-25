@@ -72,11 +72,12 @@ it("uses the saved API key bound to the exact compatible endpoint", async () => 
   expect(target.requests[0]?.authorization).toBe("Bearer endpoint-test-key");
 });
 
-it("sends image bytes to a compatible endpoint without dropping unknown-model image input", async () => {
+it("sends image bytes unchanged when the endpoint explicitly declares image support", async () => {
   const target = await endpoint();
   const provider = await createPiProvider({
     provider: "local",
     model: "vision-fixture",
+    endpointCapabilities: { images: true },
     ...target,
   });
   const image = {
@@ -98,7 +99,7 @@ it("sends image bytes to a compatible endpoint without dropping unknown-model im
     ],
   }))
     events.push(event);
-  expect(provider.supportsImages).toBeUndefined();
+  expect(provider.supportsImages).toBe(true);
   expect(events.some((event) => event.type === "done")).toBe(true);
   expect(
     target.bodies[0].messages.find(
@@ -158,32 +159,35 @@ it("uses declared reasoning and output limits on the wire without inheriting the
   expect(target.bodies[0].service_tier).toBeUndefined();
 });
 
-it("rejects images explicitly disabled by the endpoint before sending any request", async () => {
-  const target = await endpoint();
-  const provider = await createPiProvider({
-    provider: "local",
-    model: "text",
-    ...target,
-    endpointCapabilities: { images: false },
-  });
-  const stream = provider.stream({
-    system: "test",
-    tools: [],
-    signal: AbortSignal.timeout(5000),
-    messages: [
-      {
-        role: "user",
-        text: "image",
-        timestamp: 1,
-        images: [{ mimeType: "image/png", data: "ignored" }],
-      },
-    ],
-  });
-  await expect(stream[Symbol.asyncIterator]().next()).rejects.toThrow(
-    /image input/,
-  );
-  expect(target.requests).toHaveLength(0);
-});
+it.each([false, undefined])(
+  "rejects endpoint images before sending when support is %s",
+  async (images) => {
+    const target = await endpoint();
+    const provider = await createPiProvider({
+      provider: "local",
+      model: "text",
+      ...target,
+      endpointCapabilities: { images },
+    });
+    const stream = provider.stream({
+      system: "test",
+      tools: [],
+      signal: AbortSignal.timeout(5000),
+      messages: [
+        {
+          role: "user",
+          text: "image",
+          timestamp: 1,
+          images: [{ mimeType: "image/png", data: "ignored" }],
+        },
+      ],
+    });
+    await expect(stream[Symbol.asyncIterator]().next()).rejects.toThrow(
+      images === false ? /image input/ : /endpoint-capabilities.*images.*true/,
+    );
+    expect(target.requests).toHaveLength(0);
+  },
+);
 
 it("allows an explicit endpoint key to override its saved credential", async () => {
   const target = await endpoint();

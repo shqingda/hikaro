@@ -21,6 +21,7 @@ it("persists pending edits and images, restores without dispatch, and requires t
         id: "test",
         model: "test",
         contextWindow: 20000,
+        supportsImages: true,
         async *stream(input) {
           received.push(
             input.messages.filter((m) => m.role === "user").at(-1)!.text,
@@ -65,6 +66,12 @@ it("persists pending edits and images, restores without dispatch, and requires t
       /identity/,
     );
     await restored.removePending(two!.id);
+    restored.options.provider.supportsImages = undefined;
+    await expect(restored.resumePending(one!.id, "owner")).rejects.toThrow(
+      /endpoint-capabilities/,
+    );
+    expect(restored.pendingPrompts()[0]?.recovered).toBe(true);
+    restored.options.provider.supportsImages = true;
     await restored.resumePending(one!.id, "owner");
     while (restored.busy) await new Promise((r) => setTimeout(r, 10));
     expect(received).toEqual(["edited one"]);

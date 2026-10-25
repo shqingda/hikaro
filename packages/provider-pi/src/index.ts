@@ -154,10 +154,14 @@ export async function createPiProvider(options: {
     supportsImages: capabilities.images,
     async *stream(input): AsyncGenerator<ProviderEvent> {
       if (
-        capabilities.images === false &&
+        capabilities.images !== true &&
         input.messages.some((message) => message.images?.length)
       )
-        throw Error("This model does not support image input.");
+        throw Error(
+          capabilities.images === false
+            ? "This model does not support image input."
+            : "Image support is unknown. Configure this endpoint with --endpoint-capabilities '{\"images\":true}' before sending images.",
+        );
       const context = {
         systemPrompt: input.system,
         messages: input.messages.map((m) => toPi(m, selected)),
