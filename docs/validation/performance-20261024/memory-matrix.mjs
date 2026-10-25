@@ -11,7 +11,8 @@ import {
   saveReport,
 } from "../../../scripts/bench-support.mjs";
 
-const reportPath = "artifacts/memory-matrix-20261024.json";
+const reportPath =
+  process.env.HIKARO_MEMORY_OUTPUT ?? "artifacts/memory-matrix-20261024.json";
 const entry = resolve("dist/hikaro.mjs");
 const sampler = createMemorySampler();
 const report = {

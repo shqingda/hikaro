@@ -199,6 +199,8 @@ export async function packageRelease() {
     const metadata = {
       artifact,
       sha256,
+      compressedBytes: packed.size,
+      unpackedBytes: packed.unpackedSize,
       platform: process.platform,
       arch: process.arch,
       node: process.version,

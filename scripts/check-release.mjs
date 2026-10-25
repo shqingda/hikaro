@@ -177,6 +177,13 @@ try {
       });
   });
   const recovery = await verifyReleaseRecovery({ bin, spawn, home, workspace });
+  // Measure the actual production install before cleanup, excluding npm's cache.
+  const installedDiskKiB = Number(
+    (await exec("du", ["-sk", join(prefix, "node_modules")])).stdout
+      .trim()
+      .split(/\s+/)[0],
+  );
+  assert.ok(Number.isFinite(installedDiskKiB) && installedDiskKiB > 0);
   const report = {
     status: "passed",
     sha256,
@@ -186,6 +193,7 @@ try {
     node: process.version,
     nodeExecutable: process.execPath,
     emptyNpmCache: true,
+    installedDiskKiB,
     forge,
     checks: [
       "artifact checksum",
