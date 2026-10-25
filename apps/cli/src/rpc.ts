@@ -724,7 +724,6 @@ export async function serveRpc(
           }
           break;
         }
-        case "model.capabilities":
         case "providers.reload":
         case "permissions.set":
         case "resources.list": {
@@ -739,6 +738,7 @@ export async function serveRpc(
         case "draft.read":
         case "draft.save":
         case "models.list":
+        case "model.capabilities":
         case "model.read":
         case "model.set":
         case "model.default":

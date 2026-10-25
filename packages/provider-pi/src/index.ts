@@ -1,12 +1,14 @@
-import { validateModelSettings, type ModelSettings } from "./settings.ts";
 import {
-  compatibleEndpointProvider,
-  normalizeEndpointUrl,
-} from "./endpoint.ts";
+  modelCapabilities,
+  validateModelSettings,
+  type ModelSettings,
+} from "./settings.ts";
+import { compatibleEndpointProvider, endpointModel } from "./endpoint.ts";
 import type {
   ProviderAdapter,
   Message,
   ProviderEvent,
+  EndpointCapabilities,
 } from "../../core/src/types.ts";
 import type {
   Model,
@@ -77,12 +79,15 @@ export async function createPiProvider(options: {
   model: string;
   apiKey?: string;
   baseUrl?: string;
+  endpointCapabilities?: EndpointCapabilities;
   reasoning?: ThinkingLevel;
   contextWindow?: number;
   credentials?: CredentialStore;
   collection?: MutableModels;
   settings?: ModelSettings;
 }): Promise<ProviderAdapter> {
+  if (options.endpointCapabilities && !options.baseUrl)
+    throw Error("Endpoint capabilities require a base URL");
   const { createModels } = await import("@earendil-works/pi-ai/models");
   let models =
     options.collection ?? createModels({ credentials: options.credentials });
@@ -107,20 +112,7 @@ export async function createPiProvider(options: {
   }
   let model = models.getModel(options.provider, options.model);
   if (options.baseUrl) {
-    model = {
-      id: options.model,
-      name: options.model,
-      api: "openai-completions",
-      provider: options.provider,
-      baseUrl: normalizeEndpointUrl(options.baseUrl),
-      reasoning: false,
-      // The compatible transport can carry images. Actual model support is
-      // unknown here; let the endpoint reject it instead of dropping content.
-      input: ["text", "image"],
-      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-      contextWindow: options.contextWindow ?? 32768,
-      maxTokens: 8192,
-    };
+    model = endpointModel(options, options.contextWindow);
     // Keep endpoint auth isolated from the shared built-in provider collection.
     models = createModels();
     models.setProvider(
@@ -142,6 +134,10 @@ export async function createPiProvider(options: {
     },
   );
   const selected = model;
+  const capabilities = modelCapabilities(
+    selected,
+    options.baseUrl ? (options.endpointCapabilities ?? null) : undefined,
+  );
   const maxOutputTokens = Math.min(
     selected.maxTokens,
     16384,
@@ -155,8 +151,13 @@ export async function createPiProvider(options: {
     model: options.model,
     contextWindow: preferences.contextWindow ?? selected.contextWindow,
     maxOutputTokens,
-    supportsImages: options.baseUrl ? undefined : selected.input.includes("image"),
+    supportsImages: capabilities.images,
     async *stream(input): AsyncGenerator<ProviderEvent> {
+      if (
+        capabilities.images === false &&
+        input.messages.some((message) => message.images?.length)
+      )
+        throw Error("This model does not support image input.");
       const context = {
         systemPrompt: input.system,
         messages: input.messages.map((m) => toPi(m, selected)),

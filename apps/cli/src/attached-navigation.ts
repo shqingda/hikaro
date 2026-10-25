@@ -387,8 +387,13 @@ export class AttachedNavigation {
       await openModelControl(
         this.view,
         {
-          capabilities: (provider, model) =>
-            this.request("model.capabilities", { provider, model }),
+          capabilities: (selection, scope) =>
+            this.request("model.capabilities", {
+              sessionId: id,
+              provider: selection.provider,
+              model: selection.model,
+              scope,
+            }),
         },
         field,
         state.current,
@@ -402,13 +407,14 @@ export class AttachedNavigation {
             settings,
           });
         },
-        async (selection) => {
+        async (selection, scope) => {
           this.selected(id);
           await this.request("model.default", {
             sessionId: id,
             provider: selection.provider,
             model: selection.model,
             settings: selection.settings,
+            scope,
           });
         },
         arg,

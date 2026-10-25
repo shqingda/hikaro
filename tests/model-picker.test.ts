@@ -26,7 +26,10 @@ it("browses models and providers without reading secrets, then reads only the us
       stored: true,
       configured: true,
     });
-    await catalog.capabilities(choices[0]!.provider, choices[0]!.id);
+    await catalog.capabilities({
+      provider: choices[0]!.provider,
+      model: choices[0]!.id,
+    });
     expect(read).not.toHaveBeenCalled();
     await expect((await catalog.collection()).getAuth("xai")).rejects.toThrow(
       "Credential store read failed for xai",

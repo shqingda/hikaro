@@ -1,7 +1,44 @@
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai/models";
 import type { Api, Model } from "@earendil-works/pi-ai";
-import type { ModelSettings } from "../../core/src/types.ts";
+import type {
+  EndpointCapabilities,
+  ModelSettings,
+} from "../../core/src/types.ts";
+import * as z from "zod";
 export type { ModelSettings } from "../../core/src/types.ts";
+export const reasoningLevels = [
+  "off",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+] as const;
+const reasoningSchema = z.enum(reasoningLevels);
+export const modelSettingsSchema = z
+  .object({
+    contextWindow: z.number().int().min(1024).max(10000000).optional(),
+    reasoning: reasoningSchema.optional(),
+    speed: z.enum(["default", "priority", "flex"]).optional(),
+  })
+  .strict();
+export const endpointCapabilitiesSchema = z
+  .object({
+    contextWindow: z.number().int().min(1024).max(10000000).optional(),
+    maxOutputTokens: z.number().int().min(1).max(10000000).optional(),
+    images: z.boolean().optional(),
+    reasoning: z
+      .array(reasoningSchema)
+      .min(1)
+      .max(7)
+      .refine(
+        (levels) => new Set(levels).size === levels.length,
+        "Reasoning levels must be unique",
+      )
+      .optional(),
+  })
+  .strict();
 
 // Verified against the API pricing and Fast/Flex guides on 2026-10-13.
 // Unknown IDs stay on the provider default; API support alone is insufficient.
@@ -29,18 +66,41 @@ function speedTiers(
   return tiers;
 }
 
-export function modelCapabilities(model: Model<Api>) {
+export function modelCapabilities(
+  model: Model<Api>,
+  declared?: EndpointCapabilities | null,
+) {
   return {
     contextWindow: model.contextWindow,
+    maxOutputTokens: model.maxTokens,
+    images:
+      declared === undefined ? model.input.includes("image") : declared?.images,
     reasoning: getSupportedThinkingLevels(model),
     speed: speedTiers(model),
+    source:
+      declared === undefined ? ("catalog" as const) : ("endpoint" as const),
+    unknown:
+      declared === undefined
+        ? []
+        : (
+            ["contextWindow", "maxOutputTokens", "images", "reasoning"] as const
+          ).filter((key) => declared?.[key] === undefined),
   };
 }
 export function validateModelSettings(
   model: Model<Api>,
   settings: ModelSettings,
 ) {
-  const cap = modelCapabilities(model);
+  return validateCapabilitySettings(modelCapabilities(model), settings);
+}
+export function validateCapabilitySettings(
+  cap: {
+    contextWindow: number;
+    reasoning: readonly NonNullable<ModelSettings["reasoning"]>[];
+    speed: readonly NonNullable<ModelSettings["speed"]>[];
+  },
+  settings: ModelSettings,
+) {
   if (
     settings.contextWindow !== undefined &&
     (!Number.isInteger(settings.contextWindow) ||

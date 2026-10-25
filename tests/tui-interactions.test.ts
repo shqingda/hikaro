@@ -397,10 +397,13 @@ describe("TUI shortcut capabilities", () => {
           fixture.panel.handleInput("\r");
         }
         await work;
-        expect(save).toHaveBeenCalledExactlyOnceWith({
-          ...(scope === "active" ? active : defaults),
-          settings: { reasoning: "low" },
-        });
+        expect(save).toHaveBeenCalledExactlyOnceWith(
+          {
+            ...(scope === "active" ? active : defaults),
+            settings: { reasoning: "low" },
+          },
+          scope,
+        );
         if (scope === "active")
           expect(apply).toHaveBeenCalledExactlyOnceWith({ reasoning: "low" });
         else expect(apply).not.toHaveBeenCalled();

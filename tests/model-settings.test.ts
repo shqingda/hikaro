@@ -50,10 +50,13 @@ it.each(["active", "default"])(
       });
       expect(saveDefault).not.toHaveBeenCalled();
     } else {
-      expect(saveDefault).toHaveBeenCalledExactlyOnceWith({
-        ...defaults,
-        settings: { reasoning: "low", contextWindow: 128000 },
-      });
+      expect(saveDefault).toHaveBeenCalledExactlyOnceWith(
+        {
+          ...defaults,
+          settings: { reasoning: "low", contextWindow: 128000 },
+        },
+        "default",
+      );
       expect(apply).not.toHaveBeenCalled();
     }
     expect(view.openModelPanel).not.toHaveBeenCalled();
@@ -86,6 +89,47 @@ it("parses direct model controls consistently and rejects ambiguous or unsafe si
     "active default",
   ])
     expect(() => parseModelControl("context", value)).toThrow();
+});
+it("passes the complete endpoint selection and scope to the picker and labels unknown limits", async () => {
+  const selection: ModelSelection = {
+    provider: "openai",
+    model: "same-id",
+    baseUrl: "http://localhost:1234/v1",
+    settings: {},
+  };
+  const choose = vi.fn().mockResolvedValue({ value: "auto" });
+  const view = {
+    openModelPanel: () => ({
+      panel: { choose },
+      signal: new AbortController().signal,
+      close() {},
+    }),
+    notice() {},
+    setError: vi.fn(),
+  } as unknown as HikaroView;
+  const capabilities = vi
+    .fn()
+    .mockResolvedValue({
+      contextWindow: 32768,
+      reasoning: ["off"],
+      speed: ["default"],
+      source: "endpoint",
+      unknown: ["contextWindow", "images"],
+    });
+  await openModelControl(
+    view,
+    { capabilities },
+    "context",
+    selection,
+    selection,
+    async () => {},
+    async () => {},
+  );
+  expect(capabilities).toHaveBeenCalledExactlyOnceWith(selection, "active");
+  expect(choose.mock.calls[0]?.[1][0].label).toContain("fallback");
+  expect(choose.mock.calls[0]?.[2]).toContain(
+    "Endpoint capabilities unknown: contextWindow, images",
+  );
 });
 const model: Model<Api> = {
   id: "test",

@@ -2,30 +2,18 @@ import * as z from "zod";
 import type { Runtime } from "../../../packages/runtime/src/index.ts";
 import type { ModelSelection } from "../../../packages/core/src/types.ts";
 import { permissionModeSchema } from "../../../packages/runtime/src/permissions.ts";
-export const modelSettingsSchema = z
-  .object({
-    contextWindow: z.number().int().min(1024).max(10000000).optional(),
-    reasoning: z
-      .enum(["off", "minimal", "low", "medium", "high", "xhigh", "max"])
-      .optional(),
-    speed: z.enum(["default", "priority", "flex"]).optional(),
-  })
-  .strict();
+import { validateCapabilitySettings } from "../../../packages/provider-pi/src/settings.ts";
+export { modelSettingsSchema } from "../../../packages/provider-pi/src/settings.ts";
 export async function validateSettings(
   runtime: Runtime,
   selection: ModelSelection,
 ) {
-  const cap = await runtime
-    .providerCatalog()
-    .capabilities(selection.provider, selection.model);
-  const s = selection.settings;
-  if (
-    (s.contextWindow !== undefined && s.contextWindow > cap.contextWindow) ||
-    (s.reasoning !== undefined &&
-      !cap.reasoning.some((v) => v === s.reasoning)) ||
-    (s.speed !== undefined && !cap.speed.some((v) => v === s.speed))
-  )
+  const cap = await runtime.providerCatalog().capabilities(selection);
+  try {
+    validateCapabilitySettings(cap, selection.settings);
+  } catch {
     throw Error("Model settings exceed the selected model's capabilities");
+  }
 }
 export type ResourceEntry = {
   name: string;
@@ -39,13 +27,6 @@ export async function configurationRequest(
   p: Record<string, unknown>,
 ) {
   switch (method) {
-    case "model.capabilities":
-      return runtime
-        .providerCatalog()
-        .capabilities(
-          z.string().min(1).max(128).parse(p.provider),
-          z.string().min(1).max(256).parse(p.model),
-        );
     case "providers.reload":
       runtime.reloadProviderCatalog();
       return { reloaded: true };

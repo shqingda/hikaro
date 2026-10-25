@@ -35,12 +35,20 @@ export function parseModelControl(field: ModelControl, argument: string) {
 }
 export async function openModelControl(
   view: HikaroView,
-  catalog: Pick<ProviderCatalog, "capabilities">,
+  catalog: {
+    capabilities(
+      selection: ModelSelection,
+      scope: "active" | "default",
+    ): ReturnType<ProviderCatalog["capabilities"]>;
+  },
   field: ModelControl,
   active: ModelSelection,
   defaults: ModelSelection,
   apply: (settings: ModelSettings) => Promise<void>,
-  saveDefault: (selection: ModelSelection) => Promise<void>,
+  saveDefault: (
+    selection: ModelSelection,
+    scope?: "active" | "default",
+  ) => Promise<void>,
   argument = "",
 ) {
   const {
@@ -53,7 +61,7 @@ export async function openModelControl(
     const selection = requestedScope === "active" ? active : defaults;
     const settings = { ...selection.settings, [key]: value } as ModelSettings;
     if (requestedScope === "active") await apply(settings);
-    else await saveDefault({ ...selection, settings });
+    else await saveDefault({ ...selection, settings }, requestedScope);
     view.notice(
       `/${field}: ${requestedScope === "active" ? "applied to this session" : "saved for new sessions"}.`,
     );
@@ -65,10 +73,7 @@ export async function openModelControl(
   try {
     for (;;) {
       const selection = scope === "default" ? defaults : active;
-      const cap = await catalog.capabilities(
-        selection.provider,
-        selection.model,
-      );
+      const cap = await catalog.capabilities(selection, scope);
       const current =
         selection.settings[key] ?? (field === "speed" ? "default" : undefined);
       const chosenMark = (value: unknown, label: string) =>
@@ -94,7 +99,7 @@ export async function openModelControl(
             value: "auto",
             label: chosenMark(
               undefined,
-              `Auto (${Math.round(cap.contextWindow / 1000)}k maximum)`,
+              `Auto (${Math.round(cap.contextWindow / 1000)}k ${cap.unknown?.some((key) => key === "contextWindow") ? "fallback" : "maximum"})`,
             ),
           },
           ...sizes.map((n) => ({
@@ -140,7 +145,14 @@ export async function openModelControl(
       const picked = await panel.choose(
         `/${field} · ${scope} · ${selection.provider}/${selection.model}`,
         items,
-        warning,
+        [
+          warning,
+          cap.unknown?.length
+            ? `Endpoint capabilities unknown: ${cap.unknown.join(", ")}. Configure them on the host.`
+            : "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
         undefined,
         {
           allowDefault: (item) =>
@@ -168,7 +180,7 @@ export async function openModelControl(
       try {
         if (scope === "active") await apply(settings);
         if (scope === "default" || picked.makeDefault)
-          await saveDefault({ ...selection, settings });
+          await saveDefault({ ...selection, settings }, scope);
         view.notice(
           scope === "default"
             ? `/${field}: default saved; new sessions use it.`

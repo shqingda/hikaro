@@ -1,23 +1,26 @@
 import { mkdir, readFile, writeFile, rename } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { modelCapabilities, type ModelSettings } from "./settings.ts";
+import {
+  modelCapabilities,
+  modelSettingsSchema,
+  endpointCapabilitiesSchema,
+} from "./settings.ts";
+import { endpointModel } from "./endpoint.ts";
 import type { ModelSelection } from "../../core/src/types.ts";
 import * as z from "zod";
-const selectionSchema = z.object({
-  provider: z.string().min(1),
-  model: z.string().min(1),
-  settings: z
-    .object({
-      contextWindow: z.number().int().min(1024).optional(),
-      reasoning: z
-        .enum(["off", "minimal", "low", "medium", "high", "xhigh", "max"])
-        .optional(),
-      speed: z.enum(["default", "priority", "flex"]).optional(),
-    })
-    .default({}),
-  baseUrl: z.url().optional(),
-});
+const selectionSchema = z
+  .object({
+    provider: z.string().min(1),
+    model: z.string().min(1),
+    settings: modelSettingsSchema.default({}),
+    baseUrl: z.url().optional(),
+    endpointCapabilities: endpointCapabilitiesSchema.optional(),
+  })
+  .refine(
+    (selection) => !selection.endpointCapabilities || !!selection.baseUrl,
+    "Endpoint capabilities require a base URL",
+  );
 export async function readModelDefault(
   home: string,
 ): Promise<ModelSelection | undefined> {
@@ -154,12 +157,29 @@ export class ProviderCatalog {
       await this.collection()
     ).login(provider, type, interaction, { agentName: "Hikaro" });
   }
-  async capabilities(provider: string, model: string) {
+  async capabilities(
+    selection: Pick<
+      ModelSelection,
+      "provider" | "model" | "baseUrl" | "endpointCapabilities"
+    >,
+  ) {
+    const { provider, model } = selection;
+    if (selection.baseUrl)
+      return modelCapabilities(
+        endpointModel(selection),
+        selection.endpointCapabilities ?? null,
+      );
+    if (selection.endpointCapabilities)
+      throw Error("Endpoint capabilities require a base URL");
     if (provider === "demo" && model === "offline")
       return {
         contextWindow: 32000,
+        maxOutputTokens: 8192,
+        images: false,
         reasoning: ["off"] as const,
         speed: ["default"] as const,
+        source: "catalog" as const,
+        unknown: [],
       };
     const selected = (await this.collection()).getModel(provider, model);
     if (!selected) throw Error("Model not found");
@@ -168,22 +188,11 @@ export class ProviderCatalog {
   async readDefault() {
     return readModelDefault(this.home);
   }
-  async saveDefault(
-    provider: string,
-    model: string,
-    settings?: ModelSettings,
-    baseUrl?: string,
-  ) {
+  async saveDefault(selection: ModelSelection) {
     const temp = join(this.home, ".model-" + randomUUID() + ".tmp");
-    await writeFile(
-      temp,
-      JSON.stringify(
-        selectionSchema.parse({ provider, model, settings, baseUrl }),
-      ),
-      {
-        mode: 0o600,
-      },
-    );
+    await writeFile(temp, JSON.stringify(selectionSchema.parse(selection)), {
+      mode: 0o600,
+    });
     await rename(temp, join(this.home, "model-selection.json"));
   }
 }

@@ -1,5 +1,6 @@
 import type { Runtime } from "../../../packages/runtime/src/index.ts";
 import type { TuiPreferences } from "../../../packages/tui/src/preferences.ts";
+import type { EndpointCapabilities } from "../../../packages/core/src/types.ts";
 
 /** Explicit startup flags take precedence over the saved interactive session. */
 export async function selectInitialSession(
@@ -12,6 +13,7 @@ export async function selectInitialSession(
     provider?: string;
     model?: string;
     baseUrl?: string;
+    endpointCapabilities?: EndpointCapabilities;
   },
   preferences: Pick<TuiPreferences, "resumeOnStart">,
 ) {
@@ -35,6 +37,7 @@ export async function selectInitialSession(
       selected.model,
       undefined,
       flags.baseUrl,
+      flags.endpointCapabilities,
     );
   }
   return session;

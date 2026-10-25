@@ -132,6 +132,59 @@ it("never forwards provider or other endpoint credentials to a custom URL", asyn
   expect(target.requests[0]?.authorization).toBeUndefined();
 });
 
+it("uses declared reasoning and output limits on the wire without inheriting the provider label's dialect", async () => {
+  const target = await endpoint();
+  await request({
+    provider: "xai",
+    model: "local",
+    ...target,
+    endpointCapabilities: {
+      reasoning: ["off", "high"],
+      contextWindow: 64000,
+      maxOutputTokens: 1024,
+    },
+    settings: { reasoning: "high" },
+  });
+  expect(target.bodies[0]).toMatchObject({
+    reasoning_effort: "high",
+    messages: [
+      { role: "system", content: "test" },
+      { role: "user", content: "Hi" },
+    ],
+  });
+  expect(
+    target.bodies[0].max_tokens ?? target.bodies[0].max_completion_tokens,
+  ).toBe(1024);
+  expect(target.bodies[0].service_tier).toBeUndefined();
+});
+
+it("rejects images explicitly disabled by the endpoint before sending any request", async () => {
+  const target = await endpoint();
+  const provider = await createPiProvider({
+    provider: "local",
+    model: "text",
+    ...target,
+    endpointCapabilities: { images: false },
+  });
+  const stream = provider.stream({
+    system: "test",
+    tools: [],
+    signal: AbortSignal.timeout(5000),
+    messages: [
+      {
+        role: "user",
+        text: "image",
+        timestamp: 1,
+        images: [{ mimeType: "image/png", data: "ignored" }],
+      },
+    ],
+  });
+  await expect(stream[Symbol.asyncIterator]().next()).rejects.toThrow(
+    /image input/,
+  );
+  expect(target.requests).toHaveLength(0);
+});
+
 it("allows an explicit endpoint key to override its saved credential", async () => {
   const target = await endpoint();
   const credentials = new InMemoryCredentialStore();

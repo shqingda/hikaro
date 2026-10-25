@@ -35,6 +35,27 @@ export async function libraryRequest(
   selected: () => Promise<Session>,
 ): Promise<unknown> {
   switch (method) {
+    case "model.capabilities": {
+      if (p.baseUrl !== undefined || p.endpointCapabilities !== undefined)
+        throw Error("Configure endpoints on the host");
+      const provider = z.string().min(1).max(128).parse(p.provider);
+      const model = z.string().min(1).max(256).parse(p.model);
+      const scope = z.enum(["active", "default"]).parse(p.scope ?? "active");
+      const selection =
+        scope === "default"
+          ? ((await runtime.providerCatalog().readDefault()) ??
+            runtime.defaultSelection())
+          : p.sessionId !== undefined || p.scope === "active"
+            ? ((await selected()).modelSelection ?? runtime.defaultSelection())
+            : runtime.defaultSelection();
+      return runtime
+        .providerCatalog()
+        .capabilities(
+          selection.provider === provider && selection.model === model
+            ? selection
+            : { provider, model },
+        );
+    }
     case "messages.search": {
       const session = await selected();
       const query = z.string().min(1).max(256).parse(p.query);
@@ -76,9 +97,7 @@ export async function libraryRequest(
           (await runtime.providerCatalog().readDefault()) ??
             runtime.defaultSelection(),
         ),
-        capabilities: await runtime
-          .providerCatalog()
-          .capabilities(current.provider, current.model),
+        capabilities: await runtime.providerCatalog().capabilities(current),
       };
     }
     case "models.list": {
@@ -105,14 +124,12 @@ export async function libraryRequest(
       };
     }
     case "model.set": {
-      if (p.baseUrl !== undefined)
+      if (p.baseUrl !== undefined || p.endpointCapabilities !== undefined)
         throw Error("Configure endpoints on the host before selecting a model");
       const provider = z.string().min(1).max(128).parse(p.provider),
         model = z.string().min(1).max(256).parse(p.model);
       const settings =
         p.settings === undefined ? undefined : settingsSchema.parse(p.settings);
-      if (settings)
-        await validateSettings(runtime, { provider, model, settings });
       return publicSession(
         await runtime.setModel(await selected(), provider, model, settings),
       );
@@ -120,7 +137,7 @@ export async function libraryRequest(
     case "model.default": {
       const session = await selected();
       const current = session.modelSelection ?? runtime.defaultSelection();
-      if (p.baseUrl !== undefined)
+      if (p.baseUrl !== undefined || p.endpointCapabilities !== undefined)
         throw Error("Configure endpoints on the host");
       const provider = z
         .string()
@@ -135,12 +152,13 @@ export async function libraryRequest(
       const defaults =
         (await runtime.providerCatalog().readDefault()) ??
         runtime.defaultSelection();
-      const base =
-        provider === current.provider && model === current.model
-          ? current
-          : provider === defaults.provider && model === defaults.model
-            ? defaults
-            : undefined;
+      const scope = z.enum(["active", "default"]).parse(p.scope ?? "active");
+      const base = (
+        scope === "default" ? [defaults, current] : [current, defaults]
+      ).find(
+        (selection) =>
+          selection.provider === provider && selection.model === model,
+      );
       const selection = {
         provider,
         model,
@@ -149,6 +167,9 @@ export async function libraryRequest(
             ? (base?.settings ?? {})
             : settingsSchema.parse(p.settings),
         ...(base?.baseUrl ? { baseUrl: base.baseUrl } : {}),
+        ...(base?.endpointCapabilities
+          ? { endpointCapabilities: base.endpointCapabilities }
+          : {}),
       };
       if (p.settings !== undefined) await validateSettings(runtime, selection);
       await runtime.saveDefaultSelection(selection);

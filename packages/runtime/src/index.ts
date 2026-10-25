@@ -41,7 +41,9 @@ import {
   stepStatusSchema,
   type Questions,
 } from "./planning.ts";
-import type { Tool } from "../../core/src/types.ts";
+import type { Tool, EndpointCapabilities } from "../../core/src/types.ts";
+import { normalizeEndpointUrl } from "../../provider-pi/src/endpoint.ts";
+import { validateCapabilitySettings } from "../../provider-pi/src/settings.ts";
 import { TerminalManager } from "../../tools/src/terminal.ts";
 import { ChangeJournal } from "../../tools/src/changes.ts";
 import { SQLiteStore } from "../../storage/src/index.ts";
@@ -75,6 +77,7 @@ export type RuntimeOptions = {
   provider?: string;
   model?: string;
   baseUrl?: string;
+  endpointCapabilities?: EndpointCapabilities;
   reasoning?: "minimal" | "low" | "medium" | "high" | "xhigh";
   settings?: ModelSettings;
   askUser?: (
@@ -85,6 +88,11 @@ export type RuntimeOptions = {
   ) => Promise<Record<string, string> | undefined>;
   approve: (r: PermissionRequest, signal: AbortSignal) => Promise<boolean>;
 };
+function sameModel(a: Pick<ModelSelection, "provider" | "model" | "baseUrl">, b: Pick<ModelSelection, "provider" | "model" | "baseUrl">) {
+  return a.provider === b.provider && a.model === b.model &&
+    (a.baseUrl ? normalizeEndpointUrl(a.baseUrl) : undefined) ===
+    (b.baseUrl ? normalizeEndpointUrl(b.baseUrl) : undefined);
+}
 export class Runtime {
   readonly tools = new ToolRegistry();
   readonly plugins = new PluginHost(this.tools);
@@ -410,15 +418,16 @@ export class Runtime {
       const model =
         options.model ??
         (provider === selected.provider ? selected.model : undefined);
-      const sameModel =
-        provider === selected.provider && model === selected.model;
+      const baseUrl = options.baseUrl ?? (provider === selected.provider && model === selected.model ? selected.baseUrl : undefined);
+      const same = model !== undefined && sameModel(selected, { provider, model, baseUrl });
       options = {
         ...options,
         provider,
         model,
         settings:
-          options.settings ?? (sameModel ? selected.settings : undefined),
-        baseUrl: options.baseUrl ?? (sameModel ? selected.baseUrl : undefined),
+          options.settings ?? (same ? selected.settings : undefined),
+        baseUrl,
+        endpointCapabilities: options.endpointCapabilities ?? (same ? selected.endpointCapabilities : undefined),
       };
     }
     const runtime = new Runtime(
@@ -770,21 +779,24 @@ export class Runtime {
           : {}),
       },
       ...(this.options.baseUrl ? { baseUrl: this.options.baseUrl } : {}),
+      ...(this.options.endpointCapabilities ? { endpointCapabilities: this.options.endpointCapabilities } : {}),
     };
   }
   async provider(
     selection = this.defaultSelection(),
   ): Promise<ProviderAdapter> {
-    const custom = this.plugins.providers.get(selection.provider);
+    const custom = !selection.baseUrl && this.plugins.providers.get(selection.provider);
     if (custom) return custom();
     const { createPiProvider, demoProvider } =
       await import("../../provider-pi/src/index.ts");
-    return selection.provider === "demo" && selection.model === "offline"
-      ? {
+    if (!selection.baseUrl && selection.provider === "demo" && selection.model === "offline") {
+      validateCapabilitySettings(await this.providerCatalog().capabilities(selection), selection.settings);
+      return {
           ...demoProvider(),
           contextWindow: selection.settings.contextWindow ?? 32000,
-        }
-      : await createPiProvider({
+        };
+    }
+    return await createPiProvider({
           ...selection,
           collection: this.catalog
             ? await this.catalog.collection()
@@ -800,6 +812,7 @@ export class Runtime {
     model: string,
     settings?: ModelSettings,
     baseUrl?: string,
+    endpointCapabilities?: EndpointCapabilities,
   ) {
     const agent = this.agents.get(session.id);
     if (
@@ -815,20 +828,18 @@ export class Runtime {
       (previous.provider === provider ? previous.baseUrl : undefined);
     const defaults =
       (await readModelDefault(this.options.home!)) ?? this.defaultSelection();
-    const inherited =
-      defaults.provider === provider && defaults.model === model
-        ? defaults.settings
-        : {};
+    const target = { provider, model, baseUrl: endpoint };
+    const inherited = sameModel(previous, target) ? previous : sameModel(defaults, target) ? defaults : undefined;
     const selection: ModelSelection = {
       provider,
       model,
       settings: {
-        ...(settings ??
-          (previous.provider === provider && previous.model === model
-            ? previous.settings
-            : inherited)),
+        ...(settings ?? inherited?.settings),
       },
       ...(endpoint ? { baseUrl: endpoint } : {}),
+      ...(endpointCapabilities ?? inherited?.endpointCapabilities
+        ? { endpointCapabilities: endpointCapabilities ?? inherited?.endpointCapabilities }
+        : {}),
     };
     const next = await this.provider(selection);
     const updated = await this.store.setSessionModel(session.id, selection);
@@ -841,12 +852,7 @@ export class Runtime {
   }
   async saveDefaultSelection(selection: ModelSelection) {
     await this.provider(selection); // Validate before replacing the saved defaults.
-    await this.providerCatalog().saveDefault(
-      selection.provider,
-      selection.model,
-      selection.settings,
-      selection.baseUrl,
-    );
+    await this.providerCatalog().saveDefault(selection);
     this.options.demo =
       selection.provider === "demo" && selection.model === "offline";
     this.options.provider = selection.provider;
@@ -854,6 +860,7 @@ export class Runtime {
     this.options.settings = { ...selection.settings };
     this.options.reasoning = undefined;
     this.options.baseUrl = selection.baseUrl;
+    this.options.endpointCapabilities = selection.endpointCapabilities;
   }
   async agent(session: Session, depth = 0, budget?: RunBudget) {
     this.lifecycle.signal.throwIfAborted();

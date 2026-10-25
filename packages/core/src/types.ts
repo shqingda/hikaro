@@ -107,11 +107,19 @@ export type ModelSettings = {
   reasoning?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
   speed?: "default" | "priority" | "flex";
 };
+/** Optional host declaration for this exact compatible endpoint and model. */
+export type EndpointCapabilities = {
+  contextWindow?: number;
+  maxOutputTokens?: number;
+  images?: boolean;
+  reasoning?: Array<NonNullable<ModelSettings["reasoning"]>>;
+};
 export type ModelSelection = {
   provider: string;
   model: string;
   settings: ModelSettings;
   baseUrl?: string;
+  endpointCapabilities?: EndpointCapabilities;
 };
 export type Session = {
   id: string;

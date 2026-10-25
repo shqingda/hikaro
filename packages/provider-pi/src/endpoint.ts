@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import type { ModelSelection } from "../../core/src/types.ts";
+import { endpointCapabilitiesSchema, reasoningLevels } from "./settings.ts";
 import type {
   AuthOperationOptions,
   CredentialStore,
@@ -27,6 +29,47 @@ export function endpointCredentialId(baseUrl: string): string {
     "endpoint-" +
     createHash("sha256").update(normalizeEndpointUrl(baseUrl)).digest("hex")
   );
+}
+
+/** Pi's Model fields drive both request construction and capability validation. */
+export function endpointModel(
+  selection: Pick<
+    ModelSelection,
+    "provider" | "model" | "baseUrl" | "endpointCapabilities"
+  >,
+  contextWindow?: number,
+): Model<"openai-completions"> {
+  if (!selection.baseUrl)
+    throw Error("Endpoint capabilities require a base URL");
+  const declared = endpointCapabilitiesSchema.parse(
+    selection.endpointCapabilities ?? {},
+  );
+  const levels = declared.reasoning ?? ["off"];
+  return {
+    id: selection.model,
+    name: selection.model,
+    provider: selection.provider,
+    api: "openai-completions",
+    baseUrl: normalizeEndpointUrl(selection.baseUrl),
+    reasoning: levels.some((level) => level !== "off"),
+    thinkingLevelMap: Object.fromEntries(
+      reasoningLevels.map((level) => [
+        level,
+        levels.includes(level) ? (level === "off" ? "none" : level) : null,
+      ]),
+    ),
+    // Unknown legacy endpoints retain image passthrough; absence is not a claim of support.
+    input: declared.images === false ? ["text"] : ["text", "image"],
+    contextWindow: declared.contextWindow ?? contextWindow ?? 32768,
+    maxTokens: declared.maxOutputTokens ?? 8192,
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    // A provider label is not evidence of a custom endpoint's reasoning dialect.
+    compat: {
+      supportsDeveloperRole: false,
+      supportsReasoningEffort: levels.some((level) => level !== "off"),
+      thinkingFormat: "openai",
+    },
+  };
 }
 
 export async function saveEndpointApiKey(

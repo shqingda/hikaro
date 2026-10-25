@@ -28,6 +28,7 @@ const { values } = parseArgs({
     model: { type: "string" },
     "base-url": { type: "string" },
     "endpoint-key-env": { type: "string" },
+    "endpoint-capabilities": { type: "string" },
     cwd: { type: "string" },
     home: { type: "string" },
     session: { type: "string" },
@@ -39,7 +40,7 @@ const { values } = parseArgs({
 async function main() {
   if (values.help) {
     console.log(
-      `hikaro — independent coding agent\n\nUsage: hikaro [--demo] [--provider anthropic --model MODEL]\n  --trust             Allow file edits inside this workspace\n  --prompt, -p TEXT   Run once and print the response\n  --host              Run a persistent shared task host\n  --attach            Attach this TUI to the shared host\n  --serve             Connect the shared host to the encrypted relay\n  --client-id ID      Stable attached TUI identity (default: main)\n  --rpc               JSONL protocol over stdin/stdout\n  --models            List provider/model identifiers\n  --session ID        Resume a saved session\n  --continue, -c      Resume last opened session (default in TUI)\n  --new               Start a new interactive session\n  --base-url URL      OpenAI-compatible endpoint\n  --endpoint-key-env NAME  Save this environment key for the exact --base-url\n  --cwd PATH          Workspace (defaults to current directory)\n  --home PATH         Data directory (defaults to ~/.hikaro)\n\nAPI keys use provider environment variables. Interactive /permissions controls workspace approval mode.\nUse --demo to try the UI without credentials.`,
+      `hikaro — independent coding agent\n\nUsage: hikaro [--demo] [--provider anthropic --model MODEL]\n  --trust             Allow file edits inside this workspace\n  --prompt, -p TEXT   Run once and print the response\n  --host              Run a persistent shared task host\n  --attach            Attach this TUI to the shared host\n  --serve             Connect the shared host to the encrypted relay\n  --client-id ID      Stable attached TUI identity (default: main)\n  --rpc               JSONL protocol over stdin/stdout\n  --models            List provider/model identifiers\n  --session ID        Resume a saved session\n  --continue, -c      Resume last opened session (default in TUI)\n  --new               Start a new interactive session\n  --base-url URL      OpenAI-compatible endpoint\n  --endpoint-key-env NAME  Save this environment key for the exact --base-url\n  --endpoint-capabilities JSON  Declare contextWindow, maxOutputTokens, images, reasoning\n  --cwd PATH          Workspace (defaults to current directory)\n  --home PATH         Data directory (defaults to ~/.hikaro)\n\nAPI keys use provider environment variables. Interactive /permissions controls workspace approval mode.\nUse --demo to try the UI without credentials.`,
     );
     return;
   }
@@ -50,6 +51,13 @@ async function main() {
       console.log(`${m.provider}/${m.id}\t${m.context}`);
     return;
   }
+  let endpointCapabilities: import("../../../packages/core/src/types.ts").EndpointCapabilities | undefined;
+  if (values["endpoint-capabilities"] !== undefined) {
+    if (!values["base-url"])
+      throw Error("--endpoint-capabilities requires an explicit --base-url");
+    const { endpointCapabilitiesSchema } = await import("../../../packages/provider-pi/src/settings.ts");
+    endpointCapabilities = endpointCapabilitiesSchema.parse(JSON.parse(values["endpoint-capabilities"]));
+  }
   const options = {
     cwd: values.cwd ?? process.cwd(),
     home: values.home ?? process.env.HIKARO_HOME,
@@ -58,6 +66,7 @@ async function main() {
     provider: values.provider,
     model: values.model,
     baseUrl: values["base-url"],
+    endpointCapabilities,
   };
   if (values["endpoint-key-env"]) {
     if (!options.baseUrl)
@@ -266,6 +275,7 @@ async function main() {
         provider: values.provider,
         model: values.model,
         baseUrl: values["base-url"],
+        endpointCapabilities,
       },
       preferences,
     );
