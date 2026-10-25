@@ -504,9 +504,6 @@ export class SQLiteStore implements EventStore {
   renewJob(id: string, owner: string) {
     return this.request<boolean>("renewJob", { id, owner });
   }
-  acquire(sessionId: string, owner: string) {
-    return this.request<boolean>("acquire", { sessionId, owner });
-  }
   acquireLease(sessionId: string, owner: string) {
     return this.request<SessionLease | undefined>("acquireLease", {
       sessionId,
@@ -521,9 +518,6 @@ export class SQLiteStore implements EventStore {
   }
   releaseLease(sessionId: string, lease: SessionLease) {
     return this.request<void>("releaseLease", { sessionId, lease });
-  }
-  release(sessionId: string, owner: string) {
-    return this.request<void>("release", { sessionId, owner });
   }
   recentRunEvents(sessionId: string) {
     return this.request<AgentEvent[]>("recentRunEvents", { sessionId });
@@ -585,9 +579,6 @@ export class SQLiteStore implements EventStore {
     error?: string;
   }) {
     return this.request<void>("finishCommand", args);
-  }
-  claim(commandId: string, sessionId: string) {
-    return this.request<boolean>("claim", { commandId, sessionId });
   }
   async close() {
     if (this.closed) return;

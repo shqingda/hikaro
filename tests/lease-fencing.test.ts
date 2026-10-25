@@ -56,14 +56,15 @@ async function fixture(legacy = false) {
 
 it("rejects an expired owner's append in the database transaction", async () => {
   const { first, session, expire } = await fixture();
-  expect(await first.acquire(session.id, "old-owner")).toBe(true);
+  const lease = (await first.acquireLease(session.id, "old-owner"))!;
+  expect(lease.owner).toBe("old-owner");
   expire();
   await expect(
     first.append(
       session.id,
       "message",
       { text: "stale" },
-      { owner: "old-owner", epoch: 1 },
+      lease,
     ),
   ).rejects.toThrow(/lease/i);
   expect(await first.events(session.id)).toEqual([]);
@@ -71,14 +72,18 @@ it("rejects an expired owner's append in the database transaction", async () => 
 
 it("does not revive an expired lease by acquiring again with the same owner", async () => {
   const { first, session, expire } = await fixture();
-  expect(await first.acquire(session.id, "old-owner")).toBe(true);
+  expect(await first.acquireLease(session.id, "old-owner")).toMatchObject({
+    owner: "old-owner",
+  });
   expire();
-  expect(await first.acquire(session.id, "old-owner")).toBe(false);
+  expect(await first.acquireLease(session.id, "old-owner")).toBeUndefined();
 });
 
 it("rejects unowned appends while another connection holds the session lease", async () => {
   const { first, second, session } = await fixture();
-  expect(await first.acquire(session.id, "owner")).toBe(true);
+  expect(await first.acquireLease(session.id, "owner")).toMatchObject({
+    owner: "owner",
+  });
   await expect(
     second.append(session.id, "message", { text: "unowned" }),
   ).rejects.toThrow(/lease/i);

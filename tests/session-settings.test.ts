@@ -256,12 +256,12 @@ it("keeps active settings isolated and initializes only new sessions from defaul
     sessionId: c.id,
   });
   // Another process holding B cannot block changing A or allow changing B.
-  await runtime.store.acquire(b.id, "other-process");
+  const otherLease = (await runtime.store.acquireLease(b.id, "other-process"))!;
   await expect(
     runtime.setModel(b, "openai", "gpt-6.1-sol", { contextWindow: 16000 }),
   ).rejects.toThrow("Stop the active run");
   expect(agentB.options.provider.contextWindow).toBe(128000);
-  await runtime.store.release(b.id, "other-process");
+  await runtime.store.releaseLease(b.id, otherLease);
   const changed = await runtime.setModel(active, "openai", "gpt-6-luna");
   expect(changed.modelSelection?.settings).toEqual({});
   expect(runtime.defaultSelection().settings.contextWindow).toBe(32000);
@@ -502,11 +502,11 @@ it("deletes session history and outputs, preserves branches and refuses a live s
   );
   await runtime.planning.setActive(session.id, true);
   await runtime.planning.setActive(branch.id, true);
-  await runtime.store.acquire(session.id, "running-owner");
+  const lease = (await runtime.store.acquireLease(session.id, "running-owner"))!;
   await expect(runtime.deleteSession(session.id)).rejects.toThrow(
     "Stop the active run",
   );
-  await runtime.store.release(session.id, "running-owner");
+  await runtime.store.releaseLease(session.id, lease);
   const folder = join(home, "artifacts", session.id);
   await mkdir(folder, { recursive: true });
   await writeFile(join(folder, "sample.json"), "{}");
@@ -524,7 +524,9 @@ it("deletes session history and outputs, preserves branches and refuses a live s
   await expect(readFile(join(folder, "sample.json"))).rejects.toMatchObject({
     code: "ENOENT",
   });
-  expect(await runtime.store.acquire(session.id, "late-owner")).toBe(false);
+  expect(
+    await runtime.store.acquireLease(session.id, "late-owner"),
+  ).toBeUndefined();
   expect((await runtime.store.messages(branch.id))[0]?.text).toBe(
     "Delete only this session",
   );

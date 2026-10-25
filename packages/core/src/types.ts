@@ -198,7 +198,6 @@ export interface EventStore {
     lease: SessionLease,
     signal?: AbortSignal,
   ): Promise<ContextCheckpoint>;
-  acquire(sessionId: string, owner: string): Promise<boolean>;
   acquireLease(
     sessionId: string,
     owner: string,
@@ -206,8 +205,6 @@ export interface EventStore {
   renewLease(sessionId: string, lease: SessionLease): Promise<boolean>;
   assertLease(sessionId: string, lease?: SessionLease): Promise<void>;
   releaseLease(sessionId: string, lease: SessionLease): Promise<void>;
-  release(sessionId: string, owner: string): Promise<void>;
-  claim(commandId: string, sessionId: string): Promise<boolean>;
   close(): Promise<void>;
 }
 export interface AgentBackend {

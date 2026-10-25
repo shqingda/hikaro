@@ -1134,9 +1134,6 @@ const handlers = {
       ).run(Date.now() + 30000, id, owner).changes > 0
     );
   },
-  acquire({ sessionId, owner }) {
-    return !!handlers.acquireLease({ sessionId, owner });
-  },
   acquireLease({ sessionId, owner }) {
     db.exec("BEGIN IMMEDIATE");
     try {
@@ -1180,16 +1177,10 @@ const handlers = {
     assertLease(sessionId, lease);
   },
   releaseLease({ sessionId, lease }) {
+    // Retain the epoch even after release, otherwise an old token can become valid.
     prepare(
       "UPDATE leases SET expires=0 WHERE sessionId=? AND owner=? AND epoch=?",
     ).run(sessionId, lease.owner, lease.epoch);
-  },
-  release({ sessionId, owner }) {
-    // Retain the epoch even after release, otherwise an old token can become valid.
-    prepare("UPDATE leases SET expires=0 WHERE sessionId=? AND owner=?").run(
-      sessionId,
-      owner,
-    );
   },
   recentRunEvents({ sessionId }) {
     return prepare(
@@ -1325,15 +1316,6 @@ const handlers = {
     ).changes;
     if (!changed)
       throw Error("Command receipt ownership lost or already settled");
-  },
-  claim({ commandId, sessionId }) {
-    return (
-      prepare("INSERT OR IGNORE INTO commands VALUES(?,?,?)").run(
-        commandId,
-        sessionId,
-        Date.now(),
-      ).changes > 0
-    );
   },
   close() {
     db.close();

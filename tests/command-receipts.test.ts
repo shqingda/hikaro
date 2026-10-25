@@ -2,6 +2,7 @@ import { afterEach, expect, it } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { SQLiteStore } from "../packages/storage/src/index.ts";
 
 const stores = new Set<SQLiteStore>();
@@ -127,8 +128,15 @@ it("retains accepted intent after reopen without guessing another host's outcome
 });
 
 it("treats legacy unscoped claims as unknown without disclosing their session", async () => {
-  const { workspace, store, session } = await fixture();
-  await store.claim("legacy-command", session.id);
+  const { workspace, path, store, session } = await fixture();
+  const legacy = new DatabaseSync(path);
+  try {
+    legacy
+      .prepare("INSERT INTO commands(id,sessionId,createdAt) VALUES(?,?,?)")
+      .run("legacy-command", session.id, 1);
+  } finally {
+    legacy.close();
+  }
   const command = {
     workspace,
     scope: "new-device",

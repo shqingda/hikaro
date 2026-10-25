@@ -359,11 +359,6 @@ describe("independent agent loop", () => {
       "cancelled",
     );
   });
-  it("deduplicates persisted command IDs", async () => {
-    const { store, session } = await fixture(simple);
-    expect(await store.claim("same", session.id)).toBe(true);
-    expect(await store.claim("same", session.id)).toBe(false);
-  });
   it("denies external symlink reads and untrusted writes", async () => {
     const { agent, tools, cwd } = await fixture(simple);
     const outside = await mkdtemp(join(tmpdir(), "hikaro-outside-"));
