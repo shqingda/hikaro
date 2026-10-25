@@ -12,6 +12,15 @@ const labels: Record<SteeringAction, string> = {
   remove: "删除这条指令",
   resume: "确认恢复这条指令",
 };
+// Each read returns a fresh detail object, so a refresh remounts the native editor.
+const detailKeys = new WeakMap<object, number>();
+let nextDetailKey = 0;
+function detailKey(detail: object) {
+  let key = detailKeys.get(detail);
+  if (key === undefined) detailKeys.set(detail, (key = ++nextDetailKey));
+  return key;
+}
+
 export default function Steering() {
   const { controller, state } = useMobile();
   const manager = controller.steering,
@@ -125,13 +134,14 @@ export default function Steering() {
               ? "中断后恢复 · 需要原设备确认"
               : "等待下一模型轮"}
           </Note>
-          {/* Expo UI currently wraps a SwiftUI TextField whose Return ends editing. */}
+          {/* Expo UI currently wraps a SwiftUI TextField whose Return ends editing.
+              Native-owned text; each read detail remounts with its saved text. */}
           <TextInput
-            key={item.id}
+            key={detailKey(item)}
             testID="steering-editor"
             accessibilityLabel="补充指令正文"
             accessibilityHint="回车换行。点击保存修改后才更新电脑队列。"
-            value={queue.editText}
+            defaultValue={queue.editText}
             multiline
             submitBehavior="newline"
             textAlignVertical="top"

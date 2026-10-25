@@ -24,3 +24,9 @@ Expo UI 58.0.20 的 universal TextInput 在 iOS 包装 SwiftUI TextField。原�
 336970d 后新增慢存储回归：旧写入已开始且被挂起时，连续编辑中文、换行、emoji、退格后的内容；分别让旧写入成功或失败，验证整个通知过程没有旧文本回跳，最终存储和重新读取均保留最新原文。controller 回归另验证每次编辑同步通知订阅者，且不产生网络请求。composer/controller 两文件 20 项通过，根项目类型检查通过。
 
 serve-sim 0.1.48 的 `src/native.ts` 将 key 暴露为 Promise；分发服务的按键分支调用 `this.hid.key(G.type,G.usage)` 而未等待。Swift `sim-module.swift` 跨 actor 调用 HIDInjector，legacy 路径的 rawSend 未传 completion 回调。由此不能把浏览器 pressKey 返回等同于手机编辑完成；这是需要隔离验证的桥接因素，并非已证明的唯一根因。上述测试只排除了所覆盖的草稿/controller 路径，不替代原生高速输入和 IME 验收。
+
+## 原生持有文本（2026-10-25）
+
+草稿与补充指令编辑器原先是受控 `value`：每次按键经 controller 状态（以及草稿 SQLite 保存）回到整页渲染后再写回原生控件。JS 线程繁忙时，迟到的旧值可能覆盖较新的按键，这是应用侧可消除的因素。现改为 `defaultValue`，按键只由原生控件持有并同步通知 controller；只有草稿被替换（切换会话、发送确认清空、恢复草稿）或补充指令重新读取时才按 key 重挂载。发送仍使用 controller 中的最新文本，草稿保存与显式发送语义不变。
+
+验证：移动端类型检查通过。真机/Android 高速输入、中文 IME 与 serve-sim 桥接顺序仍未验，M1 保持开放。

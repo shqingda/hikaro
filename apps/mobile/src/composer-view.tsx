@@ -20,13 +20,15 @@ export function Composer() {
         你的要求
       </Text>
       {!matches && <Note>下方是切换前尚未保存的草稿，请先重试保存。</Note>}
-      {/* Expo UI currently wraps a SwiftUI TextField whose Return ends editing. */}
+      {/* Expo UI currently wraps a SwiftUI TextField whose Return ends editing.
+          The native field owns typed text; echoing each saved value back while
+          typing fast can overwrite keys. Remount only when the draft is replaced. */}
       <TextInput
-        key={record.session.id}
+        key={`${record.session.id}:${record.submission?.id ?? ""}`}
         testID="task-composer"
         accessibilityLabel="任务要求"
         accessibilityHint="回车换行。点击发送、加入待发队列或补充到下一模型轮才会提交。"
-        value={record.text}
+        defaultValue={record.text}
         multiline
         submitBehavior="newline"
         textAlignVertical="top"
