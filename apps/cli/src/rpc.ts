@@ -955,7 +955,27 @@ export async function serveRpc(
               await import("../../../packages/runtime/src/attachments.ts");
             validateImageInputs(images);
           }
-          if (!text.trim() && !images?.length) throw Error("Prompt is empty");
+          const files = z
+            .array(
+              z
+                .object({
+                  name: z.string().max(255),
+                  mimeType: z.literal("application/octet-stream"),
+                  data: z.string().max(900000),
+                  sha256: z.string().regex(/^[a-f0-9]{64}$/),
+                })
+                .strict(),
+            )
+            .max(8)
+            .optional()
+            .parse(p.files);
+          if (files?.length) {
+            const { validateFileInputs } =
+              await import("../../../packages/runtime/src/attachments.ts");
+            validateFileInputs(files);
+          }
+          if (!text.trim() && !images?.length && !files?.length)
+            throw Error("Prompt is empty");
           const { agent, session } = state;
           requireUncancelled();
           owners.set(session.id, scope);
@@ -971,10 +991,15 @@ export async function serveRpc(
           ownAgent(state.work, agent);
           let accepted: Awaited<ReturnType<Agent["enqueuePrompt"]>>;
           try {
-            accepted = await agent.enqueuePrompt(text, images, {
-              scope,
-              commandId: command.id,
-            });
+            accepted = await agent.enqueuePrompt(
+              text,
+              images,
+              {
+                scope,
+                commandId: command.id,
+              },
+              files,
+            );
           } catch (error) {
             stopRunTracking();
             releaseWork(scope, state.work, agent);

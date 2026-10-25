@@ -8,6 +8,7 @@ import type {
   AgentEvent,
   EventStore,
   ImageInput,
+  FileInput,
   Message,
   PermissionRequest,
   Plugin,
@@ -374,28 +375,31 @@ export class Agent implements AgentBackend {
     text: string,
     images?: ImageInput[],
     origin?: { scope?: string; commandId?: string },
+    files?: FileInput[],
   ) {
     this.assertImagesSupported(images);
     if (this.compacting)
       throw Error(
         "Wait for compaction to finish before sending another prompt.",
       );
-    if (!text.trim() && !images?.length) return;
+    if (!text.trim() && !images?.length && !files?.length) return;
     if (this.queue.length >= 32) throw Error("Prompt queue is full");
-    const accepted = await this.enqueuePrompt(text, images, origin);
+    const accepted = await this.enqueuePrompt(text, images, origin, files);
     return accepted.completion;
   }
   async enqueuePrompt(
     text: string,
     images?: ImageInput[],
     origin?: { scope?: string; commandId?: string },
+    files?: FileInput[],
   ) {
     this.assertImagesSupported(images);
     if (this.compacting)
       throw Error(
         "Wait for compaction to finish before sending another prompt.",
       );
-    if (!text.trim() && !images?.length) throw Error("Prompt is empty");
+    if (!text.trim() && !images?.length && !files?.length)
+      throw Error("Prompt is empty");
     let resolve!: () => void, reject!: (error: unknown) => void;
     const completion = new Promise<void>((yes, no) => {
       resolve = yes;
@@ -405,10 +409,18 @@ export class Agent implements AgentBackend {
     void completion.catch(() => {});
     await this.queueOperation(async () => {
       if (this.queue.length >= 32) throw Error("Prompt queue is full");
-      const item = { id: randomUUID(), text, images, origin, resolve, reject };
+      const item = {
+        id: randomUUID(),
+        text,
+        images,
+        files,
+        origin,
+        resolve,
+        reject,
+      };
       await this.options.pendingStore?.insertPendingPrompt(
         this.options.session.id,
-        { id: item.id, text, images, origin },
+        { id: item.id, text, images, files, origin },
       );
       this.queue.push(item);
     });
@@ -472,10 +484,10 @@ export class Agent implements AgentBackend {
     };
   }
   pendingPrompts() {
-    return this.queue.map(({ id, text, images, recovered }) => ({
+    return this.queue.map(({ id, text, images, files, recovered }) => ({
       id,
       text,
-      attachments: images?.length ?? 0,
+      attachments: (images?.length ?? 0) + (files?.length ?? 0),
       recovered: recovered ?? false,
     }));
   }
@@ -488,7 +500,7 @@ export class Agent implements AgentBackend {
   updatePending(id: string, text: string) {
     return this.queueOperation(async () => {
       const item = this.queue[this.pendingIndex(id)]!;
-      if (!text.trim() && !item.images?.length)
+      if (!text.trim() && !item.images?.length && !item.files?.length)
         throw Error("Message cannot be empty");
       await this.options.pendingStore?.updatePendingPrompt(
         this.options.session.id,
@@ -683,7 +695,7 @@ export class Agent implements AgentBackend {
           )
             throw new DOMException("Cancelled", "AbortError");
           this.origin = item.origin;
-          await this.run(item.text, item.images);
+          await this.run(item.text, item.images, item.files);
           item.resolve();
         } catch (e) {
           item.reject(e);
@@ -1100,7 +1112,7 @@ export class Agent implements AgentBackend {
     });
     return result;
   }
-  private async run(text: string, images?: ImageInput[]) {
+  private async run(text: string, images?: ImageInput[], files?: FileInput[]) {
     const controller = new AbortController();
     this.controller = controller;
     const { signal } = controller;
@@ -1130,6 +1142,7 @@ export class Agent implements AgentBackend {
         role: "user",
         text,
         images,
+        files,
         timestamp: Date.now(),
       });
       await this.emit("run.start", {

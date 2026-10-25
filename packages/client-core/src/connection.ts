@@ -70,6 +70,9 @@ export class ClientConnection {
   supports(method: RpcMethod): boolean {
     return this.view.supports(method);
   }
+  get supportsFiles(): boolean {
+    return this.view.supportsFiles;
+  }
   subscribe(fn: () => void) {
     this.listeners.add(fn);
     return () => {

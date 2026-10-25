@@ -359,7 +359,7 @@ export class SQLiteStore implements EventStore {
   messageContent(
     sessionId: string,
     seq: number,
-    field: "text" | "thinking" | "image" | "artifact" | "toolCalls",
+    field: "text" | "thinking" | "image" | "file" | "artifact" | "toolCalls",
     offset: number,
     limit: number,
     image = 0,
@@ -370,6 +370,8 @@ export class SQLiteStore implements EventStore {
       nextOffset: number | null;
       encoding: string;
       mimeType?: string;
+      name?: string;
+      sha256?: string;
     }>("messageContent", { sessionId, seq, field, offset, limit, image });
   }
   toolArtifactPage(

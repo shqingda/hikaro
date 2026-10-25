@@ -130,10 +130,22 @@ export async function attachTui(options: {
   const fail = (e: unknown) => view?.setError(String(e));
   const drafts = new DraftSaver((id, text) => files.saveDraft(id, text), fail);
   const backend: AgentBackend = {
-    async prompt(text, images) {
+    async prompt(text, images, _origin, files) {
+      if (files?.length && !client.supportsFiles)
+        throw Error(
+          "This host does not support general file attachments; update it first",
+        );
+      if (
+        files?.length &&
+        Buffer.byteLength(JSON.stringify({ text, images, files })) > 900000
+      )
+        throw Error(
+          "Attached prompts must fit the host's 1 MiB frame; use smaller files or the standalone TUI",
+        );
       await client.request("prompt", {
         text,
         ...(images?.length ? { images } : {}),
+        ...(files?.length ? { files } : {}),
       });
     },
     cancel() {
@@ -392,7 +404,7 @@ export async function attachTui(options: {
           ),
       });
     },
-    onPrompt: async (text, images) => {
+    onPrompt: async (text, images, files) => {
       try {
         const queued = client.state.busy;
         if (text.startsWith("!")) {
@@ -410,7 +422,7 @@ export async function attachTui(options: {
           );
           return;
         }
-        await backend.prompt(text, images);
+        await backend.prompt(text, images, undefined, files);
         if (queued)
           view.notice(
             "Message queued on host. Use /tasks to manage pending messages.",

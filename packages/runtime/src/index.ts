@@ -157,7 +157,9 @@ export class Runtime {
     let resources!: Resources;
     const instructions = await loadInstructions(
       this.options.cwd,
-      (next) => { resources = next; },
+      (next) => {
+        resources = next;
+      },
       installedSkillDirectories(this.options.home!, config),
     );
     this.resourcesIdle();
@@ -1186,6 +1188,19 @@ export class Runtime {
           await file.write(
             `## ${m.role}${m.name ? " · " + m.name : ""}\n\n${includeThinking && m.thinking ? "### Thinking\n\n" + m.thinking + "\n\n" : ""}${m.text}\n\n`,
           );
+          if (m.fileCount) {
+            const { exportFileAttachments } =
+              await import("./export-file-attachments.ts");
+            await exportFileAttachments(
+              this.store,
+              id,
+              row.seq,
+              m.fileCount,
+              assets,
+              file,
+              this.lifecycle.signal,
+            );
+          }
           for (let index = 0; index < (m.imageCount ?? 0); index++) {
             const first = await this.store.messageContent(
               id,

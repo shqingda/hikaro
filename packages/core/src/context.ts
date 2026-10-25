@@ -39,7 +39,8 @@ function textTokens(text: string) {
   return tokens;
 }
 function messageTokens(message: Message) {
-  const { images, timestamp, source, providerData, ...content } = message;
+  const { images, files, timestamp, source, providerData, ...content } =
+    message;
   return {
     // Provider-native assistant data is replayed instead of normalized copies.
     text:
@@ -75,6 +76,13 @@ export function fitContext(
     omitted?: number;
   } = {},
 ) {
+  // General files are archival attachments until a provider has an explicit
+  // binary-file transport. Their bytes never enter fitting or model requests.
+  messages = messages.map((message) => {
+    if (!message.files) return message;
+    const { files, ...content } = message;
+    return content;
+  });
   if (!Number.isSafeInteger(contextWindow) || contextWindow <= 0)
     throw Error("Invalid context window");
   const outputTokens =

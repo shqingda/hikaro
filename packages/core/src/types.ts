@@ -12,6 +12,13 @@ export type ToolCall = {
   arguments: Record<string, unknown>;
 };
 export type ImageInput = { mimeType: string; data: string };
+/** Saved with the turn for portable export. No provider file transport is implied. */
+export type FileInput = {
+  name: string;
+  mimeType: "application/octet-stream";
+  data: string;
+  sha256: string;
+};
 export type Message = {
   source?: "manual";
   role: "user" | "assistant" | "tool";
@@ -21,6 +28,7 @@ export type Message = {
   name?: string;
   isError?: boolean;
   images?: ImageInput[];
+  files?: FileInput[];
   providerData?: unknown;
   thinking?: string;
   timestamp: number;
@@ -137,7 +145,10 @@ export type AgentEvent = {
   timestamp: number;
 };
 export type MessagePage = {
-  items: Array<{ seq: number; message: Message & { imageCount?: number } }>;
+  items: Array<{
+    seq: number;
+    message: Message & { imageCount?: number; fileCount?: number };
+  }>;
   hasOlder: boolean;
   hasNewer: boolean;
 };
@@ -216,7 +227,12 @@ export interface EventStore {
   close(): Promise<void>;
 }
 export interface AgentBackend {
-  prompt(text: string, images?: ImageInput[]): Promise<void>;
+  prompt(
+    text: string,
+    images?: ImageInput[],
+    origin?: { scope?: string; commandId?: string },
+    files?: FileInput[],
+  ): Promise<void>;
   cancel(): void;
   steer(text: string): void | Promise<void>;
   subscribe(fn: (event: AgentEvent) => void): () => void;

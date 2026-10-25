@@ -155,6 +155,7 @@ export function rpcCapabilities(sharedHost = false) {
     eventSequence: "global-monotonic-filtered-by-session" as const,
     scopeRevision: true as const,
     maxFrameBytes: 1_048_576,
+    fileAttachments: true as const,
     commandReplay: "never-automatic" as const,
     // Preserve the original v2 marker for strict older clients.
     runIdentity: "events-only" as const,
@@ -171,6 +172,7 @@ export const RunCancelResult = z.object({
 });
 const sequence = z.int().check(z.gte(0)).check(z.lte(Number.MAX_SAFE_INTEGER));
 export const HelloResult = z.object({
+  fileAttachments: z.optional(z.boolean()),
   protocolVersion: z.literal(protocolVersion),
   supportedProtocolVersions: z.array(z.int()).check(z.maxLength(16)),
   methods: z

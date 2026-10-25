@@ -125,7 +125,13 @@ function saveModel(sessionId, modelSelection) {
     Date.now(),
   );
 }
-function insertSession({ id = randomUUID(), cwd, title, parentId, modelSelection }) {
+function insertSession({
+  id = randomUUID(),
+  cwd,
+  title,
+  parentId,
+  modelSelection,
+}) {
   const session = {
     id,
     title: title || "New session",
@@ -660,7 +666,7 @@ const handlers = {
   messagePage({ sessionId, before, after, limit = 20, bounded = false }) {
     const ascending = after !== undefined;
     const rows = prepare(
-      `SELECT seq,data FROM events WHERE sessionId=? AND type='message' AND seq ${ascending ? ">" : "<"} ? ORDER BY seq ${ascending ? "ASC" : "DESC"} LIMIT ?`,
+      `SELECT seq,json_array_length(data,'$.message.files') AS fileCount,json_remove(data,'$.message.files') AS data FROM events WHERE sessionId=? AND type='message' AND seq ${ascending ? ">" : "<"} ? ORDER BY seq ${ascending ? "ASC" : "DESC"} LIMIT ?`,
     ).iterate(
       sessionId,
       ascending ? after : (before ?? Number.MAX_SAFE_INTEGER),
@@ -704,6 +710,7 @@ const handlers = {
         message: {
           ...message,
           ...(images?.length ? { imageCount: images.length } : {}),
+          ...(r.fileCount ? { fileCount: r.fileCount } : {}),
         },
       });
       bytes += size;
@@ -793,19 +800,27 @@ const handlers = {
     const value =
       field === "image"
         ? message.images?.[image]?.data
-        : field === "toolCalls"
-          ? JSON.stringify(message.toolCalls ?? [])
-          : message[field];
+        : field === "file"
+          ? message.files?.[image]?.data
+          : field === "toolCalls"
+            ? JSON.stringify(message.toolCalls ?? [])
+            : message[field];
     if (typeof value !== "string") throw Error("Message content not found");
     const end = Math.min(value.length, offset + limit);
     return {
       data: value.slice(offset, end),
       total: value.length,
       nextOffset: end < value.length ? end : null,
-      encoding: field === "image" ? "base64" : "utf16",
+      encoding: field === "image" || field === "file" ? "base64" : "utf16",
       ...(field === "image"
         ? { mimeType: message.images[image].mimeType }
-        : {}),
+        : field === "file"
+          ? {
+              name: message.files[image].name,
+              mimeType: message.files[image].mimeType,
+              sha256: message.files[image].sha256,
+            }
+          : {}),
     };
   },
   append({ sessionId, type, data, lease }) {
@@ -867,7 +882,7 @@ const handlers = {
     )
       throw Error("Invalid context source range");
     const rows = prepare(
-      "SELECT seq,data FROM events WHERE sessionId=? AND type='message' AND seq>? AND seq<=? ORDER BY seq LIMIT ?",
+      "SELECT seq,json_remove(data,'$.message.files') AS data FROM events WHERE sessionId=? AND type='message' AND seq>? AND seq<=? ORDER BY seq LIMIT ?",
     ).iterate(sessionId, after, through, Math.min(limit, 100));
     const items = [];
     let bytes = 0;
@@ -973,7 +988,7 @@ const handlers = {
     ).get(sessionId);
     const boundary = Math.max(after, checkpoint?.throughSeq ?? 0);
     const rows = prepare(
-      "SELECT seq,data FROM events WHERE sessionId=? AND type='message' AND seq>? ORDER BY seq DESC",
+      "SELECT seq,json_remove(data,'$.message.files') AS data FROM events WHERE sessionId=? AND type='message' AND seq>? ORDER BY seq DESC",
     ).iterate(sessionId, boundary);
     const messages = [];
     let bytes = 0,

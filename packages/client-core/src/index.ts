@@ -105,6 +105,10 @@ export class ClientState {
   supports(method: RpcMethod): boolean {
     return this.methods.has(method);
   }
+  private generalFiles = false;
+  get supportsFiles(): boolean {
+    return this.generalFiles;
+  }
   receipt(id: string): CommandReceipt | undefined {
     const value = this.commands.get(id);
     return value && copy(value);
@@ -141,6 +145,7 @@ export class ClientState {
     this.epoch++;
     this.value.connection = "connecting";
     this.methods.clear();
+    this.generalFiles = false;
     this.hostNegotiated = false;
     this.helloId = undefined;
     this.snapshotId = undefined;
@@ -361,6 +366,7 @@ export class ClientState {
         !hello.methods.includes("hello")
       )
         throw Error("Invalid handshake methods");
+      this.generalFiles = hello.fileAttachments === true;
       this.methods = new Set(
         rpcMethods.filter((method) => hello.methods.includes(method)),
       );

@@ -40,6 +40,7 @@ async function fixture() {
     root,
     cwd,
     signal: AbortSignal.timeout(5000),
+    supportsImages: true,
     approve: vi.fn(async () => false),
   };
 }
@@ -121,13 +122,21 @@ it("detects images by bytes, attaches exact bytes, and rejects known text-only m
 
 it.each([
   ["bad.png", Buffer.from("not an image"), /image/i],
-  ["binary.dat", Buffer.from([0, 1, 2]), /UTF-8|binary/i],
-  ["broken.txt", Buffer.from([0xff]), /UTF-8/i],
   ["huge.txt", Buffer.alloc(128 * 1024 + 1, 65), /128 KiB/],
 ])("refuses %s without silent truncation", async (name, bytes, error) => {
   const input = await fixture();
   await writeFile(join(input.cwd, name), bytes);
   await expect(preparePrompt(`@${name}`, input)).rejects.toThrow(error);
+});
+
+it("keeps non-text inputs as archival files instead of coercing them into model text", async () => {
+  const input = await fixture();
+  await writeFile(join(input.cwd, "binary.dat"), Buffer.from([0, 1, 2]));
+  await writeFile(join(input.cwd, "broken.txt"), Buffer.from([0xff]));
+  const prepared = await preparePrompt("@binary.dat @broken.txt", input);
+  expect(prepared.files?.map((file) => file.data)).toEqual(["AAEC", "/w=="]);
+  expect(prepared.text).not.toContain("AAEC");
+  expect(prepared.text).not.toContain("/w==");
 });
 
 it("rejects combined text overflow and cancellation after approval", async () => {
@@ -177,7 +186,9 @@ it("rejects combined image overflow and serialized prompt overflow before dispat
   const image = { mimeType: "image/jpeg", data: bytes.toString("base64") };
   expect(() => validateImageInputs([image, image])).toThrow(/combined 4 MiB/);
   const input = await fixture();
-  await expect(preparePrompt("x".repeat(8 * 1024 * 1024), input)).rejects.toThrow(/stored-message limit/);
+  await expect(
+    preparePrompt("x".repeat(8 * 1024 * 1024), input),
+  ).rejects.toThrow(/stored-message limit/);
 });
 
 it("does not auto-approve sensitive aliases whose canonical target looks harmless", async () => {

@@ -180,7 +180,7 @@ export async function libraryRequest(
         (await selected()).id,
         integer(p.seq, 0),
         z
-          .enum(["text", "thinking", "image", "toolCalls"])
+          .enum(["text", "thinking", "image", "file", "toolCalls"])
           .parse(p.field ?? "text"),
         integer(p.offset, 0),
         Math.max(1, integer(p.limit, 65536, 65536)),

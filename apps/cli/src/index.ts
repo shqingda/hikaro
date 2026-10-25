@@ -229,7 +229,12 @@ async function main() {
           process.stderr.write(`${(e.data.result as any).text}\n`);
       });
       const prepared = await runtime.preparePrompt(session, values.prompt);
-      await agent.prompt(prepared.text, prepared.images);
+      await agent.prompt(
+        prepared.text,
+        prepared.images,
+        undefined,
+        prepared.files,
+      );
       process.stdout.write("\n");
     } finally {
       await runtime.close();
@@ -502,14 +507,19 @@ async function main() {
       text.startsWith("!")
         ? Promise.resolve({ text })
         : runtime.preparePrompt(session, text, signal),
-    onPrompt: async (text, images) => {
+    onPrompt: async (text, images, files) => {
       drafts.update(session.id, "");
       await drafts.flush();
       if (text.startsWith("!")) {
         await agent.executeTool("shell", parseManualCommand(text), text);
         return;
       }
-      const { completion: work } = await agent.enqueuePrompt(text, images);
+      const { completion: work } = await agent.enqueuePrompt(
+        text,
+        images,
+        undefined,
+        files,
+      );
       promptWork = work;
       const pending = agent.pendingPrompts().length;
       if (pending)
@@ -794,7 +804,10 @@ async function main() {
             reload: () => runtime.reloadResources(),
             install: (request) => runtime.installResource(request),
           });
-          return result ?? `Skills (${runtime.resources.skills.length}):\n${runtime.resources.skills.map((s) => s.name + " · " + s.path).join("\n")}\n\nInstructions:\n${runtime.resources.instructions.join("\n") || "None"}\n\n/resources reload · Refresh skills and instructions\n/resources install skill|plugin PATH --trusted · Register a local source in place; plugins require host restart`;
+          return (
+            result ??
+            `Skills (${runtime.resources.skills.length}):\n${runtime.resources.skills.map((s) => s.name + " · " + s.path).join("\n")}\n\nInstructions:\n${runtime.resources.instructions.join("\n") || "None"}\n\n/resources reload · Refresh skills and instructions\n/resources install skill|plugin PATH --trusted · Register a local source in place; plugins require host restart`
+          );
         }
         case "status":
           return `Model (active): ${agent.options.provider.id}/${agent.options.provider.model}\nContext budget: ${agent.options.provider.contextWindow}\nReasoning: ${agent.options.session.modelSelection?.settings.reasoning ?? "auto"}\nSpeed: ${agent.options.session.modelSelection?.settings.speed ?? "default"}\nPermissions: ${runtime.permissionMode}\nSession: ${session.id}\nWorkspace: ${session.cwd}\nSkills: ${runtime.resources.skills.length}\nInput/output: ${agent.usage.input}/${agent.usage.output}\nEstimated API cost: $${agent.usage.cost.toFixed(4)}\nBudget: $${agent.budget.maxCost}; ${agent.budget.modelCallsLeft} model calls remain. Current Agent lifetime only; recreating the Agent or restarting resets usage and limits.`;

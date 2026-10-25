@@ -55,11 +55,12 @@ export function publicSession(session: Session): Session {
 /** Provider-native signatures and image bytes belong to storage/provider layers, not every UI frame. */
 export function publicMessage(message: Message): Message & {
   imageCount?: number;
+  fileCount?: number;
   textLength?: number;
   thinkingLength?: number;
   toolCallsTruncated?: boolean;
 } {
-  const { providerData, images, ...rest } = message;
+  const { providerData, images, files, ...rest } = message;
   return {
     ...rest,
     text: rest.text.slice(0, 20000),
@@ -77,6 +78,7 @@ export function publicMessage(message: Message): Message & {
     })),
     ...(rest.toolCalls?.length ? { toolCallsTruncated: true } : {}),
     ...(images?.length ? { imageCount: images.length } : {}),
+    ...(files?.length ? { fileCount: files.length } : {}),
   };
 }
 export function publicEvent(event: AgentEvent): AgentEvent {

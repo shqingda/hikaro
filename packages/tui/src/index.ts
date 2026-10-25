@@ -24,6 +24,7 @@ import type {
   AgentEvent,
   Message,
   ImageInput,
+  FileInput,
   PermissionRequest,
 } from "../../core/src/types.ts";
 import type { PiUIResponse } from "../../pi-bridge/src/index.ts";
@@ -243,11 +244,19 @@ export class HikaroView {
     readonly options: {
       cwd: string;
       model: string;
-      onPrompt: (text: string, images?: ImageInput[]) => Promise<void>;
+      onPrompt: (
+        text: string,
+        images?: ImageInput[],
+        files?: FileInput[],
+      ) => Promise<void>;
       preparePrompt?: (
         text: string,
         signal: AbortSignal,
-      ) => Promise<{ text: string; images?: ImageInput[] }>;
+      ) => Promise<{
+        text: string;
+        images?: ImageInput[];
+        files?: FileInput[];
+      }>;
       onCommand: (text: string) => Promise<string | void>;
       onExit: () => void;
       /** Shared-host views can detach while an approval or unsent draft is open. */
@@ -737,6 +746,7 @@ export class HikaroView {
     });
   }
   private showMessage(message: Message, hideThinking = false) {
+    if (message.files) message = { ...message, files: undefined };
     if (
       message.role === "assistant" &&
       message.thinking &&
@@ -988,7 +998,7 @@ export class HikaroView {
     this.editor.setText(text);
     this.editor.disableSubmit = true;
     this.updateFooter();
-    let prepared: { text: string; images?: ImageInput[] };
+    let prepared: { text: string; images?: ImageInput[]; files?: FileInput[] };
     try {
       prepared = await this.options.preparePrompt(text, controller.signal);
       controller.signal.throwIfAborted();
@@ -998,7 +1008,11 @@ export class HikaroView {
       this.updateFooter();
     }
     this.editor.setText("");
-    return this.options.onPrompt(prepared.text, prepared.images);
+    return this.options.onPrompt(
+      prepared.text,
+      prepared.images,
+      prepared.files,
+    );
   }
   private updateFooter() {
     this.editor.setActivity(

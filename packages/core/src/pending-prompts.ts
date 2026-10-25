@@ -1,8 +1,9 @@
-import type { ImageInput } from "./types.ts";
+import type { ImageInput, FileInput } from "./types.ts";
 export type PendingPrompt = {
   id: string;
   text: string;
   images?: ImageInput[];
+  files?: FileInput[];
   origin?: { scope?: string; commandId?: string };
 };
 export interface PendingPromptStore {
