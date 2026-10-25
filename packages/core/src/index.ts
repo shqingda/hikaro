@@ -90,7 +90,7 @@ export class PluginHost {
   async load(plugin: Plugin, observeChanges = false) {
     if (plugin.apiVersion !== 1)
       throw Error(`Unsupported plugin API: ${plugin.id}`);
-    const names = this.tools.names(),
+    const ownedTools = new Map<string, Tool>(),
       commands = new Set(this.commands.keys()),
       providers = new Set(this.providers.keys()),
       views = new Set(this.views.keys()),
@@ -108,12 +108,25 @@ export class PluginHost {
         },
         registerTool: (t) => {
           this.tools.register(t);
+          ownedTools.set(t.name, t);
           if (observeChanges) this.observedTools.add(t);
         },
         registerTools: (tools) => {
           this.tools.registerAll(tools);
+          for (const tool of tools) ownedTools.set(tool.name, tool);
           if (observeChanges)
             for (const tool of tools) this.observedTools.add(tool);
+        },
+        unregisterTools: (names) => {
+          for (const name of names)
+            if (!ownedTools.has(name))
+              throw Error(`Tool not owned by ${plugin.id}: ${name}`);
+          for (const name of names) {
+            const tool = ownedTools.get(name)!;
+            if (this.tools.get(name) === tool) this.tools.remove(name);
+            this.observedTools.delete(tool);
+            ownedTools.delete(name);
+          }
         },
         registerCommand: (n, r) => {
           if (this.commands.has(n)) throw Error(`Duplicate command: ${n}`);
@@ -122,8 +135,8 @@ export class PluginHost {
       });
       if (cleanup) this.cleanups.push(cleanup);
     } catch (e) {
-      for (const name of this.tools.names())
-        if (!names.has(name)) this.tools.remove(name);
+      for (const [name, tool] of ownedTools)
+        if (this.tools.get(name) === tool) this.tools.remove(name);
       for (const name of this.commands.keys())
         if (!commands.has(name)) this.commands.delete(name);
       for (const name of this.providers.keys())

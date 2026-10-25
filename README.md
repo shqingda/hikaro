@@ -138,6 +138,8 @@ Copy the relevant entries from [config.example.json](templates/config.example.js
 - Plugins: tools, commands, providers, event listeners, and text views. See [plugin API](docs/plugins.md).
 - Orchestration: bounded subagents, dependency graphs, shared budgets, persistent one-shot scheduled jobs. A running host is required. Interrupted jobs do not replay automatically.
 
+For configured MCP servers, `/mcp` shows connection state, discovered tool count, active calls and the latest error. Use `/mcp connect SERVER`, `/mcp disconnect SERVER`, `/mcp reconnect SERVER` or `/mcp refresh SERVER` to manage them explicitly. In the attached TUI, open `/plugins` and choose the `mcp` command with the same arguments, or the `mcp-status` view. These user commands run through the existing trusted plugin flow; model calls to `mcp_connect` still require approval and accept the same optional `action`. Active calls and competing management operations block connection changes. Failed refreshes retain the previous tools; disconnect and unexpected connection loss remove them. Reconnection is explicit.
+
 ## Remote access
 
 See [Cloudflare setup](docs/remote.md). The relay carries encrypted frames; tools run on your computer. No cloud execution, central Hikaro account, or cloud history backup is included.

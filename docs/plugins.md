@@ -41,6 +41,8 @@ Registrations roll back when setup throws. Async tool failures become tool error
 
 Use `host.registerTools(tools)` for a discovered batch. It checks every name before registering any tool. A conflict with an existing tool or within the batch leaves the registry unchanged. `registerTool(tool)` remains available for single tools. MCP collects and validates all discovery pages before submitting its batch, so a failed connection can be retried without leftover tools.
 
+`host.unregisterTools(names)` removes tools registered by that plugin's setup instance, including later dynamic registrations. The whole list must be owned by that instance; foreign names reject the operation before anything is removed. A tool replaced outside that instance is left intact. MCP uses this for disconnect and atomic discovery refresh, and refuses refresh or connection changes while a tool call is active.
+
 Provider factories use `registerProvider(id, async () => adapter)`. Adapters stream normalized text and one final message. They do not control the execution loop. Tool parameters must validate before side effects. `context.invoke()` composes tools with inherited permissions, cancellation, shared budgets, and parent call IDs.
 
 Text views are currently exposed as TUI commands. A native arbitrary-component UI plugin ABI is intentionally not exposed to all clients.

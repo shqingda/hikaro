@@ -246,5 +246,6 @@ export interface PluginHost {
   registerView(id: string, render: PluginView): void;
   registerTool(tool: Tool): void;
   registerTools(tools: Tool[]): void;
+  unregisterTools(names: string[]): void;
   registerCommand(name: string, run: PluginCommand): void;
 }
