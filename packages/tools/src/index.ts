@@ -1,5 +1,5 @@
 import { realpath, readdir } from "node:fs/promises";
-import { relative, isAbsolute, join } from "node:path";
+import { relative, isAbsolute, join, basename } from "node:path";
 import { homedir } from "node:os";
 import * as z from "zod";
 import type { ChangeJournal } from "./changes.ts";
@@ -285,6 +285,7 @@ export type Resources = { skills: SkillResource[]; instructions: string[] };
 export async function loadInstructions(
   cwd: string,
   report?: (resources: Resources) => void,
+  installedSkills: readonly string[] = [],
 ) {
   const sections: string[] = [];
   const resources: Resources = { skills: [], instructions: [] };
@@ -314,24 +315,28 @@ export async function loadInstructions(
     join(homedir(), ".agents/skills"),
     join(homedir(), ".hikaro/skills"),
   ];
-  for (const folder of folders) {
+  // Registered directories share one batch instead of one reader per skill.
+  for (const folder of [...folders, undefined]) {
     try {
-      const root = await realpath(folder);
-      const entries = await readdir(root, { withFileTypes: true });
+      const root = folder ? await realpath(folder) : undefined;
+      const directories = root
+        ? (await readdir(root, { withFileTypes: true }))
+            .filter((entry) => entry.isDirectory())
+            .slice(0, 100)
+            .map((entry) => join(root, entry.name))
+        : installedSkills.slice(0, 100);
       const discovered = await Promise.all(
-        entries
-          .filter((e) => e.isDirectory())
-          .slice(0, 100)
-          .map(async (entry) => {
-            try {
-              const path = await realpath(join(root, entry.name, "SKILL.md"));
-              const rel = relative(root, path);
-              if (rel.startsWith("..") || isAbsolute(rel)) return undefined;
-              return { name: entry.name, path };
-            } catch {
-              return undefined;
-            }
-          }),
+        directories.map(async (directory) => {
+          try {
+            const boundary = root ?? (await realpath(directory));
+            const path = await realpath(join(directory, "SKILL.md"));
+            const rel = relative(boundary, path);
+            if (rel.startsWith("..") || isAbsolute(rel)) return undefined;
+            return { name: basename(directory), path };
+          } catch {
+            return undefined;
+          }
+        }),
       );
       const authorized = discovered.filter((item) => item !== undefined);
       const descriptions: SkillResource[] = [];

@@ -54,6 +54,17 @@ it("changes defaults without changing the active session and exposes host config
       resources.items.some((r: { name: string }) => r.name === "read_file"),
     ).toBe(true);
     await client.request("providers.reload");
+    expect(await client.request("resources.reload")).toMatchObject({
+      instructions: expect.any(Number),
+      skills: expect.any(Number),
+    });
+    await expect(
+      client.request("resources.install", {
+        kind: "plugin",
+        path: "/untrusted",
+        trusted: false,
+      }),
+    ).rejects.toThrow(/trusted/);
   } finally {
     await client.close();
     await host.close();

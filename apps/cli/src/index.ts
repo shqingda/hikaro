@@ -787,8 +787,15 @@ async function main() {
             clean: (token) => runtime.cleanupStorage(id, token),
           });
         }
-        case "resources":
-          return `Skills (${runtime.resources.skills.length}):\n${runtime.resources.skills.map((s) => s.name + " · " + s.path).join("\n")}\n\nInstructions:\n${runtime.resources.instructions.join("\n") || "None"}`;
+        case "resources": {
+          const { resourceCommand } =
+            await import("../../../packages/tui/src/resources.ts");
+          const result = await resourceCommand(arg, {
+            reload: () => runtime.reloadResources(),
+            install: (request) => runtime.installResource(request),
+          });
+          return result ?? `Skills (${runtime.resources.skills.length}):\n${runtime.resources.skills.map((s) => s.name + " · " + s.path).join("\n")}\n\nInstructions:\n${runtime.resources.instructions.join("\n") || "None"}\n\n/resources reload · Refresh skills and instructions\n/resources install skill|plugin PATH --trusted · Register a local source in place; plugins require host restart`;
+        }
         case "status":
           return `Model (active): ${agent.options.provider.id}/${agent.options.provider.model}\nContext budget: ${agent.options.provider.contextWindow}\nReasoning: ${agent.options.session.modelSelection?.settings.reasoning ?? "auto"}\nSpeed: ${agent.options.session.modelSelection?.settings.speed ?? "default"}\nPermissions: ${runtime.permissionMode}\nSession: ${session.id}\nWorkspace: ${session.cwd}\nSkills: ${runtime.resources.skills.length}\nInput/output: ${agent.usage.input}/${agent.usage.output}\nEstimated API cost: $${agent.usage.cost.toFixed(4)}\nBudget: $${agent.budget.maxCost}; ${agent.budget.modelCallsLeft} model calls remain. Current Agent lifetime only; recreating the Agent or restarting resets usage and limits.`;
         case "quit":

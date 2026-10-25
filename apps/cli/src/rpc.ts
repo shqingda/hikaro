@@ -380,6 +380,8 @@ export async function serveRpc(
             "permissions.set",
             "providers.reload",
             "resources.list",
+            "resources.reload",
+            "resources.install",
             "storage.preview",
             "storage.cleanup",
             "plugins.list",
@@ -728,6 +730,8 @@ export async function serveRpc(
         }
         case "providers.reload":
         case "permissions.set":
+        case "resources.reload":
+        case "resources.install":
         case "resources.list": {
           const { configurationRequest } =
             await import("./rpc-configuration.ts");

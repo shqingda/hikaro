@@ -13,6 +13,8 @@ export const rpcMethods = [
   "providers.reload",
   "permissions.set",
   "resources.list",
+  "resources.reload",
+  "resources.install",
   "changes.list",
   "changes.review.list",
   "changes.review.diff",

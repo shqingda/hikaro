@@ -197,7 +197,14 @@ export class AttachedNavigation {
       return;
     }
     if (command === "/resources") {
-      await this.resources(arg);
+      const { resourceCommand } =
+        await import("../../../packages/tui/src/resources.ts");
+      const result = await resourceCommand(arg, {
+        reload: () => this.request("resources.reload"),
+        install: (request) => this.request("resources.install", request),
+      });
+      if (result) this.view.notice(result);
+      else await this.resources(arg);
       return;
     }
     if (!id) throw Error("No session selected");
@@ -450,7 +457,7 @@ export class AttachedNavigation {
         const picked = await panel.choose(
           "Host resources · search loaded entries",
           choices(),
-          "Inventory only. Skills are used by the agent; use /plugins to run plugin commands/views. Restart host to reload configuration.",
+          "Use /resources reload to refresh skills/instructions, or /resources install skill|plugin PATH --trusted to register a local source. Plugin code requires a host restart.",
           undefined,
           {
             search: true,

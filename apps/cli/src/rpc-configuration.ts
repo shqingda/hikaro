@@ -30,6 +30,10 @@ export async function configurationRequest(
     case "providers.reload":
       runtime.reloadProviderCatalog();
       return { reloaded: true };
+    case "resources.reload":
+      return runtime.reloadResources();
+    case "resources.install":
+      return runtime.installResource(p);
     case "permissions.set":
       return {
         mode: await runtime.setPermissionMode(

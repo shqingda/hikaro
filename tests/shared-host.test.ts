@@ -241,6 +241,8 @@ it("shares one run and explicitly owned approvals through local IPC and the encr
       "permissions.set",
       "providers.reload",
       "resources.list",
+      "resources.reload",
+      "resources.install",
       "storage.preview",
       "storage.cleanup",
     ] as const) {
