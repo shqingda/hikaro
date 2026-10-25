@@ -149,7 +149,7 @@ export async function attachTui(options: {
       };
     },
   };
-  const syncApprovals = (state = client.state) => {
+  const syncApprovals = (state = client.status) => {
     const live = state.canAct ? state.approvals : [];
     for (const [id, controller] of approvals)
       if (!live.some((a) => a.id === id)) {
@@ -264,7 +264,7 @@ export async function attachTui(options: {
       return;
     }
     if (frame.type !== "event") return;
-    const state = client.state;
+    const state = client.status;
     if (!state.canAct || frame.event.sessionId !== state.session?.id) return;
     const event = frame.event as AgentEvent;
     if (event.type === "message")
@@ -287,7 +287,7 @@ export async function attachTui(options: {
   });
   const offState = client.subscribe(() => {
     if (!view) return;
-    const state = client.state;
+    const state = client.status;
     view.setInfo(
       state.canAct
         ? `Shared host · ${state.session?.id.slice(0, 8) ?? "no session"}`

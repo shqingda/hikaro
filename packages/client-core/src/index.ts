@@ -52,6 +52,7 @@ export type ExecutionState = {
   approvals: Permission[];
   events: Array<{ seq: number; type: string; timestamp: number }>;
 };
+export type ExecutionStatus = Omit<ExecutionState, "stream" | "events">;
 const copy = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
 /** Ordered, transport-independent execution state. Preparing a command never sends it. */
@@ -88,6 +89,11 @@ export class ClientState {
   }
   get state(): ExecutionState {
     return copy(this.value);
+  }
+  /** Control UI reads do not need a copy of the growing transcript preview. */
+  get status(): ExecutionStatus {
+    const { stream, events, ...status } = this.value;
+    return copy(status);
   }
   /** Read synchronization readiness without allocating a full UI snapshot. */
   get needsSynchronization(): boolean {

@@ -44,6 +44,38 @@ function event(
     event: { sessionId, seq, type, data, timestamp: 1 },
   };
 }
+it("reads isolated control status without copying stream or event history", () => {
+  const { client, epoch } = ready();
+  client.receive(epoch, event(1, "text.delta", { text: "中".repeat(100000) }));
+  client.receive(epoch, {
+    type: "approval",
+    scope: "local",
+    revision: 2,
+    request: {
+      id: "approval-1",
+      sessionId: "s1",
+      tool: "shell",
+      reason: "execution",
+      arguments: { command: "test" },
+    },
+  });
+  const status = client.status;
+  expect(status).toMatchObject({
+    canAct: true,
+    cursor: 1,
+    session,
+    approvals: [{ id: "approval-1" }],
+  });
+  expect(status).not.toHaveProperty("stream");
+  expect(status).not.toHaveProperty("events");
+  status.session!.title = "consumer change";
+  status.approvals[0]!.arguments.command = "consumer change";
+  expect(client.status.session?.title).toBe("Fixture");
+  expect(client.status.approvals[0]!.arguments.command).toBe("test");
+  expect(client.state.stream).toHaveLength(100000);
+  client.disconnected(epoch);
+  expect(client.status).toMatchObject({ connection: "offline", canAct: false });
+});
 it("retains a metadata invalidation arriving after a snapshot watermark but before its response", () => {
   const { client, epoch } = ready();
   client.command("racing-snapshot", "session.current");

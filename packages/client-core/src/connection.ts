@@ -61,6 +61,9 @@ export class ClientConnection {
   get state(): ExecutionState {
     return this.view.state;
   }
+  get status() {
+    return this.view.status;
+  }
   get receipts() {
     return this.view.receipts;
   }

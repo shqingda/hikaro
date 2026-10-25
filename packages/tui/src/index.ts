@@ -78,7 +78,9 @@ export class MessageComponent implements Component {
     this.streaming = streaming;
   }
   setText(text: string) {
-    this.text = this.role === "tool" ? sanitize(text) : text;
+    const next = this.role === "tool" ? sanitize(text) : text;
+    if (this.text === next) return;
+    this.text = next;
     this.dirty = true;
   }
   get pages() {
