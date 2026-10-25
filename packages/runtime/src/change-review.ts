@@ -19,6 +19,10 @@ export type ReviewFilter = {
   planId?: string;
   step?: number;
 };
+const observationKey = (
+  callId: string,
+  row: Pick<ReviewEntry, "path" | "before" | "after">,
+) => JSON.stringify([callId, row.path, row.before, row.after]);
 
 /** Read access to a root includes delegated descendants, never unrelated forks. */
 export class ChangeReview {
@@ -48,7 +52,13 @@ export class ChangeReview {
       if (filter.owner && filter.owner !== sessionId) continue;
       const reliable = await this.journal.list(sessionId);
       const observed = await this.observations.list(sessionId);
-      for (const entry of reliable)
+      const reliableKeys = new Set<string>();
+      for (const entry of reliable) {
+        if (entry.origin) {
+          reliableKeys.add(observationKey(entry.origin.callId, entry));
+          if (entry.origin.parentCallId !== undefined)
+            reliableKeys.add(observationKey(entry.origin.parentCallId, entry));
+        }
         items.push({
           ...entry,
           sessionId,
@@ -56,19 +66,10 @@ export class ChangeReview {
           source: "file",
           readOnly: sessionId !== root,
         });
+      }
       for (const entry of observed) {
         // Only an exact call/path/hash match can coalesce observation with an authoritative write.
-        if (
-          reliable.some(
-            (row) =>
-              (row.origin?.callId === entry.callId ||
-                row.origin?.parentCallId === entry.callId) &&
-              row.path === entry.path &&
-              row.before === entry.before &&
-              row.after === entry.after,
-          )
-        )
-          continue;
+        if (reliableKeys.has(observationKey(entry.callId, entry))) continue;
         items.push({
           ...entry,
           sessionId,

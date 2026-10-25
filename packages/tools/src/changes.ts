@@ -6,7 +6,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, open, readdir, realpath, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import * as z from "zod";
-import { readTextFile } from "./secure-files.ts";
+import { readFileBytesBatch, readTextFile } from "./secure-files.ts";
 import { updateTextFile } from "./workspace.ts";
 
 const digest = (value: string) =>
@@ -75,18 +75,20 @@ export class ChangeJournal {
       await rm(temp, { force: true });
     }
   }
-  private async record(session: string, id: string) {
-    const entry = recordSchema.parse(
-      JSON.parse(
-        await readTextFile(
-          this.recordPath(session, id),
-          AbortSignal.timeout(10000),
-          65536,
-        ),
-      ),
-    );
+  private parseRecord(id: string, text: string) {
+    const entry = recordSchema.parse(JSON.parse(text));
     if (entry.id !== id) throw Error("Invalid change record identity");
     return entry;
+  }
+  private async record(session: string, id: string) {
+    return this.parseRecord(
+      id,
+      await readTextFile(
+        this.recordPath(session, id),
+        AbortSignal.timeout(10000),
+        65536,
+      ),
+    );
   }
   private async saveRecord(session: string, entry: FileChange) {
     await this.save(this.recordPath(session, entry.id), JSON.stringify(entry));
@@ -111,8 +113,22 @@ export class ChangeJournal {
         "Change history exceeds 10,000 entries; start a new session.",
       );
     const entries: FileChange[] = [];
-    for (const name of ids)
-      entries.push(await this.record(session, name.slice(0, -5)));
+    for (let offset = 0; offset < ids.length; offset += 100) {
+      const batch = ids
+        .slice(offset, offset + 100)
+        .map((name) => name.slice(0, -5));
+      await readFileBytesBatch(
+        batch.map((id) => this.recordPath(session, id)),
+        AbortSignal.timeout(10000),
+        (result, index) => {
+          if (result.status === "rejected") throw result.reason;
+          entries.push(
+            this.parseRecord(batch[index]!, result.value.toString("utf8")),
+          );
+        },
+        65536,
+      );
+    }
     return entries.sort(
       (a, b) => b.timestamp - a.timestamp || b.id.localeCompare(a.id),
     );

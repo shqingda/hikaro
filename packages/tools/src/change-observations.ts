@@ -332,23 +332,22 @@ export class ChangeObservations {
   async warnings(session: string) {
     const warnings = new Set<string>();
     if (this.failures.has(session)) warnings.add(this.failures.get(session)!);
-    for (const name of (await this.names(session))
+    const names = (await this.names(session))
       .filter((n) => n.endsWith(".coverage"))
-      .slice(-100)) {
-      const rows = z
-        .array(z.string().max(200))
-        .max(20)
-        .parse(
-          JSON.parse(
-            await readTextFile(
-              join(this.folder(session), name),
-              AbortSignal.timeout(5000),
-              8192,
-            ),
-          ),
-        );
-      for (const row of rows) warnings.add(row);
-    }
+      .slice(-100);
+    await readFileBytesBatch(
+      names.map((name) => join(this.folder(session), name)),
+      AbortSignal.timeout(5000),
+      (result) => {
+        if (result.status === "rejected") throw result.reason;
+        const rows = z
+          .array(z.string().max(200))
+          .max(20)
+          .parse(JSON.parse(result.value.toString("utf8")));
+        for (const row of rows) warnings.add(row);
+      },
+      8192,
+    );
     return [...warnings];
   }
   async list(session: string) {
@@ -358,26 +357,41 @@ export class ChangeObservations {
     if (names.length > 10000)
       throw Error("Observation history exceeds 10,000 records.");
     const rows: ObservedChange[] = [];
-    for (const name of names) {
-      z.string().uuid().parse(name.slice(0, -5));
-      rows.push(await this.record(session, name.slice(0, -5)));
+    for (let offset = 0; offset < names.length; offset += 100) {
+      const batch = names.slice(offset, offset + 100).map((name) => {
+        const id = z.string().uuid().parse(name.slice(0, -5));
+        return { id, path: join(this.folder(session), name) };
+      });
+      await readFileBytesBatch(
+        batch.map((entry) => entry.path),
+        AbortSignal.timeout(5000),
+        (result, index) => {
+          if (result.status === "rejected") throw result.reason;
+          rows.push(
+            this.parseRecord(batch[index]!.id, result.value.toString("utf8")),
+          );
+        },
+        65536,
+      );
     }
     return rows;
+  }
+  private parseRecord(id: string, text: string) {
+    const entry = observationSchema.parse(JSON.parse(text));
+    if (entry.id !== id) throw Error("Invalid observation identity");
+    return entry;
   }
   private async record(session: string, id: string) {
     this.root ??= await realpath(this.home);
     z.string().uuid().parse(id);
-    const entry = observationSchema.parse(
-      JSON.parse(
-        await readTextFile(
-          join(this.folder(session), id + ".json"),
-          AbortSignal.timeout(5000),
-          65536,
-        ),
+    return this.parseRecord(
+      id,
+      await readTextFile(
+        join(this.folder(session), id + ".json"),
+        AbortSignal.timeout(5000),
+        65536,
       ),
     );
-    if (entry.id !== id) throw Error("Invalid observation identity");
-    return entry;
   }
   async detail(session: string, id: string) {
     const entry = await this.record(session, id);
