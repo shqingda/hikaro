@@ -145,47 +145,67 @@ try {
     `cancel: Ctrl+C stopped stream in ${stopMs} ms, Pi kept running, next turn completed`,
   );
 
-  // 3. /back to Pi then reopen Hikaro: does it continue the same session?
+  // 3. /back to Pi then reopen Hikaro: the same session continues with recent turns shown.
   pi.clear();
   pi.send("/back\r");
   await new Promise((r) => setTimeout(r, 500));
   assert.equal(hikaroPids().length, 0, "Hikaro child exits on /back");
   pi.clear();
   pi.send("/hikaro\r");
-  await pi.wait("Hikaro · /back returns to Pi");
+  await pi.wait("You: after-cancel");
   pi.clear();
   pi.send("reopened\r");
   await pi.wait("You wrote: reopened");
   list = await sessions();
-  console.log("INFO sessions after reopen:", list.length);
-  results.push(
-    `reopen: /back exits Hikaro child; reopening via /hikaro gives ${list.length === 1 ? "the same" : "a NEW"} Hikaro session (${list.length} total)`,
+  assert.equal(list.length, 1, `sessions after reopen ${list.length}`);
+  ok(
+    "reopen: /back exits Hikaro child; /hikaro resumes the same session and shows recent turns",
   );
 
   // 4. Hikaro child killed mid-run: Pi survives and reports it, /back works.
   pi.clear();
   pi.send("slow " + "y".repeat(3000) + "\r");
-  await pi.wait("offline demo mode");
-  for (const pid of hikaroPids()) process.kill(Number(pid), "SIGKILL");
+  await pi.wait("Working · Ctrl+C stops");
+  const pids = hikaroPids();
+  assert.ok(pids.length > 0, "found Hikaro child");
+  for (const pid of pids) process.kill(Number(pid), "SIGKILL");
   await pi.until(
     () => /exited|SIGKILL|closed/i.test(pi.out),
     5000,
     "exit notice",
   );
   assert.equal(pi.exited, undefined, "Pi survives Hikaro crash");
+  await pi.wait("Not connected · Ctrl+D or /back returns to Pi");
   pi.clear();
   pi.send("ignored\r");
   await pi.wait("not connected");
-  pi.send("\x03");
+  pi.send("/back\r");
   await new Promise((r) => setTimeout(r, 300));
   pi.clear();
   pi.send("/hikaro\r");
-  await pi.wait("Hikaro · /back returns to Pi");
+  // The killed 3000-character turn fills the screen once history has loaded.
+  await pi.wait("y".repeat(60));
+  await new Promise((r) => setTimeout(r, 200));
   pi.clear();
   pi.send("after-crash\r");
-  await pi.wait("You wrote: after-crash");
+  // The killed child's 30 s session lease is never stolen; the refusal must be visible.
+  await pi.until(
+    () =>
+      pi.out.includes("running elsewhere") ||
+      pi.out.includes("You wrote: after-crash"),
+    10000,
+    "after-crash outcome",
+  );
+  const leaseHeld = pi.out.includes("running elsewhere");
+  if (leaseHeld) {
+    await pi.wait("Enter send");
+    await new Promise((r) => setTimeout(r, 31000));
+    pi.clear();
+    pi.send("after-crash\r");
+    await pi.wait("You wrote: after-crash");
+  }
   ok(
-    "crash: SIGKILL of Hikaro child shown in view, Pi kept running, input refused while disconnected, reopen works",
+    `crash: SIGKILL of Hikaro child shown in view, Pi kept running, draft kept while disconnected, typed /back returned to Pi, reopen resumed; ${leaseHeld ? "first prompt showed the held lease, retry after expiry completed" : "next prompt completed"}`,
   );
 
   // 5. Quit Pi and relaunch: auto-entry again.
@@ -195,16 +215,15 @@ try {
   await pi.until(() => pi.exited !== undefined, 5000, "pi exit");
   assert.equal(pi.exited, 0);
   pi = openPi();
-  await pi.wait("Hikaro · /back returns to Pi");
+  await pi.wait("You: after-crash");
   pi.clear();
   pi.send("relaunched\r");
   await pi.wait("You wrote: relaunched");
   list = await sessions();
-  results.push(
-    `relaunch: Pi exits 0; relaunch auto-enters Hikaro; ${list.length} Hikaro sessions total`,
+  assert.equal(list.length, 1, `sessions after relaunch ${list.length}`);
+  ok(
+    "relaunch: Pi exits 0; relaunch auto-enters and resumes the same Hikaro session",
   );
-  const all = list.map((s: any) => s.messageCount ?? s.messages ?? "?");
-  console.log("INFO session message counts:", JSON.stringify(all));
   pi.send("/back\r");
   await new Promise((r) => setTimeout(r, 300));
   pi.send("\x04");

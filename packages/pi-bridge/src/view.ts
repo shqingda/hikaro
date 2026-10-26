@@ -12,6 +12,13 @@ import type { PiTransport } from "./index.ts";
 
 const plain = (text: string) => text;
 const MAX_TRANSCRIPT_CHARS = 128_000;
+const RESUMED_MESSAGES = 20;
+
+export interface PiBridgeSession {
+  /** Hikaro session to continue; a new one is created if it cannot be resumed. */
+  resumeSessionId?: string;
+  onSession?(id: string): void;
+}
 
 /** A terminal component hosted by Pi; only Hikaro receives submitted prompts. */
 export class PiBridgeView implements Component {
@@ -25,6 +32,9 @@ export class PiBridgeView implements Component {
   private busy = false;
   private disposed = false;
   private approvals: Array<{ id: string; reason: string }> = [];
+  private draft?: string;
+  private lost = false;
+  private running = false;
   private removeMessage: () => void;
   private removeExit: () => void;
 
@@ -32,6 +42,7 @@ export class PiBridgeView implements Component {
     readonly tui: TUI,
     readonly client: PiTransport,
     private done: () => void,
+    private session: PiBridgeSession = {},
   ) {
     this.editor = new Editor(tui, {
       borderColor: plain,
@@ -51,9 +62,11 @@ export class PiBridgeView implements Component {
         if (event.type === "text.delta") this.append(String(event.data.text));
         else if (event.type === "run.start") {
           this.busy = true;
+          this.running = true;
           this.refresh();
         } else if (event.type === "run.end") {
           this.busy = false;
+          this.running = false;
           this.approvals = [];
           this.append(
             `\n\n${event.data.status === "cancelled" ? "Stopped\n" : ""}${event.data.error ? String(event.data.error) + "\n" : ""}`,
@@ -61,6 +74,10 @@ export class PiBridgeView implements Component {
         } else if (event.type === "tool.end" && event.data.result?.isError) {
           this.append(`\n${event.data.name}: ${event.data.result.text}\n`);
         }
+      } else if (message.type === "error") {
+        // A prompt can be accepted and then refused before its run starts, e.g. a held lease.
+        if (!this.running) this.busy = false;
+        this.append(`\n${String(message.error)}\n`);
       } else if (message.type === "approval") {
         this.approvals.push({
           id: message.request.id,
@@ -74,7 +91,9 @@ export class PiBridgeView implements Component {
     this.removeExit = client.onExit((error) => {
       if (this.disposed) return;
       this.connected = false;
+      this.lost = true;
       this.busy = false;
+      this.running = false;
       this.approvals = [];
       this.append(`\n${error.message}\n/back returns to Pi.\n`);
     });
@@ -83,11 +102,11 @@ export class PiBridgeView implements Component {
     };
     // stdin pipes buffer until Hikaro installs its reader. Waiting for a ready notification
     // risks missing it when a transport is already connected or when a host reconnects.
-    void client.request("session.create").then(
-      () => {
+    void this.connect().then(
+      (history) => {
         if (this.disposed) return;
         this.connected = true;
-        this.text = "Hikaro · /back returns to Pi\n\n";
+        this.text = "Hikaro · /back returns to Pi\n\n" + history;
         this.transcript.setText(this.text);
         this.refresh();
       },
@@ -96,6 +115,34 @@ export class PiBridgeView implements Component {
           `\nCould not start Hikaro: ${String(error)}\n/back returns to Pi.\n`,
         ),
     );
+  }
+
+  private async connect() {
+    const id = this.session.resumeSessionId;
+    if (id) {
+      try {
+        await this.client.request("session.resume", { sessionId: id });
+        this.session.onSession?.(id);
+        // History is context only; a failed read must not discard the resumed session.
+        const page = await this.client
+          .request("messages.read", { limit: RESUMED_MESSAGES })
+          .catch(() => undefined);
+        return (page?.items ?? [])
+          .map(({ message }: any) =>
+            message.role === "user"
+              ? `You: ${message.text}\n\n`
+              : message.role === "assistant"
+                ? `${message.text}\n\n`
+                : "",
+          )
+          .join("");
+      } catch {
+        // Deleted or unreadable sessions fall through to a fresh one.
+      }
+    }
+    const created = await this.client.request("session.create");
+    if (typeof created?.id === "string") this.session.onSession?.(created.id);
+    return "";
   }
 
   get focused() {
@@ -121,9 +168,16 @@ export class PiBridgeView implements Component {
   }
 
   private async submit(input: string) {
-    const text = input.trim();
+    let text = input.trim();
     if (this.disposed || !text) return;
     this.editor.setText("");
+    // While disconnected the unsent draft is restored; a command typed after it still applies.
+    const draft = this.draft;
+    this.draft = undefined;
+    if (draft && text.startsWith(draft)) {
+      const command = text.slice(draft.length).trim();
+      if (command === "/back" || command === "/quit") text = command;
+    }
     if (text === "/back" || text === "/quit") {
       this.exit();
       return;
@@ -146,7 +200,8 @@ export class PiBridgeView implements Component {
       return;
     }
     if (!this.connected) {
-      this.editor.setText(input);
+      this.editor.setText(draft && text.startsWith(draft) ? draft : input);
+      this.draft = this.editor.getText();
       this.append("\nHikaro is not connected. /back returns to Pi.\n");
       return;
     }
@@ -206,11 +261,13 @@ export class PiBridgeView implements Component {
     const start = Math.min(this.offset ?? this.maxOffset, this.maxOffset);
     const visible = body.slice(start, start + this.bodyHeight);
     while (visible.length < this.bodyHeight) visible.push("");
-    const footer = this.approvals.length
-      ? "/allow approves · /deny declines · /back returns to Pi"
-      : this.busy
-        ? "Working · Ctrl+C stops · /back returns to Pi"
-        : "Enter send · PageUp/PageDown scroll · Ctrl+D or /back returns to Pi";
+    const footer = this.lost
+      ? "Not connected · Ctrl+D or /back returns to Pi"
+      : this.approvals.length
+        ? "/allow approves · /deny declines · /back returns to Pi"
+        : this.busy
+          ? "Working · Ctrl+C stops · /back returns to Pi"
+          : "Enter send · PageUp/PageDown scroll · Ctrl+D or /back returns to Pi";
     return [
       ...visible,
       ...input.slice(-inputHeight),
@@ -226,7 +283,10 @@ export class PiBridgeView implements Component {
     if (matchesKey(data, "ctrl+c")) {
       if (this.busy || this.approvals.length) this.cancel();
       else this.exit();
-    } else if (matchesKey(data, "ctrl+d") && !this.editor.getText())
+    } else if (
+      matchesKey(data, "ctrl+d") &&
+      (!this.editor.getText() || !this.connected)
+    )
       this.exit();
     else if (matchesKey(data, "pageUp")) this.move(-this.bodyHeight);
     else if (matchesKey(data, "pageDown")) this.move(this.bodyHeight);

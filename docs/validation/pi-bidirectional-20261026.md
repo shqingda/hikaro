@@ -1,6 +1,6 @@
 # Pi 双向长会话、取消与恢复 · 2026-10-26
 
-构建 `0d39fa5`，本机 Pi 1.4.0、Node 26.12.1、macOS arm64。全部在临时 Pi 配置、Hikaro home 和工作区中运行，不接触个人数据，不使用真实账号。脚本保存在 [pi-bidirectional-20261026/](pi-bidirectional-20261026/)，可用 `npx tsx` 重跑。
+首轮构建 `0d39fa5`，修复后重跑于本提交构建，本机 Pi 1.4.0、Node 26.12.1、macOS arm64。全部在临时 Pi 配置、Hikaro home 和工作区中运行，不接触个人数据，不使用真实账号。脚本保存在 [pi-bidirectional-20261026/](pi-bidirectional-20261026/)，可用 `npx tsx` 重跑。
 
 ## Hikaro → Pi（`PiBackend` 经 `pi --mode rpc`）
 
@@ -15,17 +15,23 @@
 
 ## Pi → Hikaro（Pi TUI 中自动打开的 Hikaro 入口，demo provider，PTY）
 
+首轮（`0d39fa5`）发现两处问题，修复后同一脚本连续三轮 5/5 通过：
+
 | 场景 | 结果 |
 |---|---|
 | 长会话 | 15 轮在同一 Hikaro 会话内完成 |
-| 取消 | 3000 字符回声流式中 Ctrl+C，43 ms 显示 Stopped，未输出完整回声，Pi 不退出，下一轮正常 |
-| 返回与重开 | `/back` 后 Hikaro 子进程退出；`/hikaro` 重开可用 |
-| 崩溃 | 运行中 SIGKILL Hikaro 子进程：界面显示退出原因，Pi 不退出，断开时拒绝发送；重开可用 |
-| 重启 Pi | Pi 退出码 0；重启后自动进入 Hikaro |
+| 取消 | 3000 字符回声流式中 Ctrl+C，约 42 ms 显示 Stopped，未输出完整回声，Pi 不退出，下一轮正常 |
+| 返回与重开 | `/back` 后 Hikaro 子进程退出；`/hikaro` 接回同一会话并显示最近 20 条消息 |
+| 崩溃 | 运行中 SIGKILL Hikaro 子进程：界面显示退出原因，底栏改为 `Not connected · Ctrl+D or /back returns to Pi`；草稿保留，草稿后输入 `/back` 返回 Pi；重开接回同一会话 |
+| 崩溃后的租约 | 被杀进程的 30 秒会话租约不被抢占；首次提示显示 `Session is running elsewhere` 并退出 Working，租约过期后重发完成 |
+| 重启 Pi | Pi 退出码 0；重启后自动进入并接回同一会话，全程只有 1 个 Hikaro 会话 |
 
-## 发现的问题（未修）
+## 修复
 
-1. **每次打开都是新 Hikaro 会话。** 扩展每次打开都调用 `session.create`；`/back` 再进或重启 Pi 后看不到之前的对话（本轮共产生 4 个会话）。历史仍保存在 Hikaro home，可在独立 TUI 中 `/sessions` 找到。RPC 已有 `session.resume`。
-2. **断开后 `/back` 出不去。** Hikaro 子进程退出后，提交的内容会放回输入框以保留草稿；之后再输入 `/back` 会拼成 `原内容/back`，再次被放回。只能用 Ctrl+C 返回 Pi（Ctrl+D 要求输入框为空），底栏仍提示 `/back`。
+1. **接回上次会话。** 扩展按工作目录把最近的 Hikaro 会话 ID 记在 `pi-bridge.json` 的 `sessions`；打开时先 `session.resume` 并读取最近 20 条消息显示，失败（会话已删除等）才 `session.create`。设置文件读不了时只是不接回，不影响打开。
+2. **断开后返回 Pi。** 断开时 Ctrl+D 不再要求输入框为空；保留的草稿后面输入 `/back` 或 `/quit` 会被识别为返回命令，草稿不提交。
+3. **显示被拒绝的提示。** 测试中发现：提示被接受后若在运行开始前被拒（如租约未过期），RPC 只发 `error` 消息，视图原来不处理而一直显示 Working。现在显示错误并退出 Working；运行已开始时的错误只显示，不改状态。
+
+`tests/pi-view.test.ts` 4 项先失败后通过；全量 139 个测试文件 746 项、脚本 19 项、`pi-smoke` 通过。
 
 不覆盖：真实模型/账号、Pi 工具调用与审批经桥接往返、Pi 自身的 compaction、移动端。

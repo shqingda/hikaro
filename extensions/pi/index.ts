@@ -6,8 +6,10 @@ import { ProcessClient } from "../../packages/protocol/src/client.ts";
 import { PiBridgeView } from "../../packages/pi-bridge/src/view.ts";
 import type { PiTransport } from "../../packages/pi-bridge/src/index.ts";
 import {
+  piLastSession,
   readPiSettings,
   setPiAutoOpen,
+  setPiLastSession,
 } from "../../packages/pi-bridge/src/settings.ts";
 
 interface Context {
@@ -108,9 +110,20 @@ export function createPiExtension(
       state.opening = true;
       state.autoSeen = true;
       try {
+        // An unreadable settings file only costs continuity, never the bridge.
+        const resumeSessionId = await piLastSession(home, ctx.cwd).catch(
+          () => undefined,
+        );
         await ctx.ui.custom(
           (tui, _theme, _keys, done) => {
-            const view = new PiBridgeView(tui, createClient(ctx.cwd), done);
+            const view = new PiBridgeView(tui, createClient(ctx.cwd), done, {
+              resumeSessionId,
+              onSession: (id) => {
+                void setPiLastSession(home, ctx.cwd, id).catch((error) =>
+                  ctx.ui.notify(`Hikaro settings: ${String(error)}`, "error"),
+                );
+              },
+            });
             state.view = view;
             return view;
           },

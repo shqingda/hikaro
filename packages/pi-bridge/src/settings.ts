@@ -29,6 +29,29 @@ export async function writePiFile(path: string, text: string) {
   }
 }
 
+/** The Hikaro session Pi reopens for each workspace. */
+export async function piLastSession(home: string, cwd: string) {
+  const sessions = (await readPiSettings(home)).sessions;
+  const id =
+    sessions && typeof sessions === "object"
+      ? (sessions as Record<string, unknown>)[cwd]
+      : undefined;
+  return typeof id === "string" ? id : undefined;
+}
+
+export async function setPiLastSession(home: string, cwd: string, id: string) {
+  const current = await readPiSettings(home);
+  const sessions =
+    current.sessions && typeof current.sessions === "object"
+      ? (current.sessions as Record<string, unknown>)
+      : {};
+  if (sessions[cwd] === id) return;
+  await writePiFile(
+    join(home, "pi-bridge.json"),
+    JSON.stringify({ ...current, sessions: { ...sessions, [cwd]: id } }) + "\n",
+  );
+}
+
 export async function setPiAutoOpen(home: string, autoOpen: boolean) {
   const current = await readPiSettings(home);
   await writePiFile(
