@@ -85,6 +85,13 @@ it("rolls back several model edits to a chosen point from the TUI", async () => 
     },
   );
   let output = "";
+  // Step timings make a CI timeout show which step was slow or never finished.
+  const started = Date.now();
+  const marks: string[] = [];
+  const mark = (step: string) => {
+    marks.push(`${step} @${Date.now() - started}ms`);
+    if (process.env.HIKARO_PTY_TRACE) console.error(marks.at(-1));
+  };
   const watchers = new Set<() => void>();
   const exited = new Promise<number>((done) =>
     terminal.onExit(({ exitCode }) => done(exitCode)),
@@ -104,6 +111,7 @@ it("rolls back several model edits to a chosen point from the TUI", async () => 
         if (stripVTControlCharacters(output.slice(offset)).includes(text)) {
           clearTimeout(timer);
           watchers.delete(check);
+          mark(text);
           done();
         }
       };
@@ -111,7 +119,7 @@ it("rolls back several model edits to a chosen point from the TUI", async () => 
         watchers.delete(check);
         reject(
           Error(
-            `Missing ${text}: ${stripVTControlCharacters(output.slice(-6000))}`,
+            `Missing ${text} after ${marks.join(", ")}: ${stripVTControlCharacters(output.slice(-6000))}`,
           ),
         );
       }, 8000);
@@ -144,9 +152,26 @@ it("rolls back several model edits to a chosen point from the TUI", async () => 
     await wait("Rolled back 2 changes across 2 files", done);
     expect(await readFile(join(cwd, "sample.txt"), "utf8")).toBe("original");
     await expect(access(join(cwd, "notes.txt"))).rejects.toThrow();
-    await wait("/help", send("\x1b"));
+    // Wait for the conversation footer, not "/help": a repaint of the open list can
+    // include the welcome line, and Ctrl+D sent while Esc is still pending is lost.
+    await wait("Enter send", send("\x1b"));
     send("\x04");
-    expect(await exited).toBe(0);
+    const code = await Promise.race([
+      exited,
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () =>
+            reject(
+              Error(
+                `TUI did not exit after Ctrl+D (${marks.join(", ")}): ${stripVTControlCharacters(output.slice(-3000))}`,
+              ),
+            ),
+          8000,
+        ),
+      ),
+    ]);
+    mark("exited");
+    expect(code).toBe(0);
   } finally {
     terminal.kill();
     server.closeAllConnections();
