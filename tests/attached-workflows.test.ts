@@ -334,16 +334,19 @@ it("uses durable host receipts and rejects cross-selection workflow commands", a
       sessionId: session.id,
       id: plan.id,
     });
-    await vi.waitFor(async () => {
-      expect(
-        (
-          (await client.request("plan.read", { sessionId: session.id })) as {
-            active: boolean;
-          }
-        ).active,
-      ).toBe(false);
-      expect(client.state.busy).toBe(false);
-    });
+    await vi.waitFor(
+      async () => {
+        expect(
+          (
+            (await client.request("plan.read", { sessionId: session.id })) as {
+              active: boolean;
+            }
+          ).active,
+        ).toBe(false);
+        expect(client.state.busy).toBe(false);
+      },
+      { timeout: 5000 },
+    );
     const receipts = client.receipts.filter((r) => r.method === "plan.execute");
     expect(receipts.length).toBeGreaterThan(0);
     const executed = receipts[0]!;

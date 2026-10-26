@@ -120,13 +120,20 @@ it("recovers a durably accepted queue after host SIGKILL and explicitly resumes 
     terminalExit = new Promise<number>((done) =>
       terminal!.onExit(({ exitCode }) => done(exitCode)),
     );
-    const send = (text: string) => {
+    // A key sent right after a lone Escape can be decoded with it as Alt+key, and
+    // overlay repaints still show the editor footer. Leave Escape time to resolve.
+    let escapedAt = 0;
+    const send = async (text: string) => {
+      const pause = escapedAt + 150 - Date.now();
+      if (pause > 0) await new Promise((r) => setTimeout(r, pause));
       const offset = output.length;
       terminal!.write(text);
+      if (text === "\x1b") escapedAt = Date.now();
       return offset;
     };
     let step = 0;
-    const wait = async (text: string, offset = 0) => {
+    const wait = async (text: string, sent: number | Promise<number> = 0) => {
+      const offset = await sent;
       const current = ++step;
       await vi.waitFor(
         () =>
@@ -164,7 +171,7 @@ it("recovers a durably accepted queue after host SIGKILL and explicitly resumes 
         .map((m) => m.text),
     ).toEqual(["RECOVER-PENDING-EXACTLY-ONCE"]);
     expect(await store.pendingPrompts(session.id)).toEqual([]);
-    send("\x04");
+    await send("\x04");
     expect(await terminalExit).toBe(0);
   } finally {
     terminal?.kill();

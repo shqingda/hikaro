@@ -500,9 +500,15 @@ it("recovers a recreated view's durable intent, then fences a crashed host witho
     await vi.waitFor(() => expect(client.state.runStatus).toBe("completed"), {
       timeout: 5000,
     });
-    await client.reconcile();
-    expect(client.receipts.find((r) => r.method === "prompt")?.status).toBe(
-      "completed",
+    // run.end is broadcast before the host persists the receipt as completed.
+    await vi.waitFor(
+      async () => {
+        await client.reconcile();
+        expect(client.receipts.find((r) => r.method === "prompt")?.status).toBe(
+          "completed",
+        );
+      },
+      { timeout: 5000 },
     );
     await client.request("prompt", { text: "crash " + "x".repeat(2000) });
     await vi.waitFor(() => expect(client.state.busy).toBe(true));
