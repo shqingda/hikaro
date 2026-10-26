@@ -21,7 +21,7 @@
 - [x] P4 本地增量到 PTY 输出 p95 ≤33 ms，覆盖 burst、长 Markdown、10k 历史和最终正文一致。合并窗口 24→12 ms（3d7636f）；流式 Markdown 只重解析稳定前缀后的尾部（2215cc8）；提交时一次性预热 emoji/CJK 宽度（本提交）。流式全矩阵已通过（独立/附着长 Markdown 30.10/29.04 ms，首标记均未变差）；启动 p95 不再作为勾选条件（见 P1），10-26 冻结基线与当前构建交替对照排除代码退化，见[流式记录](docs/validation/streaming-20261025.md)。
 - [x] P5 macOS arm64 包裁掉 node-pty 外平台预构建，map 独立附件；核对清洁安装大小和 helper。裁剪与 map 分离（37eb6a4、1785a53）；10-26 `b0abdd9` 候选压缩 7.7 MiB、安装 186 MiB，清洁安装与 helper 验收通过，见[精简记录](docs/validation/slimming-20261025.md)。
 - [x] P6 空间统计、清理预览及显式确认；重检运行和引用，保留文字、凭据、草稿、回执，资料失效可见（4b7221c、edc8020）。
-- [ ] P8 当前最终构建完整 30 分钟稳定性及一次内存快照。
+- [x] P8 当前最终构建完整 30 分钟稳定性及一次内存快照。`156fef7` 94 轮通过，footprint 65.5→91.0 MiB 且增长放缓，见[收尾记录](docs/validation/final-20261026.md)。
 
 旧构建附着三轮通过，普通仍有长尾，见[启动记录](docs/validation/startup-optimization-20261024.md)。旧 30 分钟及内存证据见[性能记录](docs/validation/performance-current-20261024.md)，不能冒充本轮测量。
 
@@ -41,7 +41,7 @@
 - [ ] M3 Android/iOS 真机键盘/IME、扫码、网络切换、锁屏、杀进程与真实 relay 接续。
 - [ ] M4 真实通知收件/点击。
 - [ ] R1 同 SHA 候选安装、升级回退及一次真实账号闭环。
-- [ ] R2 tutorial 清单/内容/路径完全未变；最终精简清单、性能对照及未验项准确记录。
+- [x] R2 tutorial 清单/内容/路径完全未变；最终精简清单、性能对照及未验项准确记录。 tutorial 18 个文件 SHA 与基线一致，见[收尾记录](docs/validation/final-20261026.md)。
 
 ## 已交付，移出活动待办
 
