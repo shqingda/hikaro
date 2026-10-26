@@ -10,7 +10,15 @@ curl -fsSL https://github.com/shqingda/hikaro/releases/latest/download/install.s
 
 升级：`hikaro update` 或 `hk update`，重新运行最新安装脚本。新版本原子切换，保留上一个版本供回退，更早的版本删除。数据目录 `~/.hikaro` 不在安装目录内，升级不动数据。已在运行的 hikaro 进程继续使用旧版本，重启后生效。
 
-可选环境变量：`HIKARO_INSTALL_DIR`、`HIKARO_BIN_DIR`、`HIKARO_NO_MODIFY_PATH=1`、`HIKARO_DOWNLOAD_BASE`（镜像地址）。维护者用 `pnpm release:cli` 生成安装包，产物在 `artifacts/release/cli/`。
+可选环境变量：`HIKARO_INSTALL_DIR`、`HIKARO_BIN_DIR`、`HIKARO_NO_MODIFY_PATH=1`、`HIKARO_DOWNLOAD_BASE`（镜像地址）。
+
+### 发版（维护者）
+
+1. 把 `package.json`、`apps/mobile/package.json`、`apps/mobile/app.json` 的版本号改成新版本；Android 每次发版把 `app.json` 的 `android.versionCode` 加 1。
+2. 写 `docs/releases/vX.Y.Z.md`，第一行 `# 标题` 作为 Release 标题，其余为发版说明。
+3. 提交并推送 `main`，再推送 `vX.Y.Z` 标签。`.github/workflows/release.yml` 在 macOS arm64 上打 CLI 包并实际安装一遍，在 Linux 上构建并签名 APK，两者都成功后创建 Release 并上传附件。
+
+APK 签名密钥保存在仓库 Actions Secrets（`HIKARO_ANDROID_P12_BASE64`、`HIKARO_ANDROID_P12_PASSWORD`），原件在维护者本机 `~/.local/share/hikaro-signing`，需另行备份；换密钥会导致已安装的 App 无法覆盖更新。本地也可分别用 `pnpm release:cli`、`bash scripts/build-android.sh` 构建，产物在 `artifacts/release/`。
 
 下文为源码安装与 npm tarball 候选流程。
 
