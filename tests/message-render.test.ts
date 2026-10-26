@@ -84,3 +84,20 @@ it("keeps the parsed prefix while only the live tail grows", async () => {
   expect(stableMarkdownBoundary("a\n\nb\n\n[x]: http://e")).toBe(0);
   expect(stableMarkdownBoundary("a\n\n\n\nb\n")).toBe("a\n\n\n\n".length);
 });
+
+it("warms text shaping once per process without touching the screen", async () => {
+  const { warmTextShaping } = await import("../packages/tui/src/index.ts");
+  const writes: unknown[] = [];
+  const write = process.stdout.write;
+  process.stdout.write = ((chunk: unknown) => {
+    writes.push(chunk);
+    return true;
+  }) as typeof process.stdout.write;
+  try {
+    expect(warmTextShaping()).toBe(true);
+    expect(warmTextShaping()).toBe(false);
+  } finally {
+    process.stdout.write = write;
+  }
+  expect(writes).toEqual([]);
+});

@@ -133,6 +133,26 @@ class StreamingMarkdown implements Component {
   }
 }
 
+let textShapingWarm = false;
+/**
+ * The first emoji/CJK frame compiles pi-tui's RGI_Emoji regex and loads ICU
+ * segmentation (~20–35 ms once per process). Pay it when the user submits, before
+ * the run exists, instead of in the first streamed frame. Returns whether it ran.
+ */
+export function warmTextShaping() {
+  if (textShapingWarm) return false;
+  textShapingWarm = true;
+  createMarkdown(
+    sanitize(
+      "## 中文 🙂\n\n**粗体** `code` 👍🏽 text, 한국어 かな.\n\n- 项目 🎉",
+    ),
+    1,
+    1,
+    theme,
+  ).render(80);
+  return true;
+}
+
 /** Keep Markdown parsing bounded and defer it until the renderer requests a frame. */
 export class MessageComponent implements Component {
   private text: string;
@@ -529,6 +549,8 @@ export class HikaroView {
         }
         return;
       }
+      // Before dispatch: an attached host may already stream when run.start arrives.
+      warmTextShaping();
       const work = text.startsWith("/")
         ? options.onCommand(text).then((result) => {
             if (result) this.notice(result);

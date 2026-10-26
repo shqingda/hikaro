@@ -76,6 +76,33 @@ warm-up mostly moves the same one-time cost; it is left as an open decision rath
 than tuned against the benchmark. Report: `artifacts/slimming-20261026/stream-after.json`
 (not committed).
 
+## Submit-time text-shaping warm-up — 2026-10-26
+
+`warmTextShaping()` renders one small CJK/emoji Markdown sample once per process
+(~24 ms) when the user submits a prompt or command, before it is dispatched. A first
+variant warmed on `run.start` instead: the stream gate passed, but attached first
+markers regressed (plain burst1000 ~27 → ~47 ms) because the host is already
+streaming when the client sees `run.start`, so that variant was not kept.
+
+Full `pnpm bench:stream:check` with the submit-time warm-up, host load ~2.1–2.6,
+report status `passed` (`artifacts/slimming-20261026/stream-warm-submit.json`):
+
+| Scenario                |   Standalone p95 |     Attached p95 |
+| ----------------------- | ---------------: | ---------------: |
+| Normal                  |         26.43 ms |         27.83 ms |
+| Burst 100 / 1,000       | 28.33 / 27.24 ms | 27.70 / 28.89 ms |
+| Long Markdown           |         30.10 ms |         29.04 ms |
+| 10,000 history          |         24.67 ms |         24.80 ms |
+| Input during generation |          1.00 ms |          2.68 ms |
+
+Each run's first marker is no worse than before in any cell: long Markdown
+45–62 → 30–34 ms standalone and ~57 → 27–29 ms attached.
+
+The startup gate (`pnpm bench:check`) was attempted afterwards, but an independently
+started iOS simulator raised load from 17 to 104 during the run (p95 1,003 ms startup,
+17.25 ms input; invalid). The startup driver never submits, so the warm-up path does
+not run there, but **P4 stays open until both gates pass on a quiet host.**
+
 ## Reproduction
 
 ```sh
