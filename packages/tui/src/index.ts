@@ -53,6 +53,86 @@ const MESSAGE_PAGE_CHARS = 16_000;
 const STREAM_PREVIEW_CHARS = 64_000;
 const MAX_VISIBLE_ITEMS = 40;
 
+/**
+ * End of the last blank-line block boundary that later text cannot change: outside
+ * fences, after the whole blank run, before a complete line that does not open a
+ * list, table, quote or indented block. Reference definitions can restyle earlier
+ * text, so their presence disables the split. Returns 0 when no boundary is safe.
+ */
+export function stableMarkdownBoundary(text: string) {
+  if (/^ {0,3}\[[^\]\n]+\]:/m.test(text)) return 0;
+  let fence: string | undefined,
+    boundary = 0;
+  const line = /^.*$/gm;
+  let blank = false;
+  for (let match = line.exec(text); match; match = line.exec(text)) {
+    const row = match[0];
+    if (match.index === text.length) break;
+    const marker = /^ {0,3}(`{3,}|~{3,})/.exec(row)?.[1];
+    if (fence) {
+      if (
+        marker &&
+        marker[0] === fence[0] &&
+        marker.length >= fence.length &&
+        !row.trim().slice(marker.length).trim()
+      )
+        fence = undefined;
+    } else if (!row.trim()) blank = true;
+    else {
+      if (
+        blank &&
+        match.index > 0 &&
+        match.index + row.length < text.length &&
+        !/^(\s|[-*+]\s|\d{1,9}[.)]\s|[|>])/.test(row)
+      )
+        boundary = match.index;
+      blank = false;
+      if (marker) fence = marker;
+    }
+    line.lastIndex = match.index + row.length + 1;
+  }
+  return boundary;
+}
+
+/** Streaming preview: only the tail after the stable boundary is parsed again per delta. */
+class StreamingMarkdown implements Component {
+  private prefixText = "";
+  private prefix = createMarkdown("", 1, 0, theme);
+  private tail = createMarkdown("", 1, 0, theme);
+  private blank = true;
+  private last?: { width: number; a: string[]; b: string[]; lines: string[] };
+  setText(text: string) {
+    this.blank = !text.trim();
+    const split = stableMarkdownBoundary(text);
+    const prefix = text.slice(0, split);
+    if (prefix !== this.prefixText) {
+      this.prefixText = prefix;
+      this.prefix.setText(prefix);
+    }
+    this.tail.setText(text.slice(split));
+  }
+  /** Same lines as one Markdown(text, 1, 1): padding wraps both parts. */
+  render(width: number) {
+    const a = this.prefix.render(width),
+      b = this.tail.render(width);
+    if (this.last?.width === width && this.last.a === a && this.last.b === b)
+      return this.last.lines;
+    // At paddingY 0 a part with no visible block renders a lone "" placeholder.
+    const content = [a, b].flatMap((part) =>
+      part.length === 1 && part[0] === "" ? [] : part,
+    );
+    const pad = " ".repeat(width);
+    const lines = this.blank ? [] : [pad, ...content, pad];
+    this.last = { width, a, b, lines };
+    return lines;
+  }
+  invalidate() {
+    this.last = undefined;
+    this.prefix.invalidate();
+    this.tail.invalidate();
+  }
+}
+
 /** Keep Markdown parsing bounded and defer it until the renderer requests a frame. */
 export class MessageComponent implements Component {
   private text: string;
@@ -61,6 +141,7 @@ export class MessageComponent implements Component {
   private readGeneration = 0;
   private loadedPage?: { page: number; text: string };
   private body = new Container();
+  private live?: StreamingMarkdown;
   /** User rows are re-coloured per line; reuse them until text, width or theme change. */
   private decorated?: { width: number; bg: string; lines: string[] };
   static userBackground = "\x1b[48;2;244;225;219m";
@@ -112,8 +193,13 @@ export class MessageComponent implements Component {
     if (this.dirty) {
       this.body.clear();
 
+      // A start that only moves in 2k steps keeps the stable Markdown prefix reusable.
       const text = this.streaming
-        ? this.text.slice(-MESSAGE_PAGE_CHARS)
+        ? this.text.slice(
+            Math.ceil(
+              Math.max(0, this.text.length - MESSAGE_PAGE_CHARS) / 2000,
+            ) * 2000,
+          )
         : this.loadedPage?.page === this.page
           ? this.loadedPage.text
           : this.text.slice(
@@ -122,11 +208,12 @@ export class MessageComponent implements Component {
             );
       if (this.options.label)
         this.body.addChild(new Text(muted(sanitize(this.options.label)), 1, 0));
-      this.body.addChild(
-        this.role === "tool"
-          ? new Text(muted(text), 1, 1)
-          : createMarkdown(sanitize(text), 1, 1, theme),
-      );
+      if (this.role === "tool") this.body.addChild(new Text(muted(text), 1, 1));
+      else if (this.streaming) {
+        this.live ??= new StreamingMarkdown();
+        this.live.setText(sanitize(text));
+        this.body.addChild(this.live);
+      } else this.body.addChild(createMarkdown(sanitize(text), 1, 1, theme));
       if (this.streaming && this.text.length > MESSAGE_PAGE_CHARS) {
         this.body.addChild(
           new Text(
