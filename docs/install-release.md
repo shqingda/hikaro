@@ -1,12 +1,18 @@
-# TUI 源码安装与升级
+# TUI 安装与升级
 
-当前最新版为 [v0.2.1 自用预览补丁](https://github.com/shqingda/hikaro/releases/tag/v0.2.1)，补齐会话数据清理及异步剪贴板草稿保护。请使用 [0.2.1 安装说明](releases/v0.2.1.md)。
+## 一行安装（macOS Apple Silicon）
 
-[0.2.0 自用预览版](https://github.com/shqingda/hikaro/releases/tag/v0.2.0)现已发布，新增 redo、附着模式模型参数和 macOS 剪贴板图片。使用[0.2.0 安装及登录说明](releases/v0.2.0.md)下载新包；下文 0.1.0 路径保留为历史示例。
+```sh
+curl -fsSL https://github.com/shqingda/hikaro/releases/latest/download/install.sh | sh
+```
 
-当前支持源码安装，并提供本地 macOS arm64 npm tarball 候选包流程；尚未公开发布或完成签名/公证。需要 Node 26.12.1+、pnpm 12.14.0、rg 和 Xcode Command Line Tools。浏览器功能另需 Playwright Chromium；离线 demo 不验证真实模型凭据。
+安装包自带 Node.js 26.12.1 运行时，不需要预装 Node、npm 或 sudo。程序装在 `~/.local/share/hikaro`，命令 `hikaro` 和简写 `hk` 链接到 `~/.local/bin`；如果该目录不在 PATH 中，安装脚本会在 shell 配置里补一行。下载会核对 SHA-256，校验失败不改动已装版本；同名命令若不是 Hikaro 安装的，安装会拒绝覆盖。
 
-[0.1.0 自用预览版](https://github.com/shqingda/hikaro/releases/tag/v0.1.0)已发布，访问遵循当前私有仓库权限；它是 pre-release，完整稳定版及移动端仍待完成。[安装命令和已知缺项](releases/v0.1.0.md)。附件提供 tarball、校验和、来源 manifest、安全与安装/订阅报告。下载时核对各报告的 SHA 与 tarball 一致，具体源提交和验收环境以附件为准。五项物理终端结果及各候选验收记录见仓库 docs/validation。
+升级：`hikaro update` 或 `hk update`，重新运行最新安装脚本。新版本原子切换，保留上一个版本供回退，更早的版本删除。数据目录 `~/.hikaro` 不在安装目录内，升级不动数据。已在运行的 hikaro 进程继续使用旧版本，重启后生效。
+
+可选环境变量：`HIKARO_INSTALL_DIR`、`HIKARO_BIN_DIR`、`HIKARO_NO_MODIFY_PATH=1`、`HIKARO_DOWNLOAD_BASE`（镜像地址）。维护者用 `pnpm release:cli` 生成安装包，产物在 `artifacts/release/cli/`。
+
+下文为源码安装与 npm tarball 候选流程。
 
 ## 安装
 

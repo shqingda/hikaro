@@ -4,7 +4,15 @@ Independent TypeScript coding agent. Current executable clients: fullscreen TUI 
 
 ## Run
 
-Requires **Node 26.12.1+**, **pnpm 12.14.0**, and `rg`. macOS is the initial supported host.
+Install the macOS Apple Silicon CLI (bundles its own Node.js runtime):
+
+```sh
+curl -fsSL https://github.com/shqingda/hikaro/releases/latest/download/install.sh | sh
+```
+
+Run `hikaro` or `hk`; update with `hikaro update`. Details: [TUI installation guide](docs/install-release.md).
+
+Building from source requires **Node 26.12.1+**, **pnpm 12.14.0**, and `rg`. macOS is the initial supported host.
 
 Installing or building from source also requires a C11 compiler: Xcode Command Line Tools on macOS, or `build-essential` on Linux. Installation and build compile the small file-operation helper; the built CLI includes that executable. After pulling native helper changes, run `pnpm build` or `pnpm install` before using either `pnpm dev` or `pnpm start`. File tools refuse to run if it is unavailable.
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0 — 2026-10-26
+
+- Install the macOS Apple Silicon CLI with `curl -fsSL https://github.com/shqingda/hikaro/releases/latest/download/install.sh | sh`. The package bundles Node.js 26.12.1; `hk` is a short alias and `hikaro update` reinstalls the latest release, keeping the previous one for rollback.
+- First signed Android APK (arm64-v8a). iOS is not distributed in this release.
+- Pi reopens the workspace's previous Hikaro session; Ctrl+D or `/back` returns to Pi after Hikaro disconnects. Full notes: [v0.3.0](docs/releases/v0.3.0.md). Sections below marked Unreleased shipped in this release.
+
 ## Unreleased — startup latency
 
 - Empty TUI sessions initialize Markdown when the first message is rendered, preserving full formatting on restored history.
