@@ -61,6 +61,8 @@ export class MessageComponent implements Component {
   private readGeneration = 0;
   private loadedPage?: { page: number; text: string };
   private body = new Container();
+  /** User rows are re-coloured per line; reuse them until text, width or theme change. */
+  private decorated?: { width: number; bg: string; lines: string[] };
   static userBackground = "\x1b[48;2;244;225;219m";
   static userForeground = "\x1b[38;2;41;39;37m";
   readonly streaming: boolean;
@@ -147,12 +149,15 @@ export class MessageComponent implements Component {
         );
       }
       this.dirty = false;
+      this.decorated = undefined;
     }
     const lines = this.body.render(width);
     if (this.role === "user") {
       const bg =
         MessageComponent.userBackground + MessageComponent.userForeground;
-      return lines.map(
+      if (this.decorated?.width === width && this.decorated.bg === bg)
+        return this.decorated.lines;
+      const decorated = lines.map(
         (line) =>
           bg +
           line
@@ -162,10 +167,13 @@ export class MessageComponent implements Component {
           " ".repeat(Math.max(0, width - visibleWidth(line))) +
           "\x1b[49m",
       );
+      this.decorated = { width, bg, lines: decorated };
+      return decorated;
     }
     return lines;
   }
   invalidate() {
+    this.decorated = undefined;
     this.body.invalidate();
   }
 }
@@ -197,6 +205,7 @@ export class HikaroView {
     scrollbar: "auto",
   });
   readonly footer = new Text("", 1, 0);
+  private footerText = "";
   readonly permissionStatus = new Text("", 1, 0);
   readonly inputError = new Text("", 1, 0);
   readonly modelSlot = new Container();
@@ -1027,22 +1036,23 @@ export class HikaroView {
         : "",
       !this.approval && !this.dialog && !this.modelPanel,
     );
-    if (this.modelPanel || this.approval) {
-      this.footer.setText("");
-      return;
-    }
-    this.footer.setText(
-      muted(
-        (this.info && this.preferences.showUsage ? this.info + "\n" : "") +
-          (this.dialog
-            ? this.dialog.method === "confirm"
-              ? "Type yes to confirm · Esc cancels"
-              : "Enter submits · Esc cancels"
-            : this.busy
-              ? "Ctrl+C stops · new prompts queue"
-              : `Enter send · Shift+Enter newline · /help${this.status.size ? " · " + [...this.status.values()].join(" · ") : ""}`),
-      ),
-    );
+    const footer =
+      this.modelPanel || this.approval
+        ? ""
+        : muted(
+            (this.info && this.preferences.showUsage ? this.info + "\n" : "") +
+              (this.dialog
+                ? this.dialog.method === "confirm"
+                  ? "Type yes to confirm · Esc cancels"
+                  : "Enter submits · Esc cancels"
+                : this.busy
+                  ? "Ctrl+C stops · new prompts queue"
+                  : `Enter send · Shift+Enter newline · /help${this.status.size ? " · " + [...this.status.values()].join(" · ") : ""}`),
+          );
+    // Every agent event lands here; pi-tui Text drops its wrap cache on any setText.
+    if (footer === this.footerText) return;
+    this.footerText = footer;
+    this.footer.setText(footer);
   }
   approve(request: PermissionRequest, signal: AbortSignal): Promise<boolean> {
     if (this.panelYieldsToApproval) this.modelController?.abort();
