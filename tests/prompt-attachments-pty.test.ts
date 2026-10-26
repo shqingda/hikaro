@@ -34,6 +34,8 @@ it("keeps a rejected attachment draft, then sends file and image bytes through t
     model: "fixture",
     settings: {},
     baseUrl: `http://127.0.0.1:${address.port}/v1`,
+    // Undeclared endpoints refuse images before sending (5b940b0).
+    endpointCapabilities: { images: true },
   });
   const child = spawn(
     process.execPath,
