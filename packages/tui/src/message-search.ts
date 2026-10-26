@@ -2,14 +2,30 @@ import type { HikaroView } from "./index.ts";
 import type { MessageSearchPage } from "../../protocol/src/contracts.ts";
 
 export type SearchContent = { data: string; nextOffset: number | null };
+/** Both backends forward this as `messages.content` params. */
+export type SearchContentRequest = {
+  seq: number;
+  field: "text";
+  offset: number;
+  limit: number;
+};
 
 /** Same bounded search and reader for local and attached TUI sessions. */
 export async function openMessageSearch(
   view: HikaroView,
   query: string,
   search: (query: string, before?: number) => Promise<MessageSearchPage>,
-  read: (seq: number, offset: number) => Promise<SearchContent>,
+  content: (request: SearchContentRequest) => Promise<SearchContent>,
 ) {
+  const read = async (seq: number, offset: number) => {
+    const page = await content({ seq, field: "text", offset, limit: 16000 });
+    if (
+      typeof page.data !== "string" ||
+      (page.nextOffset !== null && page.nextOffset <= offset)
+    )
+      throw Error("Invalid message page");
+    return page;
+  };
   const { panel, signal, close } = view.openModelPanel();
   try {
     if (!query.trim())

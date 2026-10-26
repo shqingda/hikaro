@@ -1,5 +1,48 @@
 import type { Session } from "../../core/src/types.ts";
 import type { HikaroView } from "./index.ts";
+
+/** What each TUI mode supplies; local guards and host epochs stay inside these calls. */
+export type SessionBackend = {
+  current(): string;
+  list(offset: number, limit: number, query?: string): Promise<Session[]>;
+  /** Persist the visible draft before the view leaves this session. */
+  flush(): Promise<void>;
+  open(id: string): Promise<void>;
+  /** Replaces the view's session after the current one was deleted. */
+  create(): Promise<void>;
+  remove(id: string): Promise<string | undefined>;
+  rename?(id: string, title: string): Promise<void>;
+};
+
+/** `/sessions [QUERY]` and `/resume [ID]` for local and attached TUI sessions. */
+export async function sessionCommand(
+  view: HikaroView,
+  command: "sessions" | "resume",
+  arg: string,
+  backend: SessionBackend,
+) {
+  const open = async (id: string) => {
+    await backend.flush();
+    await backend.open(id);
+  };
+  if (command === "resume" && arg) return open(arg);
+  await openSessions(
+    view,
+    () => backend.current(),
+    (offset, limit, query) => backend.list(offset, limit, query),
+    open,
+    async (id) => {
+      await backend.flush();
+      const current = id === backend.current();
+      const cleanupError = await backend.remove(id);
+      if (current) await backend.create();
+      return cleanupError;
+    },
+    backend.rename && ((id, title) => backend.rename!(id, title)),
+    command === "sessions" ? arg : "",
+  );
+}
+
 export async function openSessions(
   view: HikaroView,
   current: () => string,

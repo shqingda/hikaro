@@ -619,12 +619,9 @@ async function main() {
             view,
             arg,
             (query, before) => runtime.store.searchMessages(id, query, before),
-            async (seq, offset) =>
-              (await libraryRequest(
-                runtime,
-                "messages.content",
-                { seq, field: "text", offset, limit: 16000 },
-                () => runtime.session(id),
+            async (request) =>
+              (await libraryRequest(runtime, "messages.content", request, () =>
+                runtime.session(id),
               )) as import("../../../packages/tui/src/message-search.ts").SearchContent,
           );
           return;
@@ -849,33 +846,23 @@ async function main() {
         case "export":
           return `Exported: ${await runtime.exportSession(session.id, preferences.showThinking)}\nIf an .assets folder is present beside the Markdown, copy it together with the file.`;
         case "resume":
-          if (arg) {
-            await bind(await runtime.session(arg));
-            return;
-          }
         case "sessions": {
-          const { openSessions } =
+          const { sessionCommand } =
             await import("../../../packages/tui/src/sessions.ts");
-          await openSessions(
-            view,
-            () => session.id,
-            (offset, limit, query) =>
+          await sessionCommand(view, command, arg, {
+            current: () => session.id,
+            list: (offset, limit, query) =>
               runtime.store.sessions(offset, limit, runtime.options.cwd, query),
-            async (id) => {
-              await bind(await runtime.session(id));
-            },
-            async (id) => {
-              await drafts.flush();
-              const result = await runtime.deleteSession(id);
-              if (id === session.id) await bind(await runtime.session());
-              return result.cleanupError;
-            },
-            async (id, title) => {
+            flush: () => drafts.flush(),
+            open: async (id) => bind(await runtime.session(id)),
+            create: async () => bind(await runtime.session()),
+            remove: async (id) =>
+              (await runtime.deleteSession(id)).cleanupError,
+            rename: async (id, title) => {
               const next = await runtime.renameSession(id, title);
               if (id === session.id) session = next;
             },
-            command === "sessions" ? arg : "",
-          );
+          });
           return;
         }
         case "compact":

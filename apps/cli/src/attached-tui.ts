@@ -480,13 +480,10 @@ export async function attachTui(options: {
                 query,
                 before,
               })) as import("../../../packages/protocol/src/contracts.ts").MessageSearchPage,
-            async (seq, offset) =>
+            async (request) =>
               (await client.request("messages.content", {
                 sessionId,
-                seq,
-                field: "text",
-                offset,
-                limit: 16000,
+                ...request,
               })) as import("../../../packages/tui/src/message-search.ts").SearchContent,
           );
           return;

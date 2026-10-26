@@ -13,7 +13,7 @@ import {
   type DurableCommandReceipt,
   type RpcMethod,
 } from "../../../packages/protocol/src/contracts.ts";
-import { openSessions } from "../../../packages/tui/src/sessions.ts";
+import { sessionCommand } from "../../../packages/tui/src/sessions.ts";
 import { openModelPicker } from "../../../packages/tui/src/model-picker.ts";
 import { openModelControl } from "../../../packages/tui/src/model-settings.ts";
 import { openGeneralSettings } from "../../../packages/tui/src/general-settings.ts";
@@ -148,37 +148,34 @@ export class AttachedNavigation {
       return;
     }
     if (command === "/sessions" || command === "/resume") {
-      if (command === "/resume" && arg) {
-        await this.flush();
-        await this.request("session.resume", { sessionId: arg });
-        return;
-      }
-      await openSessions(
+      await sessionCommand(
         this.view,
-        () => this.client.state.session?.id ?? "",
-        (offset, limit, query) =>
-          this.request<Session[]>("session.list", { offset, limit, query }),
-        async (sessionId) => {
-          await this.flush();
-          const opened = await this.request<Session>("session.resume", {
-            sessionId,
-          });
-          this.view.notice(`Session opened: ${opened.title}.`);
-        },
-        async (sessionId) => {
-          await this.flush();
-          const current = this.client.state.session?.id === sessionId;
-          const result = await this.request<{ cleanupError?: string }>(
-            "session.delete",
-            { sessionId },
-          );
-          if (current) await this.request("session.create");
-          return result.cleanupError;
-        },
-        async (sessionId, title) => {
-          await this.request("session.rename", { sessionId, title });
-        },
+        command.slice(1) as "sessions" | "resume",
         arg,
+        {
+          current: () => this.client.state.session?.id ?? "",
+          list: (offset, limit, query) =>
+            this.request<Session[]>("session.list", { offset, limit, query }),
+          flush: this.flush,
+          open: async (sessionId) => {
+            const opened = await this.request<Session>("session.resume", {
+              sessionId,
+            });
+            this.view.notice(`Session opened: ${opened.title}.`);
+          },
+          create: async () => {
+            await this.request("session.create");
+          },
+          remove: async (sessionId) =>
+            (
+              await this.request<{ cleanupError?: string }>("session.delete", {
+                sessionId,
+              })
+            ).cleanupError,
+          rename: async (sessionId, title) => {
+            await this.request("session.rename", { sessionId, title });
+          },
+        },
       );
       return;
     }
