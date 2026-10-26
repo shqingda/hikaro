@@ -41,7 +41,7 @@
 - [ ] M3 Android/iOS 真机键盘/IME、扫码、网络切换、锁屏、杀进程与真实 relay 接续。
 - [ ] M4 真实通知收件/点击。
 - [ ] R1 同 SHA 候选安装、升级回退及一次真实账号闭环。
-- [x] R2 tutorial 清单/内容/路径完全未变；最终精简清单、性能对照及未验项准确记录。 tutorial 18 个文件 SHA 与基线一致，见[收尾记录](docs/validation/final-20261026.md)。
+- [x] R2 tutorial 清单/内容/路径完全未变；最终精简清单、性能对照及未验项准确记录。tutorial 18 个文件 SHA 与基线一致，见[收尾记录](docs/validation/final-20261026.md)。
 
 ## 已交付，移出活动待办
 
