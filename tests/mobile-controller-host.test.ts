@@ -94,9 +94,9 @@ it("reads all tool calls through a view-only encrypted host and rejects foreign 
     });
     app.review(f.uri());
     await app.confirm();
-    await vi.waitFor(() => expect(app.state.phase).toBe("connected"));
+    await settle(() => expect(app.state.phase).toBe("connected"));
     await app.select(session.id);
-    await vi.waitFor(() => expect(app.state.messages).toHaveLength(2));
+    await settle(() => expect(app.state.messages).toHaveLength(2));
     expect(app.state.messages[0]?.message).toMatchObject({
       toolCalls: calls.slice(0, 32).map(({ id, name }) => ({ id, name })),
     });
@@ -127,7 +127,7 @@ it("reads all tool calls through a view-only encrypted host and rejects foreign 
       deviceId: f.pairing.deviceId,
       role: null,
     });
-    await vi.waitFor(() => expect(app.state.session).toBeNull());
+    await settle(() => expect(app.state.session).toBeNull());
     expect(app.state.content).toBeNull();
     await expect(
       app.readMessage(callEvent.seq, 0, "toolCalls"),
@@ -151,6 +151,11 @@ it("reads all tool calls through a view-only encrypted host and rejects foreign 
     await rm(home, { recursive: true, force: true });
   }
 }, 20000);
+
+// Every wait crosses a real shared host, bridge and relay fixture. On a 2-core CI
+// runner the round trip reached ~0.9 s, too close to vi.waitFor's 1 s default.
+const settle = <T>(check: () => T | Promise<T>) =>
+  vi.waitFor(check, { timeout: 5000 });
 
 it("restores the same granted host task after a lost selection acknowledgement, app recreation and host restart", async () => {
   const home = await mkdtemp(join(tmpdir(), "hikaro-mobile-")),
@@ -188,17 +193,17 @@ it("restores the same granted host task after a lost selection acknowledgement, 
     });
     app.review(f.uri());
     await app.confirm();
-    await vi.waitFor(() =>
+    await settle(() =>
       expect(app.state.sessions.map((s) => s.id)).toEqual([session.id]),
     );
     f.dropResume();
     await expect(app.select(session.id)).rejects.toThrow(/unknown/i);
-    await vi.waitFor(() => expect(app.state.session?.id).toBe(session.id));
-    await vi.waitFor(() => expect(app.state.unknown).toBe(0));
+    await settle(() => expect(app.state.session?.id).toBe(session.id));
+    await settle(() => expect(app.state.unknown).toBe(0));
     expect(f.sent.filter((f) => f.method === "session.resume")).toHaveLength(1);
     await local.request("prompt", { text: "mobile recovery proof" });
-    await vi.waitFor(() => expect(local.state.busy).toBe(false));
-    await vi.waitFor(() =>
+    await settle(() => expect(local.state.busy).toBe(false));
+    await settle(() =>
       expect(
         app.state.messages.some((m) => m.message.role === "assistant"),
       ).toBe(true),
@@ -206,7 +211,7 @@ it("restores the same granted host task after a lost selection acknowledgement, 
     // Keep the long input within the demo context budget; cancel its slow echo.
     const fullText = "read".repeat(6000) + "中文🌅";
     await local.request("prompt", { text: fullText });
-    await vi.waitFor(() =>
+    await settle(() =>
       expect(
         app.state.messages.some(
           (m) => m.message.textLength === fullText.length,
@@ -214,7 +219,7 @@ it("restores the same granted host task after a lost selection acknowledgement, 
       ).toBe(true),
     );
     await local.request("cancel");
-    await vi.waitFor(() => expect(local.state.busy).toBe(false));
+    await settle(() => expect(local.state.busy).toBe(false));
     await app.history("latest");
     const text = app.state.messages.map((m) => m.message.text);
     const user = app.state.messages.find(
@@ -239,7 +244,7 @@ it("restores the same granted host task after a lost selection acknowledgement, 
     app.dispose();
     app = new MobileController(f.store, f.options);
     await app.restore();
-    await vi.waitFor(() => {
+    await settle(() => {
       expect(app.state.phase).toBe("connected");
       expect(app.state.messages.map((m) => m.message.text)).toEqual(text);
     });
@@ -254,7 +259,7 @@ it("restores the same granted host task after a lost selection acknowledgement, 
     local = new ClientConnection(wire.scope, wire, clock);
     await local.connected();
     await app.restore();
-    await vi.waitFor(() => {
+    await settle(() => {
       expect(app.state.phase).toBe("connected");
       expect(app.state.messages.map((m) => m.message.text)).toEqual(text);
     });
@@ -267,13 +272,13 @@ it("restores the same granted host task after a lost selection acknowledgement, 
       deviceId: f.pairing.deviceId,
       role: null,
     });
-    await vi.waitFor(() => expect(app.state.session).toBeNull());
-    await vi.waitFor(() => expect(app.state.sessions).toEqual([]));
+    await settle(() => expect(app.state.session).toBeNull());
+    await settle(() => expect(app.state.sessions).toEqual([]));
     expect(app.state.messages).toEqual([]);
     expect(app.state.content).toBeNull();
     expect(app.state.inspection.search).toBeNull();
     await expect(app.inspection.searchMessages("中文🌅")).rejects.toThrow();
-    await vi.waitFor(async () =>
+    await settle(async () =>
       expect(await f.store.snapshots.load(pairingScope(f.pairing))).toBeNull(),
     );
   } finally {
@@ -336,9 +341,9 @@ it("manages mobile steering with a real host and confirms only the original iden
     });
     app.review(f.uri());
     await app.confirm();
-    await vi.waitFor(() => expect(app.state.phase).toBe("connected"));
+    await settle(() => expect(app.state.phase).toBe("connected"));
     await app.select(session.id);
-    await vi.waitFor(() =>
+    await settle(() =>
       expect(app.state.composer.record?.session.id).toBe(session.id),
     );
     await app.steering.open(session.id);
@@ -385,8 +390,8 @@ it("manages mobile steering with a real host and confirms only the original iden
     app.dispose();
     app = new MobileController(f.store, f.options);
     await app.restore();
-    await vi.waitFor(() => expect(app.state.phase).toBe("connected"));
-    await vi.waitFor(async () => {
+    await settle(() => expect(app.state.phase).toBe("connected"));
+    await settle(async () => {
       await app.reconcileDraft();
       expect(app.state.composer.record?.text).toBe("");
     });
@@ -397,7 +402,7 @@ it("manages mobile steering with a real host and confirms only the original iden
     await app.steering.close();
     app.editDraft(session.id, "明确开始任务");
     await app.sendDraft(session.id);
-    await vi.waitFor(() => expect(app.state.runStatus).toBe("completed"));
+    await settle(() => expect(app.state.runStatus).toBe("completed"));
     await app.history();
     expect(
       app.state.messages
@@ -414,7 +419,7 @@ it("manages mobile steering with a real host and confirms only the original iden
       deviceId: f.pairing.deviceId,
       role: "view",
     });
-    await vi.waitFor(() => expect(app.state.canSteer).toBe(false));
+    await settle(() => expect(app.state.canSteer).toBe(false));
     await expect(app.steering.open(session.id)).rejects.toThrow(/control/);
   } finally {
     app.dispose();
@@ -461,25 +466,25 @@ it("sends mobile drafts through a real host, queues while busy, and recovers a l
     });
     app.review(f.uri());
     await app.confirm();
-    await vi.waitFor(() => expect(app.state.phase).toBe("connected"));
+    await settle(() => expect(app.state.phase).toBe("connected"));
     await app.select(session.id);
-    await vi.waitFor(() =>
+    await settle(() =>
       expect(app.state.composer.record?.session.id).toBe(session.id),
     );
     expect(app.state.canSend).toBe(true);
     app.editDraft(session.id, "来自手机的第一条要求");
     await app.sendDraft(session.id);
     expect(app.state.composer.record?.text).toBe("");
-    await vi.waitFor(() => expect(app.state.runStatus).toBe("completed"));
+    await settle(() => expect(app.state.runStatus).toBe("completed"));
     const running = local.request("tool.manual", {
       command:
         "printf ready > ready.txt; while [ ! -f release.txt ]; do sleep 0.05; done",
       unrestricted: true,
     });
     void running.catch(() => {});
-    await vi.waitFor(() => expect(app.state.approvals).toHaveLength(1));
+    await settle(() => expect(app.state.approvals).toHaveLength(1));
     await app.respondApproval(app.state.approvals[0]!.id, true);
-    await vi.waitFor(async () =>
+    await settle(async () =>
       expect(await readFile(join(cwd, "ready.txt"), "utf8")).toBe("ready"),
     );
     expect(app.state.busy).toBe(true);
@@ -492,7 +497,7 @@ it("sends mobile drafts through a real host, queues while busy, and recovers a l
     ).toBe(false);
     await writeFile(join(cwd, "release.txt"), "go");
     await running;
-    await vi.waitFor(async () => {
+    await settle(async () => {
       await app.history();
       expect(
         app.state.messages.filter(
@@ -507,8 +512,8 @@ it("sends mobile drafts through a real host, queues while busy, and recovers a l
     app.dispose();
     app = new MobileController(f.store, f.options);
     await app.restore();
-    await vi.waitFor(() => expect(app.state.phase).toBe("connected"));
-    await vi.waitFor(async () => {
+    await settle(() => expect(app.state.phase).toBe("connected"));
+    await settle(async () => {
       await app.reconcileDraft();
       expect(app.state.composer.record?.text).toBe("");
     });
@@ -528,7 +533,7 @@ it("sends mobile drafts through a real host, queues while busy, and recovers a l
       deviceId: f.pairing.deviceId,
       role: "view",
     });
-    await vi.waitFor(() => expect(app.state.canSend).toBe(false));
+    await settle(() => expect(app.state.canSend).toBe(false));
     app.editDraft(session.id, "无权限时保留草稿");
     await expect(app.sendDraft(session.id)).rejects.toThrow(/control/);
     expect(app.state.composer.record?.text).toBe("无权限时保留草稿");
@@ -578,16 +583,16 @@ it("arbitrates approvals and run-specific stops with a real host, reconciling lo
     });
     app.review(f.uri());
     await app.confirm();
-    await vi.waitFor(() => expect(app.state.phase).toBe("connected"));
+    await settle(() => expect(app.state.phase).toBe("connected"));
     await app.select(session.id);
-    await vi.waitFor(() => expect(app.state.sessionRole).toBe("control"));
+    await settle(() => expect(app.state.sessionRole).toBe("control"));
     const command = () =>
       local.request("tool.manual", {
         command: "printf approved > approved.txt",
         unrestricted: true,
       });
     const first = command();
-    await vi.waitFor(() => expect(app.state.approvals).toHaveLength(1));
+    await settle(() => expect(app.state.approvals).toHaveLength(1));
     const id = app.state.approvals[0]!.id;
     expect(app.state.approvals[0]!.arguments).toMatchObject({
       command: "printf approved > approved.txt",
@@ -599,17 +604,17 @@ it("arbitrates approvals and run-specific stops with a real host, reconciling lo
     expect(race.filter((r) => r.status === "fulfilled")).toHaveLength(1);
     await first;
     expect(await readFile(join(cwd, "approved.txt"), "utf8")).toBe("approved");
-    await vi.waitFor(() => expect(app.state.approvals).toHaveLength(0));
+    await settle(() => expect(app.state.approvals).toHaveLength(0));
     await expect(app.respondApproval(id, true)).rejects.toThrow(/expired/);
     const second = command();
-    await vi.waitFor(() => expect(app.state.approvals).toHaveLength(1));
+    await settle(() => expect(app.state.approvals).toHaveLength(1));
     const next = app.state.approvals[0]!.id;
     const count = f.sent.filter((f) => f.method === "approval.respond").length;
     f.dropReply("approval.respond");
     await expect(app.respondApproval(next, false)).rejects.toThrow(/unknown/i);
     expect(await second).toMatchObject({ isError: true });
-    await vi.waitFor(() => expect(app.state.phase).toBe("connected"));
-    await vi.waitFor(() => expect(app.state.unknown).toBe(0));
+    await settle(() => expect(app.state.phase).toBe("connected"));
+    await settle(() => expect(app.state.unknown).toBe(0));
     expect(f.sent.filter((f) => f.method === "approval.respond")).toHaveLength(
       count + 1,
     );
@@ -617,7 +622,7 @@ it("arbitrates approvals and run-specific stops with a real host, reconciling lo
       deviceId: f.pairing.deviceId,
       role: "view",
     });
-    await vi.waitFor(() => expect(app.state.sessionRole).toBe("view"));
+    await settle(() => expect(app.state.sessionRole).toBe("view"));
     await expect(app.respondApproval(next, true)).rejects.toThrow(/control/);
     await expect(app.stopRun(session.id, "expired")).rejects.toThrow(/control/);
     await local.request("session.access", {
@@ -630,9 +635,9 @@ it("arbitrates approvals and run-specific stops with a real host, reconciling lo
       unrestricted: true,
     });
     void running.catch(() => {}); // The assertion below still observes failures; cleanup may close the connection first.
-    await vi.waitFor(() => expect(app.state.approvals).toHaveLength(1));
+    await settle(() => expect(app.state.approvals).toHaveLength(1));
     await app.respondApproval(app.state.approvals[0]!.id, true);
-    await vi.waitFor(async () =>
+    await settle(async () =>
       expect(await readFile(join(cwd, "started.txt"), "utf8")).toBe("started"),
     );
     const shellPid = Number(await readFile(join(cwd, "shell.pid"), "utf8"));
@@ -643,9 +648,9 @@ it("arbitrates approvals and run-specific stops with a real host, reconciling lo
     f.dropReply("run.cancel");
     await expect(app.stopRun(session.id, runId)).rejects.toThrow(/unknown/i);
     expect(await running).toMatchObject({ isError: true });
-    await vi.waitFor(() => expect(app.state.phase).toBe("connected"));
-    await vi.waitFor(() => expect(app.state.runStatus).toBe("cancelled"));
-    await vi.waitFor(() => expect(app.state.unknown).toBe(0));
+    await settle(() => expect(app.state.phase).toBe("connected"));
+    await settle(() => expect(app.state.runStatus).toBe("cancelled"));
+    await settle(() => expect(app.state.unknown).toBe(0));
     expect(() => process.kill(shellPid, 0)).toThrow();
     expect(
       f.sent.filter((frame) => frame.method === "run.cancel"),
@@ -655,7 +660,7 @@ it("arbitrates approvals and run-specific stops with a real host, reconciling lo
     ).toMatchObject({ status: "completed", runId });
     const following = command();
     void following.catch(() => {});
-    await vi.waitFor(() => expect(app.state.approvals).toHaveLength(1));
+    await settle(() => expect(app.state.approvals).toHaveLength(1));
     const nextRun = app.state.runId!;
     expect(nextRun).not.toBe(runId);
     await expect(app.stopRun(session.id, runId)).rejects.toThrow(/expired/);
@@ -666,7 +671,7 @@ it("arbitrates approvals and run-specific stops with a real host, reconciling lo
     expect(app.state.approvals).toHaveLength(1);
     await app.stopRun(session.id, nextRun);
     expect(await following).toMatchObject({ isError: true });
-    await vi.waitFor(() => expect(app.state.runStatus).toBe("cancelled"));
+    await settle(() => expect(app.state.runStatus).toBe("cancelled"));
   } finally {
     app.dispose();
     local.close();
