@@ -10,12 +10,20 @@ import {
 } from "react-native";
 import { TextInput, Host, useNativeState } from "@expo/ui";
 import { router } from "expo-router";
-import { useMobile } from "@/provider";
+import { useMobileSelector } from "@/provider";
 import { Action, Note, SunMark, confirmConnectionRemoval } from "@/ui";
 import { colors } from "@/theme";
 export default function Connect() {
   useColorScheme();
-  const { controller, state } = useMobile();
+  const { controller, state } = useMobileSelector((s) => ({
+    phase: s.phase,
+    review: s.review,
+    deviceId: s.deviceId,
+    error: s.error,
+    messages: s.messages,
+    session: s.session,
+    composer: s.composer,
+  }));
   const value = useNativeState("");
   const [draft, setDraft] = useState(""),
     [error, setError] = useState<string | null>(null);

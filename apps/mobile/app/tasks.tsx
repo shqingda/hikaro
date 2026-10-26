@@ -8,14 +8,26 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { router } from "expo-router";
-import { useMobile } from "@/provider";
+import { useMobileSelector } from "@/provider";
 import { Action, Note, confirmConnectionRemoval } from "@/ui";
 import { colors, readable } from "@/theme";
 import { NotificationSettings } from "@/notification-settings";
 import { canReturnToTask } from "@/task-continuation";
 export default function Tasks() {
   useColorScheme();
-  const { controller, state } = useMobile();
+  const { controller, state } = useMobileSelector((s) => ({
+    phase: s.phase,
+    deviceId: s.deviceId,
+    relay: s.relay,
+    error: s.error,
+    loading: s.loading,
+    messages: s.messages,
+    moreSessions: s.moreSessions,
+    offset: s.offset,
+    session: s.session,
+    sessions: s.sessions,
+    composer: s.composer,
+  }));
   const online = state.phase === "connected";
   useEffect(() => {
     if (["unpaired", "revoked", "review"].includes(state.phase))

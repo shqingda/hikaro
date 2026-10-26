@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { memo, useCallback, useEffect } from "react";
 import {
   FlatList,
   View,
@@ -7,7 +7,8 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { router } from "expo-router";
-import { useMobile } from "@/provider";
+import { useMobileSelector } from "@/provider";
+import type { MobileController, MobileMessage } from "@/controller";
 import { Action, Note } from "@/ui";
 import { colors, readable } from "@/theme";
 import { TaskActions } from "@/task-actions";
@@ -20,10 +21,149 @@ const status: Record<string, string> = {
   cancelled: "已停止",
   unknown: "结果待确认",
 };
+// Stream deltas arrive every frame; only this footer piece re-renders for them.
+function StreamPreview() {
+  const { state } = useMobileSelector((s) => ({
+    stream: s.stream,
+    streamTruncated: s.streamTruncated,
+    hasNewer: s.hasNewer,
+  }));
+  if (!state.stream || state.hasNewer) return null;
+  return (
+    <>
+      <Text style={{ fontSize: 12, color: colors.secondary }}>正在输出</Text>
+      <Text
+        selectable
+        style={{ fontSize: 16, lineHeight: 25, color: colors.label }}
+      >
+        {readable(state.stream)}
+      </Text>
+      {state.streamTruncated && (
+        <Note>显示最近一段输出，完整结果以电脑上的任务历史为准。</Note>
+      )}
+    </>
+  );
+}
+const MessageRow = memo(function MessageRow({
+  item,
+  controller,
+  online,
+  contentLoading,
+  canImages,
+}: {
+  item: MobileMessage;
+  controller: MobileController;
+  online: boolean;
+  contentLoading: boolean;
+  canImages: boolean;
+}) {
+  return (
+    <View style={{ gap: 10, paddingVertical: 8 }}>
+      <Text style={{ color: colors.secondary, fontSize: 12 }}>
+        {item.message.role === "user"
+          ? "你的要求"
+          : item.message.role === "assistant"
+            ? "Hikaro"
+            : item.message.role === "tool"
+              ? `工具记录${item.message.name ? ` · ${readable(item.message.name)}` : ""}${item.message.isError ? " · 失败" : ""}`
+              : "系统记录"}
+      </Text>
+      <Text
+        selectable
+        numberOfLines={
+          (item.message.textLength ?? 0) > item.message.text.length
+            ? 12
+            : undefined
+        }
+        style={{ color: colors.label, fontSize: 16, lineHeight: 25 }}
+      >
+        {readable(item.message.text)}
+      </Text>
+      {!!item.message.toolCalls?.length && (
+        <View style={{ gap: 10 }}>
+          <Note>
+            工具调用名称预览：
+            {item.message.toolCalls
+              .map((call) => readable(call.name))
+              .join("、")}
+            。完整调用参数可按需查看。
+          </Note>
+          <Action
+            title="查看工具调用"
+            quiet
+            disabled={!online || contentLoading}
+            onPress={() => {
+              void controller
+                .readMessage(item.seq, 0, "toolCalls")
+                .catch(() => {});
+              router.push("/message");
+            }}
+          />
+        </View>
+      )}
+      {!!item.message.imageCount && (
+        <Action
+          title={`查看 ${item.message.imageCount} 张图片`}
+          quiet
+          disabled={!online || !canImages}
+          onPress={() => {
+            void controller.inspection
+              .readImage(item.seq, 0, item.message.imageCount!)
+              .catch(() => {});
+            router.push("/image");
+          }}
+        />
+      )}
+      {item.message.textLength !== undefined &&
+        item.message.textLength > item.message.text.length && (
+          <View style={{ gap: 10 }}>
+            <Note>当前显示长消息预览，可以按段阅读全文。</Note>
+            <Action
+              title="阅读全文"
+              quiet
+              disabled={!online || contentLoading}
+              onPress={() => {
+                void controller.readMessage(item.seq).catch(() => {});
+                router.push("/message");
+              }}
+            />
+          </View>
+        )}
+    </View>
+  );
+});
 export default function Task() {
   useColorScheme();
-  const { controller, state } = useMobile();
+  const { controller, state } = useMobileSelector((s) => ({
+    phase: s.phase,
+    session: s.session,
+    runStatus: s.runStatus,
+    inspection: s.inspection,
+    unknown: s.unknown,
+    error: s.error,
+    loading: s.loading,
+    contentLoading: s.contentLoading,
+    hasOlder: s.hasOlder,
+    hasNewer: s.hasNewer,
+    messages: s.messages,
+    cacheClear: s.cacheClear,
+  }));
+
   const online = state.phase === "connected";
+  const contentLoading = state.contentLoading;
+  const canImages = state.inspection.canImages;
+  const renderItem = useCallback(
+    ({ item }: { item: MobileMessage }) => (
+      <MessageRow
+        item={item}
+        controller={controller}
+        online={online}
+        contentLoading={contentLoading}
+        canImages={canImages}
+      />
+    ),
+    [controller, online, contentLoading, canImages],
+  );
   useEffect(() => {
     if (["unpaired", "revoked", "review"].includes(state.phase))
       router.replace("/");
@@ -119,80 +259,7 @@ export default function Task() {
           )}
         </View>
       }
-      renderItem={({ item }) => (
-        <View style={{ gap: 10, paddingVertical: 8 }}>
-          <Text style={{ color: colors.secondary, fontSize: 12 }}>
-            {item.message.role === "user"
-              ? "你的要求"
-              : item.message.role === "assistant"
-                ? "Hikaro"
-                : item.message.role === "tool"
-                  ? `工具记录${item.message.name ? ` · ${readable(item.message.name)}` : ""}${item.message.isError ? " · 失败" : ""}`
-                  : "系统记录"}
-          </Text>
-          <Text
-            selectable
-            numberOfLines={
-              (item.message.textLength ?? 0) > item.message.text.length
-                ? 12
-                : undefined
-            }
-            style={{ color: colors.label, fontSize: 16, lineHeight: 25 }}
-          >
-            {readable(item.message.text)}
-          </Text>
-          {!!item.message.toolCalls?.length && (
-            <View style={{ gap: 10 }}>
-              <Note>
-                工具调用名称预览：
-                {item.message.toolCalls
-                  .map((call) => readable(call.name))
-                  .join("、")}
-                。完整调用参数可按需查看。
-              </Note>
-              <Action
-                title="查看工具调用"
-                quiet
-                disabled={!online || state.contentLoading}
-                onPress={() => {
-                  void controller
-                    .readMessage(item.seq, 0, "toolCalls")
-                    .catch(() => {});
-                  router.push("/message");
-                }}
-              />
-            </View>
-          )}
-          {!!item.message.imageCount && (
-            <Action
-              title={`查看 ${item.message.imageCount} 张图片`}
-              quiet
-              disabled={!online || !state.inspection.canImages}
-              onPress={() => {
-                void controller.inspection
-                  .readImage(item.seq, 0, item.message.imageCount!)
-                  .catch(() => {});
-                router.push("/image");
-              }}
-            />
-          )}
-          {item.message.textLength !== undefined &&
-            item.message.textLength > item.message.text.length && (
-              <View style={{ gap: 10 }}>
-                <Note>当前显示长消息预览，可以按段阅读全文。</Note>
-                <Action
-                  title="阅读全文"
-                  quiet
-                  disabled={!online || state.contentLoading}
-                  onPress={() => {
-                    void controller.readMessage(item.seq).catch(() => {});
-                    router.push("/message");
-                  }}
-                />
-              </View>
-            )}
-        </View>
-      )}
+      renderItem={renderItem}
       ListEmptyComponent={
         !state.loading ? (
           <Note>
@@ -207,22 +274,7 @@ export default function Task() {
       ListFooterComponent={
         <View style={{ gap: 18, marginTop: 16 }}>
           <Composer />
-          {state.stream && !state.hasNewer && (
-            <>
-              <Text style={{ fontSize: 12, color: colors.secondary }}>
-                正在输出
-              </Text>
-              <Text
-                selectable
-                style={{ fontSize: 16, lineHeight: 25, color: colors.label }}
-              >
-                {readable(state.stream)}
-              </Text>
-              {state.streamTruncated && (
-                <Note>显示最近一段输出，完整结果以电脑上的任务历史为准。</Note>
-              )}
-            </>
-          )}
+          <StreamPreview />
           {state.hasNewer && (
             <Action
               title="较新的消息"

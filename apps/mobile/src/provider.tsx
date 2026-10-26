@@ -7,7 +7,8 @@ import {
 } from "react";
 import { AppState, View, Text, useColorScheme } from "react-native";
 import { createMobileController } from "./native-runtime";
-import type { MobileController } from "./controller";
+import type { MobileController, MobileState } from "./controller";
+import { selectionSnapshot } from "./selection";
 import { colors } from "./theme";
 import { mobileLifecycle } from "./lifecycle";
 const Context = createContext<MobileController | null>(null);
@@ -46,6 +47,18 @@ export function MobileProvider({ children }: { children: React.ReactNode }) {
       )}
     </Context>
   );
+}
+/** Re-renders only when a selected field changes. `select` must depend on state alone. */
+export function useMobileSelector<T extends Record<string, unknown>>(
+  select: (state: MobileState) => T,
+) {
+  const controller = use(Context);
+  if (!controller) throw Error("Mobile provider required");
+  const [snapshot] = useState(() =>
+    selectionSnapshot(() => controller.state, select),
+  );
+  const state = useSyncExternalStore(controller.subscribe, snapshot);
+  return { controller, state };
 }
 export function useMobile() {
   const controller = use(Context);

@@ -1,11 +1,19 @@
 import { View, Text, Alert, TextInput } from "react-native";
-import { useMobile } from "./provider";
+import { useMobileSelector } from "./provider";
 import { Action, Note } from "./ui";
 import { colors } from "./theme";
 import { router } from "expo-router";
 
 export function Composer() {
-  const { controller, state } = useMobile();
+  const { controller, state } = useMobileSelector((s) => ({
+    phase: s.phase,
+    canSend: s.canSend,
+    canSteer: s.canSteer,
+    busy: s.busy,
+    steering: s.steering,
+    session: s.session,
+    composer: s.composer,
+  }));
   const draft = state.composer;
   const record = draft.record;
   if (!record) return draft.loading ? <Note>正在读取草稿…</Note> : null;

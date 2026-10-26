@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { View, Text, Alert } from "react-native";
-import { useMobile } from "./provider";
+import { useMobileSelector } from "./provider";
 import { Action, Note } from "./ui";
 import { colors, readable } from "./theme";
 
@@ -12,7 +12,19 @@ const receipts = {
   unknown: "结果未知，未重发",
 };
 export function TaskActions() {
-  const { controller, state } = useMobile();
+  const { controller, state } = useMobileSelector((s) => ({
+    phase: s.phase,
+    actionPending: s.actionPending,
+    actionNotice: s.actionNotice,
+    canStopRun: s.canStopRun,
+    sessionRole: s.sessionRole,
+    session: s.session,
+    runStatus: s.runStatus,
+    runId: s.runId,
+    receipts: s.receipts,
+    busy: s.busy,
+    approvals: s.approvals,
+  }));
   const [expanded, setExpanded] = useState<string | null>(null);
   const canControl =
     state.phase === "connected" &&
