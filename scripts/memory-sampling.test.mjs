@@ -34,8 +34,8 @@ test("native sampler reads a live process and rejects invalid or exited PID", ()
   }
 });
 
-test("RSS diagnostics cannot veto startup timing, while timing violations still fail", async () => {
-  const { STARTUP_BUDGETS } = await import("./bench.mjs");
+test("RSS diagnostics and slow startup only warn, while input violations still fail", async () => {
+  const { STARTUP_BUDGETS, STARTUP_ADVISORY } = await import("./bench.mjs");
   const { SHARED_STARTUP_BUDGETS } = await import("./bench-shared-host.mjs");
   const { evaluateBudgets } = await import("./bench-support.mjs");
   for (const limits of [STARTUP_BUDGETS, SHARED_STARTUP_BUDGETS]) {
@@ -48,15 +48,24 @@ test("RSS diagnostics cannot veto startup timing, while timing violations still 
           combinedRssP95MiB: 600,
         },
         limits,
+        { advisory: STARTUP_ADVISORY },
       ).passed,
       true,
     );
+    const slow = evaluateBudgets({ startupP95Ms: 201, inputP95Ms: 1 }, limits, {
+      advisory: STARTUP_ADVISORY,
+    });
+    assert.equal(slow.passed, true);
+    assert.deepEqual(slow.warnings, ["startupP95Ms"]);
+    assert.equal(slow.checks.startupP95Ms.advisory, true);
     assert.equal(
-      evaluateBudgets({ startupP95Ms: 201, inputP95Ms: 1 }, limits).passed,
+      evaluateBudgets({ startupP95Ms: 175, inputP95Ms: 17 }, limits, {
+        advisory: STARTUP_ADVISORY,
+      }).passed,
       false,
     );
     assert.equal(
-      evaluateBudgets({ startupP95Ms: 175, inputP95Ms: 17 }, limits).passed,
+      evaluateBudgets({ startupP95Ms: 201, inputP95Ms: 1 }, limits).passed,
       false,
     );
   }

@@ -47,17 +47,33 @@ export function percentile(samples, fraction) {
   ];
 }
 
-export function evaluateBudgets(metrics, limits) {
+// Advisory limits are reported and listed in `warnings` but never fail the run.
+export function evaluateBudgets(metrics, limits, { advisory = [] } = {}) {
   const checks = Object.fromEntries(
     Object.entries(limits).map(([name, max]) => {
       const value = Number.isFinite(metrics[name]) ? metrics[name] : null;
-      return [name, { value, max, passed: value !== null && value <= max }];
+      const check = { value, max, passed: value !== null && value <= max };
+      if (advisory.includes(name)) check.advisory = true;
+      return [name, check];
     }),
   );
+  const entries = Object.entries(checks);
   return {
-    passed: Object.values(checks).every((check) => check.passed),
+    passed: entries.every(([, check]) => check.advisory || check.passed),
+    warnings: entries
+      .filter(([, check]) => check.advisory && !check.passed)
+      .map(([name]) => name),
     checks,
   };
+}
+
+export function warnBudget(budget) {
+  for (const name of budget.warnings ?? []) {
+    const { value, max } = budget.checks[name];
+    console.warn(
+      `warning: ${name} ${value?.toFixed(2)} exceeds advisory ${max}`,
+    );
+  }
 }
 
 export async function withBenchmarkHome(work, root = tmpdir()) {

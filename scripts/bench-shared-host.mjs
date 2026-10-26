@@ -1,11 +1,12 @@
 import { spawn, execFileSync } from "node:child_process";
 import { once } from "node:events";
 import { resolve } from "node:path";
-import { startupSample, STARTUP_BUDGETS } from "./bench.mjs";
+import { startupSample, STARTUP_ADVISORY, STARTUP_BUDGETS } from "./bench.mjs";
 import {
   environment,
   benchmarkFingerprint,
   evaluateBudgets,
+  warnBudget,
   integerSetting,
   percentile,
   saveReport,
@@ -147,7 +148,9 @@ export async function main() {
     inputSamplesPerRun: 20,
     firstLaunch,
     ...metrics,
-    budget: evaluateBudgets(metrics, SHARED_STARTUP_BUDGETS),
+    budget: evaluateBudgets(metrics, SHARED_STARTUP_BUDGETS, {
+      advisory: STARTUP_ADVISORY,
+    }),
     samples,
     limitations: [
       "Host reaches Runtime/SQLite readiness before the TUI timer starts. This measures attachment, not cold host startup.",
@@ -161,6 +164,7 @@ export async function main() {
     report,
   );
   console.log(JSON.stringify({ ...metrics, budget: report.budget }));
+  warnBudget(report.budget);
   if (check && !report.budget.passed) process.exitCode = 1;
 }
 if (isMain(import.meta.url)) await main();

@@ -10,15 +10,19 @@ import {
   isMain,
   percentile,
   saveReport,
+  warnBudget,
   withBenchmarkHome,
 } from "./bench-support.mjs";
 
-// Timing targets remain unchanged. RSS is diagnostic pending a platform
-// memory baseline; see docs/specs/shared-memory-soak.md.
+// Input latency is a hard gate. Startup p95 is advisory since 2026-10-26:
+// acceptance compares against a frozen baseline on the same host. RSS is
+// diagnostic pending a platform memory baseline; see
+// docs/specs/shared-memory-soak.md.
 export const STARTUP_BUDGETS = {
   startupP95Ms: 200,
   inputP95Ms: 16,
 };
+export const STARTUP_ADVISORY = ["startupP95Ms"];
 
 export async function startupSample({
   live = false,
@@ -174,7 +178,9 @@ export async function main() {
       0.95,
     ),
   };
-  const budget = evaluateBudgets(metrics, STARTUP_BUDGETS);
+  const budget = evaluateBudgets(metrics, STARTUP_BUDGETS, {
+    advisory: STARTUP_ADVISORY,
+  });
   const result = {
     schemaVersion: 3,
     assessmentScope: "startup-timing",
@@ -209,6 +215,7 @@ export async function main() {
     result,
   );
   console.log(JSON.stringify(result, null, 2));
+  warnBudget(budget);
   if (check && !budget.passed) process.exitCode = 1;
 }
 
