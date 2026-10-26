@@ -280,3 +280,44 @@ it("cancels through the host control lane without replaying the invocation", asy
     await rm(home, { recursive: true, force: true });
   }
 });
+
+it("accepts cancellation that arrives before the invocation acquires its lease", async () => {
+  const home = await mkdtemp(join(tmpdir(), "hikaro-plugin-early-"));
+  const runtime = await Runtime.open({
+    home,
+    cwd: home,
+    demo: true,
+    approve: async () => true,
+  });
+  let ran = false;
+  runtime.plugins.commands.set("wait", async () => {
+    ran = true;
+    return "should not run";
+  });
+  try {
+    const session = await runtime.session();
+    const outcome = runtime
+      .invokePlugin(session, "wait", "command", "", {
+        invocationId: "early",
+        scope: "owner",
+      })
+      .catch((error: unknown) => error);
+    // Still awaiting idle/lease: only the owner's own invocation may be cancelled.
+    expect(() =>
+      runtime.pluginRuns.cancel(session.id, "early", "other"),
+    ).toThrow(/not found/i);
+    expect(runtime.pluginRuns.cancel(session.id, "early", "owner")).toEqual({
+      accepted: true,
+      invocationId: "early",
+    });
+    expect(String(await outcome)).toMatch(/cancelled/i);
+    expect(ran).toBe(false);
+    expect(runtime.pluginRuns.current(session.id)).toBeUndefined();
+    expect(
+      await runtime.store.acquireLease(session.id, "competitor"),
+    ).toBeTruthy();
+  } finally {
+    await runtime.close();
+    await rm(home, { recursive: true, force: true });
+  }
+});

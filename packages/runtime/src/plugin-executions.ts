@@ -22,6 +22,12 @@ export class PluginExecutions {
       committing: boolean;
     }
   >();
+  // Invocations still waiting for idle/lease. Kept apart from `active` so they do
+  // not count as busy, yet their owner can already cancel them.
+  private pending = new Map<
+    string,
+    { invocationId: string; scope: string; controller: AbortController }
+  >();
   get busy() {
     return this.active.size > 0;
   }
@@ -40,6 +46,15 @@ export class PluginExecutions {
     );
   }
   cancel(sessionId: string, invocationId: string, scope = "local") {
+    const waiting = this.pending.get(sessionId);
+    if (
+      waiting?.invocationId === invocationId &&
+      waiting.scope === scope &&
+      !this.active.has(sessionId)
+    ) {
+      waiting.controller.abort(Error("Plugin cancelled before it started"));
+      return { accepted: true, invocationId };
+    }
     const run = this.active.get(sessionId);
     if (!run || run.invocationId !== invocationId || run.scope !== scope)
       throw Error("Plugin invocation not found for this owner and session");
@@ -68,14 +83,28 @@ export class PluginExecutions {
     args: string,
     origin: PluginInvocation = {},
   ) {
-    await this.idle(session);
-    const lease = await this.store.acquireLease(session.id, randomUUID());
-    if (!lease) throw Error("Session is running elsewhere");
     const invocationId = origin.invocationId ?? randomUUID();
+    const scope = origin.scope ?? "local";
     const controller = new AbortController();
+    const waiting = { invocationId, scope, controller };
+    this.pending.set(session.id, waiting);
+    let lease: Awaited<ReturnType<SQLiteStore["acquireLease"]>>;
+    try {
+      await this.idle(session);
+      controller.signal.throwIfAborted();
+      lease = await this.store.acquireLease(session.id, randomUUID());
+      if (!lease) throw Error("Session is running elsewhere");
+      if (controller.signal.aborted) {
+        await this.store.releaseLease(session.id, lease);
+        controller.signal.throwIfAborted();
+      }
+    } finally {
+      if (this.pending.get(session.id) === waiting)
+        this.pending.delete(session.id);
+    }
     const run = {
       invocationId,
-      scope: origin.scope ?? "local",
+      scope,
       controller,
       name,
       committing: false,
