@@ -163,3 +163,5 @@ Optional cloud configuration can be checked with `pnpm check:relay` and `pnpm --
 Read [validation status](docs/validation.md) for measured results and remaining acceptance checks. The core and TUI are implemented; remaining daily-use and Pi acceptance work is tracked in TODO.md.
 
 Source installation, macOS arm64 candidate tarballs (`pnpm release:pack` / `pnpm check:release`), upgrade/rollback precautions and isolated installation checks: [TUI installation guide](docs/install-release.md).
+
+Local preflight: `pnpm ci:check`. Android device builds: `pnpm build:android:release` (checks first, then a signed local APK). GitHub Actions are reserved for explicitly approved releases. See [local validation](docs/local-validation.md).
