@@ -57,7 +57,7 @@ it("prevents simultaneous lab owners and releases the lock on shutdown", async (
   }
 });
 
-it("requires confirmation and grants over real TLS, then restores the same task after relay/host restart", async () => {
+it("requires confirmation over real TLS, defaults to task control and preserves explicit grants across restart", async () => {
   const root = await mkdtemp(join(tmpdir(), "hikaro-lab-transport-"));
   let child: ChildProcess | undefined;
   let remote: RemoteClient | undefined;
@@ -204,7 +204,16 @@ authorityKeyIdentifier = keyid,issuer
     expect((await command("allow")).confirmed).toBe(true);
     await until(() => connected);
     await remote.request("hello", { protocolVersions: [protocolVersion] });
-    expect(await remote.request("session.list")).toEqual([]);
+    expect(await remote.request("session.list")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: initial.sessionId }),
+      ]),
+    );
+    await remote.request("session.resume", { sessionId: initial.sessionId });
+    expect((await remote.request("session.current")).sessionRole).toBe(
+      "control",
+    );
+    // Explicit view remains a restriction on the paired-phone default.
     await command("grant");
     expect(await remote.request("session.list")).toEqual(
       expect.arrayContaining([

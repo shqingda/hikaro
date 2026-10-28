@@ -28,11 +28,13 @@ export class RpcWorkflows {
     private runtime: Runtime,
     hostInstanceId: string = randomUUID(),
     enforceAccess = false,
+    defaultDeviceControl = false,
   ) {
     this.questionService = new QuestionService(
       runtime,
       hostInstanceId,
       enforceAccess,
+      defaultDeviceControl,
     );
   }
   ready() {

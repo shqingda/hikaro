@@ -134,6 +134,9 @@ it("authorizes complete run history for read-only clients without holding or rep
     expect(hello.methods).toContain("execution.history.detail");
     await owner.request("session.resume", { sessionId: session.id });
     await remote("hello");
+    // A confirmed phone has default control; explicitly exclude this task to
+    // retain the denial regression before granting the read-only override.
+    await owner.request("session.access", { deviceId, role: null });
     await expect(
       remote("session.resume", { sessionId: session.id }),
     ).rejects.toThrow(/denied/);

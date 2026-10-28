@@ -20,7 +20,8 @@ if [[ ! -x "$APKSIGNER" || ! -x "$ZIPALIGN" ]]; then
   exit 1
 fi
 cd "$REPO_DIR/apps/mobile"
-pnpm exec expo prebuild --platform android --no-install
+# Apply native config without deleting Gradle outputs on every local delivery.
+pnpm exec expo prebuild --platform android --no-install --no-clean
 (
   cd android
   ./gradlew :app:assembleRelease -PreactNativeArchitectures=arm64-v8a

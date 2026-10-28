@@ -50,4 +50,4 @@ HIKARO_APPLE_TEAM_ID=YOURTEAMID pnpm --filter @hikaro/mobile ios:release
 
 ## 从电脑配对（单终端）
 
-本地 TUI 已构建后运行 `pnpm start`，在界面输入 `/pair`。自动使用默认 Cloudflare 服务，直接显示二维码和六位数字码，不填写地址或密钥；Tab 切换、Esc 返回。手机扫码或输入六位码，核对两端验证指纹，在电脑允许后手机保存连接。用 `/share 设备ID control` 授权当前任务（设备 ID 可在手机设置页查看）。同 Wi-Fi 优先直连，失败自动回退中转。日常不需要手工启动三个终端。保持该窗口开启；详见[连接流程](remote.md#pair-in-the-tui-normal-use)。
+本地 TUI 已构建后运行 `pnpm start`，在界面输入 `/pair`。自动使用默认 Cloudflare 服务，直接显示二维码和六位数字码，不填写地址或密钥；Tab 切换、Esc 返回。手机扫码或输入六位码，核对两端验证指纹，在电脑允许后手机保存连接。确认配对后即可接续当前工作区全部任务，不必逐个授权。已有会话时显示列表，没有会话时自动新建并打开输入框；也可在列表点“新建任务”。同 Wi-Fi 优先直连，失败自动回退中转。日常不需要手工启动三个终端。保持该窗口开启；详见[连接流程](remote.md#pair-in-the-tui-normal-use)。

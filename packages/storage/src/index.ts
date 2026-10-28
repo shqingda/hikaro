@@ -105,6 +105,7 @@ export class SQLiteStore implements EventStore {
     sessionId: string;
     scope: string;
     workspace?: string;
+    defaultControl?: boolean;
   }) {
     return this.request<QuestionDraftSnapshot>("questionDraft", input);
   }
@@ -113,6 +114,7 @@ export class SQLiteStore implements EventStore {
     sessionId: string;
     scope: string;
     workspace?: string;
+    defaultControl?: boolean;
     expectedRevision: number;
     draft: QuestionDraft;
   }) {
@@ -125,6 +127,7 @@ export class SQLiteStore implements EventStore {
     hostInstanceId: string;
     answers?: Record<string, string>;
     workspace?: string;
+    defaultControl?: boolean;
     draftRevision?: number;
     /** Trusted lifecycle state: the original waiter ended after cancellation could not be saved. */
     recover?: boolean;
@@ -239,6 +242,7 @@ export class SQLiteStore implements EventStore {
     cwd?: string,
     query?: string,
     scope?: string,
+    defaultControl = false,
   ) {
     return this.request<Session[]>("sessions", {
       offset,
@@ -246,6 +250,7 @@ export class SQLiteStore implements EventStore {
       cwd,
       query,
       scope,
+      defaultControl,
     });
   }
   claimHost(workspace: string, instanceId: string) {
@@ -267,16 +272,22 @@ export class SQLiteStore implements EventStore {
       role,
     });
   }
-  sessionRole(workspace: string, sessionId: string, scope: string) {
+  sessionRole(
+    workspace: string,
+    sessionId: string,
+    scope: string,
+    defaultControl = false,
+  ) {
     return this.request<"owner" | "view" | "control" | null>("sessionRole", {
       workspace,
       sessionId,
       scope,
+      defaultControl,
     });
   }
   sessionAccess(workspace: string, sessionId: string) {
     return this.request<
-      Array<{ scope: string; role: "owner" | "view" | "control" }>
+      Array<{ scope: string; role: "owner" | "view" | "control" | null }>
     >("sessionAccess", { workspace, sessionId });
   }
   attachView(
@@ -284,12 +295,14 @@ export class SQLiteStore implements EventStore {
     scope: string,
     sessionId: string,
     local: boolean,
+    defaultControl = false,
   ) {
     return this.request<"owner" | "view" | "control" | null>("attachView", {
       workspace,
       scope,
       sessionId,
       local,
+      defaultControl,
     });
   }
   saveClientView(workspace: string, scope: string, sessionId: string) {

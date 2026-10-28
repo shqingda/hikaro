@@ -42,3 +42,59 @@ it("atomically elects one host and persists scoped session access and view recov
     await rm(home, { recursive: true, force: true });
   }
 });
+
+it("derives paired-phone control within its workspace while preserving explicit view/off overrides", async () => {
+  const home = await mkdtemp(join(tmpdir(), "hikaro-default-phone-"));
+  const store = await SQLiteStore.open(join(home, "sessions.sqlite"));
+  try {
+    const first = await store.createSession("/workspace");
+    const other = await store.createSession("/other");
+    expect(await store.sessionRole("/workspace", first.id, "phone", true)).toBe(
+      "control",
+    );
+    expect(
+      await store.sessionRole("/workspace", other.id, "phone", true),
+    ).toBeNull();
+    expect(
+      await store.attachView("/workspace", "phone", first.id, false, true),
+    ).toBe("control");
+    await store.setSessionAccess("/workspace", first.id, "phone", "view");
+    expect(await store.sessionRole("/workspace", first.id, "phone", true)).toBe(
+      "view",
+    );
+    await store.setSessionAccess("/workspace", first.id, "phone", null);
+    expect(
+      await store.sessionRole("/workspace", first.id, "phone", true),
+    ).toBeNull();
+    expect(await store.sessionAccess("/workspace", first.id)).toEqual([
+      { scope: "phone", role: null },
+    ]);
+    await expect(
+      store.attachView("/workspace", "phone", first.id, false, true),
+    ).rejects.toThrow("denied");
+    const next = await store.createSession("/workspace");
+    expect(
+      (await store.sessions(0, 50, "/workspace", "", "phone", true)).map(
+        (s) => s.id,
+      ),
+    ).toEqual([next.id]);
+    expect(
+      await store.sessionRole("/workspace", next.id, "phone", false),
+    ).toBeNull();
+    await store.setSessionAccess(
+      "/workspace",
+      next.id,
+      "phone",
+      "unknown" as never,
+    );
+    expect(
+      await store.sessionRole("/workspace", next.id, "phone", true),
+    ).toBeNull();
+    expect(
+      await store.sessions(0, 50, "/workspace", "", "phone", true),
+    ).toEqual([]);
+  } finally {
+    await store.close();
+    await rm(home, { recursive: true, force: true });
+  }
+});

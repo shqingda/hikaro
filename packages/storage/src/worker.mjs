@@ -149,7 +149,7 @@ function insertSession({
   if (modelSelection) saveModel(session.id, modelSelection);
   return { ...session, ...(modelSelection ? { modelSelection } : {}) };
 }
-function pendingQuestion({ id, sessionId, scope, workspace }) {
+function pendingQuestion({ id, sessionId, scope, workspace, defaultControl }) {
   const row = prepare(
     "SELECT data FROM pending_questions WHERE id=? AND sessionId=? AND scope=? AND status='pending'",
   ).get(id, sessionId, scope);
@@ -163,7 +163,12 @@ function pendingQuestion({ id, sessionId, scope, workspace }) {
     )
       throw Error("Session access denied");
     if (!scope.startsWith("local:")) {
-      const role = handlers.sessionRole({ workspace, sessionId, scope });
+      const role = handlers.sessionRole({
+        workspace,
+        sessionId,
+        scope,
+        defaultControl,
+      });
       if (role !== "owner" && role !== "control")
         throw Error("Session access denied");
     }
@@ -220,31 +225,44 @@ const handlers = {
       )
     )
       throw Error("Session is outside this workspace");
-    if (role === null)
-      prepare(
-        "DELETE FROM session_access WHERE workspace=? AND sessionId=? AND scope=?",
-      ).run(workspace, sessionId, scope);
-    else
-      prepare(
-        "INSERT INTO session_access VALUES(?,?,?,?) ON CONFLICT(workspace,sessionId,scope) DO UPDATE SET role=excluded.role",
-      ).run(workspace, sessionId, scope, role);
+    prepare(
+      "INSERT INTO session_access VALUES(?,?,?,?) ON CONFLICT(workspace,sessionId,scope) DO UPDATE SET role=excluded.role",
+    ).run(workspace, sessionId, scope, role ?? "off");
   },
-  sessionRole({ workspace, sessionId, scope }) {
-    return (
-      prepare(
-        "SELECT role FROM session_access WHERE workspace=? AND sessionId=? AND scope=?",
-      ).get(workspace, sessionId, scope)?.role ?? null
-    );
+  sessionRole({ workspace, sessionId, scope, defaultControl = false }) {
+    // A default device grant never extends outside the current host workspace.
+    if (
+      !prepare("SELECT 1 FROM sessions WHERE id=? AND cwd=?").get(
+        sessionId,
+        workspace,
+      )
+    )
+      return null;
+    const row = prepare(
+      "SELECT role FROM session_access WHERE workspace=? AND sessionId=? AND scope=?",
+    ).get(workspace, sessionId, scope);
+    return row
+      ? ["owner", "view", "control"].includes(row.role)
+        ? row.role
+        : null
+      : defaultControl
+        ? "control"
+        : null;
   },
   sessionAccess({ workspace, sessionId }) {
     return prepare(
-      "SELECT scope,role FROM session_access WHERE workspace=? AND sessionId=?",
+      "SELECT scope,CASE WHEN role IN ('owner','view','control') THEN role ELSE NULL END AS role FROM session_access WHERE workspace=? AND sessionId=?",
     ).all(workspace, sessionId);
   },
-  attachView({ workspace, scope, sessionId, local }) {
+  attachView({ workspace, scope, sessionId, local, defaultControl }) {
     db.exec("BEGIN IMMEDIATE");
     try {
-      const role = handlers.sessionRole({ workspace, sessionId, scope });
+      const role = handlers.sessionRole({
+        workspace,
+        sessionId,
+        scope,
+        defaultControl,
+      });
       if (!local && !role) throw Error("Session access denied");
       handlers.saveClientView({ workspace, scope, sessionId });
       db.exec("COMMIT");
@@ -349,12 +367,19 @@ const handlers = {
     hostInstanceId,
     answers,
     workspace,
+    defaultControl,
     recover,
     draftRevision,
   }) {
     db.exec("BEGIN IMMEDIATE");
     try {
-      const question = pendingQuestion({ id, sessionId, scope, workspace });
+      const question = pendingQuestion({
+        id,
+        sessionId,
+        scope,
+        workspace,
+        defaultControl,
+      });
       if (draftRevision !== undefined)
         assertDraftRevision(
           draftRevision,
@@ -521,7 +546,14 @@ const handlers = {
       throw error;
     }
   },
-  sessions({ offset = 0, limit = 100, cwd, query = "", scope } = {}) {
+  sessions({
+    offset = 0,
+    limit = 100,
+    cwd,
+    query = "",
+    scope,
+    defaultControl = false,
+  } = {}) {
     if (
       !Number.isSafeInteger(offset) ||
       offset < 0 ||
@@ -540,7 +572,9 @@ const handlers = {
     const text = query.trim().toLowerCase();
     if (scope !== undefined) {
       where.push(
-        "EXISTS(SELECT 1 FROM session_access a WHERE a.workspace=s.cwd AND a.sessionId=s.id AND a.scope=?)",
+        defaultControl
+          ? "NOT EXISTS(SELECT 1 FROM session_access a WHERE a.workspace=s.cwd AND a.sessionId=s.id AND a.scope=? AND a.role NOT IN ('owner','view','control'))"
+          : "EXISTS(SELECT 1 FROM session_access a WHERE a.workspace=s.cwd AND a.sessionId=s.id AND a.scope=? AND a.role IN ('owner','view','control'))",
       );
       args.push(scope);
     }

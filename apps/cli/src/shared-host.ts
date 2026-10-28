@@ -198,6 +198,7 @@ export async function serveSharedHost(
         instanceId,
         store,
         localScope: (scope) => scope.startsWith("local:"),
+        defaultDeviceControl: true,
         pairedDevice: async (scope) => {
           const { readConfig } =
             await import("../../../packages/remote/src/host-store.ts");

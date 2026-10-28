@@ -46,6 +46,7 @@ export class QuestionService {
     private runtime: Runtime,
     private hostInstanceId: string = randomUUID(),
     private enforceAccess = false,
+    private defaultDeviceControl = false,
   ) {}
   async ready() {
     while (this.writes.size) await Promise.all([...this.writes]);
@@ -166,7 +167,12 @@ export class QuestionService {
       id,
       sessionId,
       scope,
-      ...(this.enforceAccess ? { workspace: this.runtime.options.cwd } : {}),
+      ...(this.enforceAccess
+        ? {
+            workspace: this.runtime.options.cwd,
+            defaultControl: this.defaultDeviceControl,
+          }
+        : {}),
     });
     current();
     return result;
@@ -200,7 +206,10 @@ export class QuestionService {
           expectedRevision,
           draft,
           ...(this.enforceAccess
-            ? { workspace: this.runtime.options.cwd }
+            ? {
+                workspace: this.runtime.options.cwd,
+                defaultControl: this.defaultDeviceControl,
+              }
             : {}),
         });
       })(),
@@ -257,7 +266,12 @@ export class QuestionService {
         answers,
         ...(draftRevision === undefined ? {} : { draftRevision }),
         ...(interrupted ? { recover: true } : {}),
-        ...(this.enforceAccess ? { workspace: this.runtime.options.cwd } : {}),
+        ...(this.enforceAccess
+          ? {
+              workspace: this.runtime.options.cwd,
+              defaultControl: this.defaultDeviceControl,
+            }
+          : {}),
       }),
     );
     this.interrupted.delete(id);

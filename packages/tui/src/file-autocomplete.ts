@@ -13,7 +13,14 @@ export class FileAutocompleteProvider extends CombinedAutocompleteProvider {
     commands: ConstructorParameters<typeof CombinedAutocompleteProvider>[0],
     private readonly cwd: string,
   ) {
-    super(commands, cwd);
+    // Mode-specific commands override built-ins without adding duplicate rows.
+    const unique = new Map(
+      (commands ?? []).map((command) => [
+        "name" in command ? command.name : command.value,
+        command,
+      ]),
+    );
+    super([...unique.values()], cwd);
   }
 
   override async getSuggestions(

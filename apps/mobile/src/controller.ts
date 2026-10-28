@@ -145,6 +145,7 @@ const allowed = new Set([
   "hello",
   "session.current",
   "session.list",
+  "session.create",
   "messages.read",
   "messages.search",
   "push.register",
@@ -188,6 +189,8 @@ export type MobileState = {
   relay: string | null;
   session: MobileSession | null;
   sessions: MobileSession[];
+  landing: "task" | "tasks" | null;
+  canCreate: boolean;
   offset: number;
   moreSessions: boolean;
   messages: MobileMessage[];
@@ -245,6 +248,8 @@ const empty = (phase: MobileState["phase"]): MobileState => ({
   relay: null,
   session: null,
   sessions: [],
+  landing: null,
+  canCreate: false,
   offset: 0,
   moreSessions: false,
   messages: [],
@@ -293,6 +298,7 @@ export class MobileController {
   private releases: Array<() => void> = [];
   private disposed = false;
   private refresh?: Promise<void>;
+  private creating?: Promise<MobileSession>;
   private refreshAgain = false;
   private paint?: () => void;
   private draftIdentity = 0;
@@ -378,6 +384,7 @@ export class MobileController {
       sessionRole: null,
       canStopRun: false,
       canSend: false,
+      canCreate: false,
       canSteer: false,
       actionPending: null,
       actionNotice: null,
@@ -621,6 +628,7 @@ export class MobileController {
               s.runStatus === "running" &&
               !!s.runId &&
               ["owner", "control"].includes(s.sessionRole ?? ""),
+            canCreate: s.canAct && client.supports("session.create"),
             canSend:
               s.canAct &&
               client.supports("prompt") &&
@@ -717,13 +725,24 @@ export class MobileController {
       try {
         do {
           this.refreshAgain = false;
-          await this.tasks(this.value.offset);
+          const listed = await this.tasks(
+            this.value.landing === null ? 0 : this.value.offset,
+          );
+          if (epoch !== this.epoch) return;
+          if (listed && this.value.landing === null) {
+            // Decide from the authoritative first page, never an empty later page.
+            if (this.value.sessions.length === 0 && this.value.canCreate) {
+              await this.createSession();
+              if (epoch === this.epoch) this.update({ landing: "task" });
+            } else this.update({ landing: "tasks" });
+          }
           if (epoch === this.epoch) await this.history("latest");
         } while (epoch === this.epoch && this.refreshAgain);
       } catch {
         if (epoch === this.epoch && this.value.phase === "connected")
           this.update({
-            error: "无法读取任务，请检查电脑上的查看授权。",
+            landing: "tasks",
+            error: this.value.error ?? "无法读取任务，请重试连接。",
             loading: false,
           });
       }
@@ -762,6 +781,47 @@ export class MobileController {
         this.update({ loading: false, error: "无法读取任务列表，请重试。" });
       throw e;
     }
+  }
+  createSession(): Promise<MobileSession> {
+    if (this.creating) return this.creating;
+    const client = this.client,
+      epoch = this.epoch;
+    if (!client?.state.canAct || !client.supports("session.create"))
+      return Promise.reject(Error("当前连接无法新建任务"));
+    if (this.value.actionPending)
+      return Promise.reject(Error("请先完成当前操作"));
+    const current = () =>
+      epoch === this.epoch && this.client === client && client.state.canAct;
+    const task = (async () => {
+      this.update({ loading: true, error: null });
+      try {
+        await this.composer.flush();
+        if (!current()) throw Error("连接已变化");
+        const session = sessionSchema.parse(
+          await client.request("session.create"),
+        );
+        if (!current()) throw Error("连接已变化");
+        await this.composer.select(session);
+        if (!current()) throw Error("连接已变化");
+        await this.tasks(0);
+        return session;
+      } catch (error) {
+        if (epoch === this.epoch)
+          this.update({
+            error: "新建结果尚未确认。请刷新任务列表，避免重复新建。",
+          });
+        throw error;
+      } finally {
+        if (epoch === this.epoch) this.update({ loading: false });
+      }
+    })();
+    this.creating = task;
+    void task
+      .finally(() => {
+        if (this.creating === task) this.creating = undefined;
+      })
+      .catch(() => {});
+    return task;
   }
   async select(sessionId: string) {
     if (this.value.actionPending) throw Error("A decision is pending");

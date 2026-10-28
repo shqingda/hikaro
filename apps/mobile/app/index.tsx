@@ -23,6 +23,7 @@ export default function Connect() {
   useColorScheme();
   const { controller, state } = useMobileSelector((s) => ({
     phase: s.phase,
+    landing: s.landing,
     review: s.review,
     deviceId: s.deviceId,
     error: s.error,
@@ -34,9 +35,12 @@ export default function Connect() {
   const [manual, setManual] = useState(false);
   const [draft, setDraft] = useState("");
   useEffect(() => {
-    if (state.phase === "connected") router.replace("/tasks");
-  }, [state.phase]);
-  const pending = ["connecting", "restoring"].includes(state.phase);
+    if (state.phase === "connected" && state.landing)
+      router.replace(state.landing === "task" ? "/task" : "/tasks");
+  }, [state.phase, state.landing]);
+  const pending =
+    ["connecting", "restoring"].includes(state.phase) ||
+    (state.phase === "connected" && state.landing === null);
   const review = async () => {
     Keyboard.dismiss();
     if (await pairing.start(draft.trim())) setDraft("");
@@ -85,7 +89,7 @@ export default function Connect() {
         <View style={{ gap: 12 }}>
           <ActivityIndicator accessibilityLabel="正在连接电脑" />
           <Note>
-            正在连接。首次配对请在电脑上确认这台手机，然后授予任务查看权。
+            正在准备任务。首次配对请在电脑上确认，这台手机即可接续任务。
           </Note>
           {state.deviceId && (
             <Text selectable style={{ fontSize: 12, color: colors.secondary }}>
@@ -116,7 +120,7 @@ export default function Connect() {
             保存这台电脑
           </Text>
           <Note>{new URL(state.review.relay).hostname}</Note>
-          <Note>保存连接后即可接续任务。任务访问权限仍由电脑单独授予。</Note>
+          <Note>保存连接后即可查看已有任务、发送消息、审批和停止。</Note>
           <Action
             title="保存并连接"
             testID="confirm-pairing"

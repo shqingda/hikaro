@@ -19,6 +19,7 @@ export default function Tasks() {
     deviceId: s.deviceId,
     error: s.error,
     loading: s.loading,
+    canCreate: s.canCreate,
     messages: s.messages,
     moreSessions: s.moreSessions,
     offset: s.offset,
@@ -66,6 +67,17 @@ export default function Tasks() {
               }}
             />
           </View>
+          <Action
+            title="新建任务"
+            testID="new-session"
+            disabled={!state.canCreate || state.loading}
+            onPress={() => {
+              void controller
+                .createSession()
+                .then(() => router.push("/task"))
+                .catch(() => {});
+            }}
+          />
           {state.error && <Note error>{state.error}</Note>}
           {state.loading && <ActivityIndicator />}
         </View>
@@ -107,10 +119,9 @@ export default function Tasks() {
         !state.loading && online ? (
           <View>
             <EmptyState
-              title="等待你的第一个任务"
-              detail="在电脑上允许这台手机查看任务后，点击刷新。"
+              title="还没有任务"
+              detail="点击新建任务，即可开始对话。"
             />
-            <Note>设备 ID：{state.deviceId}</Note>
           </View>
         ) : undefined
       }

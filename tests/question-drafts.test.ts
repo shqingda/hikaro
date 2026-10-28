@@ -483,3 +483,46 @@ it("serves drafts while a normal RPC request waits and creates no durable action
     await server.close();
   }
 });
+
+it("permits trusted phone question drafts and answers without a per-session grant", async () => {
+  const home = await mkdtemp(join(tmpdir(), "hikaro-phone-question-"));
+  const runtime = await Runtime.open({
+    home,
+    cwd: home,
+    demo: true,
+    approve: async () => false,
+  });
+  const session = await runtime.session();
+  const service = new QuestionService(runtime, "phone-default", true, true);
+  const response = service.ask(
+    [{ id: "choice", question: "Continue?", options: ["Yes", "No"] }],
+    new AbortController().signal,
+    session.id,
+    "device",
+  );
+  cleanups.push(async () => {
+    service.close();
+    await runtime.close(() => service.ready());
+    await rm(home, { recursive: true, force: true });
+  });
+  await service.ready();
+  const question = (await service.read(session.id, "device"))!;
+  await service.saveDraft(session.id, "device", {
+    id: question.id,
+    expectedRevision: 0,
+    draft: {
+      answers: { choice: "Yes" },
+      inputs: {},
+      position: { kind: "review" },
+    },
+  });
+  expect(
+    await service.readDraft(session.id, "device", { id: question.id }),
+  ).toMatchObject({ revision: 1 });
+  await service.respond(session.id, "device", {
+    id: question.id,
+    answers: { choice: "Yes" },
+    draftRevision: 1,
+  });
+  expect(await response).toEqual({ choice: "Yes" });
+});

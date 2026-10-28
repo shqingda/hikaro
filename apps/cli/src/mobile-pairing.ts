@@ -74,7 +74,7 @@ export class MobilePairing {
                 { value: "deny", label: "拒绝" },
                 { value: "allow", label: "允许这台手机连接" },
               ],
-              `设备 ${id}。仅确认你刚刚扫码的手机；已有任务仍需单独授权。`,
+              `设备 ${id}。仅确认你刚刚扫码的手机；允许后可接续此工作区的所有任务，包括发消息、审批和停止。`,
             );
             return choice.value === "allow";
           } finally {
@@ -148,7 +148,7 @@ export class MobilePairing {
               { value: "deny", label: "拒绝" },
               { value: "allow", label: "核对一致，允许连接" },
             ],
-            `请核对手机上的验证指纹：${pairingFingerprint(hostKey, claim.publicKey)}。一致后再允许，任务仍需单独授权。`,
+            `请核对手机上的验证指纹：${pairingFingerprint(hostKey, claim.publicKey)}。一致后再允许；这台手机将能接续此工作区的所有任务，包括发消息、审批和停止。`,
           );
           approved = choice.value === "allow";
         } catch {
@@ -182,7 +182,7 @@ export class MobilePairing {
         );
         view.notice(
           approved
-            ? "手机已配对。使用 /share 授予当前任务的访问权限。"
+            ? "手机已配对，可直接接续此工作区的已有和新建任务。"
             : "已拒绝手机连接。输入 /pair 可重新配对。",
         );
         return;

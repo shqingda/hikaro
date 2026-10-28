@@ -50,6 +50,15 @@ export default function Layout() {
           name="task"
           options={{
             title: "对话",
+            headerLeft: () => (
+              <Action
+                title="任务"
+                quiet
+                onPress={() =>
+                  router.canGoBack() ? router.back() : router.replace("/tasks")
+                }
+              />
+            ),
             headerRight: () => (
               <Action
                 title="工具"

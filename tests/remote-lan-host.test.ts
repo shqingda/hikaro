@@ -102,18 +102,26 @@ it("LAN routes encrypted commands through the real shared host and keeps task ac
       publicKey: device.publicKey,
     });
     await remote.request("hello");
-    expect(await remote.request("session.list")).toEqual([]);
+    expect(
+      ((await remote.request("session.list")) as Array<{ id: string }>).map(
+        (s) => s.id,
+      ),
+    ).toContain(session.id);
     await owner.request("session.access", { deviceId, role: "view" });
     const tasks = (await remote.request("session.list")) as Array<{
       id: string;
     }>;
-    expect(tasks.map((s) => s.id)).toEqual([session.id]);
+    expect(tasks.map((s) => s.id)).toContain(session.id);
     await remote.request("session.resume", { sessionId: session.id });
     await expect(
       remote.request("prompt", { text: "must be rejected" }),
     ).rejects.toThrow();
     await owner.request("session.access", { deviceId, role: null });
-    expect(await remote.request("session.list")).toEqual([]);
+    expect(
+      ((await remote.request("session.list")) as Array<{ id: string }>).map(
+        (s) => s.id,
+      ),
+    ).not.toContain(session.id);
     const blocked = new Promise<void>((resolve) =>
       remote.subscribe((message) => {
         if (message.type === "connection" && message.status === "blocked")

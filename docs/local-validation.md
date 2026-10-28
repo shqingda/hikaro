@@ -9,7 +9,7 @@
 - `pnpm release:pack`：完整预检、macOS arm64 候选打包与审计、隔离安装和已有恢复检查。
 - `pnpm release:cli`：同上，再复用已检查的候选生成独立 CLI 分发包；命令本身不发布。
 
-底层 `scripts/build-android.sh` 和打包脚本供已完成同一源码预检的编排流程调用。正常交付使用上述公开入口；不要为了绕过失败而直接运行底层脚本。普通 `pnpm build` 保持快速编译功能，供 `pnpm check` 内部调用，避免循环预检。
+底层 `scripts/build-android.sh` 使用 Expo `--no-clean` 同步原生配置，保留已有 Gradle 构建缓存；仍执行正式 Release 构建、签名及产物校验。它和打包脚本供已完成同一源码预检的编排流程调用。正常交付使用上述公开入口；不要为了绕过失败而直接运行底层脚本。普通 `pnpm build` 保持快速编译功能，供 `pnpm check` 内部调用，避免循环预检。
 
 ## Actions
 

@@ -185,7 +185,13 @@ it("restores the same granted host task after a lost selection acknowledgement, 
   try {
     await local.connected();
     const session = (await local.request("session.create")) as any;
-    await local.request("session.create"); // A second, ungranted task must stay invisible.
+    await local.request("session.create");
+    // Confirmed phones now inherit workspace control. An explicit off override
+    // must still keep this second task invisible across reconnect and restart.
+    await local.request("session.access", {
+      deviceId: f.pairing.deviceId,
+      role: null,
+    });
     await local.request("session.resume", { sessionId: session.id });
     await local.request("session.access", {
       deviceId: f.pairing.deviceId,

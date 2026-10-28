@@ -61,6 +61,7 @@ export type SharedRpcOptions = {
   store: import("../../../packages/storage/src/index.ts").SQLiteStore;
   localScope(scope: string): boolean;
   pairedDevice(scope: string): Promise<boolean>;
+  defaultDeviceControl?: boolean;
   beforeClose?(): Promise<void>;
 };
 export async function serveRpc(
@@ -182,7 +183,12 @@ export async function serveRpc(
     },
     shared?.store,
   );
-  workflows = new RpcWorkflows(runtime, hostInstanceId, !!shared);
+  workflows = new RpcWorkflows(
+    runtime,
+    hostInstanceId,
+    !!shared,
+    shared?.defaultDeviceControl,
+  );
   runtime.startJobs();
   const requireLive = (scope: string, state: ScopeState) => {
     if (shuttingDown || scopes.get(scope) !== state)
@@ -207,6 +213,7 @@ export async function serveRpc(
           scope,
           next.id,
           shared.localScope(scope),
+          shared.defaultDeviceControl,
         )
       : null;
     requireLive(scope, state);
@@ -361,6 +368,7 @@ export async function serveRpc(
             runtime.options.cwd,
             session.id,
             scope,
+            shared.defaultDeviceControl,
           );
           const read =
             rpcReadMethods.has(command.method) ||
@@ -611,6 +619,7 @@ export async function serveRpc(
                 runtime.options.cwd,
                 savedId,
                 scope,
+                shared.defaultDeviceControl,
               );
               if (shared.localScope(scope) || role)
                 await bind(scope, state, await runtime.session(savedId));
@@ -712,6 +721,7 @@ export async function serveRpc(
               runtime.options.cwd,
               z.string().max(200).optional().parse(p.query),
               shared && !shared.localScope(scope) ? scope : undefined,
+              shared?.defaultDeviceControl,
             )
           ).map(publicSession);
           break;
@@ -1081,6 +1091,7 @@ export async function serveRpc(
               runtime.options.cwd,
               approval.request.authoritySessionId ?? approval.request.sessionId,
               scope,
+              shared.defaultDeviceControl,
             );
             if (
               (!shared.localScope(scope) &&

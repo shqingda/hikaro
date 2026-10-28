@@ -204,10 +204,11 @@ it("shares one run and explicitly owned approvals through local IPC and the encr
     await vi.waitFor(() => expect(remote.client.state.canAct).toBe(true));
     expect(remote.client.state.hostInstanceId).toBe(local.state.hostInstanceId);
     const session = (await local.request("session.create")) as any;
-    await expect(
-      remote.client.request("session.resume", { sessionId: session.id }),
-    ).rejects.toThrow(/denied/);
-    expect(await remote.client.request("session.list")).toEqual([]);
+    await remote.client.request("session.resume", { sessionId: session.id });
+    expect(remote.client.state.sessionRole).toBe("control");
+    expect(
+      ((await remote.client.request("session.list")) as any[]).map((s) => s.id),
+    ).toContain(session.id);
     await local.request("session.access", { deviceId, role: "view" });
     await remote.client.request("session.resume", { sessionId: session.id });
     expect(
@@ -760,3 +761,97 @@ it("does not apply a waiting control to a newly selected view-only session", asy
     await rm(options.home, { recursive: true, force: true });
   }
 }, 10000);
+
+it("confirmed phones control existing and future workspace tasks without manual grants", async () => {
+  const options = await directory();
+  const identity = createIdentity(),
+    device = createIdentity(),
+    deviceId = randomToken();
+  await writeFile(
+    join(options.home, "remote.json"),
+    JSON.stringify({
+      relay: "wss://fixture.example",
+      hostId: randomToken(),
+      publicKey: identity.publicKey,
+      devices: { [deviceId]: { publicKey: device.publicKey } },
+    }),
+  );
+  await toolProvider(options.home);
+  const host = await serveSharedHost({
+    ...options,
+    provider: "fixture",
+    model: "host",
+  });
+  const wire = await SharedHostClient.connect({
+    ...options,
+    clientId: "default-owner",
+  });
+  const bridge = await SharedHostClient.connect({ ...options, mode: "bridge" });
+  const local = new ClientConnection(wire.scope, wire, clock);
+  const remote = encryptedDevice(bridge, deviceId, identity, device);
+  try {
+    await local.connected();
+    const old = (await local.request("session.create")) as { id: string };
+    remote.connect();
+    await vi.waitFor(() => expect(remote.client.state.canAct).toBe(true));
+    expect(
+      (
+        (await remote.client.request("session.list")) as Array<{ id: string }>
+      ).map((s) => s.id),
+    ).toContain(old.id);
+    await remote.client.request("session.resume", { sessionId: old.id });
+    expect(remote.client.state.sessionRole).toBe("control");
+    await remote.client.request("prompt", { text: "phone-default" });
+    await vi.waitFor(() =>
+      expect(remote.client.state.approvals).toHaveLength(1),
+    );
+    await remote.client.request("approval.respond", {
+      id: remote.client.state.approvals[0]!.id,
+      allow: true,
+    });
+    await vi.waitFor(() =>
+      expect(remote.client.state.runStatus).toBe("completed"),
+    );
+    expect(await readFile(join(options.cwd, "phone-default.txt"), "utf8")).toBe(
+      "approved",
+    );
+    const next = (await local.request("session.create")) as { id: string };
+    expect(
+      (
+        (await remote.client.request("session.list")) as Array<{ id: string }>
+      ).map((s) => s.id),
+    ).toContain(next.id);
+    await remote.client.request("session.resume", { sessionId: next.id });
+    await local.request("prompt", { text: "phone-stop" });
+    await vi.waitFor(() =>
+      expect(remote.client.state.approvals).toHaveLength(1),
+    );
+    await remote.client.request("run.cancel", {
+      sessionId: next.id,
+      runId: remote.client.state.runId,
+    });
+    await vi.waitFor(() => expect(local.state.runStatus).toBe("cancelled"));
+    const created = (await remote.client.request("session.create")) as {
+      id: string;
+    };
+    expect(created.id).toBeTruthy();
+    expect(
+      ((await local.request("session.list")) as Array<{ id: string }>).map(
+        (s) => s.id,
+      ),
+    ).toContain(created.id);
+    await expect(
+      bridge.request("session.list", {}, false, { scope: randomToken() }),
+    ).rejects.toThrow("not confirmed");
+    await expect(
+      remote.client.request("permissions.set", { mode: "full" }),
+    ).rejects.toThrow("Only local owner");
+  } finally {
+    remote.close();
+    local.close();
+    await wire.close();
+    await bridge.close();
+    await host.close();
+    await rm(options.home, { recursive: true, force: true });
+  }
+}, 15000);
