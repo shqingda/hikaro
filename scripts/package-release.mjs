@@ -15,7 +15,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { auditDirectory, auditArtifact } from "./release-audit.mjs";
 import { isMain } from "./bench-support.mjs";
-import { patchForge, assessPatchedAudit } from "./forge-patch.mjs";
+import { patchForge, assessPatchedAudit, forgeProof } from "./forge-patch.mjs";
 
 export function releaseManifest(source, platform, arch) {
   if (platform !== "darwin" || arch !== "arm64")
@@ -36,6 +36,8 @@ export function releaseManifest(source, platform, arch) {
     // Preserve the source workspace's scoped security resolution in npm installs.
     overrides: {
       "@anthropic-ai/sandbox-runtime": { zod: source.dependencies.zod },
+      // The backport verifier accepts exactly this reviewed upstream source.
+      "node-forge": forgeProof.version,
     },
     bundledDependencies: ["@anthropic-ai/sandbox-runtime", "node-pty"],
   };

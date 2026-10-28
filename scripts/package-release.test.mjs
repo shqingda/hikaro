@@ -31,6 +31,7 @@ test("release package has explicit platform, executable and production-only depe
   assert.deepEqual(result.dependencies, { foo: "1.2.3", zod: "4.6.7" });
   assert.deepEqual(result.overrides, {
     "@anthropic-ai/sandbox-runtime": { zod: "4.6.7" },
+    "node-forge": "1.4.0",
   });
   assert.equal(result.devDependencies, undefined);
   assert.deepEqual(result.bin, { hikaro: "dist/hikaro.mjs" });
