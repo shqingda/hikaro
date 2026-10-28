@@ -79,6 +79,7 @@ function interactionView(
     signal: AbortSignal,
   ) => Promise<{ text: string }>,
   cwd = "/tmp",
+  detachOnCtrlD = false,
 ) {
   const tui = new TuiAltScreen({ ...terminalStub });
   vi.spyOn(tui, "requestRender").mockImplementation(() => {});
@@ -91,6 +92,7 @@ function interactionView(
   const exit = vi.fn();
   const view = new HikaroView(tui, {
     cwd,
+    detachOnCtrlD,
     model: "fixture",
     onPrompt,
     onDraftChange,
@@ -109,24 +111,33 @@ function interactionView(
   return { view, input: (data: string) => input(data), focus, event, exit };
 }
 
-it("Ctrl+D exits with an unsent draft intact, while a model panel keeps its own shortcut", () => {
-  const prompt = vi.fn(async () => {});
-  const { view, input, exit } = interactionView(prompt);
-  try {
-    const text = "未发送草稿 😀\n第二行";
-    view.editor.setText(text);
-    const panel = view.openModelPanel();
-    expect(input("\x04")).toBeUndefined();
-    expect(exit).not.toHaveBeenCalled();
-    panel.close();
-    expect(input("\x04")).toEqual({ consume: true });
-    expect(exit).toHaveBeenCalledTimes(1);
-    expect(view.editor.getExpandedText()).toBe(text);
-    expect(prompt).not.toHaveBeenCalled();
-  } finally {
-    view.dispose();
-  }
-});
+it.each([false, true])(
+  "Ctrl+D respects panel shortcuts before exiting (attached=%s)",
+  (attached) => {
+    const prompt = vi.fn(async () => {});
+    const { view, input, exit } = interactionView(
+      prompt,
+      undefined,
+      undefined,
+      "/tmp",
+      attached,
+    );
+    try {
+      const text = "未发送草稿 😀\n第二行";
+      view.editor.setText(text);
+      const panel = view.openModelPanel();
+      expect(input("\x04")).toBeUndefined();
+      expect(exit).not.toHaveBeenCalled();
+      panel.close();
+      expect(input("\x04")).toEqual({ consume: true });
+      expect(exit).toHaveBeenCalledTimes(1);
+      expect(view.editor.getExpandedText()).toBe(text);
+      expect(prompt).not.toHaveBeenCalled();
+    } finally {
+      view.dispose();
+    }
+  },
+);
 
 it("keeps attachment input and draft on preparation failure without dispatching", async () => {
   const prompt = vi.fn(async () => {});

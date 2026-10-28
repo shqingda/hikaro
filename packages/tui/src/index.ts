@@ -569,7 +569,11 @@ export class HikaroView {
     this.removeInput = tui.addInputListener((data) => {
       if (this.disposed) return undefined;
       if (isKeyRelease(data)) return { consume: true };
-      if (options.detachOnCtrlD && matchesKey(data, "ctrl+d")) {
+      if (
+        options.detachOnCtrlD &&
+        !this.modelPanel &&
+        matchesKey(data, "ctrl+d")
+      ) {
         options.onExit();
         return { consume: true };
       }
