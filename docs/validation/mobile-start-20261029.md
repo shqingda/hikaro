@@ -17,10 +17,19 @@
 - 移动端回归覆盖首次连接、历史列表、空会话自动创建、分页空页、丢失创建响应、重连和草稿；TUI 测试覆盖实际候选显示及 Tab 补全不发送。
 - 四处旧测试预期已更新：需拒绝的任务明确设为 off，而非以“缺少 grant”表达拒绝。原有只读、历史不可审批、断线/重启恢复等负向检查保留。
 - 现有 iPhone 18 Pro 模拟器检查实际 Tasks/Task 组件浅深色：`artifacts/validation/mobile-start-20261029/ios-first-session-{light,dark}.png`、`ios-sessions-{light,dark}.png`。截图用合成控制器状态；临时页面已删除，不代表 Android 真机验收。
-- 完整本地预检与 APK 构建日志：`artifacts/validation/mobile-start-20261029/android-release.log`，完成后补记产物。
+- 完整本地预检与 APK 构建日志：`artifacts/validation/mobile-start-20261029/android-release.log`，全部通过：152 个 Vitest 文件、798 项测试、24 项脚本测试，根目录/移动端/relay 类型检查及构建通过。Android Release 构建成功（16 秒，27 项执行、799 项复用缓存）。
 
 存储不改表结构，但新增显式 `off` 取值语义；旧二进制不能安全理解该值。回退须恢复升级前数据库备份，不能直接用旧版打开含新拒绝项的数据库。详情见 [ADR-002](../decisions/002-personal-phone-control.md)。
 
 ## 用户待测
 
 覆盖安装本轮 APK；退出旧 TUI 后在同一目录运行 `pnpm start`，让新宿主加载新规则。原有手机配对可保留。检查已有任务直接显示并可发消息/审批/停止、新建任务打开输入框、草稿重连恢复，以及 `/per` 只显示一个 permissions 候选。Android 实机结果待用户安装确认后记录；通知和 Tailscale 仍暂停。未运行 Actions、未推送 Git 或发布 tag。
+
+## 本地交付
+
+- APK：`/Users/shqingda/Projects/hikaro/artifacts/release/android/hikaro-release.apk`
+- 对应源码快照：`58c657a50f048e9a7cd788c58b325cf4b34044ed`。构建时为上一提交加本轮未提交改动，完成后原样提交为该快照，未在构建后修改应用代码；随后仅补充本交付记录。
+- APK 大小：41821744 字节。
+- SHA-256：`135ab606a6252fef87c04f62d3098c0c185315a6e1764c79d2386605a4717200`。
+- 原有 Release 证书 SHA-256：`9ee74690825efe6ecae984713cb87c0bc4d4b853953f5718a024f6e1ac417dd1`，签名及 zipalign 校验通过。
+- 旧手机配对保留；新默认控制规则需要重启旧 TUI/宿主，新会话入口需要覆盖安装该 APK。
