@@ -28,6 +28,17 @@ export default function Tools() {
       </Note>
       <Section title="查看任务">
         <NavRow
+          title="重新读取最新消息"
+          detail="刷新电脑上的任务正文"
+          disabled={!online}
+          onPress={() => {
+            void controller
+              .history("latest")
+              .then(() => router.dismissTo("/task"))
+              .catch(() => {});
+          }}
+        />
+        <NavRow
           title="搜索消息"
           detail="查找当前任务的完整消息"
           disabled={!online || !state.inspection.canSearch}

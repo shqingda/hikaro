@@ -142,22 +142,28 @@ export default function Tasks() {
               </View>
             </View>
           )}
-          {!online && state.session && (
-            <>
-              {canReturnToTask(state) && (
-                <Note>离线内容可能已过时；草稿不会自动发送。</Note>
-              )}
-              <Action
-                title={
-                  state.messages.length ? "查看离线任务与草稿" : "查看本机草稿"
-                }
-                disabled={!canReturnToTask(state)}
-                onPress={() => {
-                  if (canReturnToTask(controller.state)) router.push("/task");
-                }}
-              />
-            </>
-          )}
+          {state.session &&
+            (!online ||
+              !state.sessions.some(
+                (item) => item.id === state.session?.id,
+              )) && (
+              <>
+                {canReturnToTask(state) && (
+                  <Note>离线内容可能已过时；草稿不会自动发送。</Note>
+                )}
+                <Action
+                  title={
+                    state.messages.length
+                      ? "查看离线任务与草稿"
+                      : "查看本机草稿"
+                  }
+                  disabled={!canReturnToTask(state)}
+                  onPress={() => {
+                    if (canReturnToTask(controller.state)) router.push("/task");
+                  }}
+                />
+              </>
+            )}
         </View>
       }
     />
