@@ -1,17 +1,22 @@
 import { useEffect, useState } from "react";
 import {
-  ScrollView,
   View,
   Text,
   Keyboard,
-  Platform,
+  TextInput,
   useColorScheme,
   ActivityIndicator,
 } from "react-native";
-import { TextInput, Host, useNativeState } from "@expo/ui";
 import { router } from "expo-router";
 import { useMobileSelector } from "@/provider";
-import { Action, Note, SunMark, confirmConnectionRemoval } from "@/ui";
+import {
+  Action,
+  Note,
+  SunMark,
+  Page,
+  Section,
+  confirmConnectionRemoval,
+} from "@/ui";
 import { colors } from "@/theme";
 export default function Connect() {
   useColorScheme();
@@ -24,7 +29,7 @@ export default function Connect() {
     session: s.session,
     composer: s.composer,
   }));
-  const value = useNativeState("");
+  const [manual, setManual] = useState(false);
   const [draft, setDraft] = useState(""),
     [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -34,7 +39,6 @@ export default function Connect() {
   const review = () => {
     try {
       controller.review(draft.trim());
-      value.value = "";
       setDraft("");
       setError(null);
       Keyboard.dismiss();
@@ -43,37 +47,41 @@ export default function Connect() {
     }
   };
   return (
-    <ScrollView
+    <Page
       contentInsetAdjustmentBehavior="automatic"
       keyboardShouldPersistTaps="handled"
       automaticallyAdjustKeyboardInsets
       keyboardDismissMode="interactive"
-      contentContainerStyle={{ padding: 24, gap: 24, paddingBottom: 64 }}
+      contentContainerStyle={{ padding: 20, gap: 24, paddingBottom: 40 }}
       style={{ backgroundColor: colors.background }}
     >
-      <View style={{ gap: 16, paddingVertical: 12 }}>
+      <View style={{ gap: 16, paddingTop: 16 }}>
         <SunMark />
-        {/* The wordmark is decorative branding; cap scaling so it stays one word. */}
         <Text
           accessibilityRole="header"
-          maxFontSizeMultiplier={1.5}
-          numberOfLines={1}
           style={{
-            fontFamily: Platform.OS === "ios" ? "Georgia" : "serif",
-            fontSize: 48,
-            letterSpacing: -2,
+            fontSize: 30,
+            lineHeight: 38,
+            fontWeight: "600",
             color: colors.label,
           }}
         >
-          hikaro
+          连接你的电脑
         </Text>
-        <Text style={{ fontSize: 22, lineHeight: 31, color: colors.label }}>
-          {"任务留在电脑，\n进展随你同行。"}
-        </Text>
-        <Note>
-          连接你自己的电脑，查看任务与输出。获得控制权限后，可以发送要求、审批和停止运行；离线时保留草稿。
-        </Note>
+        <Note>任务留在电脑。随时查看进展、审批操作，继续对话。</Note>
       </View>
+      {!pending &&
+        !state.review &&
+        !["offline", "error", "blocked"].includes(state.phase) && (
+          <Section title="开始接续">
+            <Text style={{ color: colors.label, fontSize: 16, lineHeight: 26 }}>
+              1 在电脑端生成手机配对码
+            </Text>
+            <Text style={{ color: colors.label, fontSize: 16, lineHeight: 26 }}>
+              2 扫码核对，再由电脑确认授权
+            </Text>
+          </Section>
+        )}
       {pending && (
         <View style={{ gap: 12 }}>
           <ActivityIndicator accessibilityLabel="正在连接电脑" />
@@ -170,39 +178,46 @@ export default function Connect() {
                 testID="scan-pairing"
                 onPress={() => router.push("/scan")}
               />
-              <Note>也可以粘贴配对码。它包含设备凭据，请不要发给他人。</Note>
-              <Text style={{ color: colors.label, fontSize: 17 }}>配对码</Text>
-              <Host
-                matchContents={{ vertical: true }}
-                style={{ width: "100%" }}
-              >
-                <TextInput
-                  testID="pairing-code"
-                  value={value}
-                  onChangeText={setDraft}
-                  secureTextEntry
-                  maxLength={8192}
-                  autoCorrect={false}
-                  autoCapitalize="none"
-                  placeholder="hikaro://pair#…"
-                  style={{
-                    padding: 16,
-                    borderRadius: 14,
-                    backgroundColor: colors.panel,
-                  }}
-                />
-              </Host>
               <Action
-                title="核对配对信息"
-                testID="review-pairing"
-                disabled={!draft.trim()}
+                title={manual ? "收起手动输入" : "手动输入配对码"}
                 quiet
-                onPress={review}
+                onPress={() => setManual(!manual)}
               />
+              {manual && (
+                <View style={{ gap: 12 }}>
+                  <Note>配对码包含设备凭据，请不要发给他人。</Note>
+                  <TextInput
+                    testID="pairing-code"
+                    accessibilityLabel="配对码"
+                    value={draft}
+                    onChangeText={setDraft}
+                    secureTextEntry
+                    maxLength={8192}
+                    autoCorrect={false}
+                    autoCapitalize="none"
+                    placeholder="hikaro://pair#…"
+                    placeholderTextColor={colors.secondary}
+                    style={{
+                      padding: 16,
+                      minHeight: 48,
+                      borderRadius: 12,
+                      backgroundColor: colors.panel,
+                      color: colors.label,
+                    }}
+                  />
+                  <Action
+                    title="核对配对信息"
+                    testID="review-pairing"
+                    disabled={!draft.trim()}
+                    quiet
+                    onPress={review}
+                  />
+                </View>
+              )}
             </>
           )}
         </View>
       )}
-    </ScrollView>
+    </Page>
   );
 }

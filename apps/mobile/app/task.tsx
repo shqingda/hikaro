@@ -1,15 +1,20 @@
-import { memo, useCallback, useEffect } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
   FlatList,
   View,
   Text,
   useColorScheme,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useHeaderHeight } from "expo-router/react-navigation";
 import { router } from "expo-router";
 import { useMobileSelector } from "@/provider";
 import type { MobileController, MobileMessage } from "@/controller";
-import { Action, Note } from "@/ui";
+import { Action, Note, EmptyState } from "@/ui";
 import { colors, readable } from "@/theme";
 import { TaskActions } from "@/task-actions";
 import { Composer } from "@/composer-view";
@@ -57,8 +62,21 @@ const MessageRow = memo(function MessageRow({
   contentLoading: boolean;
   canImages: boolean;
 }) {
+  useColorScheme();
+  const [expanded, setExpanded] = useState(false);
+  const tool = item.message.role === "tool";
+  const user = item.message.role === "user";
   return (
-    <View style={{ gap: 10, paddingVertical: 8 }}>
+    <View
+      style={{
+        gap: 8,
+        padding: user || tool ? 16 : 0,
+        paddingVertical: 16,
+        marginLeft: user ? 32 : 0,
+        borderRadius: 16,
+        backgroundColor: user || tool ? colors.panel : "transparent",
+      }}
+    >
       <Text style={{ color: colors.secondary, fontSize: 12 }}>
         {item.message.role === "user"
           ? "你的要求"
@@ -68,67 +86,78 @@ const MessageRow = memo(function MessageRow({
               ? `工具记录${item.message.name ? ` · ${readable(item.message.name)}` : ""}${item.message.isError ? " · 失败" : ""}`
               : "系统记录"}
       </Text>
-      <Text
-        selectable
-        numberOfLines={
-          (item.message.textLength ?? 0) > item.message.text.length
-            ? 12
-            : undefined
-        }
-        style={{ color: colors.label, fontSize: 16, lineHeight: 25 }}
-      >
-        {readable(item.message.text)}
-      </Text>
-      {!!item.message.toolCalls?.length && (
-        <View style={{ gap: 10 }}>
-          <Note>
-            工具调用名称预览：
-            {item.message.toolCalls
-              .map((call) => readable(call.name))
-              .join("、")}
-            。完整调用参数可按需查看。
-          </Note>
-          <Action
-            title="查看工具调用"
-            quiet
-            disabled={!online || contentLoading}
-            onPress={() => {
-              void controller
-                .readMessage(item.seq, 0, "toolCalls")
-                .catch(() => {});
-              router.push("/message");
-            }}
-          />
-        </View>
-      )}
-      {!!item.message.imageCount && (
+      {tool && (
         <Action
-          title={`查看 ${item.message.imageCount} 张图片`}
+          title={expanded ? "收起工具输出" : "展开工具输出"}
           quiet
-          disabled={!online || !canImages}
-          onPress={() => {
-            void controller.inspection
-              .readImage(item.seq, 0, item.message.imageCount!)
-              .catch(() => {});
-            router.push("/image");
-          }}
+          onPress={() => setExpanded(!expanded)}
         />
       )}
-      {item.message.textLength !== undefined &&
-        item.message.textLength > item.message.text.length && (
-          <View style={{ gap: 10 }}>
-            <Note>当前显示长消息预览，可以按段阅读全文。</Note>
+      {(!tool || expanded) && (
+        <>
+          <Text
+            selectable
+            numberOfLines={
+              (item.message.textLength ?? 0) > item.message.text.length
+                ? 12
+                : undefined
+            }
+            style={{ color: colors.label, fontSize: 16, lineHeight: 25 }}
+          >
+            {readable(item.message.text)}
+          </Text>
+          {!!item.message.toolCalls?.length && (
+            <View style={{ gap: 10 }}>
+              <Note>
+                工具调用名称预览：
+                {item.message.toolCalls
+                  .map((call) => readable(call.name))
+                  .join("、")}
+                。完整调用参数可按需查看。
+              </Note>
+              <Action
+                title="查看工具调用"
+                quiet
+                disabled={!online || contentLoading}
+                onPress={() => {
+                  void controller
+                    .readMessage(item.seq, 0, "toolCalls")
+                    .catch(() => {});
+                  router.push("/message");
+                }}
+              />
+            </View>
+          )}
+          {!!item.message.imageCount && (
             <Action
-              title="阅读全文"
+              title={`查看 ${item.message.imageCount} 张图片`}
               quiet
-              disabled={!online || contentLoading}
+              disabled={!online || !canImages}
               onPress={() => {
-                void controller.readMessage(item.seq).catch(() => {});
-                router.push("/message");
+                void controller.inspection
+                  .readImage(item.seq, 0, item.message.imageCount!)
+                  .catch(() => {});
+                router.push("/image");
               }}
             />
-          </View>
-        )}
+          )}
+          {item.message.textLength !== undefined &&
+            item.message.textLength > item.message.text.length && (
+              <View style={{ gap: 10 }}>
+                <Note>当前显示长消息预览，可以按段阅读全文。</Note>
+                <Action
+                  title="阅读全文"
+                  quiet
+                  disabled={!online || contentLoading}
+                  onPress={() => {
+                    void controller.readMessage(item.seq).catch(() => {});
+                    router.push("/message");
+                  }}
+                />
+              </View>
+            )}
+        </>
+      )}
     </View>
   );
 });
@@ -146,7 +175,6 @@ export default function Task() {
     hasOlder: s.hasOlder,
     hasNewer: s.hasNewer,
     messages: s.messages,
-    cacheClear: s.cacheClear,
   }));
 
   const online = state.phase === "connected";
@@ -169,25 +197,59 @@ export default function Task() {
       router.replace("/");
     else if (online && !state.session) router.replace("/tasks");
   }, [state.phase, online, state.session]);
+  const headerHeight = useHeaderHeight();
+  const list = useRef<FlatList<MobileMessage>>(null);
+  const follow = useRef(!state.hasNewer);
+  const contentHeight = useRef(0);
+  const [away, setAway] = useState(false);
+  const interacting = useRef(false);
+  useEffect(() => {
+    follow.current = !state.hasNewer;
+    setAway(false);
+  }, [state.session?.id]);
+  const latest = async () => {
+    if (state.hasNewer) {
+      if (!online) return;
+      try {
+        await controller.history("latest");
+      } catch {
+        return;
+      }
+    }
+    interacting.current = false;
+    follow.current = true;
+    setAway(false);
+    list.current?.scrollToOffset({
+      offset: contentHeight.current,
+      animated: true,
+    });
+  };
   return (
-    <FlatList
-      contentInsetAdjustmentBehavior="automatic"
-      automaticallyAdjustKeyboardInsets
-      keyboardShouldPersistTaps="handled"
-      keyboardDismissMode="interactive"
-      contentContainerStyle={{ padding: 24, gap: 24, paddingBottom: 48 }}
-      style={{ backgroundColor: colors.background }}
-      data={state.messages}
-      keyExtractor={(item) => String(item.seq)}
-      ListHeaderComponent={
-        <View style={{ gap: 14, marginBottom: 8 }}>
+    <SafeAreaView
+      edges={["bottom"]}
+      style={{ flex: 1, backgroundColor: colors.background }}
+    >
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={headerHeight}
+      >
+        <View
+          style={{
+            paddingHorizontal: 20,
+            paddingBottom: 8,
+            gap: 4,
+            borderBottomWidth: 0.5,
+            borderBottomColor: colors.separator,
+          }}
+        >
           <Text
+            numberOfLines={2}
             accessibilityRole="header"
-            selectable
             style={{
-              fontSize: 26,
-              lineHeight: 34,
-              fontWeight: "500",
+              fontSize: 18,
+              lineHeight: 26,
+              fontWeight: "600",
               color: colors.label,
             }}
           >
@@ -196,133 +258,132 @@ export default function Task() {
           <Note>
             {online
               ? (status[state.runStatus] ?? "状态待确认")
-              : "离线快照 · 状态可能已变化"}
+              : "离线快照 · 草稿不会自动发送"}
           </Note>
+        </View>
+        <ScrollView
+          style={{ maxHeight: 180, flexGrow: 0 }}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 4 }}
+          keyboardShouldPersistTaps="handled"
+        >
           <TaskActions />
-          {online && state.inspection.canSearch && (
-            <Action
-              title="搜索消息"
-              quiet
-              onPress={() => router.push("./search")}
-            />
-          )}
-          {online && (
-            <Action
-              title="查看后台任务"
-              quiet
-              onPress={() => {
-                void controller.readBackground().catch(() => {});
-                router.push("/background");
-              }}
-            />
-          )}
-          {online && (
-            <Action
-              title="查看计划进度"
-              quiet
-              onPress={() => {
-                void controller.readPlanProgress().catch(() => {});
-                router.push("/plan");
-              }}
-            />
-          )}
-          {online && (
-            <Action
-              title="查看文件修改"
-              quiet
-              disabled={!state.inspection.canChanges}
-              onPress={() => {
-                void controller.inspection.listChanges().catch(() => {});
-                router.push("/changes");
-              }}
-            />
-          )}
-          {online && !state.inspection.canChanges && (
-            <Note>电脑版本尚不支持手机差异阅读，请升级电脑端。</Note>
-          )}
           {state.unknown > 0 && (
-            <Note>
-              有未确认的操作。当前内容以电脑返回的状态为准，没有重新发送操作。
-            </Note>
+            <Note>有未确认的操作，请在工具中核对回执，不会自动重发。</Note>
           )}
           {state.error && <Note error>{state.error}</Note>}
-          {state.loading && <ActivityIndicator />}
-          {state.hasOlder && (
-            <Action
-              title="更早的消息"
-              disabled={!online || state.loading}
-              quiet
-              onPress={() => {
-                void controller.history("older").catch(() => {});
-              }}
-            />
-          )}
-        </View>
-      }
-      renderItem={renderItem}
-      ListEmptyComponent={
-        !state.loading ? (
-          <Note>
-            {state.session
-              ? online
-                ? "这项任务还没有消息。"
-                : "本机没有缓存的消息。连接电脑后可重新读取。"
-              : "请返回任务列表选择一项任务。"}
-          </Note>
-        ) : undefined
-      }
-      ListFooterComponent={
-        <View style={{ gap: 18, marginTop: 16 }}>
-          <Composer />
-          <StreamPreview />
-          {state.hasNewer && (
-            <Action
-              title="较新的消息"
-              disabled={!online || state.loading}
-              quiet
-              onPress={() => {
-                void controller.history("newer").catch(() => {});
-              }}
-            />
-          )}
+        </ScrollView>
+        <FlatList
+          ref={list}
+          key={state.session?.id}
+          style={{ flex: 1 }}
+          contentContainerStyle={{ padding: 16, gap: 8, flexGrow: 1 }}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
+          scrollEventThrottle={32}
+          onLayout={() => {
+            if (follow.current && !state.hasNewer)
+              requestAnimationFrame(() =>
+                list.current?.scrollToOffset({
+                  offset: contentHeight.current,
+                  animated: false,
+                }),
+              );
+          }}
+          onScrollBeginDrag={() => {
+            interacting.current = true;
+            follow.current = false;
+          }}
+          onScroll={({ nativeEvent: e }) => {
+            if (!interacting.current) return;
+            const near =
+              e.contentSize.height -
+                e.layoutMeasurement.height -
+                e.contentOffset.y <
+              64;
+            follow.current = near && !state.hasNewer;
+            setAway(!near);
+          }}
+          onContentSizeChange={(_width, height) => {
+            contentHeight.current = height;
+            if (follow.current && !state.hasNewer)
+              list.current?.scrollToOffset({
+                offset: contentHeight.current,
+                animated: false,
+              });
+          }}
+          data={state.messages}
+          keyExtractor={(item) => String(item.seq)}
+          renderItem={renderItem}
+          ListHeaderComponent={
+            <View>
+              {state.loading && (
+                <ActivityIndicator accessibilityLabel="正在读取消息" />
+              )}
+              {state.hasOlder && (
+                <Action
+                  title="更早的消息"
+                  quiet
+                  disabled={!online || state.loading}
+                  onPress={() => {
+                    follow.current = false;
+                    void controller.history("older").catch(() => {});
+                  }}
+                />
+              )}
+            </View>
+          }
+          ListEmptyComponent={
+            !state.loading ? (
+              <EmptyState
+                title={online ? "从这里继续对话" : "暂无离线消息"}
+                detail={
+                  online
+                    ? "输入要求并明确发送。任务会在电脑上执行。"
+                    : "可以继续编辑本机草稿，连接后再读取消息。"
+                }
+              />
+            ) : undefined
+          }
+          ListFooterComponent={
+            <View style={{ gap: 8 }}>
+              <StreamPreview />
+              {state.hasNewer && (
+                <Action
+                  title="较新的消息"
+                  quiet
+                  disabled={!online || state.loading}
+                  onPress={() => {
+                    follow.current = false;
+                    void controller.history("newer").catch(() => {});
+                  }}
+                />
+              )}
+            </View>
+          }
+        />
+        {(away || state.hasNewer || !online) && (
           <Action
-            title={online ? "恢复最新内容" : "重新连接"}
+            title={online ? "回到最新内容" : "重新连接"}
             quiet
             disabled={state.loading}
             onPress={() => {
-              void (
-                online ? controller.history("latest") : controller.restore()
-              ).catch(() => {});
+              void (online ? latest() : controller.restore()).catch(() => {});
             }}
           />
-          <Note>本机仅缓存最近查看的一页消息；图片和完整附件不缓存。</Note>
-          <Action
-            title={
-              state.cacheClear === "clearing"
-                ? "正在清除本机历史缓存…"
-                : state.cacheClear === "failed"
-                  ? "重试清除本机历史缓存"
-                  : "清除本机历史缓存"
-            }
-            quiet
-            disabled={state.cacheClear === "clearing"}
-            onPress={() => {
-              void controller.clearHistoryCache().catch(() => {});
-            }}
-          />
-          {state.cacheClear === "cleared" && (
-            <View accessible accessibilityLiveRegion="polite">
-              <Note>已清除本机历史缓存。</Note>
-            </View>
-          )}
-          {state.cacheClear === "failed" && (
-            <Note error>未能清除本机历史缓存，请重试。</Note>
-          )}
-          <Note>
-            清除缓存保留未发送草稿和电脑上的任务记录；继续读取任务会重新缓存。
-          </Note>
-        </View>
-      }
-    />
+        )}
+        <ScrollView
+          style={{
+            flexGrow: 0,
+            maxHeight: "45%",
+            borderTopWidth: 0.5,
+            borderTopColor: colors.separator,
+          }}
+          contentContainerStyle={{ padding: 12 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Composer />
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }

@@ -43,7 +43,7 @@ export default function ImageViewer() {
     >
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={{ padding: 24, gap: 18 }}
+        contentContainerStyle={{ padding: 20, gap: 18 }}
       >
         <Text
           accessibilityRole="header"

@@ -1,8 +1,9 @@
+import { useColorScheme } from "react-native";
 import { useEffect } from "react";
-import { ActivityIndicator, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Text, View } from "react-native";
 import { router, useNavigation } from "expo-router";
 import { useMobile } from "@/provider";
-import { Action, Note } from "@/ui";
+import { Action, Note, Page } from "@/ui";
 import { colors, readable } from "@/theme";
 import type { MobileBackgroundItem } from "@/controller";
 
@@ -47,6 +48,7 @@ function Section({
 }
 
 export default function Background() {
+  useColorScheme();
   const { controller, state } = useMobile();
   const navigation = useNavigation();
   const background = state.background;
@@ -64,7 +66,7 @@ export default function Background() {
     else if (online && !background) router.dismissTo("/task");
   }, [state.phase, online, background]);
   return (
-    <ScrollView
+    <Page
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{ padding: 20, gap: 20, paddingBottom: 48 }}
       style={{ backgroundColor: colors.background }}
@@ -100,6 +102,6 @@ export default function Background() {
         disabled={!online || background?.status === "loading"}
         onPress={() => void controller.readBackground().catch(() => {})}
       />
-    </ScrollView>
+    </Page>
   );
 }

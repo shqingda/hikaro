@@ -1,22 +1,66 @@
+import { useColorScheme } from "react-native";
+import { router } from "expo-router";
+import { Action } from "@/ui";
 import { Stack } from "expo-router/stack";
 import { StatusBar } from "expo-status-bar";
 import { MobileProvider } from "@/provider";
 import { NotificationResponses } from "@/notification-responses";
 import { colors } from "@/theme";
 export default function Layout() {
+  useColorScheme();
   return (
     <MobileProvider>
       <StatusBar style="auto" />
-      <Stack screenOptions={{ headerBackButtonDisplayMode: "minimal" }}>
+      <Stack
+        screenOptions={{
+          headerBackButtonDisplayMode: "minimal",
+          headerStyle: { backgroundColor: colors.background },
+          headerTintColor: colors.label,
+          headerShadowVisible: false,
+          contentStyle: { backgroundColor: colors.background },
+        }}
+      >
         <Stack.Screen
           name="index"
-          options={{ title: "连接", headerLargeTitleEnabled: true }}
+          options={{
+            title: "hikaro",
+            headerRight: () => (
+              <Action
+                title="设置"
+                quiet
+                onPress={() => router.push("/settings")}
+              />
+            ),
+          }}
         />
         <Stack.Screen
           name="tasks"
-          options={{ title: "任务", headerLargeTitleEnabled: true }}
+          options={{
+            title: "任务",
+            headerRight: () => (
+              <Action
+                title="设置"
+                quiet
+                onPress={() => router.push("/settings")}
+              />
+            ),
+          }}
         />
-        <Stack.Screen name="task" options={{ title: "任务详情" }} />
+        <Stack.Screen
+          name="task"
+          options={{
+            title: "对话",
+            headerRight: () => (
+              <Action
+                title="工具"
+                quiet
+                onPress={() => router.push("/tools")}
+              />
+            ),
+          }}
+        />
+        <Stack.Screen name="tools" options={{ title: "任务工具" }} />
+        <Stack.Screen name="settings" options={{ title: "设置" }} />
         <Stack.Screen name="message" options={{ title: "消息正文" }} />
         <Stack.Screen name="search" options={{ title: "搜索消息" }} />
         <Stack.Screen name="image" options={{ title: "消息图片" }} />

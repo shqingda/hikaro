@@ -1,31 +1,24 @@
-import { Platform } from "react-native";
-import { Color } from "expo-router";
+import { Appearance } from "react-native";
+const dark = () => Appearance.getColorScheme() === "dark";
 export const colors = {
-  background: Platform.select({
-    ios: Color.ios.systemBackground,
-    android: Color.android.dynamic.surface,
-    default: "#f7f7f6",
-  })!,
-  label: Platform.select({
-    ios: Color.ios.label,
-    android: Color.android.dynamic.onSurface,
-    default: "#12120f",
-  })!,
-  secondary: Platform.select({
-    ios: Color.ios.secondaryLabel,
-    android: Color.android.dynamic.onSurfaceVariant,
-    default: "#64645d",
-  })!,
-  panel: Platform.select({
-    ios: Color.ios.secondarySystemBackground,
-    android: Color.android.dynamic.surfaceContainer,
-    default: "#efefed",
-  })!,
-  separator: Platform.select({
-    ios: Color.ios.separator,
-    android: Color.android.dynamic.outlineVariant,
-    default: "#d5d5cf",
-  })!,
+  get background() {
+    return dark() ? "#141513" : "#f7f7f6";
+  },
+  get label() {
+    return dark() ? "#f2f2ed" : "#12120f";
+  },
+  get secondary() {
+    return dark() ? "#aeafa6" : "#62655b";
+  },
+  get panel() {
+    return dark() ? "#22241f" : "#ffffff";
+  },
+  get separator() {
+    return dark() ? "#3b3d35" : "#dddfd6";
+  },
+  get error() {
+    return dark() ? "#ffb4a9" : "#a52a20";
+  },
   beam: "#f2b500",
   ink: "#12120f",
   paper: "#f7f7f6",

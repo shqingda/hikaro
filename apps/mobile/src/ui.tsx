@@ -1,5 +1,12 @@
-import { Host, Button } from "@expo/ui";
-import { Alert, Text, View, useColorScheme } from "react-native";
+import {
+  Alert,
+  Text,
+  View,
+  Pressable,
+  ScrollView,
+  useColorScheme,
+  type ScrollViewProps,
+} from "react-native";
 import { colors } from "./theme";
 import { connectionRemoval } from "./connection-removal";
 
@@ -47,18 +54,35 @@ export function Action({
 }) {
   useColorScheme();
   return (
-    <Host matchContents={{ vertical: true }} style={{ minHeight: 48 }}>
-      <Button
-        testID={testID}
-        label={title}
-        onPress={onPress}
-        disabled={disabled}
-        variant={quiet ? "text" : "filled"}
-        // No fixed height: it truncates labels at large Dynamic Type sizes.
-        // Host keeps the 48 pt minimum touch target.
-        style={{ paddingVertical: 6 }}
-      />
-    </Host>
+    <Pressable
+      testID={testID}
+      accessibilityRole="button"
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        minHeight: 48,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderRadius: 12,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: quiet ? "transparent" : colors.beam,
+        opacity: disabled ? 0.4 : pressed ? 0.65 : 1,
+      })}
+    >
+      <Text
+        style={{
+          fontSize: 15,
+          lineHeight: 22,
+          fontWeight: "600",
+          color: quiet ? colors.label : colors.ink,
+          textAlign: "center",
+        }}
+      >
+        {title}
+      </Text>
+    </Pressable>
   );
 }
 export function Note({
@@ -74,7 +98,11 @@ export function Note({
       selectable
       accessibilityRole={error ? "alert" : undefined}
       accessibilityLiveRegion={error ? "polite" : undefined}
-      style={{ color: colors.secondary, fontSize: 15, lineHeight: 23 }}
+      style={{
+        color: error ? colors.error : colors.secondary,
+        fontSize: 13,
+        lineHeight: 20,
+      }}
     >
       {children}
     </Text>
@@ -98,6 +126,141 @@ export function SunMark() {
         }}
       />
       <View style={{ height: 2, backgroundColor: colors.label }} />
+    </View>
+  );
+}
+
+export function Page({
+  children,
+  contentContainerStyle,
+  style,
+  ...props
+}: ScrollViewProps) {
+  useColorScheme();
+  return (
+    <ScrollView
+      contentInsetAdjustmentBehavior="automatic"
+      keyboardShouldPersistTaps="handled"
+      {...props}
+      style={[{ flex: 1, backgroundColor: colors.background }, style]}
+      contentContainerStyle={[
+        { padding: 20, gap: 20, paddingBottom: 40 },
+        contentContainerStyle,
+      ]}
+    >
+      {children}
+    </ScrollView>
+  );
+}
+export function Section({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  useColorScheme();
+  return (
+    <View style={{ gap: 12 }}>
+      <Text
+        accessibilityRole="header"
+        style={{
+          color: colors.secondary,
+          fontSize: 13,
+          lineHeight: 20,
+          fontWeight: "600",
+        }}
+      >
+        {title}
+      </Text>
+      <View
+        style={{
+          backgroundColor: colors.panel,
+          borderRadius: 16,
+          padding: 16,
+          gap: 12,
+        }}
+      >
+        {children}
+      </View>
+    </View>
+  );
+}
+export function NavRow({
+  title,
+  detail,
+  disabled = false,
+  onPress,
+}: {
+  title: string;
+  detail?: string;
+  disabled?: boolean;
+  onPress: () => void;
+}) {
+  useColorScheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled }}
+      onPress={onPress}
+      disabled={disabled}
+      style={({ pressed }) => ({
+        minHeight: 56,
+        paddingVertical: 12,
+        flexDirection: "row",
+        gap: 12,
+        alignItems: "center",
+        opacity: disabled ? 0.4 : pressed ? 0.65 : 1,
+        borderBottomWidth: 0.5,
+        borderBottomColor: colors.separator,
+      })}
+    >
+      <View style={{ flex: 1, gap: 4 }}>
+        <Text style={{ color: colors.label, fontSize: 16, lineHeight: 24 }}>
+          {title}
+        </Text>
+        {detail && <Note>{detail}</Note>}
+      </View>
+      <Text
+        accessible={false}
+        style={{ color: colors.secondary, fontSize: 24 }}
+      >
+        ›
+      </Text>
+    </Pressable>
+  );
+}
+export function EmptyState({
+  title,
+  detail,
+}: {
+  title: string;
+  detail: string;
+}) {
+  useColorScheme();
+  return (
+    <View style={{ paddingVertical: 32, gap: 8 }}>
+      <View
+        style={{
+          width: 28,
+          height: 4,
+          borderRadius: 2,
+          backgroundColor: colors.beam,
+          marginBottom: 8,
+        }}
+      />
+      <Text
+        accessibilityRole="header"
+        style={{
+          color: colors.label,
+          fontSize: 20,
+          lineHeight: 28,
+          fontWeight: "600",
+        }}
+      >
+        {title}
+      </Text>
+      <Note>{detail}</Note>
     </View>
   );
 }

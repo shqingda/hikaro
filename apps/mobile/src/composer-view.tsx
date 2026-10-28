@@ -1,8 +1,8 @@
-import { View, Text, Alert, TextInput } from "react-native";
+import { useState } from "react";
+import { View, Alert, TextInput } from "react-native";
 import { useMobileSelector } from "./provider";
 import { Action, Note } from "./ui";
 import { colors } from "./theme";
-import { router } from "expo-router";
 
 export function Composer() {
   const { controller, state } = useMobileSelector((s) => ({
@@ -14,6 +14,7 @@ export function Composer() {
     session: s.session,
     composer: s.composer,
   }));
+  const [inputHeight, setInputHeight] = useState(48);
   const draft = state.composer;
   const record = draft.record;
   if (!record) return draft.loading ? <Note>正在读取草稿…</Note> : null;
@@ -21,12 +22,6 @@ export function Composer() {
   const editable = matches && !draft.loading && !record.submission;
   return (
     <View style={{ gap: 12 }}>
-      <Text
-        accessibilityRole="header"
-        style={{ color: colors.label, fontSize: 18 }}
-      >
-        你的要求
-      </Text>
       {!matches && <Note>下方是切换前尚未保存的草稿，请先重试保存。</Note>}
       {/* Expo UI currently wraps a SwiftUI TextField whose Return ends editing.
           The native field owns typed text; echoing each saved value back while
@@ -41,7 +36,12 @@ export function Composer() {
         submitBehavior="newline"
         textAlignVertical="top"
         placeholderTextColor={colors.secondary}
-        numberOfLines={5}
+        numberOfLines={2}
+        onContentSizeChange={(event) =>
+          setInputHeight(
+            Math.max(48, Math.min(144, event.nativeEvent.contentSize.height)),
+          )
+        }
         editable={editable}
         maxLength={100000}
         placeholder="输入要求，回车换行"
@@ -54,22 +54,17 @@ export function Composer() {
           }
         }}
         style={{
-          padding: 16,
+          padding: 12,
           borderRadius: 14,
           backgroundColor: colors.panel,
           color: colors.label,
-          fontSize: 17,
-          height: 160,
+          fontSize: 16,
+          lineHeight: 24,
+          height: inputHeight,
+          minHeight: 48,
+          maxHeight: 144,
         }}
       />
-      <Note>
-        {draft.saving
-          ? "正在保存草稿…"
-          : draft.error
-            ? "草稿尚未保存"
-            : "草稿已保存在本机"}
-        {state.phase !== "connected" ? " · 离线编辑，重连不会自动发送" : ""}
-      </Note>
       {draft.error && (
         <>
           <Note error>{draft.error}</Note>
@@ -122,20 +117,36 @@ export function Composer() {
         </>
       ) : (
         <>
-          <Action
-            title={state.busy ? "加入待发队列" : "发送"}
-            testID="send-prompt"
-            disabled={
-              !state.canSend ||
-              !matches ||
-              !record.text.trim() ||
-              draft.loading ||
-              !!draft.error
-            }
-            onPress={() => {
-              void controller.sendDraft(record.session.id).catch(() => {});
-            }}
-          />
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+            <View style={{ flex: 1 }}>
+              <Note>
+                {draft.saving
+                  ? "正在保存草稿…"
+                  : draft.error
+                    ? "草稿尚未保存"
+                    : "草稿已保存"}
+                {state.phase !== "connected"
+                  ? " · 离线编辑，重连不会自动发送"
+                  : ""}
+              </Note>
+            </View>
+            <View style={{ minWidth: 80 }}>
+              <Action
+                title={state.busy ? "加入待发队列" : "发送"}
+                testID="send-prompt"
+                disabled={
+                  !state.canSend ||
+                  !matches ||
+                  !record.text.trim() ||
+                  draft.loading ||
+                  !!draft.error
+                }
+                onPress={() => {
+                  void controller.sendDraft(record.session.id).catch(() => {});
+                }}
+              />
+            </View>
+          </View>
           {state.busy && <Note>这条要求将在当前运行结束后执行。</Note>}
           {state.canSteer && (
             <>
@@ -161,16 +172,6 @@ export function Composer() {
             <Note>发送需要当前任务的控制权限及支持发送回执的电脑版本。</Note>
           )}
         </>
-      )}
-      {state.steering.available && (
-        <Action
-          title="补充指令队列"
-          quiet
-          onPress={() => {
-            void controller.steering.open(record.session.id).catch(() => {});
-            router.push("/steering");
-          }}
-        />
       )}
     </View>
   );

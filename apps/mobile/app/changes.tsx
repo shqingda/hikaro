@@ -83,7 +83,7 @@ export default function Changes() {
         <FlatList
           key={`${diff.entry.id}:${diff.offset}`}
           contentInsetAdjustmentBehavior="automatic"
-          contentContainerStyle={{ padding: 24, paddingBottom: 36 }}
+          contentContainerStyle={{ padding: 20, paddingBottom: 36 }}
           data={diff.page ? diff.page.data.split("\n") : []}
           keyExtractor={(_, index) => String(index)}
           ListHeaderComponent={header}
@@ -138,7 +138,7 @@ export default function Changes() {
       ) : (
         <FlatList
           contentInsetAdjustmentBehavior="automatic"
-          contentContainerStyle={{ padding: 24, gap: 18, paddingBottom: 36 }}
+          contentContainerStyle={{ padding: 20, gap: 18, paddingBottom: 36 }}
           data={changes?.items ?? []}
           keyExtractor={(item) => item.id}
           ListHeaderComponent={header}

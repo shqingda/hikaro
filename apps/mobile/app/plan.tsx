@@ -1,9 +1,10 @@
+import { useColorScheme } from "react-native";
 import type { StepEvidence } from "../../../packages/core/src/change-evidence.ts";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Text, View } from "react-native";
 import { router, useNavigation } from "expo-router";
 import { useMobile } from "@/provider";
-import { Action, Note } from "@/ui";
+import { Action, Note, Page } from "@/ui";
 import { colors, readable } from "@/theme";
 
 const labels = {
@@ -15,6 +16,7 @@ const labels = {
 } as const;
 
 export default function Plan() {
+  useColorScheme();
   const { controller, state } = useMobile();
   const navigation = useNavigation();
   const plan = state.plan;
@@ -35,7 +37,7 @@ export default function Plan() {
   const done =
     progress?.steps.filter((step) => step.status === "completed").length ?? 0;
   return (
-    <ScrollView
+    <Page
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{ padding: 20, gap: 14, paddingBottom: 48 }}
       style={{ backgroundColor: colors.background }}
@@ -122,7 +124,7 @@ export default function Plan() {
         disabled={!online || plan?.status === "loading"}
         onPress={() => void controller.readPlanProgress().catch(() => {})}
       />
-    </ScrollView>
+    </Page>
   );
 }
 

@@ -1,15 +1,9 @@
 import { useEffect } from "react";
-import {
-  ScrollView,
-  View,
-  Text,
-  ActivityIndicator,
-  useColorScheme,
-} from "react-native";
+import { View, Text, ActivityIndicator, useColorScheme } from "react-native";
 import { router, useNavigation } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useMobile } from "@/provider";
-import { Action, Note } from "@/ui";
+import { Action, Note, Page } from "@/ui";
 import { colors, readable } from "@/theme";
 import { CONTENT_STEP } from "@/content";
 
@@ -46,14 +40,14 @@ export default function Message() {
       edges={["bottom"]}
       style={{ flex: 1, backgroundColor: colors.background }}
     >
-      <ScrollView
+      <Page
         key={
           content
             ? `${content.sessionId}:${content.seq}:${content.field}:${content.offset}`
             : "empty"
         }
         contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={{ padding: 24, gap: 20, paddingBottom: 48 }}
+        contentContainerStyle={{ padding: 20, gap: 16, paddingBottom: 40 }}
         style={{ flex: 1 }}
       >
         <Text
@@ -100,7 +94,7 @@ export default function Message() {
             {readable(content.page.data) || "这条消息没有正文。"}
           </Text>
         )}
-      </ScrollView>
+      </Page>
       {content ? (
         <View
           style={{

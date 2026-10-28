@@ -32,8 +32,8 @@ export default function Scan() {
         style={{ backgroundColor: colors.background }}
         contentContainerStyle={{
           flexGrow: 1,
-          padding: 24,
-          paddingBottom: 48,
+          padding: 20,
+          paddingBottom: 40,
           gap: 20,
           justifyContent: "center",
         }}
@@ -89,7 +89,7 @@ export default function Scan() {
         }}
       />
       <View
-        style={{ padding: 24, gap: 12, backgroundColor: colors.background }}
+        style={{ padding: 20, gap: 12, backgroundColor: colors.background }}
       >
         <Text style={{ fontSize: 17, color: colors.label }}>
           将电脑上的二维码放入取景框

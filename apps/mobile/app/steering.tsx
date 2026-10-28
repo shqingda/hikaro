@@ -1,8 +1,9 @@
+import { useColorScheme } from "react-native";
 import { useEffect, useState } from "react";
-import { Alert, ScrollView, View, Text, TextInput } from "react-native";
+import { Alert, View, Text, TextInput } from "react-native";
 import { router, useNavigation, usePreventRemove } from "expo-router";
 import { useMobile } from "@/provider";
-import { Action, Note } from "@/ui";
+import { Action, Note, Page } from "@/ui";
 import { colors, readable } from "@/theme";
 import type { SteeringAction } from "@/steering";
 
@@ -22,6 +23,7 @@ function detailKey(detail: object) {
 }
 
 export default function Steering() {
+  useColorScheme();
   const { controller, state } = useMobile();
   const manager = controller.steering,
     queue = state.steering,
@@ -86,11 +88,11 @@ export default function Steering() {
   };
   const busy = queue.loading || queue.pending;
   return (
-    <ScrollView
+    <Page
       contentInsetAdjustmentBehavior="automatic"
       automaticallyAdjustKeyboardInsets
       keyboardShouldPersistTaps="handled"
-      contentContainerStyle={{ padding: 24, gap: 18, paddingBottom: 48 }}
+      contentContainerStyle={{ padding: 20, gap: 16, paddingBottom: 40 }}
       style={{ backgroundColor: colors.background }}
     >
       <Text
@@ -252,6 +254,6 @@ export default function Steering() {
         quiet
         onPress={() => router.dismissTo("/task")}
       />
-    </ScrollView>
+    </Page>
   );
 }

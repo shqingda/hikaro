@@ -7,6 +7,9 @@ import { Action, Note } from "./ui";
 
 export function NotificationSettings() {
   const { controller, state } = useMobile();
+  const projectId =
+    Constants.expoConfig?.extra?.eas?.projectId ??
+    Constants.easConfig?.projectId;
   const identity = controller.pushIdentity;
   const generation = useRef(0);
   const [busy, setBusy] = useState(false);
@@ -26,9 +29,6 @@ export function NotificationSettings() {
     try {
       let token: string | null = null;
       if (enable) {
-        const projectId =
-          Constants.expoConfig?.extra?.eas?.projectId ??
-          Constants.easConfig?.projectId;
         if (typeof projectId !== "string" || !projectId)
           throw Error("当前安装包未配置推送项目，暂时无法启用通知。");
         if (!requireOptionalNativeModule("ExpoPushTokenManager"))
@@ -63,10 +63,15 @@ export function NotificationSettings() {
   }
   return (
     <View style={{ gap: 8 }}>
+      <Note>
+        {projectId
+          ? "推送项目已配置，实际收件尚待验收。"
+          : "推送项目暂未配置。"}
+      </Note>
       <Action
         title="开启或更新任务通知"
         quiet
-        disabled={state.phase !== "connected" || busy}
+        disabled={state.phase !== "connected" || busy || !projectId}
         onPress={() => {
           void configure(true);
         }}

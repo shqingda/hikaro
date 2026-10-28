@@ -40,7 +40,7 @@ export default function Search() {
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
       style={{ backgroundColor: colors.background }}
-      contentContainerStyle={{ padding: 24, gap: 18, paddingBottom: 48 }}
+      contentContainerStyle={{ padding: 20, gap: 18, paddingBottom: 40 }}
       data={page?.items ?? []}
       keyExtractor={(item) => String(item.seq)}
       ListHeaderComponent={
