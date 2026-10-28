@@ -22,6 +22,8 @@ pnpm build
 pnpm start --demo
 ```
 
+To connect your phone from the current local build, enter `/pair` inside the TUI. Setup, QR code, and device confirmation stay in the same terminal; see [phone pairing](docs/remote.md#pair-in-the-tui-normal-use).
+
 Interactive `--demo` starts a fresh offline session unless an offline session is explicitly selected; it cannot restore a live-model session implicitly. The demo model never calls tools. An explicit `!COMMAND` still runs a real sandboxed command under the normal permission policy.
 
 For a real model, start the TUI and enter `/login`. For an xAI subscription, choose **xAI → Sign in with SuperGrok or X Premium**. Existing subscribers can use their saved login directly; no API key is required:

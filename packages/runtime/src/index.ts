@@ -125,6 +125,19 @@ export class Runtime {
   private closing?: Promise<void>;
   private instructions = "";
   readonly resources: Resources = { skills: [], instructions: [] };
+  canCloseForMobile() {
+    return (
+      !this.pluginExecution?.busy &&
+      this.pendingSubagents === 0 &&
+      this.initializingAgents.size === 0 &&
+      [...this.terminals.records.values()].every(
+        (t) => t.exitCode !== undefined || t.exitSignal !== undefined,
+      ) &&
+      [...this.agents.values()].every(
+        (agent) => !agent.busy && agent.pendingPrompts().length === 0,
+      )
+    );
+  }
   private resourcesIdle() {
     this.lifecycle.signal.throwIfAborted();
     if (

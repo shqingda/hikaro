@@ -94,9 +94,14 @@ export class ClientFiles implements IntentStore {
   private draftName(session: string) {
     return createHash("sha256").update(session).digest("hex") + ".draft.json";
   }
-  async draft(session: string) {
+  async draft(session: string, initial?: () => Promise<string>) {
     const value = await this.read(this.draftName(session));
-    if (value === null) return "";
+    if (value === null) {
+      if (!initial) return "";
+      const text = await initial();
+      await this.saveDraft(session, text);
+      return text;
+    }
     if (typeof value !== "string" || value.length > 100000)
       throw Error("Invalid local draft");
     return value;

@@ -13,6 +13,7 @@ import {
   type MarkdownTheme,
 } from "./primitives.ts";
 import { createMarkdown } from "./markdown.cjs";
+import { PairingScreen } from "./pairing-screen.ts";
 import { ModelPanel } from "./model-panel.ts";
 import { ActivityEditor } from "./activity-editor.ts";
 import { ApprovalPanel } from "./approval-panel.ts";
@@ -572,6 +573,10 @@ export class HikaroView {
         options.onExit();
         return { consume: true };
       }
+      if (this.pairingScreen) {
+        this.pairingScreen.handleInput(data);
+        return { consume: true };
+      }
       if (this.approval) {
         this.approval.panel.handleInput(data);
         return { consume: true };
@@ -612,6 +617,28 @@ export class HikaroView {
     });
   }
 
+  private pairingScreen?: PairingScreen;
+  showPairing(code: string, qr: string) {
+    this.closePairing();
+    const screen = new PairingScreen(
+      code,
+      qr,
+      () => this.tui.terminal.rows,
+      () => this.closePairing(),
+      () => this.tui.requestRender(),
+    );
+    this.pairingScreen = screen;
+    this.tui.setLayoutRoot(screen);
+    this.tui.setFocus(screen);
+    this.tui.requestRender(true);
+  }
+  closePairing() {
+    if (!this.pairingScreen) return;
+    this.pairingScreen = undefined;
+    this.tui.setLayoutRoot(this.layout);
+    this.tui.setFocus(this.editor);
+    this.tui.requestRender(true);
+  }
   setError(text: string) {
     this.inputError.setText(
       text ? `\x1b[31m${sanitize(text.slice(0, 2000))}\x1b[39m` : "",
@@ -1164,6 +1191,7 @@ export class HikaroView {
     this.footer.setText(footer);
   }
   approve(request: PermissionRequest, signal: AbortSignal): Promise<boolean> {
+    this.closePairing();
     if (this.panelYieldsToApproval) this.modelController?.abort();
     if (
       this.approval ||
@@ -1221,6 +1249,7 @@ export class HikaroView {
     if (!this.disposed) this.tui.requestRender();
   }
   dispose() {
+    this.closePairing();
     this.preparingPrompt?.abort();
     this.modelController?.abort();
     this.removeScheme?.();

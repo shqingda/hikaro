@@ -177,7 +177,13 @@ export async function serveRemote(options: {
   approveDevice?: (id: string) => Promise<boolean>;
 }) {
   const home = options.home ?? join(homedir(), ".hikaro");
-  let { config, secret } = await load(home);
+  let { config, secret } = await load(home).catch((error) => {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT")
+      throw Error(
+        "尚未配置手机连接。请正常启动 hikaro，在 TUI 输入 /pair 完成配置与扫码配对。",
+      );
+    throw error;
+  });
   let stopped = false,
     socket: WebSocket | undefined,
     retry = 0,

@@ -47,3 +47,7 @@ HIKARO_APPLE_TEAM_ID=YOURTEAMID pnpm --filter @hikaro/mobile ios:release
 与 `pnpm mobile:ios` 的开发构建不同，此入口用于真机自用 Release 安装，不上传 TestFlight 或 App Store，也不生成已验证的商店分发包。没有团队变量时提前停止，不自动选择另一个团队。普通开发与双平台导出继续使用原有配置。
 
 安装后最低检查：打开应用、配对自己的电脑、发送并收到回复、后台再返回、断网重连不重发、未发送草稿退出后恢复。搜索/图片阅读及系统输入法应在同一设备验证。当前这些真机结果尚未记录，不能由构建脚本存在推断已完成。
+
+## 从电脑配对（单终端）
+
+本地 TUI 已构建后运行 `pnpm start`，在界面输入 `/pair`。首次按提示填写已部署 relay 地址和隐藏输入的 bootstrap 密钥，之后显示二维码及配对码；Tab 切换、Esc 返回。电脑端确认扫码设备后，用 `/share 设备ID control` 授权当前任务。日常不需要手工启动三个终端。保持该窗口开启；详见[连接流程](remote.md#pair-in-the-tui-normal-use)。

@@ -66,23 +66,11 @@ M0 不注册携带凭据的 `hikaro://pair#…` 系统深链接；配对只从 A
 
 1. 在仓库根目录执行 `pnpm dev:sim`，打开 [Simulator Preview](http://localhost:3200/)。当前电脑已安装开发客户端，日常修改 TS／TSX 后直接在这里检查。首次安装或原生配置变化，先执行上面的原生构建步骤。
 2. 只看界面时，可以检查连接页、无效配对码提示、设置和返回。此时没有任务是正常的；Metro 只提供手机界面，不是任务 host 或 relay。
-3. 测试真实连接前，按 [relay 部署指南](remote.md#deploy-your-relay) 配置有效的 `wss://` 地址和 bootstrap secret。没有 relay 时不能完成端到端配对；不要改成明文连接或跳过证书检查。以下命令均在同一仓库目录运行，使用默认 `~/.hikaro`：
-
-   ```sh
-   pnpm build
-   # 终端 A：启动任务主机（--demo 不需要模型 API key）
-   pnpm start --host --demo
-   # 终端 B：打开同一主机的 TUI，输入一句话产生任务记录
-   pnpm start --attach
-   # 终端 C：生成配对码；将地址和 secret 替换为自己 relay 的配置
-   HIKARO_RELAY_BOOTSTRAP='你的-bootstrap-secret' pnpm start --pair --relay wss://你的-relay.workers.dev
-   pnpm start --serve
-   ```
-
-4. 模拟器里使用配对码输入框（提示为 `hikaro://pair#…`），输入终端 C 生成的完整配对 URI，再点“核对配对信息”，核对主机并“保存并连接”。模拟器不用于真实相机扫码验收。无 DeviceHub 的原生粘贴步骤见 [原有 iPhone 验收记录](mobile-m0-acceptance.md#复测操作)；不要把配对 URI 放进浏览器地址栏。
-5. 在终端 C 按提示确认设备。在终端 B 当前任务内执行 `/share <手机显示的设备ID> view`，然后在手机刷新并选择任务。没有该授权时，空列表是预期行为。
-6. 在 TUI 继续对话，检查手机显示同一任务的最新输出；点预览下方 Home，再打开 Hikaro，检查恢复。停止终端 C 的桥接后手机应显示离线；重新执行 `pnpm start --serve` 后应恢复。电脑任务不会因手机离开而停止。
-7. 在 TUI 执行 `/share <设备ID> off`，手机应失去该任务访问权。手机发送、审批和停止需要另行授予 `control`，流程见下文。
+3. 测试真实连接前，按 [relay 部署指南](remote.md#deploy-your-relay) 准备有效的 `wss://` 地址和 bootstrap secret。正常启动 `pnpm start`（离线模型可用 `pnpm start --demo`），在 TUI 输入 `/pair`。首次配置通过界面询问地址与密钥，密钥隐藏输入；不需要另开 host/serve/attach 终端。
+4. 全屏面板显示二维码，Tab 切换完整配对码，Esc 返回任务。模拟器使用 App 内配对码输入框；手机可直接扫码。核对主机后保存连接，再在电脑同一 TUI 中明确确认设备。二维码有效五分钟，配对 URI 含设备凭据，不放进浏览器地址栏或日志。
+5. 在 TUI 当前任务执行 `/share <手机显示的设备ID> view`，手机刷新并选择任务。没有授权时空列表是预期行为；发送、审批和停止需授予 `control`。
+6. 保持该 TUI 窗口开启，检查手机接收最新输出与前后台恢复。日常重启仍只需 `pnpm start`，程序复用配置连接 relay；退出会关闭本窗口的桥接及本窗口启动的任务主机。需要主机独立常驻时才使用[高级分进程入口](remote.md#advanced-separate-host-and-relay-processes)。
+7. 在 TUI 执行 `/share <设备ID> off`，手机应失去该任务访问权。
 
 ## 审批与回执
 

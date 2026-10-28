@@ -17,7 +17,16 @@ pnpm --filter @hikaro/relay deploy
 
 Use a randomly generated secret for `BOOTSTRAP_TOKEN`, distinct from Cloudflare deployment credentials. Keep it local. The Worker configuration declares a SQLite Durable Object per host and a queue for generic push notifications.
 
-## Pair
+## Pair in the TUI (normal use)
+
+Run `hikaro` / `hk` (or `pnpm start` from this checkout), then enter `/pair`.
+The first setup asks for your deployed `wss://` relay address and a masked bootstrap secret. It does not deploy a relay. Cancel returns to the current task. Once enrollment succeeds, the same terminal starts or reuses the shared host and opens the relay connection; no extra terminals are required.
+
+The fullscreen pairing screen shows the QR code. Tab switches to the complete pairing URI; Esc returns to the task. Enlarge the terminal if the QR cannot fit without clipping. Scan within five minutes and confirm the device in the TUI; confirmation defaults to refusal. Existing sessions still require `/share DEVICE_ID view|control|off` — pairing does not silently grant access.
+
+Subsequent normal starts reuse the saved connection configuration. Keep this terminal open while using the phone. Quitting closes this view's bridge and a host started by this view; it does not stop an externally managed host. First-time switching requires idle tasks/background operations, preserves the current session, and carries local drafts/preferences into the attached view. The original CLI flags below remain available for deliberate headless/background operation.
+
+## Advanced: separate host and relay processes
 
 ```sh
 export HIKARO_RELAY_BOOTSTRAP='the-bootstrap-secret'

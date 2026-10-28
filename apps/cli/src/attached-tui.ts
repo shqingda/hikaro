@@ -27,6 +27,11 @@ export async function attachTui(options: {
   clientId?: string;
   session?: string;
   newSession?: boolean;
+  mobile?: boolean;
+  pairOnStart?: boolean;
+  pairingCode?: string;
+  initialDraft?: string;
+  onClose?: () => Promise<void> | undefined;
 }) {
   if (!process.stdin.isTTY || !process.stdout.isTTY)
     throw Error("--attach requires a terminal");
@@ -46,6 +51,8 @@ export async function attachTui(options: {
   );
   const { createTerminal, HikaroView } = ui;
   const { AttachedWorkflows } = workflowsModule;
+  const { MobilePairing } = await import("./mobile-pairing.ts");
+  const mobile = new MobilePairing(options);
   const files = await ClientFiles.open(
     transport.endpoint.home,
     transport.endpoint.key,
@@ -62,11 +69,18 @@ export async function attachTui(options: {
       return () => clearTimeout(timer);
     },
   });
-  const { parseTuiPreferences } =
+  const { parseTuiPreferences, loadTuiPreferences } =
     await import("../../../packages/tui/src/preferences.ts");
   const preferences = await files
     .preferences()
-    .then((value) => parseTuiPreferences(value ?? {}))
+    .then(async (value) =>
+      parseTuiPreferences(
+        value ??
+          (options.mobile
+            ? await loadTuiPreferences(transport.endpoint.home)
+            : {}),
+      ),
+    )
     .catch(async (error) => {
       client.close();
       await transport.close();
@@ -220,7 +234,17 @@ export async function attachTui(options: {
       let draft: string | undefined;
       if (changed) {
         await drafts.flush();
-        draft = await files.draft(next);
+        draft = await files.draft(
+          next,
+          options.mobile
+            ? async () => {
+                const saved = (await client.request("draft.read", {
+                  sessionId: next,
+                })) as { text: string };
+                return saved.text;
+              }
+            : undefined,
+        );
       }
       if (
         epoch !== loadEpoch ||
@@ -345,7 +369,12 @@ export async function attachTui(options: {
     void drafts
       .flush()
       .catch((e) => console.error(String(e)))
-      .finally(() => transport.close());
+      .finally(async () => {
+        await mobile.close();
+        await transport.close();
+        await options.onClose?.();
+      })
+      .catch((e) => console.error(String(e)));
   };
   let submittedDraft = "";
   view = new HikaroView(tui, {
@@ -354,6 +383,7 @@ export async function attachTui(options: {
     onExit: leave,
     detachOnCtrlD: true,
     commands: [
+      { name: "pair", description: "连接手机 · 显示二维码与配对码" },
       {
         name: "storage",
         description: "Preview host session storage and clean snapshots",
@@ -464,6 +494,9 @@ export async function attachTui(options: {
       const [command, ...parts] = text.trim().split(/\s+/);
       const rest = parts.join(" ");
       switch (command) {
+        case "/pair":
+          await mobile.pair(view);
+          return;
         case "/search": {
           if (!client.supports("messages.search"))
             throw Error("Upgrade the host to search message history.");
@@ -497,7 +530,7 @@ export async function attachTui(options: {
           leave();
           return;
         case "/help":
-          return "Shared host: /recovery, /export, /plugins, ![--unrestricted] COMMAND (host approvals apply), /search [text], /changes, /tasks, /tasks history [RUN_ID], /plan [TASK], /plan cancel, /plan history, /plan progress · host workflows. /sessions [query], /resume ID, /new, /rename title, /compact, /fork, /steer text, /status, /access, /share DEVICE view|control|off, /model [PROVIDER/MODEL], /login, /settings, /permissions, /context [default], /thinking [default], /speed [default], /resources [query], /storage, /attach PATH. Ctrl+C stops the selected task; Ctrl+D detaches. Local files use the existing @ completion.";
+          return "/pair 手机配对 · Shared host: /recovery, /export, /plugins, ![--unrestricted] COMMAND (host approvals apply), /search [text], /changes, /tasks, /tasks history [RUN_ID], /plan [TASK], /plan cancel, /plan history, /plan progress · host workflows. /sessions [query], /resume ID, /new, /rename title, /compact, /fork, /steer text, /status, /access, /share DEVICE view|control|off, /model [PROVIDER/MODEL], /login, /settings, /permissions, /context [default], /thinking [default], /speed [default], /resources [query], /storage, /attach PATH. Ctrl+C stops the selected task; Ctrl+D detaches. Local files use the existing @ completion.";
         case "/storage": {
           const { storageCommand } =
             await import("../../../packages/tui/src/storage.ts");
@@ -655,8 +688,14 @@ export async function attachTui(options: {
     )
       await client.request("session.create");
     await refresh();
+    if (options.initialDraft !== undefined && client.state.session) {
+      await files.saveDraft(client.state.session.id, options.initialDraft);
+      view.editor.setText(options.initialDraft);
+    }
     view.notice(
-      "Attached to shared host. Ctrl+D detaches; the task continues.",
+      options.mobile
+        ? "手机接续已就绪 · /pair 显示配对码。保持此窗口开启；退出将关闭本次启动的连接与任务主机。"
+        : "Attached to shared host. Ctrl+D detaches; the task continues.",
     );
     tui.setLayoutRoot(view.layout);
     tui.setFocus(view.editor);
@@ -667,6 +706,10 @@ export async function attachTui(options: {
     view.startTheme();
     process.once("SIGTERM", leave);
     process.once("SIGHUP", leave);
+    if (options.mobile) await mobile.start(view).catch(fail);
+    if (options.pairingCode)
+      await mobile.show(view, options.pairingCode).catch(fail);
+    else if (options.pairOnStart) void mobile.pair(view).catch(fail);
   } catch (e) {
     leave();
     throw e;

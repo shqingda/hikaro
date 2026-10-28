@@ -49,6 +49,7 @@ export class SharedHostClient {
       await client.close();
       throw Error(
         `Shared host unavailable; start --host for this --cwd and --home. ${String(e)}`,
+        { cause: e },
       );
     }
   }
