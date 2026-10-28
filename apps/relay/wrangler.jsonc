@@ -3,10 +3,17 @@
   "name": "hikaro-relay",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
+  "vars": { "PUBLIC_REGISTRATION": "true" },
   "durable_objects": {
-    "bindings": [{ "name": "HOSTS", "class_name": "HostRelay" }],
+    "bindings": [
+      { "name": "HOSTS", "class_name": "HostRelay" },
+      { "name": "PAIRINGS", "class_name": "PairingRegistry" },
+    ],
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["HostRelay"] }],
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["HostRelay"] },
+    { "tag": "v2", "new_sqlite_classes": ["PairingRegistry"] },
+  ],
   "queues": {
     "producers": [
       { "binding": "NOTIFICATIONS", "queue": "hikaro-notifications" },

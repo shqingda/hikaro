@@ -44,3 +44,20 @@ it("never displays a silently truncated pairing credential", () => {
   expect(output).toContain("完整显示配对码");
   expect(output).not.toContain("hikaro://pair#");
 });
+
+it("always shows the six-digit code even when the QR cannot fit", () => {
+  const uri =
+    "hikaro://connect#" +
+    encodeURIComponent(JSON.stringify({ code: "012345" }));
+  const screen = new PairingScreen(
+    uri,
+    "█".repeat(100),
+    () => 8,
+    () => {},
+    () => {},
+  );
+  expect(screen.render(40).join("\n")).toContain("配对码 012345");
+  expect(screen.render(40).join("\n")).toContain("请放大终端");
+  screen.handleInput("\t");
+  expect(screen.render(80).join("\n")).toContain("012345");
+});

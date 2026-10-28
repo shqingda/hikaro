@@ -1,5 +1,7 @@
 interface Env {
   HOSTS: DurableObjectNamespace;
+  PAIRINGS: DurableObjectNamespace;
+  PUBLIC_REGISTRATION?: string;
   BOOTSTRAP_TOKEN: string;
   NOTIFICATIONS: Queue<Notice>;
 }
@@ -13,6 +15,36 @@ type Attachment = {
 const MAX_FRAME = 1_500_000;
 const idValid = (v: unknown): v is string =>
   typeof v === "string" && /^[A-Za-z0-9_-]{43}$/.test(v);
+const keyValid = (v: unknown): v is string =>
+  typeof v === "string" &&
+  /^[A-Za-z0-9+/]{43}=$/.test(v) &&
+  btoa(atob(v)) === v;
+const lanValid = (value: unknown): value is string[] => {
+  if (!Array.isArray(value) || value.length > 4) return false;
+  return value.every((item) => {
+    if (typeof item !== "string") return false;
+    try {
+      const url = new URL(item);
+      const parts = url.hostname.split(".").map(Number);
+      return (
+        url.protocol === "ws:" &&
+        !!url.port &&
+        !url.username &&
+        !url.password &&
+        !url.search &&
+        !url.hash &&
+        (url.pathname === "/" || !url.pathname) &&
+        parts.length === 4 &&
+        parts.every((n) => Number.isInteger(n) && n >= 0 && n <= 255) &&
+        (parts[0] === 10 ||
+          (parts[0] === 192 && parts[1] === 168) ||
+          (parts[0] === 172 && parts[1]! >= 16 && parts[1]! <= 31))
+      );
+    } catch {
+      return false;
+    }
+  });
+};
 const record = (v: unknown): v is Record<string, unknown> =>
   v !== null && typeof v === "object" && !Array.isArray(v);
 const noticeValid = (v: unknown): v is Notice =>
@@ -76,10 +108,37 @@ async function body(request: Request): Promise<Record<string, unknown>> {
 export default {
   async fetch(request: Request, env: Env) {
     const url = new URL(request.url);
+    if (
+      !url.search &&
+      /^\/pairings(?:\/\d{6}(?:\/(?:claim|request|complete|result))?)?$/.test(
+        url.pathname,
+      )
+    )
+      return env.PAIRINGS.get(env.PAIRINGS.idFromName("registry")).fetch(
+        request,
+      );
     const match = url.pathname.match(
-      /^\/hosts\/([A-Za-z0-9_-]{43})\/(register|enroll|activate|revoke|push|notify-enqueue|host|(?:device|device-status)\/[A-Za-z0-9_-]{43})$/,
+      /^\/hosts\/([A-Za-z0-9_-]{43})\/(register|host-auth|enroll|activate|revoke|push|notify-enqueue|host|(?:device|device-status)\/[A-Za-z0-9_-]{43})$/,
     );
     if (!match || url.search) return json({ error: "Not found" }, 404);
+    if (
+      env.PUBLIC_REGISTRATION === "true" &&
+      match[2] === "register" &&
+      request.method === "POST"
+    ) {
+      const allowed = await env.PAIRINGS.get(
+        env.PAIRINGS.idFromName("registry"),
+      ).fetch(
+        new Request("https://internal/internal/register-limit", {
+          method: "POST",
+          headers: {
+            "CF-Connecting-IP":
+              request.headers.get("CF-Connecting-IP") ?? "unknown",
+          },
+        }),
+      );
+      if (!allowed.ok) return allowed;
+    }
     return env.HOSTS.get(env.HOSTS.idFromName(match[1]!)).fetch(request);
   },
   async queue(batch: MessageBatch<Notice>, env: Env) {
@@ -145,8 +204,9 @@ export class HostRelay {
       (await hash(secret)) === stored;
     if (operation === "register" && request.method === "POST") {
       if (
-        !this.env.BOOTSTRAP_TOKEN ||
-        (await hash(secret)) !== (await hash(this.env.BOOTSTRAP_TOKEN))
+        this.env.PUBLIC_REGISTRATION !== "true" &&
+        (!this.env.BOOTSTRAP_TOKEN ||
+          (await hash(secret)) !== (await hash(this.env.BOOTSTRAP_TOKEN)))
       )
         return json({ error: "Unauthorized" }, 401);
       const value = await body(request);
@@ -161,6 +221,8 @@ export class HostRelay {
         return json({ ok: true });
       });
     }
+    if (operation === "host-auth" && request.method === "GET")
+      return isHost ? json({ ok: true }) : json({ error: "Unauthorized" }, 401);
     if (operation === "notify" && request.method === "POST") {
       if (
         !this.env.BOOTSTRAP_TOKEN ||
@@ -508,5 +570,199 @@ export class HostRelay {
       code === 1005 || code === 1006 ? 1000 : code,
       reason.slice(0, 100),
     );
+  }
+}
+
+type Claim = { deviceId: string; publicKey: string; token: string };
+type Enrollment = {
+  hostId: string;
+  hostKey: string;
+  expires: number;
+  lan?: string[];
+  claim?: Claim;
+  approved?: boolean;
+};
+/** Short codes discover public keys; encryption identities stay on each device. */
+export class PairingRegistry {
+  constructor(
+    private state: DurableObjectState,
+    private env: Env,
+  ) {}
+  private async authorized(request: Request, hostId: string) {
+    return (
+      await this.env.HOSTS.get(this.env.HOSTS.idFromName(hostId)).fetch(
+        new Request(`https://internal/hosts/${hostId}/host-auth`, {
+          headers: { Authorization: `Bearer ${token(request)}` },
+        }),
+      )
+    ).ok;
+  }
+  private async limit(request: Request, category = "pair", maximum = 30) {
+    const key =
+      "rate:" +
+      category +
+      ":" +
+      (await hash(request.headers.get("CF-Connecting-IP") ?? "unknown"));
+    const allowed = await this.state.storage.transaction(async (tx) => {
+      const now = Date.now();
+      let bucket = await tx.get<{ count: number; expires: number }>(key);
+      if (!bucket || bucket.expires <= now)
+        bucket = { count: 0, expires: now + 60000 };
+      if (bucket.count >= maximum) return false;
+      bucket.count++;
+      await tx.put(key, bucket);
+      return true;
+    });
+    await this.scheduleCleanup();
+    return allowed;
+  }
+  private async scheduleCleanup() {
+    if ((await this.state.storage.getAlarm()) === null)
+      await this.state.storage.setAlarm(Date.now() + 60000);
+  }
+  async alarm() {
+    const now = Date.now();
+    const entries = await this.state.storage.list<{ expires: number }>();
+    for (const [key, value] of entries)
+      if (value.expires <= now) await this.state.storage.delete(key);
+    if ((await this.state.storage.list({ limit: 1 })).size)
+      await this.state.storage.setAlarm(now + 60000);
+  }
+  async fetch(request: Request): Promise<Response> {
+    try {
+      return await this.handle(request);
+    } catch {
+      return json({ error: "Invalid request" }, 400);
+    }
+  }
+  private async handle(request: Request): Promise<Response> {
+    const path = new URL(request.url).pathname;
+    if (path === "/internal/register-limit" && request.method === "POST")
+      return (await this.limit(request, "register", 10))
+        ? json({ ok: true })
+        : json({ error: "Too many registrations; retry in a minute" }, 429);
+    if (path === "/pairings" && request.method === "POST") {
+      const value = await body(request);
+      if (
+        !idValid(value.hostId) ||
+        !keyValid(value.hostKey) ||
+        (value.lan !== undefined && !lanValid(value.lan)) ||
+        typeof value.expires !== "number" ||
+        !Number.isSafeInteger(value.expires) ||
+        value.expires <= Date.now() ||
+        value.expires > Date.now() + 300000
+      )
+        return json({ error: "Invalid enrollment" }, 400);
+      if (!(await this.authorized(request, value.hostId)))
+        return json({ error: "Unauthorized" }, 401);
+      const entry: Enrollment = {
+        hostId: value.hostId,
+        hostKey: value.hostKey,
+        expires: value.expires,
+        ...(value.lan === undefined ? {} : { lan: value.lan as string[] }),
+      };
+      const response = await this.state.storage.transaction(async (tx) => {
+        const old = await tx.get<{ code: string }>("host:" + entry.hostId);
+        // Re-running /pair replaces the previous invitation from this host.
+        if (old) await tx.delete("code:" + old.code);
+        for (let attempt = 0; attempt < 10; attempt++) {
+          const random = crypto.getRandomValues(new Uint32Array(1))[0]!;
+          if (random >= 4294000000) continue;
+          const code = String(random % 1000000).padStart(6, "0");
+          if (old?.code === code || (await tx.get("code:" + code))) continue;
+          await tx.put("code:" + code, entry);
+          await tx.put("host:" + entry.hostId, {
+            code,
+            expires: entry.expires,
+          });
+          return json({ code, expires: entry.expires });
+        }
+        return json({ error: "Pairing capacity reached" }, 503);
+      });
+      await this.scheduleCleanup();
+      return response;
+    }
+    const match = path.match(
+      /^\/pairings\/(\d{6})(?:\/(claim|request|complete|result))?$/,
+    );
+    if (!match) return json({ error: "Not found" }, 404);
+    const operation = match[2],
+      key = "code:" + match[1];
+    if (
+      (!operation && request.method === "GET") ||
+      (operation === "claim" && request.method === "POST")
+    )
+      if (!(await this.limit(request)))
+        return json({ error: "Too many attempts; retry in a minute" }, 429);
+    const entry = await this.state.storage.get<Enrollment>(key);
+    if (!entry || entry.expires <= Date.now())
+      return json({ error: "Pairing code expired" }, 410);
+    if (!operation && request.method === "GET")
+      return json({
+        hostId: entry.hostId,
+        hostKey: entry.hostKey,
+        expires: entry.expires,
+        ...(entry.lan === undefined ? {} : { lan: entry.lan }),
+      });
+    if (operation === "claim" && request.method === "POST") {
+      const value = await body(request);
+      if (
+        !idValid(value.deviceId) ||
+        !keyValid(value.publicKey) ||
+        !idValid(value.token)
+      )
+        return json({ error: "Invalid claim" }, 400);
+      const claim: Claim = {
+        deviceId: value.deviceId,
+        publicKey: value.publicKey,
+        token: value.token,
+      };
+      return this.state.storage.transaction(async (tx) => {
+        const current = await tx.get<Enrollment>(key);
+        if (!current || current.expires <= Date.now())
+          return json({ error: "Pairing code expired" }, 410);
+        if (current.claim) {
+          const same = Object.entries(claim).every(
+            ([name, v]) => current.claim![name as keyof Claim] === v,
+          );
+          return same
+            ? json({ ok: true })
+            : json({ error: "Pairing code already claimed" }, 409);
+        }
+        await tx.put(key, { ...current, claim });
+        return json({ ok: true });
+      });
+    }
+    if (operation === "result" && request.method === "GET") {
+      if (!entry.claim || token(request) !== entry.claim.token)
+        return json({ error: "Unauthorized" }, 401);
+      return json({ approved: entry.approved ?? null });
+    }
+    if (
+      (operation === "request" && request.method === "GET") ||
+      (operation === "complete" && request.method === "POST")
+    ) {
+      if (!(await this.authorized(request, entry.hostId)))
+        return json({ error: "Unauthorized" }, 401);
+      if (operation === "request") return json(entry.claim ?? null);
+      const value = await body(request);
+      if (!idValid(value.deviceId) || typeof value.approved !== "boolean")
+        return json({ error: "Invalid confirmation" }, 400);
+      return this.state.storage.transaction(async (tx) => {
+        const current = await tx.get<Enrollment>(key);
+        if (!current || current.expires <= Date.now())
+          return json({ error: "Pairing code expired" }, 410);
+        if (
+          !current.claim ||
+          current.claim.deviceId !== value.deviceId ||
+          (current.approved !== undefined &&
+            current.approved !== value.approved)
+        )
+          return json({ error: "Pairing request changed" }, 409);
+        await tx.put(key, { ...current, approved: value.approved });
+        return json({ ok: true });
+      });
+    }
+    return json({ error: "Not found" }, 404);
   }
 }

@@ -19,7 +19,10 @@ function fixture() {
   };
   const bridge = { close: vi.fn() };
   const deps = {
+    lanOrigins: () => [],
     readConfig: vi.fn().mockRejectedValue(missing()),
+    request: vi.fn().mockResolvedValue(null),
+    accept: vi.fn(),
     pair: vi.fn().mockResolvedValue("hikaro://pair#fixture"),
     serve: vi.fn(async (_options: any) => bridge),
     qr: vi.fn().mockResolvedValue("QR"),
@@ -31,14 +34,13 @@ function fixture() {
   const mobile = new MobilePairing({ cwd: "/workspace", home: "/home" }, deps);
   return { mobile, view, panel, deps, bridge, close };
 }
-it("first pairing prompts privately, starts the bridge and displays code without auto-approving", async () => {
+it("first pairing uses default service without prompts and does not auto-approve", async () => {
   const f = fixture();
   await f.mobile.pair(f.view as any);
-  expect(f.panel.prompt.mock.calls[1]?.[1]).toBe(true);
+  expect(f.panel.prompt).not.toHaveBeenCalled();
   expect(f.deps.pair).toHaveBeenCalledWith({
     home: "/home",
-    relay: "wss://relay.example",
-    bootstrap: "secret",
+    lan: [],
   });
   expect(f.view.showPairing).toHaveBeenCalledWith(
     "hikaro://pair#fixture",
@@ -58,15 +60,10 @@ it("existing configuration skips setup and reuses one bridge for repeated pairin
   await f.mobile.pair(f.view as any);
   expect(f.panel.prompt).not.toHaveBeenCalled();
   expect(f.deps.serve).toHaveBeenCalledOnce();
-  expect(f.deps.pair).toHaveBeenCalledWith({ home: "/home" });
+  expect(f.deps.pair).toHaveBeenCalledWith({ home: "/home", lan: [] });
 });
-it("cancelled setup creates no pairing and corrupt configuration is not overwritten", async () => {
+it("corrupt configuration is not overwritten", async () => {
   const f = fixture();
-  f.panel.prompt
-    .mockReset()
-    .mockRejectedValueOnce(new DOMException("Cancelled", "AbortError"));
-  await f.mobile.pair(f.view as any);
-  expect(f.deps.pair).not.toHaveBeenCalled();
   f.deps.readConfig.mockRejectedValue(Error("invalid configuration"));
   await expect(f.mobile.pair(f.view as any)).rejects.toThrow(
     "invalid configuration",
@@ -84,4 +81,64 @@ it("missing configuration on startup stays local and device confirmation default
   expect(await f.deps.serve.mock.calls[0]![0].approveDevice("device")).toBe(
     false,
   );
+});
+
+it("waits for explicit fingerprint approval before accepting a short-code claim", async () => {
+  const { createIdentity, randomToken } =
+    await import("../packages/crypto/src/index.ts");
+  const f = fixture();
+  const hostKey = createIdentity().publicKey;
+  const claim = {
+    deviceId: randomToken(),
+    publicKey: createIdentity().publicKey,
+    token: randomToken(),
+  };
+  f.deps.readConfig.mockResolvedValue({ registered: true } as never);
+  f.deps.request.mockResolvedValue(claim as never);
+  const uri =
+    "hikaro://connect#" +
+    encodeURIComponent(JSON.stringify({ code: "012345", hostKey }));
+  try {
+    await f.mobile.show(f.view as any, uri);
+    await vi.waitFor(() =>
+      expect(f.deps.accept).toHaveBeenCalledWith("/home", claim),
+    );
+    expect(f.panel.choose.mock.calls[0]?.[0]).toBe("确认连接手机");
+    expect(f.deps.request).toHaveBeenCalledWith(
+      "/home",
+      "/pairings/012345/complete",
+      { deviceId: claim.deviceId, approved: true },
+      expect.any(AbortSignal),
+    );
+  } finally {
+    await f.mobile.close();
+  }
+});
+
+it("does not enroll an invitation that expired while its approval panel was open", async () => {
+  const { createIdentity, randomToken } =
+    await import("../packages/crypto/src/index.ts");
+  const f = fixture();
+  f.deps.readConfig.mockResolvedValue({ registered: true } as never);
+  f.deps.request
+    .mockResolvedValueOnce({
+      deviceId: randomToken(),
+      publicKey: createIdentity().publicKey,
+      token: randomToken(),
+    } as never)
+    .mockRejectedValueOnce(Error("expired"));
+  const uri =
+    "hikaro://connect#" +
+    encodeURIComponent(
+      JSON.stringify({ code: "012345", hostKey: createIdentity().publicKey }),
+    );
+  try {
+    await f.mobile.show(f.view as any, uri);
+    await vi.waitFor(() =>
+      expect(f.view.setError).toHaveBeenCalledWith("Error: expired"),
+    );
+    expect(f.deps.accept).not.toHaveBeenCalled();
+  } finally {
+    await f.mobile.close();
+  }
 });

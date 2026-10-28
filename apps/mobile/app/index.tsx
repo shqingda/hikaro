@@ -18,6 +18,7 @@ import {
   confirmConnectionRemoval,
 } from "@/ui";
 import { colors } from "@/theme";
+import { PairingProgress, usePairingFlow } from "@/pairing-flow";
 export default function Connect() {
   useColorScheme();
   const { controller, state } = useMobileSelector((s) => ({
@@ -29,22 +30,16 @@ export default function Connect() {
     session: s.session,
     composer: s.composer,
   }));
+  const pairing = usePairingFlow(controller);
   const [manual, setManual] = useState(false);
-  const [draft, setDraft] = useState(""),
-    [error, setError] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
   useEffect(() => {
     if (state.phase === "connected") router.replace("/tasks");
   }, [state.phase]);
   const pending = ["connecting", "restoring"].includes(state.phase);
-  const review = () => {
-    try {
-      controller.review(draft.trim());
-      setDraft("");
-      setError(null);
-      Keyboard.dismiss();
-    } catch {
-      setError("配对码无效或已过期。请从电脑重新生成，再扫描或粘贴。");
-    }
+  const review = async () => {
+    Keyboard.dismiss();
+    if (await pairing.start(draft.trim())) setDraft("");
   };
   return (
     <Page
@@ -71,17 +66,21 @@ export default function Connect() {
         <Note>任务留在电脑。随时查看进展、审批操作，继续对话。</Note>
       </View>
       {!pending &&
+        !pairing.pending &&
         !state.review &&
         !["offline", "error", "blocked"].includes(state.phase) && (
           <Section title="开始接续">
             <Text style={{ color: colors.label, fontSize: 16, lineHeight: 26 }}>
-              1 在电脑端生成手机配对码
+              1 在电脑 TUI 输入 /pair
             </Text>
             <Text style={{ color: colors.label, fontSize: 16, lineHeight: 26 }}>
-              2 扫码核对，再由电脑确认授权
+              2 扫码或输入六位码，在电脑确认连接
             </Text>
           </Section>
         )}
+      {pairing.pending && (
+        <PairingProgress waiting={pairing.waiting} cancel={pairing.cancel} />
+      )}
       {pending && (
         <View style={{ gap: 12 }}>
           <ActivityIndicator accessibilityLabel="正在连接电脑" />
@@ -114,16 +113,10 @@ export default function Connect() {
             accessibilityRole="header"
             style={{ fontSize: 20, fontWeight: "600", color: colors.label }}
           >
-            核对你的电脑
+            保存这台电脑
           </Text>
-          <Note>{state.review.relay}</Note>
-          <Text selectable style={{ color: colors.label, fontSize: 13 }}>
-            主机 {state.review.hostId}
-          </Text>
-          <Text selectable style={{ color: colors.secondary, fontSize: 12 }}>
-            公钥 {state.review.hostKey}
-          </Text>
-          <Note>确认与你电脑上的配对信息一致，再保存连接。</Note>
+          <Note>{new URL(state.review.relay).hostname}</Note>
+          <Note>保存连接后即可接续任务。任务访问权限仍由电脑单独授予。</Note>
           <Action
             title="保存并连接"
             testID="confirm-pairing"
@@ -140,7 +133,9 @@ export default function Connect() {
           />
         </View>
       )}
-      {(error || state.error) && <Note error>{error ?? state.error}</Note>}
+      {(pairing.error || state.error) && (
+        <Note error>{pairing.error ?? state.error}</Note>
+      )}
       {state.phase !== "connected" &&
         state.session &&
         state.composer.record && (
@@ -151,7 +146,7 @@ export default function Connect() {
             onPress={() => router.push("/task")}
           />
         )}
-      {!pending && !state.review && (
+      {!pending && !pairing.pending && !state.review && (
         <View style={{ gap: 16 }}>
           {["offline", "error", "blocked"].includes(state.phase) && (
             <>
@@ -179,23 +174,24 @@ export default function Connect() {
                 onPress={() => router.push("/scan")}
               />
               <Action
-                title={manual ? "收起手动输入" : "手动输入配对码"}
+                title={manual ? "收起手动输入" : "输入六位配对码"}
                 quiet
                 onPress={() => setManual(!manual)}
               />
               {manual && (
                 <View style={{ gap: 12 }}>
-                  <Note>配对码包含设备凭据，请不要发给他人。</Note>
+                  <Note>输入电脑 /pair 显示的六位数字，五分钟内有效。</Note>
                   <TextInput
                     testID="pairing-code"
                     accessibilityLabel="配对码"
                     value={draft}
                     onChangeText={setDraft}
-                    secureTextEntry
+                    keyboardType="number-pad"
                     maxLength={8192}
+                    secureTextEntry={draft.startsWith("hikaro://pair#")}
                     autoCorrect={false}
                     autoCapitalize="none"
-                    placeholder="hikaro://pair#…"
+                    placeholder="000000"
                     placeholderTextColor={colors.secondary}
                     style={{
                       padding: 16,
@@ -206,11 +202,17 @@ export default function Connect() {
                     }}
                   />
                   <Action
-                    title="核对配对信息"
+                    title="连接电脑"
                     testID="review-pairing"
-                    disabled={!draft.trim()}
+                    disabled={
+                      !/^\d{6}$/.test(draft.trim()) &&
+                      !draft.trim().startsWith("hikaro://pair#") &&
+                      !draft.trim().startsWith("hikaro://connect#")
+                    }
                     quiet
-                    onPress={review}
+                    onPress={() => {
+                      void review();
+                    }}
                   />
                 </View>
               )}

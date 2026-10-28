@@ -6,7 +6,16 @@
     "version": "0.3.0",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
-    "ios": { "bundleIdentifier": "dev.hikaro.mobile", "supportsTablet": true },
+    "ios": {
+      "bundleIdentifier": "dev.hikaro.mobile",
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocalNetworkUsageDescription": "连接同一 Wi-Fi 上的 Hikaro 电脑。",
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        }
+      }
+    },
     "android": {
       "package": "dev.hikaro.mobile",
       "versionCode": 1,
@@ -24,8 +33,16 @@
           "microphonePermission": false
         }
       ],
-      ["expo-sqlite", { "enableFTS": false }]
+      [
+        "expo-sqlite",
+        {
+          "enableFTS": false
+        }
+      ],
+      "./scripts/with-lan.cjs"
     ],
-    "experiments": { "typedRoutes": true }
+    "experiments": {
+      "typedRoutes": true
+    }
   }
 }

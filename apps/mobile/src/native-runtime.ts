@@ -5,9 +5,34 @@ import { MobileController } from "./controller";
 import { nativeStorage } from "./native-storage";
 import {
   validateRelay,
+  validateLan,
   type Pairing,
 } from "../../../packages/remote/src/client";
 export async function probePairing(p: Pairing) {
+  for (const origin of p.lan ?? []) {
+    const controller = new AbortController();
+    const deadline = setTimeout(() => controller.abort(), 1500);
+    try {
+      // LAN never receives the relay bearer token. SecureChannel proves identity after dialing.
+      const response = await fetch(
+        validateLan(origin).replace(/^ws:/, "http:") +
+          `/hosts/${p.hostId}/device-status/${p.deviceId}`,
+        { signal: controller.signal, redirect: "error" },
+      );
+      if (response.ok) {
+        const status = await response.json();
+        if (status?.hostOnline === true && status?.confirmed === true)
+          return "ready" as const;
+      }
+    } catch {
+      /* A changed Wi-Fi address falls through to the relay. */
+    } finally {
+      clearTimeout(deadline);
+    }
+  }
+  return probeRelay(p);
+}
+async function probeRelay(p: Pairing) {
   const controller = new AbortController();
   const deadline = setTimeout(() => controller.abort(), 10000);
   try {

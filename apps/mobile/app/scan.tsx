@@ -5,6 +5,7 @@ import { router } from "expo-router";
 import { useMobile } from "@/provider";
 import { Action, Note } from "@/ui";
 import { colors } from "@/theme";
+import { PairingProgress, usePairingFlow } from "@/pairing-flow";
 export default function Scan() {
   useColorScheme();
   const [permission, request] = useCameraPermissions(),
@@ -13,6 +14,7 @@ export default function Scan() {
   const [requesting, setRequesting] = useState(false);
   const [cameraFailed, setCameraFailed] = useState(false);
   const { controller } = useMobile();
+  const pairing = usePairingFlow(controller);
   async function requestPermission() {
     if (requesting) return;
     setRequesting(true);
@@ -20,11 +22,27 @@ export default function Scan() {
     try {
       await request();
     } catch {
-      setError("无法请求相机权限。请重试，或返回粘贴配对码。");
+      setError("无法请求相机权限。请重试，或返回输入六位码。");
     } finally {
       setRequesting(false);
     }
   }
+  if (pairing.pending)
+    return (
+      <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
+        style={{ backgroundColor: colors.background }}
+        contentContainerStyle={{ padding: 20, gap: 20, paddingBottom: 40 }}
+      >
+        <PairingProgress
+          waiting={pairing.waiting}
+          cancel={() => {
+            pairing.cancel();
+            locked.current = false;
+          }}
+        />
+      </ScrollView>
+    );
   if (!permission?.granted || cameraFailed)
     return (
       <ScrollView
@@ -58,10 +76,10 @@ export default function Scan() {
             }}
           />
         )}
-        <Action title="返回粘贴配对码" quiet onPress={() => router.back()} />
+        <Action title="返回输入六位码" quiet onPress={() => router.back()} />
         {permission?.canAskAgain === false && (
           <Note>
-            相机权限已关闭。你可以使用粘贴方式，或到系统设置中开启相机。
+            相机权限已关闭。你可以输入六位码，或到系统设置中开启相机。
           </Note>
         )}
       </ScrollView>
@@ -73,19 +91,16 @@ export default function Scan() {
         facing="back"
         onMountError={() => {
           locked.current = true;
-          setError("相机未能启动。可以重试，或返回粘贴电脑上的配对码。");
+          setError("相机未能启动。可以重试，或返回输入电脑上的六位码。");
           setCameraFailed(true);
         }}
         barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
         onBarcodeScanned={({ data }) => {
           if (locked.current) return;
           locked.current = true;
-          try {
-            controller.review(data);
-            router.back();
-          } catch {
-            setError("这不是有效的 Hikaro 配对码，或配对码已过期。");
-          }
+          void pairing.start(data).then((success) => {
+            if (success) router.back();
+          });
         }}
       />
       <View
@@ -94,9 +109,9 @@ export default function Scan() {
         <Text style={{ fontSize: 17, color: colors.label }}>
           将电脑上的二维码放入取景框
         </Text>
-        {error && (
+        {(error || pairing.error) && (
           <>
-            <Note error>{error}</Note>
+            <Note error>{error ?? pairing.error}</Note>
             <Action
               title="重新扫描"
               onPress={() => {

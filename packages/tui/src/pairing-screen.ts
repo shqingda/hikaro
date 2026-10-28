@@ -24,11 +24,32 @@ export class PairingScreen implements Component {
     }
   }
   render(width: number) {
-    const header = "手机配对 · 五分钟内扫码 · 配对码含凭据，请勿转发";
+    let shortCode: string | undefined;
+    if (this.code.startsWith("hikaro://connect#")) {
+      try {
+        const value = JSON.parse(decodeURIComponent(this.code.split("#")[1]!));
+        if (/^\d{6}$/.test(value.code)) shortCode = value.code;
+      } catch {
+        /* Legacy credential display remains available. */
+      }
+    }
+    const header = shortCode
+      ? `手机配对 · 配对码 ${shortCode} · 五分钟有效`
+      : "手机配对 · 五分钟内扫码 · 配对码含凭据，请勿转发";
     const help = "Tab 切换二维码/配对码 · Esc 返回任务";
     const qr = this.qr.trimEnd().split("\n");
     if (this.showCode) {
-      const lines = [header, ...new Text(this.code, 0, 1).render(width), help];
+      const lines = [
+        header,
+        ...new Text(
+          shortCode
+            ? `在 Hikaro 手机端输入：${shortCode}\n配对后请核对两端显示的验证指纹。`
+            : this.code,
+          0,
+          1,
+        ).render(width),
+        help,
+      ];
       return lines.length <= this.rows()
         ? lines
         : [

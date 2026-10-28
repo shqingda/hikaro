@@ -1,18 +1,20 @@
 # Remote host and Cloudflare
 
+Default service: `wss://hikaro-relay.shqingda.workers.dev`. Normal use requires only Hikaro: start the TUI and enter `/pair`. Tailscale is deferred; see [ADR-001](decisions/001-mobile-connectivity.md). The user explicitly waived a separate mainland-network stability precheck.
+
 Use `pnpm dev:sim` for the existing iPhone 18 Pro browser preview; it opens localhost:3200 without launching DeviceHub or provisioning another simulator. Pairing and task grants use the relay configured below. The encrypted local relay fixture remains available to headless tests (`pnpm mobile:lab:check`); it does not provision or change simulators.
 
-Cloudflare stores connection/device metadata and hashed bearer tokens. Application commands and events use authenticated NaCl encryption between paired devices. Each connection performs a mutual challenge handshake and checks direction and sequence. Keys are pinned by the pairing code. This protocol does **not** claim forward secrecy.
+Cloudflare stores connection/device metadata and hashed transport bearer tokens; the short-lived pairing exchange also holds the phone-generated bearer token until expiry, so the authenticated host can enroll it. Private identity keys never enter the new pairing exchange. Application commands and events use authenticated NaCl encryption between paired devices. Each connection performs a mutual challenge handshake and checks direction and sequence. Keys are pinned by the pairing code. This protocol does **not** claim forward secrecy.
 
-## Deploy your relay
+## Optional: deploy your own relay
 
-Use your own Cloudflare account. No account or service has been deployed by this implementation task.
+For self-hosting, use your own Cloudflare account. The bundled configuration enables public host registration; set `PUBLIC_REGISTRATION` to `"false"` if your private deployment should require the legacy bootstrap secret.
 
 ```sh
 pnpm --filter @hikaro/relay exec wrangler login
 pnpm --filter @hikaro/relay exec wrangler queues create hikaro-notifications
 pnpm --filter @hikaro/relay exec wrangler secret put BOOTSTRAP_TOKEN
-pnpm --filter @hikaro/relay deploy
+pnpm --filter @hikaro/relay run deploy
 ```
 
 Use a randomly generated secret for `BOOTSTRAP_TOKEN`, distinct from Cloudflare deployment credentials. Keep it local. The Worker configuration declares a SQLite Durable Object per host and a queue for generic push notifications.
@@ -20,11 +22,13 @@ Use a randomly generated secret for `BOOTSTRAP_TOKEN`, distinct from Cloudflare 
 ## Pair in the TUI (normal use)
 
 Run `hikaro` / `hk` (or `pnpm start` from this checkout), then enter `/pair`.
-The first setup asks for your deployed `wss://` relay address and a masked bootstrap secret. It does not deploy a relay. Cancel returns to the current task. Once enrollment succeeds, the same terminal starts or reuses the shared host and opens the relay connection; no extra terminals are required.
+First use registers the host automatically with the default service. No relay address or bootstrap prompt appears. The same terminal starts or reuses the shared host and relay bridge. Existing configured relay addresses remain usable if the service implements the new pairing endpoints.
 
-The fullscreen pairing screen shows the QR code. Tab switches to the complete pairing URI; Esc returns to the task. Enlarge the terminal if the QR cannot fit without clipping. Scan within five minutes and confirm the device in the TUI; confirmation defaults to refusal. Existing sessions still require `/share DEVICE_ID view|control|off` — pairing does not silently grant access.
+The fullscreen screen shows a QR and six-digit code; Tab shows the short code and Esc returns to the task. The code remains visible if the QR cannot fit. Scan or enter the code within five minutes, compare the verification fingerprint on both screens, then explicitly allow the phone in the TUI. The phone generates its own identity; the QR pins the host public key. Cancelled or unused enrollments expire. Existing sessions still require `/share DEVICE_ID view|control|off` — pairing does not silently grant access.
 
 Subsequent normal starts reuse the saved connection configuration. Keep this terminal open while using the phone. Quitting closes this view's bridge and a host started by this view; it does not stop an externally managed host. First-time switching requires idle tasks/background operations, preserves the current session, and carries local drafts/preferences into the attached view. The original CLI flags below remain available for deliberate headless/background operation.
+
+The phone tries advertised private IPv4 LAN addresses first, then falls back to the default secure WebSocket relay. Local frames remain NaCl encrypted and authenticated; LAN does not send the relay bearer token. The desktop listens on port 43187 while the mobile bridge runs. If that port is unavailable, the relay remains usable. Fresh pairing currently needs the default service even on the same Wi-Fi; previously paired LAN sessions can connect directly. Address changes require a new pairing to refresh the advertised LAN addresses.
 
 ## Advanced: separate host and relay processes
 

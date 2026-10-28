@@ -1,4 +1,5 @@
 import WebSocket from "ws";
+import { startLanServer, type LanPeer } from "./lan.ts";
 import { watchFile, unwatchFile } from "node:fs";
 import { createHash } from "node:crypto";
 import { createInterface } from "node:readline/promises";
@@ -175,6 +176,8 @@ export async function serveRemote(options: {
   cwd: string;
   home?: string;
   approveDevice?: (id: string) => Promise<boolean>;
+  lan?: boolean;
+  lanPort?: number;
 }) {
   const home = options.home ?? join(homedir(), ".hikaro");
   let { config, secret } = await load(home).catch((error) => {
@@ -197,6 +200,7 @@ export async function serveRemote(options: {
     mode: "bridge",
   });
   type Peer = {
+    local?: LanPeer;
     channel: SecureChannel;
     ready: boolean;
     connectionId: string;
@@ -209,6 +213,9 @@ export async function serveRemote(options: {
   const peers = new Map<string, Peer>();
   const activeScopes = new Set<string>();
   const drop = (id: string, cancel = false) => {
+    peers
+      .get(id)
+      ?.local?.close(cancel ? 4003 : 1000, cancel ? "Revoked" : "Disconnected");
     peers.delete(id);
     if (cancel) {
       activeScopes.delete(id);
@@ -218,7 +225,12 @@ export async function serveRemote(options: {
     }
   };
   const frame = (id: string, peer: Peer, body: string) => {
-    if (peers.get(id) !== peer || socket?.readyState !== WebSocket.OPEN) return;
+    if (peers.get(id) !== peer) return;
+    if (peer.local) {
+      peer.local.send(body);
+      return;
+    }
+    if (socket?.readyState !== WebSocket.OPEN) return;
     if (socket.bufferedAmount + body.length > 2_000_000) {
       socket.close(1013, "Backpressure");
       return;
@@ -229,7 +241,7 @@ export async function serveRemote(options: {
   };
   const send = (id: string, data: unknown) => {
     const peer = peers.get(id);
-    if (peer?.ready && socket?.readyState === WebSocket.OPEN) {
+    if (peer?.ready && (peer.local || socket?.readyState === WebSocket.OPEN)) {
       try {
         frame(id, peer, peer.channel.send(data));
       } catch {
@@ -286,7 +298,9 @@ export async function serveRemote(options: {
     const result = peer.channel.receive(message.body);
     if (result.ready) {
       if (device.expires !== undefined) {
-        const allowed = await (options.approveDevice ?? confirmDevice)(id);
+        const allowed =
+          device.approved === true ||
+          (await (options.approveDevice ?? confirmDevice)(id));
         if (!allowed || peers.get(id) !== peer) {
           drop(id);
           return;
@@ -298,6 +312,7 @@ export async function serveRemote(options: {
             if (!fresh.devices[id])
               throw Error("Device revoked during confirmation");
             delete fresh.devices[id]!.expires;
+            delete fresh.devices[id]!.approved;
             await saveConfig(home, fresh);
             config = fresh;
           }),
@@ -371,6 +386,88 @@ export async function serveRemote(options: {
       });
     }
   };
+  const receive = (id: string, peer: Peer, body: string) => {
+    if (peer.queued >= 8 || peer.bytes + body.length > 2_000_000) {
+      drop(id);
+      return;
+    }
+    peer.queued++;
+    peer.bytes += body.length;
+    peer.chain = peer.chain
+      .then(() => handle(id, peer, { connectionId: peer.connectionId, body }))
+      .catch((error) => {
+        if (peers.get(id) === peer) drop(id);
+        console.error(`Remote request rejected: ${String(error)}`);
+      })
+      .finally(() => {
+        peer.queued--;
+        peer.bytes -= body.length;
+      });
+  };
+  const lan = options.lan
+    ? await startLanServer({
+        hostId: config.hostId,
+        port: options.lanPort,
+        async hasDevice(id) {
+          const device = (await readConfig(home)).devices[id];
+          return (
+            !!device &&
+            (device.expires === undefined ||
+              (device.approved === true && device.expires > Date.now()))
+          );
+        },
+        onConnection(local) {
+          const id = local.deviceId;
+          let peer: Peer | undefined;
+          local.onFrame((body) => {
+            if (peer && peers.get(id) === peer) receive(id, peer, body);
+          });
+          let closed = false;
+          local.onClose(() => {
+            closed = true;
+            if (peer && peers.get(id) === peer) peers.delete(id);
+          });
+          void readConfig(home)
+            .then((latest) => {
+              const device = latest.devices[id];
+              if (
+                stopped ||
+                closed ||
+                !device ||
+                (device.expires !== undefined &&
+                  (device.approved !== true || device.expires <= Date.now()))
+              ) {
+                local.close();
+                return;
+              }
+              drop(id);
+              peer = {
+                local,
+                channel: new SecureChannel(
+                  "host",
+                  secret.identity,
+                  device.publicKey,
+                ),
+                ready: false,
+                connectionId: local.connectionId,
+                chain: Promise.resolve(),
+                queued: 0,
+                bytes: 0,
+                requests: 0,
+                requestBytes: 0,
+              };
+              peers.set(id, peer);
+              frame(id, peer, peer.channel.hello());
+            })
+            .catch(() => local.close());
+        },
+      }).catch((error) => {
+        console.error(
+          `局域网直连未启动，将使用中转：${(error as Error).message}`,
+        );
+        return undefined;
+      })
+    : undefined;
   const connect = () => {
     if (stopped) return;
     const current = ++generation;
@@ -443,6 +540,7 @@ export async function serveRemote(options: {
                 requests: 0,
                 requestBytes: 0,
               };
+              drop(id);
               peers.set(id, peer);
               frame(id, peer, peer.channel.hello());
             })
@@ -456,22 +554,7 @@ export async function serveRemote(options: {
           message.connectionId !== peer.connectionId
         )
           return;
-        if (peer.queued >= 8 || peer.bytes + message.body.length > 2_000_000) {
-          drop(id);
-          return;
-        }
-        peer.queued++;
-        peer.bytes += message.body.length;
-        peer.chain = peer.chain
-          .then(() => handle(id, peer, message))
-          .catch((error) => {
-            drop(id);
-            console.error(`Remote request rejected: ${String(error)}`);
-          })
-          .finally(() => {
-            peer.queued--;
-            peer.bytes -= (message.body as string).length;
-          });
+        receive(id, peer, message.body);
       } catch {
         ws.close(1003, "Invalid frame");
       }
@@ -480,7 +563,7 @@ export async function serveRemote(options: {
     ws.on("close", () => {
       if (current !== generation) return;
       clearInterval(heartbeat);
-      peers.clear();
+      for (const [id, peer] of peers) if (!peer.local) peers.delete(id);
       if (!stopped)
         retryTimer = setTimeout(
           connect,
@@ -498,11 +581,12 @@ export async function serveRemote(options: {
     process.off("SIGINT", onSignal);
     process.off("SIGTERM", onSignal);
     socket?.close();
+    await lan?.close();
     await rpc.close();
   }
   connect();
   const onSignal = () => void shutdown();
   process.once("SIGINT", onSignal);
   process.once("SIGTERM", onSignal);
-  return { close: shutdown };
+  return { close: shutdown, ...(lan ? { lanPort: lan.port } : {}) };
 }

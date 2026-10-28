@@ -15,7 +15,10 @@ export type HostConfig = {
   hostId: string;
   publicKey: string;
   registered?: boolean;
-  devices: Record<string, { publicKey: string; expires?: number }>;
+  devices: Record<
+    string,
+    { publicKey: string; expires?: number; approved?: boolean }
+  >;
   pendingRevocations?: string[];
 };
 export type HostSecret = { identity: Identity; token: string };
@@ -58,6 +61,7 @@ export async function readConfig(home: string): Promise<HostConfig> {
     if (
       !isToken(id) ||
       !isRecord(device) ||
+      (device.approved !== undefined && typeof device.approved !== "boolean") ||
       (device.expires !== undefined &&
         (typeof device.expires !== "number" ||
           !Number.isSafeInteger(device.expires) ||

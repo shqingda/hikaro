@@ -8,7 +8,7 @@ import { stripVTControlCharacters } from "node:util";
 import { SharedHostClient } from "../packages/host/src/client.ts";
 import { Runtime } from "../packages/runtime/src/index.ts";
 for (const managed of [false, true])
-  it(`${managed ? "managed" : "local"} TUI pairs and cancels in one terminal without losing the current session`, async () => {
+  it(`${managed ? "managed" : "local"} TUI keeps its session after failed automatic pairing in one terminal without losing the current session`, async () => {
     const home = await realpath(
         await mkdtemp(join(tmpdir(), "hikaro-pair-pty-")),
       ),
@@ -41,6 +41,15 @@ for (const managed of [false, true])
       );
       args = ["--import", "tsx", script];
     }
+    // Deterministic service failure, without real Keychain or network access.
+    const preload = join(home, "pair-fixture.mts");
+    await writeFile(
+      preload,
+      `import {keychainStore} from ${JSON.stringify(pathToFileURL(resolve("packages/remote/src/host-store.ts")).href)};
+      const keys=new Map(); keychainStore.set=async(k,v)=>{keys.set(k,v)}; keychainStore.get=async k=>keys.get(k);
+      globalThis.fetch=async()=>Response.json({error:"fixture offline"},{status:503});`,
+    );
+    args.splice(2, 0, "--import", preload);
     const term = spawn(process.execPath, args, {
       name: "xterm-256color",
       cols: 110,
@@ -62,25 +71,13 @@ for (const managed of [false, true])
       await wait(managed ? "手机接续已就绪" : "Type a task");
       output = "";
       term.write("/pair\r");
-      await wait("输入已部署的 relay 地址");
-      // A cancelled first-time setup never starts a second runtime.
+      await wait("手机配对请求失败（503）");
+      expect(output).not.toContain("输入已部署的 relay 地址");
+      expect(output).not.toContain("bootstrap");
       if (!managed)
         await expect(SharedHostClient.connect({ home, cwd })).rejects.toThrow(
           "Shared host unavailable",
         );
-      term.write("\x1b");
-      await new Promise((r) => setTimeout(r, 100));
-      output = "";
-      term.write("/pair\r");
-      await wait("输入已部署的 relay 地址");
-      term.write("wss://relay.example\r");
-      await wait("隐藏输入");
-      output = "";
-      term.write("secret-not-visible");
-      await new Promise((r) => setTimeout(r, 100));
-      expect(output).not.toContain("secret-not-visible");
-      term.write("\x1b");
-      await new Promise((r) => setTimeout(r, 100));
       if (managed) {
         probe = await SharedHostClient.connect({
           home,

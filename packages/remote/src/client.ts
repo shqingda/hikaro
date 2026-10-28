@@ -17,7 +17,30 @@ export type Pairing = {
   identity: Identity;
   hostKey: string;
   expires: number;
+  lan?: string[];
 };
+export function validateLan(value: unknown): string {
+  if (typeof value !== "string") throw Error("Invalid LAN address");
+  const url = new URL(value);
+  const parts = url.hostname.split(".").map(Number);
+  if (
+    url.protocol !== "ws:" ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash ||
+    url.pathname !== "/" ||
+    parts.length !== 4 ||
+    parts.some((n) => !Number.isInteger(n) || n < 0 || n > 255) ||
+    !(
+      parts[0] === 10 ||
+      (parts[0] === 192 && parts[1] === 168) ||
+      (parts[0] === 172 && parts[1]! >= 16 && parts[1]! <= 31)
+    )
+  )
+    throw Error("LAN address must be a private IPv4 ws:// origin");
+  return url.origin;
+}
 export function validateRelay(value: unknown): string {
   if (typeof value !== "string" || value.length > 2048)
     throw Error("Invalid relay URL");
@@ -60,10 +83,16 @@ export function validatePairing(
           "identity",
           "hostKey",
           "expires",
+          "lan",
         ].includes(key),
     )
   )
     throw Error("Invalid pairing data");
+  if (value.lan !== undefined) {
+    if (!Array.isArray(value.lan) || value.lan.length > 4)
+      throw Error("Invalid LAN addresses");
+    value.lan.forEach(validateLan);
+  }
   validateRelay(value.relay);
   publicKeyBytes(value.hostKey);
   validateIdentity(value.identity);
@@ -117,6 +146,7 @@ export class RemoteClient {
   private stopped = true;
   private ready = false;
   private attempt = 0;
+  private route = 0;
   private generation = 0;
   private timer?: ReturnType<typeof setTimeout>;
   private deadline?: ReturnType<typeof setTimeout>;
@@ -160,6 +190,7 @@ export class RemoteClient {
   connect() {
     if (!this.stopped) return;
     this.stopped = false;
+    this.route = 0;
     this.dial();
   }
   private dial() {
@@ -167,20 +198,31 @@ export class RemoteClient {
     clearTimeout(this.timer);
     const generation = ++this.generation;
     const p = this.pairing;
+    const lan = p.lan ?? [];
+    const isLan = this.route < lan.length;
+    const origin = isLan
+      ? validateLan(lan[this.route])
+      : validateRelay(p.relay);
     const channel = new SecureChannel("device", p.identity, p.hostKey);
     this.channel = channel;
     this.ready = false;
     this.emit({ type: "connection", status: "connecting" });
+    let authenticated = false;
     let socket: RemoteSocket;
     try {
       socket = (
         this.options.socket ??
         ((url, protocols) => new WebSocket(url, protocols))
       )(
-        validateRelay(p.relay) + "/hosts/" + p.hostId + "/device/" + p.deviceId,
-        ["hikaro.v1", "token." + p.token],
+        origin + "/hosts/" + p.hostId + "/device/" + p.deviceId,
+        isLan ? ["hikaro.v1"] : ["hikaro.v1", "token." + p.token],
       );
     } catch {
+      if (isLan) {
+        this.route++;
+        this.dial();
+        return;
+      }
       this.emit({ type: "error", error: "Could not open remote connection." });
       this.scheduleReconnect();
       return;
@@ -192,14 +234,17 @@ export class RemoteClient {
       this.ready = false;
       socket.close(code, reason);
     };
-    this.deadline = setTimeout(() => fail(4001, "Connection timed out"), 15000);
+    this.deadline = setTimeout(
+      () => fail(4001, "Connection timed out"),
+      isLan ? 1500 : 15000,
+    );
     let lastPong = Date.now();
     socket.onopen = () => {
       if (!current()) return;
       clearTimeout(this.deadline);
       this.deadline = setTimeout(
         () => fail(4001, "Host confirmation timed out"),
-        this.options.handshakeTimeoutMs ?? 120000,
+        isLan ? 3000 : (this.options.handshakeTimeoutMs ?? 120000),
       );
     };
     socket.onmessage = (event) => {
@@ -217,6 +262,7 @@ export class RemoteClient {
         const result = channel.receive(event.data);
         if (result.reply) socket.send(result.reply);
         if (result.ready) {
+          authenticated = true;
           this.ready = true;
           this.attempt = 0;
           clearTimeout(this.deadline);
@@ -267,7 +313,7 @@ export class RemoteClient {
       }
     };
     socket.onerror = () => {
-      if (current())
+      if (current() && !isLan)
         this.emit({
           type: "error",
           error: "Connection failed. Check the relay and paired host.",
@@ -280,6 +326,12 @@ export class RemoteClient {
       this.channel = undefined;
       clearTimeout(this.deadline);
       clearInterval(this.heartbeat);
+      if (isLan && !authenticated) {
+        this.route++;
+        this.dial();
+        return;
+      }
+      this.route = 0;
       this.rejectPending("Connection lost; command outcome may be unknown.");
       this.emit({ type: "connection", status: "disconnected" });
       // Revocation, identity errors and replacement require explicit user action.
