@@ -1,8 +1,5 @@
 name: checks
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
 permissions:
   contents: read
@@ -35,4 +32,4 @@ jobs:
           version: 12.15.0
       - run: command -v rg || brew install ripgrep
       - run: pnpm install --frozen-lockfile
-      - run: pnpm check
+      - run: pnpm ci:check

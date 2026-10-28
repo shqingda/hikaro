@@ -36,8 +36,7 @@ jobs:
           test "${GITHUB_REF_NAME}" = "v$version"
           test -s "docs/releases/${GITHUB_REF_NAME}.md"
           command -v rg || brew install ripgrep
-      - run: pnpm install --frozen-lockfile --filter hikaro --store-dir "$RUNNER_TEMP/hikaro-pnpm-store"
-      - run: pnpm typecheck
+      - run: pnpm install --frozen-lockfile --store-dir "$RUNNER_TEMP/hikaro-pnpm-store"
       - name: Build standalone CLI
         run: pnpm release:cli
       - name: Install from the built files and run the installed CLI
@@ -63,6 +62,8 @@ jobs:
           retention-days: 7
 
   android:
+    # The CLI job runs the shared preflight for this same release SHA.
+    needs: cli
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:

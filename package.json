@@ -36,10 +36,12 @@
     "mobile:ios": "pnpm --filter @hikaro/mobile ios",
     "mobile:android": "pnpm --filter @hikaro/mobile android",
     "mobile:typecheck": "pnpm --filter @hikaro/mobile typecheck",
-    "release:pack": "node scripts/package-release.mjs",
-    "release:cli": "node scripts/package-cli.mjs",
+    "release:pack": "pnpm ci:check && node scripts/checked-release.mjs pack",
+    "release:cli": "pnpm ci:check && node scripts/checked-release.mjs cli",
     "check:release": "node --import tsx scripts/check-release.mjs",
-    "audit:release": "node scripts/release-audit.mjs"
+    "audit:release": "node scripts/release-audit.mjs",
+    "ci:check": "pnpm check && pnpm mobile:typecheck && pnpm check:relay && pnpm --filter @hikaro/relay build",
+    "build:android:release": "pnpm ci:check && bash scripts/build-android.sh"
   },
   "dependencies": {
     "@anthropic-ai/sandbox-runtime": "0.0.81",

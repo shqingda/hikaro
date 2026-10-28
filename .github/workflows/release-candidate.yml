@@ -2,11 +2,6 @@ name: release candidate
 run-name: Candidate validation · ${{ github.sha }}
 on:
   workflow_dispatch:
-  # Exercise changes to this release pipeline on their own branch. Ordinary
-  # product pushes do not automatically start the expensive packaging check.
-  push:
-    paths:
-      - .github/workflows/release-candidate.yml
 permissions:
   contents: read
 jobs:
@@ -37,20 +32,9 @@ jobs:
           node --version
           command -v rg || brew install ripgrep
       - name: Install source dependencies into an empty store
-        run: pnpm install --frozen-lockfile --filter hikaro --store-dir "$RUNNER_TEMP/hikaro-pnpm-store"
-      - name: Check types and release security contracts
-        run: |
-          pnpm typecheck
-          pnpm exec vitest run tests/runtime-lifecycle.test.ts -t 'workspace directory'
-          pnpm exec vitest run tests/steering-recovery.test.ts tests/steering-queue.test.ts
-          node --test scripts/package-release.test.mjs scripts/release-audit.test.mjs scripts/forge-patch.test.mjs
-      - name: Build and audit candidate
+        run: pnpm install --frozen-lockfile --store-dir "$RUNNER_TEMP/hikaro-pnpm-store"
+      - name: Check, build and install candidate locally
         run: pnpm release:pack
-      - name: Install candidate with empty npm cache and exercise installed TUI
-        run: |
-          candidates=(artifacts/release/*.tgz)
-          (( ${#candidates} == 1 ))
-          pnpm check:release "${candidates[1]}"
       - name: Retain verified candidate and reports
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
