@@ -41,6 +41,9 @@ test("backport evidence fails closed for unpatched, altered, extra-code and unre
     assert.equal(good.passed, true);
     assert.equal(good.registryPassed, false);
     assert.equal(good.vulnerabilities.high, 2);
+    delete result.vulnerabilities["@anthropic-ai/sandbox-runtime"];
+    result.metadata.vulnerabilities.high = 1;
+    assert.equal((await assessPatchedAudit(audit(), directory)).passed, true);
     result.vulnerabilities["node-forge"].via.push({
       url: "https://github.com/advisories/another",
     });

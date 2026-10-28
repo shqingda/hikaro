@@ -78,7 +78,11 @@ export async function assessPatchedAudit(audit, directory) {
   if (
     audit.vulnerabilities.critical !== 0 ||
     findings.length !== audit.vulnerabilities.high ||
-    findings.length !== 2
+    ![1, 2].includes(findings.length) ||
+    findings.some(
+      ([name]) =>
+        !["node-forge", "@anthropic-ai/sandbox-runtime"].includes(name),
+    )
   )
     return rejected;
   const entries = Object.fromEntries(findings);
@@ -86,11 +90,10 @@ export async function assessPatchedAudit(audit, directory) {
   const runtime = entries["@anthropic-ai/sandbox-runtime"];
   if (
     !forge ||
-    !runtime ||
     forge.via?.length !== 1 ||
     forge.via[0]?.url !== forgeProof.advisory ||
-    runtime.via?.length !== 1 ||
-    runtime.via[0] !== "node-forge" ||
+    (runtime &&
+      (runtime.via?.length !== 1 || runtime.via[0] !== "node-forge")) ||
     !forge.nodes?.length
   )
     return rejected;
