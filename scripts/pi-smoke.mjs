@@ -66,7 +66,11 @@ try {
     }, 15_000);
     terminal.onData((data) => {
       output = (output + stripVTControlCharacters(data)).slice(-30000);
-      if (phase === 0 && output.includes("Hikaro · /back returns to Pi")) {
+      if (
+        phase === 0 &&
+        output.includes("/back returns to Pi") &&
+        output.includes("Ready · Permissions: Hikaro")
+      ) {
         phase = 1;
         terminal.write("bridge smoke\r");
       }

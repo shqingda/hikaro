@@ -157,9 +157,11 @@ async function main() {
     );
     const tui = createTerminal();
     let externalExiting = false;
+    let removeBackendExit: (() => void) | undefined;
     const leave = () => {
       if (externalExiting) return;
       externalExiting = true;
+      removeBackendExit?.();
       view.dispose();
       tui.stop({ preserveScreen: true });
       void backend.close();
@@ -184,11 +186,15 @@ async function main() {
       onExit: leave,
     });
     view.bind(backend);
+    removeBackendExit = backend.client.onExit(() =>
+      view.setStatus({ connection: "disconnected" }),
+    );
     view.setPermissionLabel("Managed by Pi");
     view.notice("Connected to Pi. Pi owns execution, tools, and permissions.");
     tui.setLayoutRoot(view.layout);
     tui.setFocus(view.editor);
     tui.start();
+    view.startTheme();
     process.once("SIGTERM", leave);
     process.once("SIGHUP", leave);
     return;
@@ -361,9 +367,14 @@ async function main() {
     );
     const preferences = agent.options.session.modelSelection?.settings ?? {};
     const usage = agent.usage;
-    view.setInfo(
-      `${options.cwd.replace(process.env.HOME ?? "", "~")}${gitBranch ? " (" + gitBranch + ")" : ""} · ↑${usage.input} ↓${usage.output} est $${usage.cost.toFixed(3)} · ${Math.round(agent.options.provider.contextWindow / 1000)}k · ${preferences.reasoning ?? "auto"}${preferences.speed && preferences.speed !== "default" ? " · " + preferences.speed : ""}`,
-    );
+    view.setStatus({
+      cwd: options.cwd,
+      branch: gitBranch,
+      usage: { ...usage },
+      contextWindow: agent.options.provider.contextWindow,
+      reasoning: preferences.reasoning ?? "auto",
+      speed: preferences.speed,
+    });
   };
   const reviewCurrentPlan = async () => {
     while (!agent.busy) {

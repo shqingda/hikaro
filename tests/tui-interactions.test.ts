@@ -260,11 +260,13 @@ describe("TUI immediate cancellation feedback", () => {
         method: "input",
         title: "Extension input",
       });
-      expect(fixture.view.editor.render(36)[0]).toContain("Waiting for input");
+      expect(fixture.view.footer.render(36).join("\n")).toContain(
+        "Waiting for input",
+      );
       fixture.input("\x1b");
       expect(fixture.view.editor.getText()).toBe("Saved draft");
-      expect(fixture.view.editor.render(36)[0]).toContain("Working");
-      expect(fixture.view.footer.render(36).join("\n")).toContain(
+      expect(fixture.view.footer.render(36).join("\n")).toContain("Working");
+      expect(fixture.view.editor.render(36).join("\n")).toContain(
         "Ctrl+C stops",
       );
       expect(respondToUI).toHaveBeenCalledWith("dialog", { cancelled: true });
@@ -621,14 +623,14 @@ describe("TUI interaction fixes", () => {
       onExit: () => {},
     });
     try {
-      view.setInfo("usage-only-value");
+      view.setStatus({ usage: { input: 12345, output: 6789, cost: 9 } });
       view.setPermissionLabel("Full Access");
       view.setPreferences({ ...defaultTuiPreferences, showUsage: false });
       const screen = stripVTControlCharacters(
         view.layout.render(80).join("\n"),
       );
       expect(screen).toContain("Permissions · Full Access");
-      expect(screen).not.toContain("usage-only-value");
+      expect(screen).not.toContain("↑12345");
       view.setPermissionLabel("Ask for approval");
       const updated = stripVTControlCharacters(
         view.layout.render(80).join("\n"),
@@ -735,16 +737,16 @@ it("does not redraw an unchanged shared-host status during idle polling", () => 
     onExit: () => {},
   });
   try {
-    view.setInfo("Shared host · session");
+    view.setStatus({ connection: "connected", model: "shared host" });
     render.mockClear();
     for (let poll = 0; poll < 100; poll++)
-      view.setInfo("Shared host · session");
+      view.setStatus({ connection: "connected", model: "shared host" });
     expect(render).not.toHaveBeenCalled();
-    view.setInfo("Host disconnected / synchronizing · draft stays local");
+    view.setStatus({ connection: "disconnected" });
     expect(render).toHaveBeenCalledOnce();
     expect(
       stripVTControlCharacters(view.layout.render(100).join("\n")),
-    ).toContain("Host disconnected");
+    ).toContain("Disconnected");
   } finally {
     view.dispose();
   }

@@ -483,7 +483,10 @@ describe("TUI approval panel", () => {
       );
       const denied = tui.send("!printf denied > denied-proof.txt\r");
       await tui.wait("Permission required", denied);
-      await tui.wait("→ Deny", tui.send("\x1b[B"));
+      await tui.wait("→ Deny", denied);
+      // Deny is already selected. Navigate deliberately to release the
+      // pending-Enter guard without requiring an unchanged row to redraw.
+      tui.send("\x1b[B");
       const rejected = tui.send("\r");
       await tui.wait("Permission denied", rejected);
       await tui.wait("Enter send", rejected);
@@ -498,7 +501,6 @@ describe("TUI approval panel", () => {
         await tui.wait("Allow once", resized);
         await tui.wait("Esc deny", resized);
       }
-      await tui.wait("→ Deny", tui.send("\x1b[B"));
       await tui.wait("→ Allow once", tui.send("\x1b[A"));
       await tui.wait("Enter send", tui.send("\r"));
       expect(tui.outputSince(denied)).not.toContain("Type allow");
@@ -512,8 +514,8 @@ describe("TUI approval panel", () => {
   }, 20000);
 });
 
-describe("permissions and activity indicator", () => {
-  it("applies the picker to real tools and animates the input border", async () => {
+describe("permissions and execution status", () => {
+  it("applies the picker to real tools and shows a stable execution status", async () => {
     await withCriticalTui(async (tui) => {
       await tui.wait(
         "Permissions · this workspace",
@@ -533,8 +535,11 @@ describe("permissions and activity indicator", () => {
       await tui.wait("Permissions: Full Access", tui.send("\r"));
       const after = tui.send("activity-check\r");
       const request = await tui.nextRequest();
-      await tui.wait("⠙ Working", after);
-      await tui.wait("⠹ Working", after);
+      await tui.wait("Working", after);
+      const quiet = tui.send("");
+      await new Promise<void>((done) => setTimeout(done, 240));
+      expect(tui.outputSince(quiet)).toBe("");
+      expect(tui.outputSince(after)).not.toMatch(/[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/);
       await request.write("activity-completed");
       const finished = tui.send("");
       request.finish();
@@ -575,7 +580,9 @@ describe("TUI interaction fixes", () => {
       await tui.wait(/→ Completion bell[\s\S]*Off/, tui.send("\r"));
       await tui.wait("→ Usage footer", tui.send("\x1b[A"));
       await tui.wait(/→ Usage footer[\s\S]*Hide/, tui.send("\r"));
-      await tui.wait("Permissions · Ask for approval", tui.send("\x1b"));
+      // The permission row stays visible while this panel closes, so the
+      // differential renderer only emits the restored input hint.
+      await tui.wait("Enter send", tui.send("\x1b"));
       await tui.wait(
         "Permissions · Full Access",
         tui.send("/permissions full\r"),

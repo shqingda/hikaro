@@ -9,8 +9,8 @@ import {
   matchesKey,
   isKeyRelease,
   visibleWidth,
+  truncateToWidth,
   type Component,
-  type MarkdownTheme,
 } from "./primitives.ts";
 import { createMarkdown } from "./markdown.cjs";
 import { ModelPanel } from "./model-panel.ts";
@@ -29,26 +29,16 @@ import type {
 } from "../../core/src/types.ts";
 import type { PiUIResponse } from "../../pi-bridge/src/index.ts";
 
-const accent = (text: string) => `\x1b[38;2;196;85;72m${text}\x1b[39m`;
-const muted = (text: string) => `\x1b[90m${text}\x1b[39m`;
-const bold = (text: string) => `\x1b[1m${text}\x1b[22m`;
-const identity = (text: string) => text;
-const theme: MarkdownTheme = {
-  heading: bold,
-  link: accent,
-  linkUrl: muted,
-  code: accent,
-  codeBlock: identity,
-  codeBlockBorder: muted,
-  quote: muted,
-  quoteBorder: muted,
-  hr: muted,
-  listBullet: accent,
+import {
+  accent,
+  muted,
   bold,
-  italic: (text) => `\x1b[3m${text}\x1b[23m`,
-  strikethrough: identity,
-  underline: identity,
-};
+  error as errorText,
+  selected,
+  setColorScheme,
+  markdownTheme as theme,
+} from "./theme.ts";
+import { renderHeader, renderStatus, type ViewStatus } from "./status.ts";
 const MESSAGE_PAGE_CHARS = 16_000;
 const STREAM_PREVIEW_CHARS = 64_000;
 const MAX_VISIBLE_ITEMS = 40;
@@ -162,10 +152,8 @@ export class MessageComponent implements Component {
   private loadedPage?: { page: number; text: string };
   private body = new Container();
   private live?: StreamingMarkdown;
-  /** User rows are re-coloured per line; reuse them until text, width or theme change. */
-  private decorated?: { width: number; bg: string; lines: string[] };
-  static userBackground = "\x1b[48;2;244;225;219m";
-  static userForeground = "\x1b[38;2;41;39;37m";
+  private rendered?: { width: number; lines: string[] };
+
   readonly streaming: boolean;
   constructor(
     readonly number: number,
@@ -174,6 +162,9 @@ export class MessageComponent implements Component {
     streaming = false,
     private options: {
       label?: string;
+      tool?: { name: string; target: string; state: string };
+      details?: boolean;
+      manual?: boolean;
       textLength?: number;
       read?: (offset: number, limit: number) => Promise<string>;
     } = {},
@@ -186,6 +177,27 @@ export class MessageComponent implements Component {
     if (this.text === next) return;
     this.text = next;
     this.dirty = true;
+  }
+  setDetails(details: boolean) {
+    details ||= this.options.manual === true;
+    if (this.options.details === details) return;
+    this.options.details = details;
+    this.dirty = true;
+  }
+  completeTool(text: string, state: string, manual = false) {
+    if (manual) {
+      this.options.manual = true;
+      this.options.details = true;
+    }
+    if (this.options.tool) this.options.tool.state = state;
+    this.setText(text);
+    this.dirty = true;
+  }
+  get toolState() {
+    return this.options.tool?.state;
+  }
+  get toolName() {
+    return this.options.tool?.name;
   }
   get pages() {
     return Math.max(
@@ -210,6 +222,9 @@ export class MessageComponent implements Component {
     this.dirty = true;
   }
   render(width: number) {
+    if (!this.dirty && this.rendered?.width === width)
+      return this.rendered.lines;
+    if (this.rendered && this.rendered.width !== width) this.dirty = true;
     if (this.dirty) {
       this.body.clear();
 
@@ -226,7 +241,46 @@ export class MessageComponent implements Component {
               this.page * MESSAGE_PAGE_CHARS,
               (this.page + 1) * MESSAGE_PAGE_CHARS,
             );
-      if (this.options.label)
+      if (this.options.tool) {
+        const { name, target, state } = this.options.tool;
+        this.body.addChild(
+          new Text(
+            muted(
+              truncateToWidth(
+                sanitize(`${state}  ${name}${target ? `  ${target}` : ""}`),
+                Math.max(1, width - 2),
+              ),
+            ),
+            1,
+            0,
+          ),
+        );
+        if (!this.options.details) {
+          if (state === "Failed")
+            this.body.addChild(
+              new Text(
+                errorText(
+                  sanitize(this.text.slice(0, 200)).replace(/[\r\n]+/g, " "),
+                ),
+                3,
+                0,
+              ),
+            );
+          this.dirty = false;
+          const lines = this.body.render(width);
+          this.rendered = { width, lines };
+          return lines;
+        }
+      } else if (this.role !== "tool") {
+        this.body.addChild(
+          new Text(
+            this.role === "user" ? bold("YOU") : accent(bold("HIKARO")),
+            1,
+            0,
+          ),
+        );
+      }
+      if (this.options.label && !this.options.tool)
         this.body.addChild(new Text(muted(sanitize(this.options.label)), 1, 0));
       if (this.role === "tool") this.body.addChild(new Text(muted(text), 1, 1));
       else if (this.streaming) {
@@ -256,31 +310,13 @@ export class MessageComponent implements Component {
         );
       }
       this.dirty = false;
-      this.decorated = undefined;
     }
     const lines = this.body.render(width);
-    if (this.role === "user") {
-      const bg =
-        MessageComponent.userBackground + MessageComponent.userForeground;
-      if (this.decorated?.width === width && this.decorated.bg === bg)
-        return this.decorated.lines;
-      const decorated = lines.map(
-        (line) =>
-          bg +
-          line
-            .replace(/\x1b\[0m/g, "\x1b[0m" + bg)
-            .replace(/\x1b\[49m/g, bg)
-            .replace(/\x1b\[39m/g, MessageComponent.userForeground) +
-          " ".repeat(Math.max(0, width - visibleWidth(line))) +
-          "\x1b[49m",
-      );
-      this.decorated = { width, bg, lines: decorated };
-      return decorated;
-    }
+    this.rendered = { width, lines };
     return lines;
   }
   invalidate() {
-    this.decorated = undefined;
+    this.dirty = true;
     this.body.invalidate();
   }
 }
@@ -300,6 +336,18 @@ type Dialog = {
   prefill?: string;
   timeout?: number;
 };
+function toolTarget(value: unknown): string {
+  if (!value || typeof value !== "object") return "";
+  const args = value as Record<string, unknown>;
+  const target =
+    args.path ?? args.file_path ?? args.query ?? args.pattern ?? args.command;
+  return typeof target === "string"
+    ? sanitize(target)
+        .replace(/[\r\n\t]+/g, " ")
+        .slice(0, 240)
+    : "";
+}
+
 type UIBackend = AgentBackend & {
   respondToUI?(id: string, response: PiUIResponse): Promise<void>;
 };
@@ -311,10 +359,20 @@ export class HikaroView {
     follow: "end",
     scrollbar: "auto",
   });
-  readonly footer = new Text("", 1, 0);
-  private footerText = "";
-  readonly permissionStatus = new Text("", 1, 0);
+  private viewStatus: ViewStatus;
+  private phase = "Ready";
+  readonly footer: Component = {
+    render: (width) =>
+      renderStatus(
+        this.viewStatus,
+        this.phase,
+        this.preferences.showUsage,
+        width,
+      ),
+    invalidate() {},
+  };
   readonly inputError = new Text("", 1, 0);
+  private errorMessage = "";
   readonly modelSlot = new Container();
   readonly approvalSlot = new Container();
   private panelYieldsToApproval = false;
@@ -322,7 +380,7 @@ export class HikaroView {
   private preparingPrompt?: AbortController;
   private modelPanel?: ModelPanel;
   readonly historyHint = new Text("", 1, 0);
-  readonly header: Text;
+  readonly header: Component;
   readonly editor: ActivityEditor;
   readonly layout: VStack;
   private draft?: MessageComponent;
@@ -352,7 +410,9 @@ export class HikaroView {
   private historyLoading = false;
   private pendingMessages = false;
   private status = new Map<string, string>();
-  private info = "";
+  private tools = new Map<string, MessageComponent>();
+  private activeTools = new Map<string, string>();
+  private toolTargets = new Map<string, string>();
   private removeScheme?: () => void;
 
   constructor(
@@ -388,18 +448,23 @@ export class HikaroView {
       commands?: Array<{ name: string; description: string }>;
     },
   ) {
-    this.header = new Text(
-      `${accent(bold(" H "))} ${bold("hikaro")}  ${muted(sanitize(options.model))}`,
-      1,
-      1,
-    );
+    this.viewStatus = {
+      connection: "connected",
+      model: options.model,
+      permission: "",
+      cwd: options.cwd,
+    };
+    this.header = {
+      render: (width) => renderHeader(this.viewStatus, width),
+      invalidate() {},
+    };
     this.editor = new ActivityEditor(
       tui,
       {
-        borderColor: (text) => (this.busy ? accent(text) : muted(text)),
+        borderColor: muted,
         selectList: {
           selectedPrefix: accent,
-          selectedText: bold,
+          selectedText: selected,
           description: muted,
           scrollInfo: muted,
           noMatch: muted,
@@ -475,7 +540,7 @@ export class HikaroView {
       ),
     );
     this.layout = new VStack([
-      this.header,
+      { component: this.header, basis: "auto", shrink: 0 },
       this.historyHint,
       { component: this.scroll, basis: 0, grow: 1, minSize: 1 },
       {
@@ -492,10 +557,9 @@ export class HikaroView {
         shrink: 0,
         visible: () => !!this.approval,
       },
-      { component: this.editor, basis: "auto", maxSize: 10 },
-      this.inputError,
-      this.permissionStatus,
-      this.footer,
+      { component: this.editor, basis: "auto", shrink: 0 },
+      { component: this.inputError, basis: "auto", maxSize: 2 },
+      { component: this.footer, basis: "auto", shrink: 0 },
     ]);
     this.updateFooter();
     this.editor.onSubmit = (text) => {
@@ -516,7 +580,10 @@ export class HikaroView {
             .catch((e) => this.setError(String(e)));
           return;
         }
-        this.detail = !this.detail;
+        this.setPreferences({
+          ...this.preferences,
+          showToolDetails: !this.detail,
+        });
         this.notice(
           this.detail ? "Tool details enabled" : "Tool details hidden",
         );
@@ -617,9 +684,14 @@ export class HikaroView {
   }
 
   setError(text: string) {
+    const message = sanitize(text.slice(0, 2000));
+    if (message && message !== this.errorMessage)
+      this.notice(`Error: ${message}`);
+    this.errorMessage = message;
     this.inputError.setText(
-      text ? `\x1b[31m${sanitize(text.slice(0, 2000))}\x1b[39m` : "",
+      text ? errorText(sanitize(text.slice(0, 2000))) : "",
     );
+    if (text) this.phase = "Failed";
     this.tui.requestRender();
   }
   closeModelPanel() {
@@ -647,9 +719,8 @@ export class HikaroView {
             this.tui.terminal.rows -
               this.header.render(width).length -
               this.historyHint.render(width).length -
-              Math.min(10, this.editor.render(width).length) -
-              this.inputError.render(width).length -
-              this.permissionStatus.render(width).length -
+              this.editor.render(width).length -
+              Math.min(2, this.inputError.render(width).length) -
               this.footer.render(width).length -
               1,
           ),
@@ -683,6 +754,10 @@ export class HikaroView {
     this.dialogs = [];
     this.backend = backend;
     this.busy = false;
+    this.phase = "Ready";
+    this.activity = "Working";
+    this.activeTools.clear();
+    this.setError("");
     this.unsubscribe = backend.subscribe((event) => this.event(event));
     this.updateFooter();
   }
@@ -693,6 +768,7 @@ export class HikaroView {
     streamTruncated: boolean;
   }) {
     this.busy = snapshot.busy;
+    this.phase = snapshot.busy ? "Working" : "Ready";
     this.activity = "Working";
     if (snapshot.stream && !this.history.hasNewer) {
       if (!this.draft) {
@@ -712,12 +788,10 @@ export class HikaroView {
   }
   startTheme() {
     const apply = (light: boolean) => {
-      MessageComponent.userBackground = light
-        ? "\x1b[48;2;244;225;219m"
-        : "\x1b[48;2;58;39;36m";
-      MessageComponent.userForeground = light
-        ? "\x1b[38;2;41;39;37m"
-        : "\x1b[38;2;244;237;236m";
+      if (this.disposed) return;
+      setColorScheme(light);
+      this.editor.invalidate();
+      this.modelPanel?.invalidate();
       this.content.invalidate();
       this.tui.requestRender();
     };
@@ -748,37 +822,36 @@ export class HikaroView {
       })
       .catch(() => {});
   }
-  setInfo(info: string) {
-    const next = sanitize(info);
-    if (next === this.info) return;
-    this.info = next;
+  setStatus(patch: Partial<ViewStatus>) {
+    const next = { ...this.viewStatus, ...patch };
+    if (JSON.stringify(next) === JSON.stringify(this.viewStatus)) return;
+    this.viewStatus = next;
     this.updateFooter();
     this.tui.requestRender();
   }
-  setPermissionLabel(label: string) {
-    const text = `Permissions · ${sanitize(label)}`;
-    this.permissionStatus.setText(
-      label === "Full Access" ? accent(text) : muted(text),
-    );
-    this.tui.requestRender();
+  setPermissionLabel(permission: string) {
+    this.setStatus({ permission });
   }
   setPreferences(preferences: TuiPreferences) {
     this.preferences = { ...preferences };
     this.detail = preferences.showToolDetails;
+    for (const item of this.content.children)
+      if (item instanceof MessageComponent && item.role === "tool")
+        item.setDetails(this.detail);
     this.updateFooter();
     this.tui.requestRender();
   }
   setModel(model: string) {
-    this.header.setText(
-      `${accent(bold(" H "))} ${bold("hikaro")}  ${muted(sanitize(model))}`,
-    );
-    this.tui.requestRender();
+    this.setStatus({ model });
   }
   private append(component: Component) {
     if (this.disposed) return;
     this.content.addChild(component);
     while (this.content.children.length > MAX_VISIBLE_ITEMS) {
-      this.content.removeChild(this.content.children[0]!);
+      const removed = this.content.children[0]!;
+      this.content.removeChild(removed);
+      for (const [id, component] of this.tools)
+        if (component === removed) this.tools.delete(id);
       this.history.hasOlder = true;
     }
     this.updateHistoryHint();
@@ -793,6 +866,8 @@ export class HikaroView {
     flags: Partial<Pick<HistoryPage, "hasOlder" | "hasNewer">> = {},
   ) {
     this.content.clear();
+    this.tools.clear();
+    this.toolTargets.clear();
     this.draft = undefined;
     this.draftText = "";
     this.thinkingDraft = undefined;
@@ -860,6 +935,19 @@ export class HikaroView {
         message.role === "tool"
           ? `${message.name ?? "tool"}${message.isError ? " failed" : ""}`
           : undefined,
+      ...(message.role === "tool"
+        ? {
+            tool: {
+              name: message.name ?? "tool",
+              target: message.callId
+                ? (this.toolTargets.get(message.callId) ?? "")
+                : "",
+              state: message.isError ? "Failed" : "Done",
+            },
+            details: this.detail || message.source === "manual",
+            manual: message.source === "manual",
+          }
+        : {}),
       textLength: message.textLength,
       read:
         read && (message.textLength ?? 0) > message.text.length
@@ -869,6 +957,11 @@ export class HikaroView {
   }
   private showMessage(message: Message, hideThinking = false) {
     if (message.files) message = { ...message, files: undefined };
+    for (const call of message.toolCalls ?? []) {
+      this.toolTargets.set(call.id, toolTarget(call.arguments));
+      if (this.toolTargets.size > 40)
+        this.toolTargets.delete(this.toolTargets.keys().next().value!);
+    }
     if (
       message.role === "assistant" &&
       message.thinking &&
@@ -883,8 +976,20 @@ export class HikaroView {
         ),
       );
     if (message.role === "tool") {
-      if (this.detail || message.source === "manual")
-        this.append(this.messageComponent(message));
+      const existing = message.callId
+        ? this.tools.get(message.callId)
+        : undefined;
+      if (existing) {
+        existing.completeTool(
+          message.text,
+          existing.toolState === "Stopped"
+            ? "Stopped"
+            : message.isError
+              ? "Failed"
+              : "Done",
+          message.source === "manual",
+        );
+      } else this.append(this.messageComponent(message));
       return;
     }
     if (
@@ -988,35 +1093,81 @@ export class HikaroView {
         this.thinkingDraft = undefined;
         this.thinkingText = "";
       }
-    } else if (event.type === "tool.start") {
-      this.activity = `Running ${sanitize(String(event.data.name))}`;
-      if (this.detail)
-        this.notice(
-          `${event.data.name} ${JSON.stringify(event.data.arguments ?? {}).slice(0, 500)}`,
-        );
-    } else if (event.type === "tool.end") {
-      this.activity = "Working";
-      const result = event.data.result as
-        | { text?: string; isError?: boolean; data?: { artifact?: string } }
-        | undefined;
-      if (result?.isError && !this.detail)
-        this.setError(`${event.data.name}: ${result.text ?? "Tool failed"}`);
-      if (this.detail) {
-        const artifact = result?.data?.artifact;
-        const text = result?.text ?? "";
-        this.showMessage({
-          role: "tool",
-          name: String(event.data.name),
-          text:
-            artifact && !text.includes(artifact)
-              ? `${text}\n[Complete result: ${artifact}]`
-              : text,
-          isError: result?.isError,
-          timestamp: event.timestamp,
-        });
+    } else if (event.type === "tool.start" || event.type === "tool.end") {
+      const id = String(event.data.callId ?? `event-${event.seq}`);
+      const name = sanitize(String(event.data.name));
+      if (event.type === "tool.start") {
+        this.activeTools.set(id, name);
+        if (this.activeTools.size > 40)
+          this.activeTools.delete(this.activeTools.keys().next().value!);
+      } else this.activeTools.delete(id);
+      const runningName = this.activeTools.values().next().value;
+      this.activity = runningName ? `Running ${runningName}` : "Working";
+      if (this.history.hasNewer) {
+        this.pendingMessages = true;
+        this.updateHistoryHint();
+      } else {
+        if (event.type === "tool.start") {
+          const target = toolTarget(event.data.arguments);
+          const component = new MessageComponent(
+            this.nextMessage++,
+            "tool",
+            "",
+            false,
+            {
+              tool: { name, target, state: "Running" },
+              details: this.detail,
+            },
+          );
+          this.tools.set(id, component);
+          this.append(component);
+        } else {
+          const result = event.data.result as
+            | { text?: string; isError?: boolean; data?: { artifact?: string } }
+            | undefined;
+          const artifact = result?.data?.artifact;
+          let text = result?.text ?? "";
+          if (artifact && !text.includes(artifact))
+            text += `\n[Complete result: ${artifact}]`;
+          const state =
+            event.data.status === "cancelled"
+              ? "Stopped"
+              : result?.isError
+                ? "Failed"
+                : "Done";
+          let component = this.tools.get(id);
+          if (!component) {
+            component = new MessageComponent(
+              this.nextMessage++,
+              "tool",
+              "",
+              false,
+              {
+                tool: { name, target: this.toolTargets.get(id) ?? "", state },
+                details: this.detail,
+              },
+            );
+            this.tools.set(id, component);
+            this.append(component);
+          }
+          component.completeTool(text, state);
+        }
       }
     } else if (event.type === "run.end") {
+      this.activeTools.clear();
       this.busy = false;
+      this.phase =
+        event.data.status === "failed"
+          ? "Failed"
+          : event.data.status === "cancelled"
+            ? "Stopped"
+            : "Ready";
+      for (const tool of this.tools.values())
+        if (tool.toolState === "Running")
+          tool.completeTool(
+            "",
+            event.data.status === "cancelled" ? "Stopped" : "Unknown",
+          );
       if (event.data.status === "failed")
         this.setError(String(event.data.error));
       else if (event.data.status === "cancelled") {
@@ -1137,36 +1288,37 @@ export class HikaroView {
     );
   }
   private updateFooter() {
-    this.editor.setActivity(
-      (this.busy || this.preparingPrompt) && !this.disposed
-        ? this.approval
-          ? "Approval required"
-          : this.preparingPrompt
-            ? "Loading attachments"
-            : this.dialog
-              ? "Waiting for input"
-              : this.activity
-        : "",
-      !this.approval && !this.dialog && !this.modelPanel,
-    );
-    const footer =
+    this.editor.setBodyRows(this.modelPanel || this.approval ? 1 : undefined);
+    if (this.approval) this.phase = "Waiting for approval";
+    else if (this.preparingPrompt) this.phase = "Loading attachments";
+    else if (this.dialog) this.phase = "Waiting for input";
+    else if (this.busy) this.phase = this.activity;
+    else if (
+      this.phase === "Waiting for approval" ||
+      this.phase === "Waiting for input" ||
+      this.phase === "Loading attachments"
+    )
+      this.phase = "Ready";
+    this.editor.setLabel(
       this.modelPanel || this.approval
-        ? ""
-        : muted(
-            (this.info && this.preferences.showUsage ? this.info + "\n" : "") +
-              (this.dialog
-                ? this.dialog.method === "confirm"
-                  ? "Type yes to confirm · Esc cancels"
-                  : "Enter submits · Esc cancels"
-                : this.busy
-                  ? "Ctrl+C stops · new prompts queue"
-                  : `Enter send · Shift+Enter newline · /help${this.status.size ? " · " + [...this.status.values()].join(" · ") : ""}`),
-          );
-    // Every agent event lands here; pi-tui Text drops its wrap cache on any setText.
-    if (footer === this.footerText) return;
-    this.footerText = footer;
-    this.footer.setText(footer);
+        ? "Message · draft preserved"
+        : this.busy
+          ? "Message · queued on send"
+          : "Message",
+    );
+    this.editor.setHint(
+      this.modelPanel || this.approval
+        ? "Close the panel to continue editing"
+        : this.dialog
+          ? this.dialog.method === "confirm"
+            ? "Type yes to confirm · Esc cancels"
+            : "Enter submits · Esc cancels"
+          : this.busy
+            ? "Ctrl+C stops · new prompts queue"
+            : `Enter send · Shift+Enter newline · /help · @ files${this.status.size ? " · " + [...this.status.values()].join(" · ") : ""}`,
+    );
   }
+
   approve(request: PermissionRequest, signal: AbortSignal): Promise<boolean> {
     if (this.panelYieldsToApproval) this.modelController?.abort();
     if (
@@ -1193,9 +1345,9 @@ export class HikaroView {
               this.tui.terminal.rows -
                 this.header.render(width).length -
                 this.historyHint.render(width).length -
-                Math.min(10, this.editor.render(width).length) -
-                this.inputError.render(width).length -
-                this.permissionStatus.render(width).length -
+                this.editor.render(width).length -
+                Math.min(2, this.inputError.render(width).length) -
+                this.footer.render(width).length -
                 1,
             ),
           ),
@@ -1241,6 +1393,8 @@ export class HikaroView {
     this.closeDialog();
     this.answer(false);
     this.content.clear();
+    this.tools.clear();
+    this.toolTargets.clear();
     this.draft = undefined;
     this.draftText = "";
   }

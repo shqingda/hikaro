@@ -103,7 +103,7 @@ it.each([false, true])(
       if (attached) {
         await wait("/help");
         await wait("Tool details enabled", send("/tools\r"));
-        send("/latest\r");
+        // /tools now expands the already loaded result; no history refresh is needed.
       }
       await wait("Message 1 · part 1/2 · /read 1 PART");
       await wait(

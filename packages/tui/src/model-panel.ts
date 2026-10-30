@@ -1,7 +1,6 @@
 import { sanitize as clean } from "./text.ts";
 import {
   Input,
-  SelectList,
   Text,
   CURSOR_MARKER,
   matchesKey,
@@ -11,9 +10,7 @@ import {
   type Component,
   type SelectItem,
 } from "./primitives.ts";
-const accent = (v: string) => `\x1b[38;2;196;85;72m${clean(v)}\x1b[39m`;
-const dim = (v: string) => `\x1b[90m${clean(v)}\x1b[39m`;
-const red = (v: string) => `\x1b[31m${clean(v)}\x1b[39m`;
+import { accent, muted as dim, selected, error as red } from "./theme.ts";
 export type Selection = {
   value: string;
   makeDefault: boolean;
@@ -21,6 +18,28 @@ export type Selection = {
   query?: string;
 };
 type ActionCapability = boolean | ((item: SelectItem) => boolean);
+
+/** Selection state belongs to Hikaro; the editor still owns text input. */
+class MenuSelection {
+  private index = 0;
+  onSelect?: (item: SelectItem) => void;
+  constructor(private items: SelectItem[]) {}
+  setSelectedIndex(index: number) {
+    this.index = Math.max(0, Math.min(index, this.items.length - 1));
+  }
+  getSelectedItem() {
+    return this.items[this.index];
+  }
+  handleInput(data: string) {
+    if (!this.items.length) return;
+    if (matchesKey(data, "up"))
+      this.index = (this.index + this.items.length - 1) % this.items.length;
+    else if (matchesKey(data, "down"))
+      this.index = (this.index + 1) % this.items.length;
+    else if (matchesKey(data, "enter"))
+      this.onSelect?.(this.items[this.index]!);
+  }
+}
 /** The input-adjacent panel owns focus only for its lifetime. Secret input never renders raw bytes. */
 export class ModelPanel implements Component {
   focused = false;
@@ -45,7 +64,10 @@ export class ModelPanel implements Component {
   private cancelValue?: string;
   private input?: Input;
   private onInputChange?: (value: string) => void;
-  private list?: SelectList;
+  private list?: MenuSelection;
+  private descriptionOffset = 0;
+  private descriptionHeight = 1;
+  private descriptionRows = 0;
   private items: SelectItem[] = [];
   private matches: SelectItem[] = [];
   private emptyMessage = "No matching options";
@@ -185,14 +207,8 @@ export class ModelPanel implements Component {
           ),
         );
     this.matches = matches;
-    this.list = new SelectList(matches, 8, {
-      selectedPrefix: accent,
-      selectedText: accent,
-      description: dim,
-      scrollInfo: dim,
-      noMatch: () =>
-        dim(`  ${this.searching ? "Searching…" : this.emptyMessage}`),
-    });
+    this.list = new MenuSelection(matches);
+    this.descriptionOffset = 0;
     if (selectedValue !== undefined) {
       const index = matches.findIndex((item) => item.value === selectedValue);
       if (index >= 0) this.list.setSelectedIndex(index);
@@ -312,11 +328,29 @@ export class ModelPanel implements Component {
     }
     if (
       this.list &&
+      (matchesKey(data, "pageUp") || matchesKey(data, "pageDown"))
+    ) {
+      const delta = matchesKey(data, "pageUp")
+        ? -this.descriptionHeight
+        : this.descriptionHeight;
+      this.descriptionOffset = Math.max(
+        0,
+        Math.min(
+          Math.max(0, this.descriptionRows - this.descriptionHeight),
+          this.descriptionOffset + delta,
+        ),
+      );
+      this.refresh();
+      return;
+    }
+    if (
+      this.list &&
       (matchesKey(data, "up") ||
         matchesKey(data, "down") ||
         matchesKey(data, "enter"))
     ) {
       this.list.handleInput(data);
+      this.descriptionOffset = 0;
     } else if (
       this.list &&
       this.actionEnabled(this.allowDelete) &&
@@ -422,7 +456,7 @@ export class ModelPanel implements Component {
             : "Waiting… · Esc cancel",
         ),
         1,
-        compact ? 0 : 1,
+        0,
       ).render(width);
     const item = this.list.getSelectedItem();
     const action =
@@ -442,91 +476,93 @@ export class ModelPanel implements Component {
       ...(this.actionEnabled(this.allowRename) ? ["Ctrl+R rename"] : []),
     ];
     const text = base + (extras.length ? "\n" + extras.join(" · ") : "");
-    return new Text(dim(text), 1, compact ? 0 : 1).render(width);
+    return new Text(dim(clean(text)), 1, 0).render(width);
   }
   private choiceRows(width: number, available: number) {
     if (available <= 0) return [];
     if (!this.matches.length)
-      return new Text(dim(this.emptyMessage), 1, 0)
+      return new Text(
+        dim(this.searching ? "Searching…" : clean(this.emptyMessage)),
+        1,
+        0,
+      )
         .render(width)
         .slice(0, available);
+    const current = this.list!.getSelectedItem()!;
+    const index = this.matches.indexOf(current);
+    const count = Math.min(
+      8,
+      this.matches.length,
+      Math.max(1, available - (this.matches.length > available ? 1 : 0)),
+    );
+    const start = Math.max(
+      0,
+      Math.min(index - Math.floor(count / 2), this.matches.length - count),
+    );
     const text = (value: string) =>
       clean(value)
         .replace(/[\r\n]+/g, " ")
         .trim();
-    const selected = this.list!.getSelectedItem()!.value;
-    const index = this.matches.findIndex((item) => item.value === selected);
-    const primary = Math.min(
-      32,
-      Math.max(
-        ...this.matches.map((item) => visibleWidth(text(item.label)) + 2),
-      ),
+    const rows = this.matches.slice(start, start + count).map((item) => {
+      const label = text(item.label);
+      const description = text(item.description ?? "");
+      const prefix = item === current ? "→ " : "  ";
+      const inline =
+        width >= 72 &&
+        description &&
+        visibleWidth(prefix + label + "  " + description) <= width - 2
+          ? "  " + description
+          : "";
+      const row = truncateToWidth(
+        prefix + label + inline,
+        Math.max(1, width - 2),
+        "…",
+      );
+      return " " + (item === current ? selected(row) : row);
+    });
+    if (
+      (start || start + count < this.matches.length) &&
+      rows.length < available
+    )
+      rows.push(
+        dim(
+          truncateToWidth(
+            `  ${index + 1}/${this.matches.length} · ↑↓`,
+            width,
+            "…",
+          ),
+        ),
+      );
+    return rows;
+  }
+  private descriptionLines(width: number) {
+    const item = this.list?.getSelectedItem();
+    if (!item) return [];
+    const label = clean(item.label);
+    const description = clean(item.description ?? "");
+    const text = [visibleWidth(label) > width - 4 ? label : "", description]
+      .filter(Boolean)
+      .join("\n");
+    return text ? new Text(dim(text), 1, 0).render(width) : [];
+  }
+  private renderDescription(lines: string[], available: number, width: number) {
+    this.descriptionRows = lines.length;
+    if (!lines.length || available < 1) return [];
+    const paged = lines.length > available;
+    this.descriptionHeight = Math.max(1, available - (paged ? 1 : 0));
+    this.descriptionOffset = Math.min(
+      this.descriptionOffset,
+      Math.max(0, lines.length - this.descriptionHeight),
     );
-    const rows = new Map<number, string[]>();
-    const row = (at: number) => {
-      if (rows.has(at)) return rows.get(at)!;
-      const item = this.matches[at]!;
-      const label = text(item.label),
-        description = text(item.description ?? "");
-      const prefix = item.value === selected ? "→ " : "  ";
-      const gap = " ".repeat(Math.max(2, primary - visibleWidth(label)));
-      if (visibleWidth(prefix + label + gap + description) <= width) {
-        const lines = [
-          item.value === selected
-            ? accent(prefix + label + (description ? gap + description : ""))
-            : prefix + label + (description ? dim(gap + description) : ""),
-        ];
-        rows.set(at, lines);
-        return lines;
-      }
-      const wrappedLabel = new Text(label, 0, 0).render(Math.max(1, width - 2));
-      const lines = wrappedLabel.map(
-        (line, part) => (part ? "  " : prefix) + line,
-      );
-      if (description)
-        lines.push(
-          ...new Text(description, 0, 0)
-            .render(Math.max(1, width - 4))
-            .map((line) => "    " + line),
-        );
-      const styled = lines.map(
-        item.value === selected ? accent : (line) => dim(line),
-      );
-      rows.set(at, styled);
-      return styled;
-    };
-    const room = Math.max(1, available - (this.matches.length > 1 ? 1 : 0));
-    if (row(index).length > room) {
-      const visible = row(index).slice(0, Math.max(0, available - 1));
-      return [
-        ...visible,
-        dim(truncateToWidth("  … Resize to read more", width, "…")),
-      ];
-    }
-    let start = index,
-      end = index + 1,
-      used = row(index).length;
-    while (
-      start > 0 &&
-      index - start < 3 &&
-      used + row(start - 1).length <= room
-    )
-      used += row(--start).length;
-    while (
-      end < this.matches.length &&
-      end - start < 8 &&
-      used + row(end).length <= room
-    )
-      used += row(end++).length;
-    while (start > 0 && end - start < 8 && used + row(start - 1).length <= room)
-      used += row(--start).length;
-    const visible: string[] = [];
-    for (let at = start; at < end; at++) visible.push(...row(at));
-    if (start || end < this.matches.length)
+    const visible = lines.slice(
+      this.descriptionOffset,
+      this.descriptionOffset + this.descriptionHeight,
+    );
+    if (paged && available > 1)
       visible.push(
         dim(
           truncateToWidth(
-            `  (${index + 1}/${this.matches.length}) · ↑↓`,
+            ` Details ${this.descriptionOffset + 1}–${this.descriptionOffset + visible.length}/${lines.length} · PgUp/PgDn`,
             width,
             "…",
           ),
@@ -583,7 +619,8 @@ export class ModelPanel implements Component {
     const title = compact
       ? truncateToWidth(clean(this.title), Math.max(1, width - 2), "…")
       : this.title;
-    const lines = new Text(accent(title), 1, compact ? 0 : 1).render(width);
+    const lines = new Text(accent(clean(title)), 1, 0).render(width);
+    const titleRows = lines.length;
     if (this.input) {
       lines.push(
         ...(this.secret
@@ -595,12 +632,11 @@ export class ModelPanel implements Component {
     }
     const help = this.helpLines(width, compact);
     const message = this.message
-      ? new Text(dim(this.message), 1, compact ? 0 : 1).render(width)
+      ? new Text(dim(clean(this.message)), 1, 0).render(width)
       : [];
     const error = this.error
-      ? new Text(red(this.error), 1, compact ? 0 : 1).render(width)
+      ? new Text(red(clean(this.error)), 1, 0).render(width)
       : [];
-    if (this.list && this.input) lines.push("");
     if (lines.length + help.length + (this.list ? 1 : 0) > budget)
       return new Text(dim("Resize terminal · Esc close"), 0, 0)
         .render(width)
@@ -623,18 +659,32 @@ export class ModelPanel implements Component {
     }
     this.noticeVisible = true;
     const notices = [...message, ...error].slice(0, noticeRoom);
-    if (this.list)
+    // Notices follow the title; confirmation notices must fit in full.
+    lines.splice(titleRows, 0, ...notices);
+    if (this.list) {
+      const available = budget - lines.length - help.length;
+      const description = this.descriptionLines(width);
+      const detailBudget = description.length
+        ? Math.min(
+            description.length + 1,
+            Math.max(0, available - 1),
+            Math.max(2, Math.floor(available / 2)),
+          )
+        : 0;
+      const choices = this.choiceRows(width, available - detailBudget);
       lines.push(
-        ...this.choiceRows(
+        ...choices,
+        ...this.renderDescription(
+          description,
+          available - choices.length,
           width,
-          budget - lines.length - help.length - notices.length,
         ),
       );
-    lines.push(...notices, ...help);
+    }
+    lines.push(...help);
     return lines;
   }
   invalidate() {
     this.input?.invalidate();
-    this.list?.invalidate();
   }
 }

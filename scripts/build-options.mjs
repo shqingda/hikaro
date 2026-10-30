@@ -54,6 +54,21 @@ export function piExtensionBuildOptions() {
     ...cliBuildOptions(),
     entryPoints: { "pi-extension": "extensions/pi/index.ts" },
     splitting: false,
-    plugins: [],
+    plugins: [
+      {
+        name: "pi-host-tui",
+        setup(build) {
+          // Shared Hikaro presentation imports pinned leaf modules in the CLI;
+          // an extension must instead use the classes supplied by its Pi host.
+          build.onResolve(
+            { filter: /^@earendil-works\/pi-tui(?:\/.*)?$/ },
+            () => ({
+              path: "@earendil-works/pi-tui",
+              external: true,
+            }),
+          );
+        },
+      },
+    ],
   };
 }

@@ -1,44 +1,143 @@
-import { Editor, truncateToWidth, visibleWidth } from "./primitives.ts";
+import {
+  Editor,
+  CURSOR_MARKER,
+  truncateToWidth,
+  visibleWidth,
+  type TUI,
+  type TuiMouseEvent,
+} from "./primitives.ts";
+import { accent, muted, editorTheme } from "./theme.ts";
+import { sanitize } from "./text.ts";
 
-const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+// Used only inside super.render(); never returned to the terminal.
+const bottomBoundary = "\0hikaro-editor-bottom\0";
 
-/** Put activity in the existing border; never animate an idle editor. */
+/** Pi keeps editing and completion; this viewport owns the visible chrome and rows. */
 export class ActivityEditor extends Editor {
-  private activity = "";
-  private frame = 0;
-  private timer?: ReturnType<typeof setInterval>;
-  private animated = false;
+  private label = "Message";
+  private hint = "Enter send · / commands · @ files";
+  private above = 0;
+  private below = 0;
+  private viewportTop = 0;
+  private bodyRows?: number;
+  private sourceRows: number[] = [];
+  private sourceHeight = 0;
 
-  setActivity(label = "", animate = true) {
-    const animated = !!label && animate;
-    if (this.activity === label && this.animated === animated) return;
-    this.activity = label;
-    this.animated = animated;
-    if (this.timer) clearInterval(this.timer);
-    this.timer = undefined;
-    this.frame = 0;
-    if (animated) {
-      this.timer = setInterval(() => {
-        this.frame = (this.frame + 1) % frames.length;
-        this.tui.requestRender();
-      }, 80);
-      this.timer.unref();
-    }
+  constructor(
+    tui: TUI,
+    theme: ConstructorParameters<typeof Editor>[1] = editorTheme,
+    options: ConstructorParameters<typeof Editor>[2] = {},
+  ) {
+    super(tui, theme, { ...options, paddingX: 1, autocompleteMaxVisible: 5 });
+  }
+
+  setHint(text: string) {
+    const next = sanitize(text).replace(/[\r\n]+/g, " ");
+    if (this.hint === next) return;
+    this.hint = next;
     this.tui.requestRender();
   }
 
-  protected override renderTopBorder(width: number, hiddenLineCount: number) {
-    if (!this.activity || width < 5)
-      return super.renderTopBorder(width, hiddenLineCount);
-    const overflow = hiddenLineCount > 0 ? ` · ↑ ${hiddenLineCount} more` : "";
-    const text = `${this.animated ? frames[this.frame] + " " : ""}${this.activity}${overflow}`;
-    const label = truncateToWidth(text, Math.max(1, width - 4), "");
-    return this.borderColor(
-      `── ${label} ${"─".repeat(Math.max(0, width - visibleWidth(label) - 4))}`,
-    );
+  setLabel(text: string) {
+    const next = sanitize(text).replace(/[\r\n]+/g, " ");
+    if (this.label === next) return;
+    this.label = next;
+    this.tui.requestRender();
   }
 
-  dispose() {
-    this.setActivity();
+  /** Optional layout budget; the terminal height may further reduce it. */
+  setBodyRows(rows?: number) {
+    const next =
+      rows === undefined
+        ? undefined
+        : Math.max(1, Math.min(6, Math.floor(rows)));
+    if (this.bodyRows === next) return;
+    this.bodyRows = next;
+    this.tui.requestRender();
   }
+
+  // Kept for callers migrating activity to the independent status bar.
+  setActivity(_label = "", _animate = true) {}
+
+  protected override renderTopBorder(_width: number, hiddenLineCount: number) {
+    this.above = hiddenLineCount;
+    return "";
+  }
+
+  protected override renderBottomBorder(
+    _width: number,
+    hiddenLineCount: number,
+  ) {
+    this.below = hiddenLineCount;
+    return bottomBoundary;
+  }
+
+  override render(width: number) {
+    this.setAutocompleteMaxVisible(this.tui.terminal.rows < 18 ? 3 : 5);
+    // Ask Pi for its cursor marker even when a panel has focus, solely to keep
+    // the viewport anchored. Strip it again before returning an unfocused view.
+    const focused = this.focused;
+    let source: string[];
+    this.focused = true;
+    try {
+      source = super.render(width);
+    } finally {
+      this.focused = focused;
+    }
+    const bottom = source.indexOf(bottomBoundary);
+    const body = source.slice(1, bottom);
+    const budget = Math.min(
+      this.bodyRows ?? 6,
+      Math.max(1, Math.min(6, Math.floor(this.tui.terminal.rows / 3) - 2)),
+    );
+    const cursor = Math.max(
+      0,
+      body.findIndex((line) => line.includes(CURSOR_MARKER)),
+    );
+    let start = Math.max(
+      0,
+      Math.min(body.length - budget, this.viewportTop - this.above),
+    );
+    if (cursor < start) start = cursor;
+    else if (cursor >= start + budget) start = cursor - budget + 1;
+    const end = Math.min(body.length, start + budget);
+    this.viewportTop = this.above + start;
+    this.sourceHeight = source.length;
+    this.sourceRows = [0];
+    for (let row = start + 1; row <= end; row++) this.sourceRows.push(row);
+    for (let row = bottom; row < source.length; row++)
+      this.sourceRows.push(row);
+    const result = this.sourceRows.map((row) => source[row]!);
+    const overflowAbove = this.above + start;
+    const label = truncateToWidth(
+      `${this.label}${overflowAbove ? ` · ↑ ${overflowAbove}` : ""}`,
+      Math.max(0, width - 4),
+      "",
+    );
+    result[0] = truncateToWidth(
+      muted("─ ") +
+        accent(label) +
+        muted(` ${"─".repeat(Math.max(0, width - visibleWidth(label) - 3))}`),
+      width,
+      "",
+    );
+    const overflowBelow = this.below + body.length - end;
+    const hint = `${overflowBelow ? `↓ ${overflowBelow} · ` : ""}${this.hint}`;
+    result[end - start + 1] = muted(truncateToWidth(` ${hint}`, width, ""));
+    return focused
+      ? result
+      : result.map((line) => line.replaceAll(CURSOR_MARKER, ""));
+  }
+
+  override handleMouse(event: TuiMouseEvent) {
+    const sourceY = this.sourceRows[event.y];
+    if (sourceY === undefined) return undefined;
+    return super.handleMouse({
+      ...event,
+      y: sourceY,
+      height: this.sourceHeight,
+    });
+  }
+
+  dispose() {}
 }

@@ -44,7 +44,7 @@ it("browses models and providers without reading secrets, then reads only the us
     await rm(home, { recursive: true, force: true });
   }
 });
-it("renders picker errors below options and never displays secret input", async () => {
+it("renders picker errors before options and never displays secret input", async () => {
   const abort = new AbortController();
   const panel = new ModelPanel(abort.signal, () => {});
   const choice = panel.choose(
@@ -53,7 +53,7 @@ it("renders picker errors below options and never displays secret input", async 
     "Could not refresh; using cached models",
   );
   const output = panel.render(80).join("\n");
-  expect(output.indexOf("Could not refresh")).toBeGreaterThan(
+  expect(output.indexOf("Could not refresh")).toBeLessThan(
     output.indexOf("Model A"),
   );
   expect(output.indexOf("Could not refresh")).toBeLessThan(

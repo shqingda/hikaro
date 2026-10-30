@@ -7,13 +7,12 @@ import {
 import type { PermissionRequest } from "../../core/src/types.ts";
 import { sanitize } from "./text.ts";
 
-const accent = (text: string) => `\x1b[38;2;196;85;72m${text}\x1b[39m`;
-const muted = (text: string) => `\x1b[90m${text}\x1b[39m`;
+import { accent, muted, selected } from "./theme.ts";
 
 /** A pending operation owns focus; typing never changes the saved composer. */
 export class ApprovalPanel implements Component {
   focused = false;
-  private allow = true;
+  private allow = false;
   private offset = 0;
   private pageSize = 1;
   private detailRows = 0;
@@ -60,8 +59,8 @@ export class ApprovalPanel implements Component {
     else if (matchesKey(data, "enter")) {
       // Ignore Enter already in flight when the operation took focus.
       if (
-        !this.allow ||
-        (this.readable && (this.navigated || Date.now() >= this.readyAt))
+        (this.navigated || Date.now() >= this.readyAt) &&
+        (!this.allow || this.readable)
       )
         this.answer(this.allow);
       return;
@@ -74,8 +73,8 @@ export class ApprovalPanel implements Component {
     const text = (value: string) => new Text(value, 1, 0).render(width);
     const title = text(accent("Permission required"));
     const choices = [
-      ...text(this.allow ? accent("→ Allow once") : "  Allow once"),
-      ...text(!this.allow ? accent("→ Deny") : "  Deny"),
+      ...text(this.allow ? selected("→ Allow once") : "  Allow once"),
+      ...text(!this.allow ? selected("→ Deny") : "  Deny"),
     ];
     const help = text(muted("↑↓ choose · Enter confirm · Esc deny"));
     const rows = text(this.details);

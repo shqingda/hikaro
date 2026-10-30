@@ -45,6 +45,7 @@ describe("production startup packaging", () => {
       "--input-type=module",
       "-e",
       `
+      delete process.env.NO_COLOR; // This case verifies styled first-frame Markdown.
       let cjkExpressions = 0;
       const original = globalThis.RegExp;
       globalThis.RegExp = new Proxy(original, {

@@ -107,15 +107,13 @@ it("passes the complete endpoint selection and scope to the picker and labels un
     notice() {},
     setError: vi.fn(),
   } as unknown as HikaroView;
-  const capabilities = vi
-    .fn()
-    .mockResolvedValue({
-      contextWindow: 32768,
-      reasoning: ["off"],
-      speed: ["default"],
-      source: "endpoint",
-      unknown: ["contextWindow", "images"],
-    });
+  const capabilities = vi.fn().mockResolvedValue({
+    contextWindow: 32768,
+    reasoning: ["off"],
+    speed: ["default"],
+    source: "endpoint",
+    unknown: ["contextWindow", "images"],
+  });
   await openModelControl(
     view,
     { capabilities },
@@ -210,14 +208,14 @@ it("recognizes the device-code URL used by xAI authorization", () => {
     }),
   ).toBe("https://auth.example.com/login");
 });
-it("uses a full-width brand-tinted user background without role headings", () => {
+it("uses explicit role headings on the terminal background", () => {
   const user = new MessageComponent(1, "user", "hi");
   const assistant = new MessageComponent(2, "assistant", "hello");
   const a = user.render(40).join("\n"),
     b = assistant.render(40).join("\n");
-  expect(a).toContain("\x1b[48;");
-  expect(a).not.toContain("You");
-  expect(b).not.toContain("Hikaro");
+  expect(a).not.toContain("\x1b[48;");
+  expect(a).toContain("YOU");
+  expect(b).toContain("HIKARO");
   expect(b).not.toContain("\x1b[48;");
 });
 

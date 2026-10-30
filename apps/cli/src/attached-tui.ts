@@ -300,11 +300,13 @@ export async function attachTui(options: {
   const offState = client.subscribe(() => {
     if (!view) return;
     const state = client.status;
-    view.setInfo(
-      state.canAct
-        ? `Shared host · ${state.session?.id.slice(0, 8) ?? "no session"}`
-        : "Host disconnected / synchronizing · draft stays local",
-    );
+    view.setStatus({
+      connection: state.canAct
+        ? "connected"
+        : state.connection === "offline"
+          ? "disconnected"
+          : "synchronizing",
+    });
     if (!state.canAct) {
       if (state.connection === "offline") {
         workflows?.disconnected();
@@ -630,6 +632,9 @@ export async function attachTui(options: {
   workflows = new AttachedWorkflows(client, view, transport.endpoint.cwd);
   view.setPreferences(preferences);
   view.bind(backend);
+  view.setStatus({
+    connection: client.status.canAct ? "connected" : "synchronizing",
+  });
   view.setPermissionLabel("Host owns task approvals");
   try {
     await client.connected();

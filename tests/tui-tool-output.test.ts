@@ -105,10 +105,8 @@ it("keeps failed tool output readable and hides ordinary tool details by default
         result: { text: "permission denied", isError: true },
       },
     });
-    expect(sanitize(view.inputError.render(100).join("\n"))).toContain(
-      "permission denied",
-    );
-    expect(screen()).not.toContain("permission denied");
+    expect(screen()).toContain("permission denied");
+    expect(screen()).toContain("Failed  shell");
     view.setPreferences({ ...defaultTuiPreferences, showToolDetails: true });
     view.showMessages([
       {
@@ -119,7 +117,7 @@ it("keeps failed tool output readable and hides ordinary tool details by default
         timestamp: 1,
       },
     ]);
-    expect(screen()).toContain("shell failed");
+    expect(screen()).toContain("Failed  shell");
     expect(screen()).toContain("permission denied");
   } finally {
     view.dispose();

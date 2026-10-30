@@ -204,7 +204,7 @@ describe("permissions", () => {
   });
 });
 
-it("activity indicator animates runs, pauses for approval, and stops on cancellation and disposal", async () => {
+it("status bar reflects execution and approval without animation or idle redraws", async () => {
   vi.useFakeTimers();
   const terminal: Terminal = {
     rows: 24,
@@ -241,37 +241,48 @@ it("activity indicator animates runs, pauses for approval, and stops on cancella
       seq: 1,
       timestamp: 1,
     } as AgentEvent);
+  const status = () => view.footer.render(80).join("\n");
   try {
     expect(vi.getTimerCount()).toBe(0);
     event("run.start");
-    const first = view.editor.render(80)[0];
+    const first = status();
     expect(first).toContain("Working");
-    vi.advanceTimersByTime(80);
-    expect(view.editor.render(80)[0]).not.toBe(first);
+    expect(view.editor.render(80)[0]).toContain("Message");
+    expect(view.editor.render(80)[0]).not.toContain("Working");
+    render.mockClear();
+    vi.advanceTimersByTime(800);
+    expect(status()).toBe(first);
+    expect(render).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
     event("context.compacting");
-    expect(view.editor.render(80)[0]).toContain("Compacting");
+    expect(status()).toContain("Compacting");
     event("context.checkpoint");
-    expect(view.editor.render(80)[0]).toContain("Working");
+    expect(status()).toContain("Working");
     event("thinking.delta", { text: "hidden reasoning" });
-    expect(view.editor.render(80)[0]).toContain("Thinking");
+    expect(status()).toContain("Thinking");
     event("tool.start", { name: "shell" });
-    expect(view.editor.render(80)[0]).toContain("Running shell");
+    expect(status()).toContain("Running shell");
     const abort = new AbortController();
     const approval = view.approve(request("shell", {}), abort.signal);
-    expect(view.editor.render(80)[0]).toContain("Approval required");
+    expect(status()).toContain("Waiting for approval");
     expect(vi.getTimerCount()).toBe(0);
     abort.abort();
     expect(await approval).toBe(false);
+    expect(status()).toContain("Running shell");
     event("run.end", { status: "cancelled" });
-    expect(view.editor.render(80)[0]).not.toContain("Running");
+    expect(status()).toContain("Stopped");
+    expect(status()).not.toContain("Running");
     expect(vi.getTimerCount()).toBe(0);
     render.mockClear();
     vi.advanceTimersByTime(800);
     expect(render).not.toHaveBeenCalled();
     event("run.start", { operation: "compact" });
-    expect(view.editor.render(80)[0]).toContain("Compacting");
+    expect(status()).toContain("Compacting");
     view.dispose();
     expect(vi.getTimerCount()).toBe(0);
+    render.mockClear();
+    vi.advanceTimersByTime(800);
+    expect(render).not.toHaveBeenCalled();
   } finally {
     view.dispose();
   }

@@ -1,5 +1,4 @@
 import {
-  Editor,
   Text,
   matchesKey,
   truncateToWidth,
@@ -7,12 +6,29 @@ import {
   type Component,
   type TuiMouseEvent,
 } from "@earendil-works/pi-tui";
+import { ActivityEditor } from "../../tui/src/activity-editor.ts";
+import {
+  accent,
+  muted,
+  bold,
+  error as errorText,
+  setColorScheme,
+  editorTheme,
+} from "../../tui/src/theme.ts";
 import { sanitize } from "../../tui/src/text.ts";
 import type { PiTransport } from "./index.ts";
 
-const plain = (text: string) => text;
 const MAX_TRANSCRIPT_CHARS = 128_000;
 const RESUMED_MESSAGES = 20;
+
+type TranscriptEntry = {
+  role: "user" | "assistant" | "notice" | "tool";
+  text: string;
+  id?: string;
+  name?: string;
+  target?: string;
+  status?: "Running" | "Done" | "Failed" | "Stopped" | "Interrupted";
+};
 
 export interface PiBridgeSession {
   /** Hikaro session to continue; a new one is created if it cannot be resumed. */
@@ -22,9 +38,15 @@ export interface PiBridgeSession {
 
 /** A terminal component hosted by Pi; only Hikaro receives submitted prompts. */
 export class PiBridgeView implements Component {
-  readonly editor: Editor;
+  readonly editor: ActivityEditor;
   private transcript = new Text("", 1, 0);
-  private text = "Hikaro · connecting…\n";
+  private entries: TranscriptEntry[] = [];
+  private transcriptDirty = true;
+  private outcome = "Ready";
+  private assistant?: TranscriptEntry;
+  private removeScheme?: () => void;
+  private editorY = 0;
+  private editorHeight = 0;
   private offset?: number;
   private maxOffset = 0;
   private bodyHeight = 1;
@@ -44,39 +66,55 @@ export class PiBridgeView implements Component {
     private done: () => void,
     private session: PiBridgeSession = {},
   ) {
-    this.editor = new Editor(tui, {
-      borderColor: plain,
-      selectList: {
-        selectedPrefix: plain,
-        selectedText: plain,
-        description: plain,
-        scrollInfo: plain,
-        noMatch: plain,
-      },
+    this.editor = new ActivityEditor(tui, editorTheme, {
+      paddingX: 1,
+      autocompleteMaxVisible: 5,
     });
-    this.transcript.setText(this.text);
+    this.startTheme();
     this.removeMessage = client.subscribe((message) => {
       if (this.disposed) return;
       if (message.type === "event") {
         const event = message.event;
-        if (event.type === "text.delta") this.append(String(event.data.text));
-        else if (event.type === "run.start") {
+        if (event.type === "text.delta") {
+          if (!this.assistant) {
+            this.assistant = { role: "assistant", text: "" };
+            this.entries.push(this.assistant);
+          }
+          this.assistant.text += sanitize(String(event.data.text));
+          this.changed();
+        } else if (event.type === "run.start") {
           this.busy = true;
           this.running = true;
+          this.assistant = undefined;
+          this.outcome = "Working";
           this.refresh();
         } else if (event.type === "run.end") {
           this.busy = false;
           this.running = false;
           this.approvals = [];
-          this.append(
-            `\n\n${event.data.status === "cancelled" ? "Stopped\n" : ""}${event.data.error ? String(event.data.error) + "\n" : ""}`,
-          );
-        } else if (event.type === "tool.end" && event.data.result?.isError) {
-          this.append(`\n${event.data.name}: ${event.data.result.text}\n`);
+          this.outcome =
+            event.data.status === "cancelled"
+              ? "Stopped"
+              : event.data.status === "failed"
+                ? "Failed"
+                : "Ready";
+          for (const entry of this.entries) {
+            if (entry.status === "Running")
+              entry.status =
+                this.outcome === "Stopped" ? "Stopped" : "Interrupted";
+          }
+          this.assistant = undefined;
+          if (event.data.error) this.append(String(event.data.error));
+          this.changed();
+        } else if (event.type === "tool.start" || event.type === "tool.end") {
+          this.updateTool(event.type, event.data);
         }
       } else if (message.type === "error") {
         // A prompt can be accepted and then refused before its run starts, e.g. a held lease.
-        if (!this.running) this.busy = false;
+        if (!this.running) {
+          this.busy = false;
+          this.outcome = "Failed";
+        }
         this.append(`\n${String(message.error)}\n`);
       } else if (message.type === "approval") {
         this.approvals.push({
@@ -95,6 +133,8 @@ export class PiBridgeView implements Component {
       this.busy = false;
       this.running = false;
       this.approvals = [];
+      for (const entry of this.entries)
+        if (entry.status === "Running") entry.status = "Interrupted";
       this.append(`\n${error.message}\n/back returns to Pi.\n`);
     });
     this.editor.onSubmit = (text) => {
@@ -104,16 +144,17 @@ export class PiBridgeView implements Component {
     // risks missing it when a transport is already connected or when a host reconnects.
     void this.connect().then(
       (history) => {
-        if (this.disposed) return;
+        if (this.disposed || this.lost) return;
         this.connected = true;
-        this.text = "Hikaro · /back returns to Pi\n\n" + history;
-        this.transcript.setText(this.text);
-        this.refresh();
+        this.entries = [...history, ...this.entries];
+        this.changed();
       },
-      (error) =>
+      (error) => {
+        this.lost = true;
         this.append(
-          `\nCould not start Hikaro: ${String(error)}\n/back returns to Pi.\n`,
-        ),
+          `Could not start Hikaro: ${String(error)}\n/back returns to Pi.`,
+        );
+      },
     );
   }
 
@@ -127,22 +168,38 @@ export class PiBridgeView implements Component {
         const page = await this.client
           .request("messages.read", { limit: RESUMED_MESSAGES })
           .catch(() => undefined);
-        return (page?.items ?? [])
-          .map(({ message }: any) =>
-            message.role === "user"
-              ? `You: ${message.text}\n\n`
-              : message.role === "assistant"
-                ? `${message.text}\n\n`
-                : "",
-          )
-          .join("");
+        return (page?.items ?? []).flatMap(
+          ({ message }: any): TranscriptEntry[] => {
+            if (message.role === "user" || message.role === "assistant")
+              return [
+                {
+                  role: message.role,
+                  text: sanitize(String(message.text ?? "")),
+                },
+              ];
+            if (message.role === "tool")
+              return [
+                {
+                  role: "tool",
+                  name: sanitize(String(message.name ?? "tool")),
+                  text: message.isError
+                    ? sanitize(String(message.text ?? ""))
+                        .split("\n")[0]!
+                        .slice(0, 200)
+                    : "",
+                  status: message.isError ? "Failed" : "Done",
+                },
+              ];
+            return [];
+          },
+        );
       } catch {
         // Deleted or unreadable sessions fall through to a fresh one.
       }
     }
     const created = await this.client.request("session.create");
     if (typeof created?.id === "string") this.session.onSession?.(created.id);
-    return "";
+    return [] as TranscriptEntry[];
   }
 
   get focused() {
@@ -154,17 +211,146 @@ export class PiBridgeView implements Component {
   private refresh() {
     if (!this.disposed) this.tui.requestRender();
   }
-  private append(text: string) {
+  private startTheme() {
+    const apply = (light: boolean) => {
+      if (this.disposed) return;
+      setColorScheme(light);
+      this.invalidate();
+      this.refresh();
+    };
+    this.removeScheme = this.tui.onTerminalColorSchemeChange?.((scheme) =>
+      apply(scheme === "light"),
+    );
+    const colors = (value: {
+      background?: { r: number; g: number; b: number };
+    }) => {
+      if (value.background)
+        apply(
+          (value.background.r + value.background.g + value.background.b) / 3 >
+            128,
+        );
+    };
+    void this.tui
+      .queryTerminalColors?.({ timeoutMs: 100, onLateReply: colors })
+      .then(colors)
+      .catch(() => {});
+  }
+  private changed() {
     if (this.disposed) return;
-    this.text += sanitize(text);
-    if (this.text.length > MAX_TRANSCRIPT_CHARS) {
-      this.text =
-        "Earlier output is saved in the Hikaro session.\n" +
-        this.text.slice(-MAX_TRANSCRIPT_CHARS);
+    let length = this.entries.reduce(
+      (sum, entry) =>
+        sum +
+        entry.text.length +
+        (entry.target?.length ?? 0) +
+        (entry.name?.length ?? 0) +
+        32,
+      0,
+    );
+    let trimmed = false;
+    while (length > MAX_TRANSCRIPT_CHARS && this.entries.length > 1) {
+      const entry = this.entries.shift()!;
+      length -=
+        entry.text.length +
+        (entry.target?.length ?? 0) +
+        (entry.name?.length ?? 0) +
+        32;
+      trimmed = true;
+    }
+    if (this.entries[0] && length > MAX_TRANSCRIPT_CHARS) {
+      this.entries[0].text = this.entries[0].text.slice(
+        -MAX_TRANSCRIPT_CHARS + 256,
+      );
+      trimmed = true;
+    }
+    if (trimmed) {
+      this.entries.unshift({
+        role: "notice",
+        text: "Earlier output is saved in the Hikaro session.",
+      });
       this.offset = undefined;
     }
-    this.transcript.setText(this.text);
+    this.transcriptDirty = true;
     this.refresh();
+  }
+  private append(text: string) {
+    if (this.disposed) return;
+    this.assistant = undefined;
+    this.entries.push({ role: "notice", text: sanitize(text).trim() });
+    this.changed();
+  }
+  private updateTool(type: string, data: any) {
+    const id = typeof data.callId === "string" ? data.callId : undefined;
+    let entry = id
+      ? this.entries.find((item) => item.role === "tool" && item.id === id)
+      : undefined;
+    if (!entry) {
+      const args = data.arguments ?? {};
+      const target = [
+        args.path,
+        args.filePath,
+        args.file_path,
+        args.query,
+        args.pattern,
+        args.command,
+      ].find((value) => typeof value === "string");
+      entry = {
+        role: "tool",
+        id,
+        text: "",
+        name: sanitize(String(data.name ?? "tool")),
+        target: target
+          ? sanitize(target).replace(/\s+/g, " ").slice(0, 200)
+          : undefined,
+      };
+      this.entries.push(entry);
+    }
+    entry.status =
+      type === "tool.start"
+        ? "Running"
+        : data.status === "cancelled"
+          ? "Stopped"
+          : data.result?.isError
+            ? "Failed"
+            : "Done";
+    entry.text = data.result?.isError
+      ? sanitize(String(data.result.text ?? "Tool failed"))
+          .split("\n")[0]!
+          .slice(0, 200)
+      : "";
+    this.assistant = undefined;
+    this.changed();
+  }
+  private updateTranscript() {
+    if (!this.transcriptDirty) return;
+    this.transcriptDirty = false;
+    this.transcript.setText(
+      this.entries
+        .map((entry, index) => {
+          const prefix =
+            index &&
+            (entry.role !== "tool" || this.entries[index - 1]!.role !== "tool")
+              ? "\n"
+              : "";
+          if (entry.role === "tool") {
+            const label = `${entry.status ?? "Done"}  ${entry.name ?? "tool"}${entry.target ? "  " + entry.target : ""}${entry.text ? " · " + entry.text : ""}`;
+            return (
+              prefix +
+              "  " +
+              (entry.status === "Failed" ? errorText(label) : muted(label)) +
+              "\n"
+            );
+          }
+          if (entry.role === "notice") return prefix + muted(entry.text) + "\n";
+          return (
+            prefix +
+            (entry.role === "user" ? bold("YOU") : accent(bold("HIKARO"))) +
+            "\n" +
+            entry.text +
+            "\n"
+          );
+        })
+        .join(""),
+    );
   }
 
   private async submit(input: string) {
@@ -223,12 +409,16 @@ export class PiBridgeView implements Component {
     }
     this.editor.addToHistory(input);
     this.offset = undefined;
-    this.append(`\nYou: ${input}\n\n`);
+    this.assistant = undefined;
+    this.entries.push({ role: "user", text: sanitize(input) });
     this.busy = true;
+    this.outcome = "Working";
+    this.changed();
     try {
       await this.client.request("prompt", { text: input });
     } catch (error) {
       this.busy = false;
+      this.outcome = "Failed";
       this.append(`\n${String(error)}\n`);
     }
   }
@@ -250,31 +440,57 @@ export class PiBridgeView implements Component {
     const rows = Math.max(1, this.tui.terminal.rows);
     if (width < 8 || rows < 4)
       return [truncateToWidth("Resize terminal", Math.max(1, width))];
-    const input = this.editor.render(width);
-    const inputHeight = Math.min(
-      input.length,
-      Math.max(1, Math.floor(rows / 3)),
+    const state = !this.connected
+      ? this.lost
+        ? "Disconnected"
+        : "Connecting"
+      : this.approvals.length
+        ? "Waiting for approval"
+        : this.busy
+          ? "Working"
+          : this.outcome;
+    const status = `${state} · Permissions: Hikaro`;
+    const footer = new Text(
+      state === "Failed" || state === "Disconnected"
+        ? errorText(status)
+        : muted(status),
+      1,
+      0,
+    ).render(width);
+    this.editor.setLabel(
+      this.approvals.length ? "Permission response" : "Message",
     );
-    this.bodyHeight = Math.max(1, rows - inputHeight - 1);
+    this.editor.setHint(
+      this.approvals.length
+        ? "/allow approves · /deny declines"
+        : this.busy
+          ? "Ctrl+C stops · /back returns to Pi"
+          : "Enter send · PgUp/PgDn scroll",
+    );
+    this.editor.setBodyRows(Math.max(1, Math.min(6, rows - footer.length - 4)));
+    const input = this.editor.render(width);
+    this.editorHeight = input.length;
+    this.bodyHeight = Math.max(1, rows - input.length - footer.length - 1);
+    this.updateTranscript();
     const body = this.transcript.render(width);
     this.maxOffset = Math.max(0, body.length - this.bodyHeight);
     const start = Math.min(this.offset ?? this.maxOffset, this.maxOffset);
     const visible = body.slice(start, start + this.bodyHeight);
     while (visible.length < this.bodyHeight) visible.push("");
-    const footer = this.lost
-      ? "Not connected · Ctrl+D or /back returns to Pi"
-      : this.approvals.length
-        ? "/allow approves · /deny declines · /back returns to Pi"
-        : this.busy
-          ? "Working · Ctrl+C stops · /back returns to Pi"
-          : "Enter send · PageUp/PageDown scroll · Ctrl+D or /back returns to Pi";
+    this.editorY = 1 + visible.length;
     return [
+      truncateToWidth(
+        ` ${accent(bold("hikaro"))} ${muted("· /back returns to Pi")}`,
+        width,
+      ),
       ...visible,
-      ...input.slice(-inputHeight),
-      truncateToWidth(footer, width),
+      ...input,
+      ...footer,
     ];
   }
+
   invalidate() {
+    this.transcriptDirty = true;
     this.editor.invalidate();
     this.transcript.invalidate();
   }
@@ -296,6 +512,12 @@ export class PiBridgeView implements Component {
     } else this.editor.handleInput(data);
   }
   handleMouse(event: TuiMouseEvent) {
+    if (event.y >= this.editorY && event.y < this.editorY + this.editorHeight)
+      return this.editor.handleMouse({
+        ...event,
+        y: event.y - this.editorY,
+        height: this.editorHeight,
+      });
     if (event.type === "wheel") {
       this.move(event.wheelDelta ?? 0);
       return { handled: true, render: true };
@@ -312,6 +534,8 @@ export class PiBridgeView implements Component {
     this.disposed = true;
     this.removeMessage();
     this.removeExit();
+    this.removeScheme?.();
+    this.editor.dispose();
     this.approvals = [];
     void this.client.close().catch(() => {});
   }

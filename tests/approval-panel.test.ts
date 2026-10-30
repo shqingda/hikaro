@@ -79,7 +79,7 @@ describe("TUI approval panel", () => {
       expect(screen()).toContain("Permission required");
       expect(screen()).toContain("read_file");
       expect(screen()).toContain("/outside/README.md");
-      expect(screen()).toContain("→ Allow once");
+      expect(screen()).toContain("→ Deny");
       expect(screen()).not.toContain("Type allow");
       input("\r");
       await Promise.resolve();
