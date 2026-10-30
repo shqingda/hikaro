@@ -82,6 +82,9 @@ export class ModelPanel implements Component {
   private error = "";
   private choiceHits = new Map<number, number>();
   private choiceTop = 0;
+  private panelLeft = 0;
+  private panelWidth = 0;
+  private detailsExpanded = false;
   onCancel?: () => void;
   private helpTop = 0;
   private buttons: { row: number; start: number; end: number; key: string }[] =
@@ -368,6 +371,13 @@ export class ModelPanel implements Component {
     this.refresh();
   }
   handleMouse(event: TuiMouseEvent) {
+    event = {
+      ...event,
+      x: event.x - this.panelLeft - 1,
+      y: event.y - 1,
+      width: this.panelWidth,
+    };
+    if (event.x < 0 || event.x >= this.panelWidth || event.y < 0) return;
     if (event.type !== "press" || event.button !== "left" || !this.list) return;
     const button = this.buttons.find(
       (b) =>
@@ -376,7 +386,10 @@ export class ModelPanel implements Component {
         event.x < b.end,
     );
     if (button) {
-      if (button.key === "\x1b") {
+      if (button.key === "details") {
+        this.detailsExpanded = !this.detailsExpanded;
+        this.refresh();
+      } else if (button.key === "\x1b") {
         if (!this.cancelStep()) this.onCancel?.();
       } else this.handleInput(button.key);
       return { handled: true };
@@ -403,6 +416,11 @@ export class ModelPanel implements Component {
   }
   handleInput(data: string) {
     if (!this.pending || isKeyRelease(data)) return;
+    if (this.activeTab === "models" && matchesKey(data, "f2")) {
+      this.detailsExpanded = !this.detailsExpanded;
+      this.refresh();
+      return;
+    }
     if (
       this.tabs.length > 1 &&
       (matchesKey(data, "tab") || matchesKey(data, "shift+tab"))
@@ -738,7 +756,11 @@ export class ModelPanel implements Component {
       rows.push(
         " " +
           (item === current
-            ? selected(bold(row))
+            ? selected(
+                bold(
+                  row + " ".repeat(Math.max(0, width - visibleWidth(row) - 2)),
+                ),
+              )
             : /^(delete|remove)\b/i.test(label)
               ? red(row)
               : row),
@@ -763,7 +785,11 @@ export class ModelPanel implements Component {
     const item = this.list?.getSelectedItem();
     if (!item) return [];
     const label = clean(item.label);
-    const description = clean(item.detail ?? item.description ?? "");
+    const description = clean(
+      this.activeTab === "models" && !this.detailsExpanded
+        ? (item.description ?? "")
+        : (item.detail ?? item.description ?? ""),
+    );
     const text = [visibleWidth(label) > width - 4 ? label : "", description]
       .filter(Boolean)
       .join("\n");
@@ -795,11 +821,29 @@ export class ModelPanel implements Component {
     return visible;
   }
   render(width: number) {
+    this.panelWidth = Math.max(1, Math.min(76, width - 4));
+    this.panelLeft = Math.max(0, Math.floor((width - this.panelWidth - 2) / 2));
+    const body = this.renderContent(this.panelWidth);
+    const pad = " ".repeat(this.panelLeft);
+    return [
+      pad + dim("╭" + "─".repeat(this.panelWidth) + "╮"),
+      ...body.map(
+        (line) =>
+          pad +
+          dim("│") +
+          line +
+          " ".repeat(Math.max(0, this.panelWidth - visibleWidth(line))) +
+          dim("│"),
+      ),
+      pad + dim("╰" + "─".repeat(this.panelWidth) + "╯"),
+    ];
+  }
+  private renderContent(width: number) {
     this.choiceHits.clear();
     this.buttons = [];
     this.tabHits = [];
     this.tabRow = -1;
-    const budget = Math.max(0, Math.floor(this.maxRows(width)));
+    const budget = Math.max(0, Math.floor(this.maxRows(width)) - 2);
     this.noticeVisible = false;
     this.documentReady = false;
     if (budget < 4)
@@ -859,13 +903,8 @@ export class ModelPanel implements Component {
     const title = compact
       ? truncateToWidth(clean(this.title), Math.max(1, width - 2), "…")
       : this.title;
-    const heading = truncateToWidth(`─ ${clean(title)} `, width, "…");
     const lines = [
-      dim("─") +
-        (/delete|remove/i.test(title)
-          ? red(bold(heading.slice(1)))
-          : bold(heading.slice(1))) +
-        dim("─".repeat(Math.max(0, width - visibleWidth(heading)))),
+      " " + (/delete|remove/i.test(title) ? red(bold(title)) : bold(title)),
     ];
     if (this.tabs.length) {
       this.tabRow = lines.length;
@@ -893,6 +932,7 @@ export class ModelPanel implements Component {
         ),
       );
     }
+    if (budget >= 14) lines.push("");
     const titleRows = lines.length;
     if (this.input) {
       lines.push(
@@ -903,18 +943,25 @@ export class ModelPanel implements Component {
           : this.input.render(width)),
       );
     }
-    const help = this.helpLines(width, compact);
+    const help = this.list ? ([] as string[]) : this.helpLines(width, compact);
     if (this.list) {
       let row = help.length,
         x = 1;
       help.push(" ");
       for (const button of [
         {
-          label:
-            typeof this.enterAction === "string" ? this.enterAction : "Open",
+          label: `${typeof this.enterAction === "string" ? this.enterAction : "Open"} ↵`,
           key: "\r",
         },
-        { label: "Cancel", key: "\x1b" },
+        { label: "Cancel Esc", key: "\x1b" },
+        ...(this.activeTab === "models"
+          ? [
+              {
+                label: this.detailsExpanded ? "Less F2" : "Details F2",
+                key: "details",
+              },
+            ]
+          : []),
         ...(this.actionEnabled(this.allowDelete)
           ? [{ label: "Delete", key: "\x04" }]
           : []),
@@ -939,6 +986,25 @@ export class ModelPanel implements Component {
           " ";
         x += label.length + 1;
       }
+    }
+    if (
+      this.list &&
+      (this.actions.length || this.actionEnabled(this.allowDefault))
+    ) {
+      const hints = [
+        ...this.actions
+          .filter(
+            (a) => a.enabled === undefined || this.actionEnabled(a.enabled),
+          )
+          .map(
+            (a) =>
+              `${a.key} ${typeof a.label === "function" ? a.label(this.list?.getSelectedItem()) : a.label}`,
+          ),
+        ...(this.actionEnabled(this.allowDefault)
+          ? ["Ctrl+S save default"]
+          : []),
+      ];
+      help.push(...new Text(dim(hints.join(" · ")), 1, 0).render(width));
     }
     const message = this.message
       ? new Text(dim(clean(this.message)), 1, 0).render(width)

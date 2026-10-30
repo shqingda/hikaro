@@ -177,7 +177,7 @@ it("selects a menu item with the mouse and confirms through its visible button",
   );
   rows = panel.render(80).map(stripVTControlCharacters);
   expect(rows.join("\n")).toContain("→ Second");
-  const y = rows.findIndex((row) => row.includes("[Confirm]"));
-  click(rows[y]!.indexOf("[Confirm]") + 2, y);
+  const y = rows.findIndex((row) => row.includes("[Confirm ↵]"));
+  click(rows[y]!.indexOf("[Confirm ↵]") + 2, y);
   expect((await result).value).toBe("b");
 });

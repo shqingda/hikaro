@@ -465,7 +465,7 @@ export async function openModelPicker(
           return {
             value: id,
             label: `${favorite ? "★ " : ""}${model.name}`,
-            description: model.provider,
+            description: `${model.provider}${model.capabilities ? ` · ${Math.round(model.capabilities.contextWindow / 1000)}K context` : ""}`,
             section: favoriteOrder!.includes(id)
               ? "Favorites"
               : recentOrder.includes(id)
@@ -509,7 +509,6 @@ export async function openModelPicker(
         {
           search: true,
           searchQuery: queries.models,
-          description: `Credentials: ${owner}`,
           selectedValue:
             selections.models ??
             (options.current ? key(options.current) : undefined),
