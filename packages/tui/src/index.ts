@@ -251,12 +251,6 @@ export class HikaroView {
     this.header = {
       render: (width) => renderHeader(this.viewStatus, width),
       invalidate() {},
-      handleMouse: (event) => {
-        if (event.type === "press" && event.button === "left") {
-          void this.openActions();
-          return { handled: true };
-        }
-      },
     };
     this.editor = new ActivityEditor(
       tui,
@@ -912,7 +906,7 @@ export class HikaroView {
     const { panel, close } = this.openModelPanel();
     try {
       const choice = await panel.choose(
-        "Actions",
+        "Commands",
         this.actions.search().map((action) => ({
           value: action.id,
           label: action.title,
@@ -925,7 +919,7 @@ export class HikaroView {
             .filter(Boolean)
             .join(" · "),
         })),
-        "Search commands and actions for this workspace",
+        "Find models, sessions, changes and settings",
         undefined,
         { search: true },
       );
@@ -1240,13 +1234,7 @@ export class HikaroView {
     this.welcome = undefined;
     for (const message of messages.slice(-20)) this.showMessage(message);
     if (!messages.length) {
-      this.welcome = new Text(
-        muted(
-          "What would you like to work on?",
-        ),
-        1,
-        1,
-      );
+      this.welcome = new Text(muted("What would you like to work on?"), 1, 1);
       this.content.addChild(this.welcome);
     }
     this.updateHistoryHint();
@@ -1791,7 +1779,7 @@ export class HikaroView {
             ? this.options.onSteer
               ? "Enter intervene · Ctrl+X Enter queue · Ctrl+C stop"
               : "Ctrl+C stops · new prompts queue"
-            : `Enter send · Ctrl+P actions · @ files${this.status.size ? " · " + [...this.status.values()].join(" · ") : ""}`,
+            : `Enter send · Ctrl+P commands · @ files${this.status.size ? " · " + [...this.status.values()].join(" · ") : ""}`,
     );
   }
 

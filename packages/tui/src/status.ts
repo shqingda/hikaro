@@ -28,14 +28,9 @@ export function renderHeader(status: ViewStatus, width: number) {
   );
   const context = fit(
     `${workspace}${status.branch ? ` / ${single(status.branch)}` : ""}${status.sessionTitle && status.sessionTitle !== "New session" ? ` · ${single(status.sessionTitle)}` : ""}`,
-    Math.max(0, room - 29),
+    Math.max(0, room - 8),
   );
-  return [
-    fit(
-      ` ${title}  ${muted(context)}${" ".repeat(Math.max(1, room - 27 - visibleWidth(context)))}${accent("Actions Ctrl+P")}`,
-      width,
-    ),
-  ];
+  return [fit(` ${title}  ${muted(context)}`, width)];
 }
 
 export function renderStatus(

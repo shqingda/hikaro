@@ -41,3 +41,7 @@ Updated the existing completion-click regression: it failed before the fix and p
 ## Quiet default workspace
 
 Reviewed Grok Build's `views/welcome/top_bar.rs`: location metadata is one compact line. Applied that hierarchy to Hikaro rather than importing its renderer. Session navigation now opens explicitly instead of consuming a permanent column; the current view stays visible while the full tab selector appears on focus. Added a blank row between navigation and content, and suppressed the placeholder New session in the header. Existing F6, mouse view switching and session controls remain available. Two relevant suites (13 checks), typecheck and build passed; no expanded matrix or manual terminal claim.
+
+## Explicit controls after local Grok trial
+
+Launched locally installed Grok Build 1.0.70 in a PTY, inspected its welcome screen and slash picker, then exited with /quit without sending a model prompt. Its named menu entries and bracketed Dashboard control distinguish actions from location text. Removed Hikaro's invisible whole-header action. Added bracketed View, Sessions and Commands controls with exact hit regions and wrapping on narrow screens; View opens selection instead of cycling invisibly. Renamed the command picker and described its model/session/change/settings contents. Existing 13 relevant checks, typecheck and build passed. No manual mouse/IME claim.

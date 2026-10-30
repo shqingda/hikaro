@@ -75,6 +75,12 @@ export class WorkbenchFrame extends VStack {
   sessions: WorkspaceSession[] = [];
   navigationOpen = false;
   private navigationIndex = 0;
+  private toolbarActions: {
+    row: number;
+    start: number;
+    end: number;
+    run(): void;
+  }[] = [];
   private tabRegions: { tab: WorkspaceTab; start: number; end: number }[] = [];
   private sessionRegions: { row: number; id: string }[] = [];
   private navigationActions = new Map<number, () => void>();
@@ -182,10 +188,48 @@ export class WorkbenchFrame extends VStack {
       focused: false,
       render: (width) => {
         this.tabRegions = [];
+        this.toolbarActions = [];
         const full = this.tabs.map((t) => ` ${t} `).join(" ");
-        if (!this.tabBar.focused || visibleWidth(full) > width) {
+        if (!this.tabBar.focused) {
+          let offset = 1;
+          const buttons = [
+            {
+              label: `View: ${this.tab} ▾`,
+              run: () => {
+                tui.setFocus(this.tabBar);
+                tui.requestRender();
+              },
+            },
+            ...(callbacks.sessionNavigation !== false
+              ? [{ label: "Sessions", run: callbacks.sessions }]
+              : []),
+            { label: "Commands", run: callbacks.actions },
+          ];
+          const lines = [" "];
+          for (const button of buttons) {
+            const text = `[${button.label}]`;
+            if (offset + text.length > width && offset > 1) {
+              lines.push(" ");
+              offset = 1;
+            }
+            this.toolbarActions.push({
+              row: lines.length - 1,
+              start: offset,
+              end: Math.min(width, offset + text.length),
+              run: button.run,
+            });
+            lines[lines.length - 1] += accent(fit(text, width - offset));
+            offset += text.length + 2;
+            if (offset <= width) lines[lines.length - 1] += "  ";
+          }
+          return [...lines, ""];
+        }
+        if (visibleWidth(full) > width) {
           this.tabRegions.push({ tab: this.tab, start: 0, end: width });
-          return [muted(fit(` ${this.tab} · F6 views`, width)), ""];
+          return [
+            accent(fit(` [${this.tab}]  ← → select · Enter open`, width)),
+            "",
+          ];
         }
         let offset = 0;
         const line = this.tabs
@@ -226,6 +270,14 @@ export class WorkbenchFrame extends VStack {
       },
       handleMouse: (event) => {
         if (event.type !== "press" || event.button !== "left") return;
+        const button = this.toolbarActions.find(
+          (item) =>
+            event.y === item.row && event.x >= item.start && event.x < item.end,
+        );
+        if (button) {
+          button.run();
+          return { handled: true };
+        }
         const hit = this.tabRegions.find(
           (t) => event.x >= t.start && event.x < t.end,
         );
