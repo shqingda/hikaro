@@ -57,7 +57,7 @@ File candidates use the required `rg` executable and respect ignore rules. Type 
 
 Conversation, Changes, Activity, Plan and Context are separate working views. Changes opens file diffs, read markers and existing rollback/redo operations. Activity manages queue entries, interventions, terminals, child tasks and durable run history; reading it never pauses execution. Object readers retain selection, support search and show actions next to the inspected object. Long message readers provide bounded parts, search, copy and reference-to-draft actions.
 
-At 144 columns navigation, main view and details can coexist. At 100–143 columns details replace navigation; below 100 columns navigation and details become full pages. Native and attached clients monitor up to eight sessions, including background work and approvals. Closing a running view keeps it monitored. Close an idle view through Actions to free a slot; no running session is terminated to make room.
+The header offers Sessions and Model shortcuts. Commands (Ctrl+P) opens the remaining tools and views. Conversation shows the composer; browsing views show a list, detail reader and visible action buttons, with a return-to-conversation control. F6 can focus the preserved composer. Menus and permission review share a bounded surface; drafts stay in memory while a panel is open. At 100 columns details can appear beside the list; below 100 columns they become a full page. Native and attached clients monitor up to eight sessions, including background work and approvals. Closing a running view keeps it monitored. Close an idle view through Commands to free a slot; no running session is terminated to make room.
 
 Running Enter submits an intervention to the observed run. Submitted, applied and unapplied states follow durable receipts and consumption events; they do not imply a tool was interrupted. A run ending concurrently preserves the draft rather than silently starting another task. Reconnection never resends an uncertain prompt, intervention or approval automatically.
 
@@ -67,7 +67,7 @@ Running Enter submits an intervention to the observed run. Submitted, applied an
 
 | Command | Action |
 | --- | --- |
-| `/new`, `/sessions [QUERY]`, `/resume [ID]` | Session picker searches titles and IDs across the current workspace, with bounded result pages; Delete/Ctrl+D opens confirmation; Enter deletes, Esc cancels |
+| `/new`, `/sessions [QUERY]`, `/resume [ID]` | Session picker searches titles and IDs across the current workspace, with bounded result pages; Delete/Ctrl+D opens confirmation; Keep session is selected by default; select Delete session to confirm, or Esc to cancel |
 | `/rename TITLE` | Rename the current session; Ctrl+R renames a selected session in `/sessions` |
 | `/export` | Export all saved text messages as Markdown; hidden thinking stays excluded |
 | `/skill:NAME [TASK]` | Invoke a discovered Skill; Skill and plugin commands appear in completion |

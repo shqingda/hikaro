@@ -1,3 +1,4 @@
+import { surfaceBounds, renderSurface } from "./surface.ts";
 import {
   Text,
   matchesKey,
@@ -7,7 +8,7 @@ import {
 import type { PermissionRequest } from "../../core/src/types.ts";
 import { sanitize } from "./text.ts";
 
-import { accent, muted, selected } from "./theme.ts";
+import { bold, muted, neutralSelected as selected } from "./theme.ts";
 
 /** A pending operation owns focus; typing never changes the saved composer. */
 export class ApprovalPanel implements Component {
@@ -69,9 +70,15 @@ export class ApprovalPanel implements Component {
   }
 
   render(width: number): string[] {
-    const budget = Math.max(1, Math.floor(this.maxRows(width)));
+    return renderSurface(
+      this.renderContent(surfaceBounds(width).content),
+      width,
+    );
+  }
+  private renderContent(width: number): string[] {
+    const budget = Math.max(1, Math.floor(this.maxRows(width)) - 2);
     const text = (value: string) => new Text(value, 1, 0).render(width);
-    const title = text(accent("Permission required"));
+    const title = text(bold("Permission required"));
     const choices = [
       ...text(this.allow ? selected("→ Allow once") : "  Allow once"),
       ...text(!this.allow ? selected("→ Deny") : "  Deny"),

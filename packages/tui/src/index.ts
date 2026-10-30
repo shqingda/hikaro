@@ -447,6 +447,8 @@ export class HikaroView {
         shrink: 0,
         visible: () =>
           this.attachments.visible &&
+          (this.frame.tab === "Conversation" ||
+            tui.getFocusedComponent() === this.editor) &&
           !this.modelPanel &&
           !this.approval &&
           !(
@@ -459,13 +461,10 @@ export class HikaroView {
         component: this.editor,
         shrink: 0,
         visible: () =>
-          !(
-            tui.terminal.rows < 18 &&
-            (this.modelPanel ||
-              this.approval ||
-              (this.frame.tab !== "Conversation" &&
-                tui.getFocusedComponent() !== this.editor))
-          ),
+          !this.modelPanel &&
+          !this.approval &&
+          (this.frame.tab === "Conversation" ||
+            tui.getFocusedComponent() === this.editor),
       },
       { component: this.inputError, shrink: 0, maxSize: 2 },
       { component: this.footer, shrink: 0 },
@@ -1052,15 +1051,7 @@ export class HikaroView {
     const panel = new ModelPanel(
       controller.signal,
       () => this.tui.requestRender(),
-      () =>
-        Math.max(
-          0,
-          this.tui.terminal.rows -
-            (this.tui.terminal.rows < 18
-              ? 0
-              : this.editor.render(this.tui.terminal.columns).length) -
-            5,
-        ),
+      () => Math.max(0, this.tui.terminal.rows - 5),
     );
     panel.onCancel = () => controller.abort();
     this.panelCancel = options?.onCancel;

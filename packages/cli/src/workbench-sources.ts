@@ -621,8 +621,7 @@ function workspaceSources(
       : "";
   const Changes: ObjectSource = {
     title: "Changes",
-    description:
-      "File edits and observed changes · review, reference, or restore an edit",
+    description: "Review changed files",
     async load(signal) {
       backend.current(signal);
       const result = await backend.changes(signal);
@@ -788,7 +787,7 @@ function workspaceSources(
   const Activity: ObjectSource = {
     title: "Activity",
     description:
-      "Queue · steering · child agents · terminals · saved runs. Search covers this loaded page; reading keeps execution moving.",
+      "Running tasks, queued messages and recent runs · Search this page",
     get actions() {
       const page = historyPage,
         index = historyIndex;
@@ -837,7 +836,7 @@ function workspaceSources(
           : []),
         {
           id: "history.all",
-          title: "Browse full run history…",
+          title: "All runs…",
           run: async () => {
             backend.current();
             await view.command("/tasks history");
@@ -898,7 +897,10 @@ function workspaceSources(
       historyPage = loadedHistory;
       return [...next].map(([id, { kind, item }]) => ({
         id,
-        title: item.title,
+        title:
+          kind === "history"
+            ? `${item.state} · ${item.title.split(" · ")[0]}`
+            : item.title,
         group:
           kind === "history" && loadedHistory
             ? `history · page ${index + 1}`
@@ -920,7 +922,7 @@ function workspaceSources(
       const actions: ObjectAction[] = [
         {
           id: "reference",
-          title: "Reference this activity in draft",
+          title: "Add to message",
           run: () => {
             backend.current(signal);
             append(`${ref.kind}: ${item.id}\n${item.title}`);
@@ -1006,8 +1008,7 @@ function workspaceSources(
   };
   const Plan: ObjectSource = {
     title: "Plan",
-    description:
-      "Current plan, reported progress, questions, versions, and recorded evidence",
+    description: "Steps, questions and progress",
     async load(signal) {
       backend.current(signal);
       const state = await backend.plan(signal),
@@ -1226,8 +1227,7 @@ function workspaceSources(
   };
   const Context: ObjectSource = {
     title: "Context",
-    description:
-      "Draft attachments, active model, workspace instructions, skills, and tools",
+    description: "Attachments, instructions and available tools",
     async load(signal) {
       backend.current(signal);
       const result: WorkspaceObject[] = [

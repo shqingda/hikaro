@@ -76,10 +76,7 @@ export async function verifyReleaseDiff({
       "\\ No newline at end of file",
     ].join("\n"),
   );
-  await terminal.text(
-    "File edits and observed changes",
-    terminal.send("/changes\r"),
-  );
+  await terminal.text("Review changed files", terminal.send("/changes\r"));
   await terminal.text("Next part", terminal.send("\r"));
   await terminal.text("Part 2 · final", terminal.send("1"));
   await terminal.text("release-diff-tail", terminal.send("\x1b[6~".repeat(60)));

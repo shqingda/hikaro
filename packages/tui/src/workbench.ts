@@ -8,7 +8,7 @@ import {
   type TUI,
   type TuiMouseEvent,
 } from "./primitives.ts";
-import { accent, bold, muted, selected } from "./theme.ts";
+import { accent, bold, muted, neutralSelected as selected } from "./theme.ts";
 import { sanitize } from "./text.ts";
 
 export type WorkspaceTab =
@@ -195,6 +195,14 @@ export class WorkbenchFrame extends VStack {
         if (!this.tabBar.focused) {
           let offset = 1;
           const buttons = [
+            ...(this.tab !== "Conversation"
+              ? [
+                  {
+                    label: "← Conversation",
+                    run: () => callbacks.selectTab("Conversation"),
+                  },
+                ]
+              : []),
             ...(callbacks.sessionNavigation !== false
               ? [{ label: "Sessions", run: callbacks.sessions }]
               : []),

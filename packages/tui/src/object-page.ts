@@ -9,10 +9,16 @@ import {
   FAKE_CURSOR_END,
   matchesKey,
   truncateToWidth,
+  visibleWidth,
   type Component,
   type TUI,
 } from "./primitives.ts";
-import { accent, muted, selected, error as errorText } from "./theme.ts";
+import {
+  bold,
+  muted,
+  neutralSelected as selected,
+  error as errorText,
+} from "./theme.ts";
 import { sanitize } from "./text.ts";
 
 export type ObjectAction = {
@@ -68,7 +74,12 @@ export class ObjectPage extends VStack {
   });
   private actionIndex = 0;
   private renderedRows: { row: number; index: number }[] = [];
-  private actionRows: { row: number; action: ObjectAction }[] = [];
+  private actionRows: {
+    row: number;
+    start: number;
+    end: number;
+    action: ObjectAction;
+  }[] = [];
   private detailsVisible?: (visible: boolean) => void;
 
   constructor(
@@ -82,12 +93,12 @@ export class ObjectPage extends VStack {
       render: (width) => {
         this.search.focused = this.focused && this.searching;
         return [
-          accent(truncateToWidth(` ${source.title}`, width)),
+          bold(truncateToWidth(` ${source.title}`, width)),
           ...(tui.terminal.rows >= 18 || this.failure
             ? [
                 muted(
                   truncateToWidth(
-                    ` ${this.message || source.description}`,
+                    ` ${this.message === "Loading…" || this.failure ? this.message : source.description}`,
                     width,
                   ),
                 ),
@@ -162,33 +173,65 @@ export class ObjectPage extends VStack {
         this.actionRows = [];
         const available = this.currentActions();
         const lines: string[] = [];
-        const i = Math.min(this.actionIndex, Math.max(0, available.length - 1));
-        const action = available[i];
-        if (action) {
-          this.actionRows.push({ row: lines.length, action });
-          const line = truncateToWidth(
-            ` ${i + 1}/${available.length} ${action.title}${available.length > 1 ? " · Tab next" : ""}`,
-            width,
+        let x = 1;
+        lines.push(muted("─".repeat(width)), " ");
+        const buttons = [
+          ...(this.reading
+            ? [{ id: "back", title: "← List", run: () => this.closeDetails() }]
+            : []),
+          {
+            id: "search",
+            title: "Search /",
+            run: () => {
+              this.searching = true;
+              this.tui.setFocus(this);
+              this.tui.requestRender();
+            },
+          },
+          { id: "refresh", title: "Refresh", run: () => this.refresh() },
+          ...available,
+        ];
+        for (const action of buttons) {
+          const label = truncateToWidth(
+            `[${action.title}]`,
+            Math.max(1, width - 2),
           );
-          lines.push(
-            i === this.actionIndex && this.reading
-              ? selected(line)
-              : accent(line),
-          );
+          const length = visibleWidth(label);
+          if (x + length > width && x > 1) {
+            lines.push(" ");
+            x = 1;
+          }
+          this.actionRows.push({
+            row: lines.length - 1,
+            start: x,
+            end: x + length,
+            action,
+          });
+          lines[lines.length - 1] +=
+            (available[this.actionIndex] === action && this.reading
+              ? selected(label)
+              : label) + " ";
+          x += length + 1;
         }
         return lines;
       },
       invalidate() {},
       handleMouse: (event) => {
         if (event.type !== "press" || event.button !== "left") return;
-        const row = this.actionRows.find((row) => row.row === event.y);
-        if (row) void this.run(row.action);
+        const row = this.actionRows.find(
+          (row) =>
+            row.row === event.y && event.x >= row.start && event.x < row.end,
+        );
+        if (row) {
+          if (["back", "search", "refresh"].includes(row.action.id))
+            void row.action.run();
+          else void this.run(row.action);
+        }
         return { handled: true };
       },
     };
     const inspector = new VStack([
       { component: this.detailScroll, basis: 0, grow: 1, minSize: 1 },
-      { component: actions, shrink: 0 },
     ]);
     this.addChild(heading, { shrink: 0 });
     this.addChild(
@@ -220,15 +263,15 @@ export class ObjectPage extends VStack {
       ),
       { basis: 0, grow: 1, minSize: 1 },
     );
-    this.addChild(actions, { shrink: 0, visible: () => !this.reading });
+    this.addChild(actions, { shrink: 0 });
     this.addChild(
       {
         render: (width) => [
           muted(
             truncateToWidth(
               this.reading
-                ? " ← list · PgUp/PgDn read · Tab action · Enter apply · / search"
-                : " ↑↓ select · Enter inspect · / search · Ctrl+R refresh · F6 input",
+                ? " PgUp/PgDn read · Tab select action · Enter apply"
+                : " ↑↓ select · Enter open · Ctrl+P commands · F6 focus",
               width,
             ),
           ),

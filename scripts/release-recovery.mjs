@@ -157,8 +157,11 @@ export async function verifyReleaseRecovery({ bin, spawn, home, workspace }) {
       session.id,
     ]);
     await attached.text("Attached to shared host");
-    await attached.text("Queue · steering", attached.send("/tasks\r"));
-    await attached.text("Reference this activity", attached.send("\r"));
+    await attached.text(
+      "Running tasks, queued messages and recent runs",
+      attached.send("/tasks\r"),
+    );
+    await attached.text("Add to message", attached.send("\r"));
     await attached.text("Apply recovered steering", attached.send("\t"));
     await attached.text(
       "This permits the recovered message",

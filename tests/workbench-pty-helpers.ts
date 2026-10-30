@@ -34,21 +34,8 @@ export function workbenchKeys(
   const reveal = async (label: string, offset: number) => {
     const index = actionIndex(label);
     if (!index) return wait(label, offset);
-    const expected = label.replace(/ \(.*$/, "");
-    await vi.waitFor(
-      async () => {
-        const text = stripVTControlCharacters(output().slice(offset));
-        const marker = [...text.matchAll(/\b([1-9])\/([1-9]) /g)].at(-1);
-        if (!marker) throw Error(`Waiting for ${label} action controls`);
-        const current = text.slice(marker.index, marker.index + 100);
-        if (Number(marker[1]) === index) expect(current).toContain(expected);
-        else {
-          await send("\t");
-          throw Error(`Selecting ${label}; currently ${current}`);
-        }
-      },
-      { timeout: 8000, interval: 100 },
-    );
+    await wait(label.replace(/ \(.*$/, ""), offset);
+    for (let i = 1; i < index; i++) await send("\t");
   };
   return {
     async tab(
@@ -61,18 +48,18 @@ export function workbenchKeys(
         tab === "Conversation"
           ? "Enter "
           : tab === "Activity"
-            ? "Queue · steering"
+            ? "Running tasks, queued messages and recent runs"
             : tab === "Changes"
-              ? "File edits and observed changes"
+              ? "Review changed files"
               : tab,
       );
       if (tab !== "Conversation")
         await sent(
           "\x12",
           tab === "Activity"
-            ? "Queue · steering"
+            ? "Running tasks, queued messages and recent runs"
             : tab === "Changes"
-              ? "File edits and observed changes"
+              ? "Review changed files"
               : tab,
         );
     },

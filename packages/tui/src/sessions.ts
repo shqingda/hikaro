@@ -69,13 +69,13 @@ export async function openSessions(
         ...sessions.map((session) => ({
           value: session.id,
           label: `${session.id === current() ? "● " : ""}${session.title}`,
-          description: session.id,
+          description: `Created ${new Date(session.createdAt).toLocaleString()}${session.id === current() ? " · Current session" : ""}`,
         })),
         ...(offset ? [{ value: "__previous", label: "Previous page…" }] : []),
         ...(rows.length > 50 ? [{ value: "__next", label: "Next page…" }] : []),
       ];
       const picked = await panel.choose(
-        `Sessions · page ${offset / 50 + 1} · search this workspace`,
+        `Sessions · page ${offset / 50 + 1}`,
         choices(),
         warning,
         undefined,
@@ -90,7 +90,7 @@ export async function openSessions(
             const found = await list(0, 51, text);
             if (signal.aborted || text !== panel.searchQuery) return [];
             offset = 0;
-            panel.setTitle("Sessions · page 1 · search this workspace");
+            panel.setTitle("Sessions · page 1");
             rows = found;
             sessions = rows.slice(0, 50);
             return choices();

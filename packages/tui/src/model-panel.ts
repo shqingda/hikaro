@@ -1,3 +1,4 @@
+import { surfaceBounds, renderSurface } from "./surface.ts";
 import { sanitize as clean } from "./text.ts";
 import {
   Input,
@@ -354,7 +355,7 @@ export class ModelPanel implements Component {
     if (this.signal.aborted) return;
     if (!this.pending) {
       this.document = undefined;
-      this.title = "";
+      this.title = "Loading";
       this.error = "";
       this.list = undefined;
       this.input = undefined;
@@ -378,6 +379,10 @@ export class ModelPanel implements Component {
       width: this.panelWidth,
     };
     if (event.x < 0 || event.x >= this.panelWidth || event.y < 0) return;
+    if (event.type === "wheel") {
+      this.handleInput((event.wheelDelta ?? 0) < 0 ? "\x1b[A" : "\x1b[B");
+      return { handled: true };
+    }
     if (event.type !== "press" || event.button !== "left" || !this.list) return;
     const button = this.buttons.find(
       (b) =>
@@ -821,23 +826,12 @@ export class ModelPanel implements Component {
     return visible;
   }
   render(width: number) {
-    this.panelWidth = Math.max(1, Math.min(76, width - 4));
-    this.panelLeft = Math.max(0, Math.floor((width - this.panelWidth - 2) / 2));
-    const body = this.renderContent(this.panelWidth);
-    const pad = " ".repeat(this.panelLeft);
-    return [
-      pad + dim("╭" + "─".repeat(this.panelWidth) + "╮"),
-      ...body.map(
-        (line) =>
-          pad +
-          dim("│") +
-          line +
-          " ".repeat(Math.max(0, this.panelWidth - visibleWidth(line))) +
-          dim("│"),
-      ),
-      pad + dim("╰" + "─".repeat(this.panelWidth) + "╯"),
-    ];
+    const bounds = surfaceBounds(width);
+    this.panelWidth = bounds.content;
+    this.panelLeft = bounds.left;
+    return renderSurface(this.renderContent(this.panelWidth), width);
   }
+
   private renderContent(width: number) {
     this.choiceHits.clear();
     this.buttons = [];
