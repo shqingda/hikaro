@@ -82,6 +82,12 @@ export class ClientFiles implements IntentStore {
   savePreferences(value: unknown) {
     return this.write("preferences.json", value);
   }
+  workspace() {
+    return this.read("workspace.json");
+  }
+  saveWorkspace(value: unknown) {
+    return this.write("workspace.json", value);
+  }
   async load(): Promise<Intent[]> {
     const value = await this.read("intents.json");
     if (value === null) return [];

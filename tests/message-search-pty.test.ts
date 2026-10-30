@@ -117,7 +117,7 @@ it.each([false, true])(
         terminal!.write(text);
         return offset;
       };
-      await wait("/help");
+      await wait("Enter send");
       await wait("Search: FULLTEXT-NEEDLE", send("/search FULLTEXT-NEEDLE\r"));
       await wait("FULLTEXT-NEEDLE");
       await wait("ORIGINAL-BEGIN", send("\r"));

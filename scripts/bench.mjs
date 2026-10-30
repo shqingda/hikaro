@@ -31,7 +31,7 @@ export async function startupSample({
   env = process.env,
   homePath,
   extraArgs = [],
-  readyText = "/help",
+  readyText = "Enter send",
   onReady,
 } = {}) {
   integerSetting("inputSamples", inputSamples, {}, 1000);

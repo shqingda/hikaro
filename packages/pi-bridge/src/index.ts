@@ -1,6 +1,9 @@
 import { ProcessClient } from "../../protocol/src/client.ts";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import type { ModelChoice } from "../../provider-pi/src/catalog.ts";
+import { modelCapabilities } from "../../provider-pi/src/settings.ts";
+import type { Api, Model } from "@earendil-works/pi-ai";
 import type {
   AgentBackend,
   AgentEvent,
@@ -38,6 +41,13 @@ export class PiBackend implements AgentBackend {
   private cancellation?: Promise<void>;
   private lastError?: string;
   private sessionId = "external-pi";
+  private selectedModel?: ModelChoice;
+  get isBusy() {
+    return this.running || !!this.cancellation;
+  }
+  get currentModel() {
+    return this.selectedModel;
+  }
   private dialogs = new Map<string, any>();
   private removeMessage: () => void;
   private removeExit: () => void;
@@ -101,6 +111,8 @@ export class PiBackend implements AgentBackend {
           "Pi get_state does not match the required RPC contract; no execution backend was changed",
         );
       backend.sessionId = state.sessionId;
+      backend.running = state.isStreaming || state.isCompacting;
+      if (state.model) backend.selectedModel = piModelChoice(state.model);
       return backend;
     } catch (error) {
       await backend.close();
@@ -113,6 +125,33 @@ export class PiBackend implements AgentBackend {
     return () => {
       this.listeners.delete(listener);
     };
+  }
+
+  /** Pi's model catalogue and credentials remain owned by Pi. */
+  async availableModels(): Promise<ModelChoice[]> {
+    if (this.closed) throw Error("Pi backend is closed");
+    const result = await this.client.request("get_available_models", {}, true);
+    if (!Array.isArray(result?.models))
+      throw Error("Pi returned an invalid model catalogue");
+    return result.models.map(piModelChoice);
+  }
+  async setModel(provider: string, modelId: string): Promise<ModelChoice> {
+    if (this.closed) throw Error("Pi backend is closed");
+    if (this.isBusy)
+      throw Error(
+        "Finish or cancel the running Pi task before switching models.",
+      );
+    const result = await this.client.request(
+      "set_model",
+      { provider, modelId },
+      true,
+    );
+    const model = piModelChoice(result);
+    if (model.provider !== provider || model.id !== modelId)
+      throw Error("Pi did not confirm the requested model selection");
+    this.selectedModel = model;
+    this.emit("model.changed", { provider, model: modelId });
+    return model;
   }
 
   private emit(type: string, data: Record<string, unknown>) {
@@ -385,4 +424,30 @@ export class PiBackend implements AgentBackend {
     this.removeExit();
     await this.client.close();
   }
+}
+
+function piModelChoice(value: unknown): ModelChoice {
+  if (!value || typeof value !== "object")
+    throw Error("Pi returned an invalid model");
+  const model = value as Model<Api>;
+  if (
+    typeof model.provider !== "string" ||
+    !model.provider ||
+    typeof model.id !== "string" ||
+    !model.id ||
+    typeof model.name !== "string"
+  )
+    throw Error("Pi returned an invalid model");
+  return {
+    provider: model.provider,
+    id: model.id,
+    name: model.name,
+    ...(Number.isFinite(model.contextWindow) &&
+    model.contextWindow > 0 &&
+    Number.isFinite(model.maxTokens) &&
+    model.maxTokens > 0 &&
+    Array.isArray(model.input)
+      ? { capabilities: modelCapabilities(model) }
+      : {}),
+  };
 }

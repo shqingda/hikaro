@@ -91,7 +91,7 @@ it.each([false, true])(
         terminal!.write(text);
         return offset;
       };
-      await wait("/help");
+      await wait("Enter send");
       await wait("Plan history · page 1", send("/plan history\r"));
       await wait("Plan version 23 · read-only", send("\r"));
       await wait("UNIQUE-STEP-23-END");

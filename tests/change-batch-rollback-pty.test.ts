@@ -1,3 +1,4 @@
+import { workbenchKeys } from "./workbench-pty-helpers.ts";
 import { expect, it } from "vitest";
 import { spawn } from "node-pty";
 import { createServer } from "node:http";
@@ -127,7 +128,7 @@ it("rolls back several model edits to a chosen point from the TUI", async () => 
       check();
     });
   try {
-    await wait("/help");
+    await wait("Enter send");
     const submitted = send("Make two edits\r");
     await wait("Batch fixture completed.", submitted);
     await wait("Enter send", submitted);
@@ -137,24 +138,22 @@ it("rolls back several model edits to a chosen point from the TUI", async () => 
     expect(await readFile(join(cwd, "sample.txt"), "utf8")).toBe(
       "edited by model",
     );
-    const list = send("/changes\r");
-    await wait("File changes", list);
-    // Both edits came from one model run, so the list labels that run.
-    await wait("· run ", list);
-    // Newest first: sample.txt, then notes.txt. Open the older one.
-    const detail = send("\x1b[B\r");
-    await wait("Roll back this run (2 changes)", detail);
-    await wait("Roll back to here (2 changes)", detail);
-    const confirm = send("\x1b[B".repeat(3) + "\r");
+    const keys = workbenchKeys(send, wait, () => output);
+    await keys.tab("Changes");
+    await keys.object(
+      "notes.txt",
+      "notes.txt",
+      "Roll back this run (2 changes)",
+    );
+    await wait("Roll back to here", send("\t"));
+    const confirm = send("5");
     await wait("Confirm rollback to here", confirm);
     await wait("1 created files will be removed", confirm);
-    const done = send("\x1b[B\r");
-    await wait("Rolled back 2 changes across 2 files", done);
+    await wait("reverted", send("\x1b[B\r"));
     expect(await readFile(join(cwd, "sample.txt"), "utf8")).toBe("original");
     await expect(access(join(cwd, "notes.txt"))).rejects.toThrow();
-    // Wait for the conversation footer, not "/help": a repaint of the open list can
-    // include the welcome line, and Ctrl+D sent while Esc is still pending is lost.
-    await wait("Enter send", send("\x1b"));
+    await keys.tab("Conversation");
+    await wait("Rolled back 2 changes across 2 files");
     send("\x04");
     const code = await Promise.race([
       exited,

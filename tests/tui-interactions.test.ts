@@ -108,6 +108,7 @@ function interactionView(
       seq: 1,
       timestamp: 1,
     } satisfies AgentEvent);
+  tui.setFocus(view.editor);
   return { view, input: (data: string) => input(data), focus, event, exit };
 }
 

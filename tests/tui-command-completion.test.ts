@@ -67,6 +67,7 @@ it("renders one permissions suggestion in attached views and keeps completion fr
     onExit: () => {},
     commands: [{ name: "permissions", description: "Open permissions" }],
   });
+  tui.setFocus(view.editor);
   const screen = () =>
     stripVTControlCharacters(view.editor.render(100).join("\n"));
   try {

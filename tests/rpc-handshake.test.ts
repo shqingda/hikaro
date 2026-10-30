@@ -226,7 +226,9 @@ it("routes a run-bound intervention through RPC into the same run", async () => 
   });
   await host.request("prompt", { text: "start" });
   await vi.waitFor(() => expect(intervention).toBeDefined());
-  expect((await intervention).error).toBeUndefined();
+  const submitted = await intervention;
+  expect(submitted.error).toBeUndefined();
+  expect(submitted.result.steeringId).toEqual(expect.any(String));
   await vi.waitFor(() =>
     expect(
       host.frames.some(
@@ -246,7 +248,8 @@ it("routes a run-bound intervention through RPC into the same run", async () => 
     events.filter(
       (event: any) =>
         event.type === "message" &&
-        event.data.message.text === "intervene once",
+        event.data.message.text === "intervene once" &&
+        event.data.steeringId === submitted.result.steeringId,
     ),
   ).toHaveLength(1);
 });

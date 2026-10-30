@@ -1,3 +1,4 @@
+import { workbenchKeys } from "./workbench-pty-helpers.ts";
 import { spawn as spawnProcess } from "node:child_process";
 import { spawn } from "node-pty";
 import { createServer } from "node:http";
@@ -128,22 +129,26 @@ it("edits, prioritizes and removes steering through attached TUI before the next
           ),
         { timeout: 8000 },
       );
-    await wait("Ctrl+C stops");
-    await wait("Execution manager", send("/tasks\r"));
-    await wait("Steering messages · page 1", send("\x1b[B".repeat(3) + "\r"));
-    await wait("Edit message", send("\r"));
-    await wait("Edit pending message", send("\x1b[B\r"));
-    await wait("Steering messages · page 1", send("\x01\x0bedited steering\r"));
-    await wait("Move to front", send("\x1b[B\r"));
-    await wait("1. priority steering", send("\x1b[B".repeat(2) + "\r"));
-    await wait("Remove message", send("\x1b[B".repeat(2) + "\r"));
-    await wait("Remove pending message?", send("\x1b[B".repeat(3) + "\r"));
-    await wait("Steering messages · page 1", send("\x1b[B\r"));
+    await wait("Attached to shared host");
+    const keys = workbenchKeys(send, wait, () => output);
+    await keys.tab("Activity");
+    await keys.object("first steering", "first steering", "Edit message");
+    await wait("Edit message", send("2"));
+    await wait("↑↓ select", send("\x01\x0bedited steering\r"));
+    await keys.object("edited steering", "edited steering", "Edit message");
+    await keys.object(
+      "priority steering",
+      "priority steering",
+      "Move to front",
+    );
+    await wait("1. priority steering", send("3"));
+    await keys.object("discard steering", "discard steering", "Remove message");
+    await keys.confirm("4", "Remove message", "↑↓ select");
     finishFirst!();
-    await wait("First turn complete");
-    expect(inputs).toHaveLength(1);
-    await wait("Execution manager", send("\x1b"));
-    await wait("Steering applied", send("\x1b"));
+    // Reading Activity must not hold steering consumption at the next turn.
+    await vi.waitFor(() => expect(inputs).toHaveLength(2), { timeout: 8000 });
+    await keys.tab("Conversation");
+    await wait("Steering applied");
     expect(inputs).toEqual([
       ["start"],
       ["start", "priority steering", "edited steering"],
@@ -279,13 +284,19 @@ it("restores steering after SIGKILL in the built TUI and applies only the explic
         { timeout: 8000 },
       );
     await wait("Attached to shared host");
-    await wait("Execution manager", send("/tasks\r"));
-    await wait("Steering messages · page 1", send("\x1b[B".repeat(3) + "\r"));
-    await wait("Apply recovered steering", send("\r"));
-    await wait("Apply recovered steering?", send("\x1b[B\r"));
-    await wait("Steering messages · page 1", send("\x1b[B\r"));
-    await wait("Execution manager", send("\x1b"));
-    await wait("Enter send", send("\x1b"));
+    const keys = workbenchKeys(send, wait, () => output);
+    await keys.tab("Activity");
+    await keys.object(
+      "recover first",
+      "recover first",
+      "Apply recovered steering",
+    );
+    await keys.confirm(
+      "2",
+      "This permits the recovered message",
+      "Pending next model turn",
+    );
+    await keys.tab("Conversation");
     expect(
       (await events()).filter((event) => event.type === "run.start"),
     ).toEqual([]);

@@ -77,10 +77,11 @@ it("keeps completed tool summaries and expands their already received result", (
       name: "read_file",
       result: { text: "PRIVATE DETAIL" },
     });
-    expect(screen()).toMatch(/Done[^\n]*read_file[^\n]*src\/a.ts/);
+    expect(screen()).toContain("Execution · 1 read_file · 1 shell");
     expect(screen()).toMatch(/Running[^\n]*shell[^\n]*pnpm test/);
     expect(screen()).not.toContain("PRIVATE DETAIL");
     view.setPreferences({ ...defaultTuiPreferences, showToolDetails: true });
+    expect(screen()).toMatch(/Done[^\n]*read_file[^\n]*src\/a.ts/);
     expect(screen()).toContain("PRIVATE DETAIL");
     view.setPreferences(defaultTuiPreferences);
     expect(screen()).not.toContain("PRIVATE DETAIL");
@@ -150,8 +151,10 @@ it("reconstructs history summaries without inventing missing targets", () => {
       },
     ]);
     expect(screen()).toContain("YOU");
-    expect(screen()).toMatch(/Done[^\n]*read_file[^\n]*src\/a.ts/);
+    expect(screen()).toContain("Execution · 1 read_file · 1 shell");
     expect(screen()).toMatch(/Failed[^\n]*shell/);
+    view.setPreferences({ ...defaultTuiPreferences, showToolDetails: true });
+    expect(screen()).toMatch(/Done[^\n]*read_file[^\n]*src\/a.ts/);
     expect(screen()).not.toContain("undefined");
   } finally {
     view.dispose();

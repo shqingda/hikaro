@@ -1,3 +1,4 @@
+import { workbenchKeys } from "./workbench-pty-helpers.ts";
 import { expect, it, vi } from "vitest";
 import { spawn } from "node-pty";
 import { createServer } from "node:http";
@@ -133,48 +134,46 @@ it("manages queued messages, terminal input/exit, and child cancellation from a 
       check();
     });
   try {
-    await wait("/help");
+    await wait("Enter send");
     send("start fixture\r");
     await vi.waitFor(() => expect(releaseRoot).toBeTypeOf("function"), {
       timeout: 8000,
     });
-    await wait("1 pending", send("discard me\r"));
-    await wait("2 pending", send("kept message\r"));
-    await wait("Execution manager", send("/tasks\r"));
-    await wait("Pending messages", send("\r"));
-    await wait("Remove message", send("\r"));
-    await wait("Remove pending message?", send("\x1b[B".repeat(3) + "\r"));
-    await wait("Message removed", send("\x1b[B\r"));
-    await wait("Edit message", send("\r"));
-    await wait("Edit pending message", send("\x1b[B\r"));
-    await wait("Message updated", send("\x01\x0bedited queued\r"));
-    await wait("Execution manager", send("\x1b"));
-    await wait("Ctrl+C stops", send("\x1b"));
+    await wait("1 pending", send("discard me\x18\r"));
+    await wait("2 pending", send("kept message\x18\r"));
+    const keys = workbenchKeys(send, wait, () => output);
+    await keys.tab("Activity");
+    await keys.object("discard me", "discard me", "Remove message");
+    await keys.confirm("4", "Remove message", "↑↓ select");
+    await keys.object("kept message", "kept message", "Edit message");
+    await wait("Edit message", send("2"));
+    await wait("↑↓ select", send("\x01\x0bedited queued\r"));
+    await keys.object("edited queued", "edited queued", "Edit message");
+    await keys.tab("Conversation");
     releaseRoot!();
     await vi.waitFor(() => expect(childStarted).toBe(true), { timeout: 8000 });
-    await wait("Execution manager", send("/tasks\r"));
-    await wait("Background terminals · page", send("\x1b[B\r"));
-    await wait("Send a line", send("\r"));
-    await wait("Send a line to terminal", send("\x1b[B\r"));
+    await keys.tab("Activity");
+    await keys.object("terminals", "printf", "Send a line");
+    await wait("Send a line", send("2"));
     await wait("Send terminal input?", send("hello\r"));
-    await wait("Input sent", send("\x1b[B\r"));
-    await wait("RESPONSE:hello", send("\r"));
-    await wait("Stop this task?", send("\x1b[B".repeat(2) + "\r"));
-    await wait("Stop requested", send("\x1b[B\r"));
-    await wait("State: exited", send("\r"));
-    await wait("Background terminals", send("\x1b"));
-    await wait("Execution manager", send("\x1b"));
-    // The manager menu also says "Child agents"; wait for the loaded list.
-    await wait("Child agents · page", send("\x1b[B".repeat(2) + "\r"));
-    await wait("Task: child fixture", send("\r"));
-    await wait("Stop this task?", send("\x1b[B\r"));
-    await wait("Stop requested", send("\x1b[B\r"));
+    send("\x1b[B\r");
+    await keys.refresh("RESPONSE:hello");
+    await keys.confirm("3", "Stop terminal", "1/");
+    await keys.refresh("State: exited");
+    await keys.object("children", "child fixture", "Stop child agent");
+    await keys.confirm("2", "Stop child agent", "1/");
+    await keys.refresh("State: cancelled");
+    // No page-level queue hold: completion dispatches the queued edit while Activity stays open.
+    await vi.waitFor(
+      () =>
+        expect(received.some((text) => text.includes("edited queued"))).toBe(
+          true,
+        ),
+      { timeout: 8000 },
+    );
+    await keys.tab("Conversation");
     await wait("Main finished");
-    await wait("State: cancelled", send("\r"));
-    expect(received.some((text) => text.includes("edited queued"))).toBe(false);
-    await wait("Child agents", send("\x1b"));
-    await wait("Execution manager", send("\x1b"));
-    await wait("Queued edit executed", send("\x1b"));
+    await wait("Queued edit executed");
     expect(received.some((text) => text.includes("discard me"))).toBe(false);
     send("\x04");
     expect(await exited).toBe(0);

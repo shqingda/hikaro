@@ -9,6 +9,10 @@ import {
 import { endpointModel } from "./endpoint.ts";
 import type { ModelSelection } from "../../core/src/types.ts";
 import * as z from "zod";
+import {
+  ModelPreferenceStore,
+  type ModelReference,
+} from "./model-preferences.ts";
 const selectionSchema = z
   .object({
     provider: z.string().min(1),
@@ -45,9 +49,19 @@ export type ProviderChoice = {
   name: string;
   configured: boolean;
   stored: boolean;
+  /** Metadata only: saved credentials have not necessarily been verified. */
+  source?: "stored" | "environment" | "none" | "unknown";
+  credentialType?: AuthType;
+  ambientSource?: string;
+  statusReason?: string;
   methods: Array<{ id: AuthType; label: string }>;
 };
-export type ModelChoice = { provider: string; id: string; name: string };
+export type ModelChoice = {
+  provider: string;
+  id: string;
+  name: string;
+  capabilities?: ReturnType<typeof modelCapabilities>;
+};
 class CatalogCache implements ModelsStore {
   constructor(private home: string) {}
   async read(id: string) {
@@ -75,10 +89,13 @@ class CatalogCache implements ModelsStore {
 export class ProviderCatalog {
   private models?: MutableModels;
   private browsing?: MutableModels;
+  private preferences: ModelPreferenceStore;
   constructor(
     private home: string,
     readonly credentials: CredentialStore,
-  ) {}
+  ) {
+    this.preferences = new ModelPreferenceStore(home);
+  }
   async collection() {
     if (!this.models) {
       const { createModels, InMemoryCredentialStore } =
@@ -105,20 +122,36 @@ export class ProviderCatalog {
   }
   async providers(): Promise<ProviderChoice[]> {
     const models = await this.collection();
-    const stored = new Set(
-      (await this.credentials.list()).map((v) => v.providerId),
+    const stored = new Map(
+      (await this.credentials.list()).map((v) => [v.providerId, v.type]),
     );
     const choices = await Promise.all(
       models.getProviders().map(async (p) => {
-        let configured = stored.has(p.id);
+        let ambientSource: string | undefined;
+        let ambient = false;
+        let statusReason: string | undefined;
         try {
-          configured ||= !!(await this.browsing!.checkAuth(p.id));
-        } catch {}
+          const check = await this.browsing!.checkAuth(p.id);
+          ambient = !!check;
+          ambientSource = check?.source;
+        } catch {
+          statusReason = "Environment availability could not be checked";
+        }
         return {
           id: p.id,
           name: p.name,
-          configured,
+          configured: stored.has(p.id) || ambient,
           stored: stored.has(p.id),
+          source: stored.has(p.id)
+            ? ("stored" as const)
+            : ambient
+              ? ("environment" as const)
+              : statusReason
+                ? ("unknown" as const)
+                : ("none" as const),
+          credentialType: stored.get(p.id),
+          ambientSource,
+          statusReason,
           methods: [
             ...(p.auth.oauth
               ? [
@@ -144,7 +177,12 @@ export class ProviderCatalog {
   async available(provider?: string): Promise<ModelChoice[]> {
     return (await this.collection())
       .getModels(provider)
-      .map((m) => ({ provider: m.provider, id: m.id, name: m.name }));
+      .map((m) => ({
+        provider: m.provider,
+        id: m.id,
+        name: m.name,
+        capabilities: modelCapabilities(m),
+      }));
   }
   async refresh(provider: string, signal: AbortSignal) {
     const result = await (
@@ -156,6 +194,19 @@ export class ProviderCatalog {
     await (
       await this.collection()
     ).login(provider, type, interaction, { agentName: "Hikaro" });
+  }
+  async logout(provider: string, signal?: AbortSignal) {
+    signal?.throwIfAborted();
+    await (await this.collection()).logout(provider, { signal });
+  }
+  readPreferences() {
+    return this.preferences.read();
+  }
+  setFavorite(model: ModelReference, enabled: boolean) {
+    return this.preferences.setFavorite(model, enabled);
+  }
+  recordRecent(model: ModelReference) {
+    return this.preferences.recordRecent(model);
   }
   async capabilities(
     selection: Pick<

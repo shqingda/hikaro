@@ -3,6 +3,8 @@ import { CURSOR_MARKER, visibleWidth } from "@earendil-works/pi-tui";
 import { sanitize } from "../packages/tui/src/text.ts";
 import { PiBridgeView } from "../packages/pi-bridge/src/view.ts";
 import type { PiTransport } from "../packages/pi-bridge/src/index.ts";
+import type { ModelPickerCatalog } from "../packages/tui/src/model-picker.ts";
+import { MessageComponent } from "../packages/tui/src/messages.ts";
 
 class FakeHikaro implements PiTransport {
   calls: Array<{ method: string; params?: any }> = [];
@@ -48,6 +50,138 @@ const type = (view: PiBridgeView, text: string) => {
 };
 
 describe("Pi bridge view", () => {
+  it("uses shared Markdown rendering and preserves completed message components while streaming", async () => {
+    const client = new FakeHikaro();
+    client.handler = async (method) =>
+      method === "messages.read"
+        ? {
+            items: [
+              { message: { role: "user", text: "Earlier **question**" } },
+            ],
+          }
+        : { id: "embedded" };
+    const rendered = vi.spyOn(MessageComponent.prototype, "render");
+    const view = new PiBridgeView(tui, client, () => {}, {
+      resumeSessionId: "embedded",
+    });
+    try {
+      await settle();
+      expect(screen(view)).toContain("Earlier question");
+      expect(screen(view)).not.toContain("**question**");
+      const history = rendered.mock.contexts.find(
+        (item) => item instanceof MessageComponent && item.role === "user",
+      )!;
+      expect(history).toBeDefined();
+      const first =
+        rendered.mock.results[rendered.mock.contexts.indexOf(history)]!.value;
+      client.emit({ type: "event", event: { type: "run.start", data: {} } });
+      client.emit({
+        type: "event",
+        event: {
+          type: "text.delta",
+          data: { text: "This is **offline demo mode**." },
+        },
+      });
+      expect(screen(view)).toContain("offline demo mode");
+      expect(screen(view)).not.toContain("**offline demo mode**");
+      client.emit({
+        type: "event",
+        event: { type: "text.delta", data: { text: "\n\n- 中文 result" } },
+      });
+      screen(view);
+      const completed = rendered.mock.contexts.flatMap((item, index) =>
+        item === history ? [rendered.mock.results[index]!.value] : [],
+      );
+      expect(completed.every((lines) => lines === first)).toBe(true);
+      expect(
+        new Set(
+          rendered.mock.contexts.filter(
+            (item) => item instanceof MessageComponent && item.role === "user",
+          ),
+        ).size,
+      ).toBe(1);
+    } finally {
+      view.dispose();
+      rendered.mockRestore();
+    }
+  });
+
+  it("opens retained long-message parts in the shared searchable reader", async () => {
+    const client = new FakeHikaro();
+    const view = new PiBridgeView(tui, client, () => {});
+    try {
+      await settle();
+      client.emit({ type: "event", event: { type: "run.start", data: {} } });
+      client.emit({
+        type: "event",
+        event: {
+          type: "text.delta",
+          data: { text: "x".repeat(16_000) + "\nneedle on next part" },
+        },
+      });
+      client.emit({
+        type: "event",
+        event: { type: "run.end", data: { status: "completed" } },
+      });
+      expect(screen(view)).toContain("/read 1 PART");
+      type(view, "/read 1 2");
+      await vi.waitFor(() =>
+        expect(screen(view)).toContain("needle on next part"),
+      );
+      view.handleInput("/");
+      view.handleInput("needle");
+      expect(screen(view)).toContain("Match 1/1");
+      view.handleInput("\x1b");
+      view.handleInput("\x1b");
+      await vi.waitFor(() => expect(screen(view)).toContain("Enter send"));
+      expect(client.calls.some((call) => call.method === "prompt")).toBe(false);
+    } finally {
+      view.dispose();
+    }
+  });
+  it("uses the shared workspace views and model center without submitting model commands as prompts", async () => {
+    const client = new FakeHikaro();
+    client.handler = async (method) =>
+      method === "session.create"
+        ? { id: "embedded" }
+        : method === "models.list"
+          ? {
+              items: [{ provider: "test", id: "alpha", name: "Alpha" }],
+              hasMore: false,
+            }
+          : {};
+    const catalog: ModelPickerCatalog = {
+      available: async () => [{ provider: "test", id: "alpha", name: "Alpha" }],
+      providers: async () => [],
+      login: vi.fn(async () => {}),
+      refresh: async () => undefined,
+    };
+    const view = new PiBridgeView(tui, client, () => {}, {
+      modelCatalog: catalog,
+      cwd: "/workspace",
+    });
+    await settle();
+    expect(screen(view)).toContain("Conversation");
+    expect(screen(view)).toContain("Activity");
+    expect(screen(view)).not.toContain("Changes");
+    type(view, "/model");
+    await vi.waitFor(() => expect(screen(view)).toContain("Alpha"));
+    view.handleInput("\r");
+    await vi.waitFor(() =>
+      expect(client.calls.some((call) => call.method === "model.set")).toBe(
+        true,
+      ),
+    );
+    expect(
+      client.calls.find((call) => call.method === "model.set")?.params,
+    ).toMatchObject({
+      sessionId: "embedded",
+      provider: "test",
+      model: "alpha",
+    });
+    expect(client.calls.some((call) => call.method === "prompt")).toBe(false);
+    view.dispose();
+  });
   it("resumes the saved session and shows its recent messages", async () => {
     const client = new FakeHikaro();
     client.handler = async (m, p) =>
@@ -116,6 +250,24 @@ describe("Pi bridge view", () => {
       else view.handleInput(leave);
       expect(done).toBe(1);
     }
+  });
+
+  it("returns a disconnected unsent draft to the extension and restores it on reentry", async () => {
+    const client = new FakeHikaro();
+    let draft = "";
+    const view = new PiBridgeView(tui, client, () => {}, {
+      onDraft: (text) => {
+        draft = text;
+      },
+    });
+    await settle();
+    client.crash();
+    type(view, "unsent context");
+    type(view, "/back");
+    expect(draft).toBe("unsent context");
+    const next = new PiBridgeView(tui, new FakeHikaro(), () => {}, { draft });
+    expect(next.editor.getText()).toBe("unsent context");
+    next.dispose();
   });
 
   it("shows a rejected prompt instead of staying busy", async () => {
@@ -249,12 +401,13 @@ it.each([
     expect(lines.join("\n")).toContain(CURSOR_MARKER);
     expect(lines.every((line) => visibleWidth(line) <= columns)).toBe(true);
     const cursorRow = lines.findIndex((line) => line.includes(CURSOR_MARKER));
+    const editorX = columns >= 100 ? 23 : 0;
     view.handleMouse({
       type: "click",
       button: "left",
-      x: 1,
+      x: editorX + 1,
       y: cursorRow,
-      screenX: 1,
+      screenX: editorX + 1,
       screenY: cursorRow,
       width: columns,
       height: rows,

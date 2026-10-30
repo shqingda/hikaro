@@ -9,6 +9,7 @@ export type ViewStatus = {
   permission: string;
   cwd: string;
   branch?: string;
+  sessionTitle?: string;
   usage?: { input: number; output: number; cost: number };
   contextWindow?: number;
   reasoning?: string;
@@ -26,12 +27,12 @@ export function renderHeader(status: ViewStatus, width: number) {
     status.cwd.replace(/\/$/, "").split("/").at(-1) ?? "",
   );
   const context = fit(
-    `${workspace}${status.branch ? ` / ${single(status.branch)}` : ""}`,
-    Math.max(0, room - 9),
+    `${workspace}${status.branch ? ` / ${single(status.branch)}` : ""}${status.sessionTitle ? ` · ${single(status.sessionTitle)}` : ""}`,
+    Math.max(0, room - 29),
   );
   return [
     fit(
-      ` ${title}${" ".repeat(Math.max(1, room - 6 - visibleWidth(context)))}${muted(context)}`,
+      ` ${title}  ${muted(context)}${" ".repeat(Math.max(1, room - 27 - visibleWidth(context)))}${accent("Actions Ctrl+P")}`,
       width,
     ),
   ];

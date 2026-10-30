@@ -341,7 +341,7 @@ export async function runStreamSample({
       await wait(
         () =>
           output.includes(
-            mode === "attached" ? "Attached to shared host." : "/help",
+            mode === "attached" ? "Attached to shared host." : "Enter send",
           ),
         "TUI ready",
       );

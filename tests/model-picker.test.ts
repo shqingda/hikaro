@@ -6,6 +6,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { spawn } from "node-pty";
+import { stripVTControlCharacters } from "node:util";
 it("browses models and providers without reading secrets, then reads only the used provider", async () => {
   const home = await mkdtemp(join(tmpdir(), "hikaro-catalog-"));
   const credentials = new InMemoryCredentialStore();
@@ -89,76 +90,73 @@ it("uses supported provider authentication methods", async () => {
     await rm(home, { recursive: true, force: true });
   }
 });
-it("opens /model without arguments, then provider/auth selection, and cancels back to input", async () => {
+it("opens provider authentication from the model center and cancels back to input", async () => {
   const home = await mkdtemp(join(tmpdir(), "hikaro-picker-"));
-  try {
-    await new Promise<void>((done, reject) => {
-      const term = spawn(
-        process.execPath,
-        [
-          "--import",
-          "tsx",
-          resolve("packages/cli/src/index.ts"),
-          "--demo",
-          "--home",
-          home,
-        ],
-        {
-          cols: 100,
-          rows: 32,
-          env: { ...process.env, TERM: "xterm-256color" },
-        },
-      );
-      let output = "",
-        phase = 0;
-      const timeout = setTimeout(() => {
-        term.kill();
-        reject(Error("Model picker timeout: " + output.slice(-1200)));
-      }, 10000);
-      term.onData((chunk) => {
-        output = (output + chunk).slice(-30000);
-        if (phase === 0 && output.includes("/help")) {
-          phase = 1;
-          output = "";
-          term.write("/model\r");
-        } else if (
-          phase === 1 &&
-          (output.includes("Select provider to configure") ||
-            output.includes("Select model"))
-        ) {
-          phase = 2;
-          output = "";
-          term.write("\x1b");
-          setTimeout(() => term.write("/login\r"), 30);
-        } else if (
-          phase === 2 &&
-          output.includes("Select provider to configure")
-        ) {
-          phase = 3;
-          output = "";
-          term.write("xAI\r");
-        } else if (
-          phase === 3 &&
-          output.includes("Select authentication method")
-        ) {
-          expect(output).toContain("SuperGrok");
-          phase = 4;
-          term.write("\x1b");
-          setTimeout(() => term.write("\x04"), 30);
-        }
-      });
-      term.onExit(({ exitCode }) => {
-        clearTimeout(timeout);
-        try {
-          expect(phase).toBe(4);
-          expect(exitCode).toBe(0);
-          done();
-        } catch (e) {
-          reject(e);
-        }
-      });
+  const term = spawn(
+    process.execPath,
+    [
+      "--import",
+      "tsx",
+      resolve("packages/cli/src/index.ts"),
+      "--demo",
+      "--home",
+      home,
+    ],
+    { cols: 100, rows: 32, env: { ...process.env, TERM: "xterm-256color" } },
+  );
+  let output = "";
+  const watchers = new Set<() => void>();
+  const exited = new Promise<number>((resolve) =>
+    term.onExit(({ exitCode }) => resolve(exitCode)),
+  );
+  term.onData((chunk) => {
+    output += chunk;
+    for (const check of watchers) check();
+  });
+  const send = (text: string) => {
+    const offset = output.length;
+    term.write(text);
+    return offset;
+  };
+  const wait = (text: string, offset = 0) =>
+    new Promise<void>((resolve, reject) => {
+      const check = () => {
+        if (!stripVTControlCharacters(output.slice(offset)).includes(text))
+          return;
+        clearTimeout(timer);
+        watchers.delete(check);
+        resolve();
+      };
+      const timer = setTimeout(() => {
+        watchers.delete(check);
+        reject(
+          Error(
+            `Missing ${text}: ${stripVTControlCharacters(output.slice(-2000))}`,
+          ),
+        );
+      }, 4000);
+      watchers.add(check);
+      check();
     });
+  try {
+    await wait("Enter send");
+    await wait("Select model", send("/model\r"));
+    await wait("Select provider to configure", send("\t"));
+    await wait("xAI", send("xai"));
+    await wait("Connect", send("\r"));
+    await wait("Select authentication method", send("\x1b[B\r"));
+    expect(stripVTControlCharacters(output)).toContain("SuperGrok");
+    await wait("Connect", send("\x1b"));
+    await wait("Select provider to configure", send("\x1b"));
+    await wait("Enter send", send("\x1b"));
+    await wait("Select authentication method", send("/login xai\r"));
+    await wait("Select provider to configure", send("\x1b"));
+    await wait("Enter send", send("\x1b"));
+    send("\x04");
+    expect(await exited).toBe(0);
   } finally {
+    term.kill();
+    await exited;
     await rm(home, { recursive: true, force: true });
   }
 }, 15000);

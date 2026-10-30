@@ -247,7 +247,7 @@ try {
   terminalExit = new Promise((done) =>
     terminal.onExit(({ exitCode }) => done(exitCode)),
   );
-  await waitText("/help");
+  await waitText("Enter send");
   step = "real model read/edit/test/diff";
   const endAfter = (offset) =>
     events.slice(offset).find((event) => event.type === "run.end");

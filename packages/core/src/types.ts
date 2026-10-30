@@ -234,7 +234,7 @@ export interface AgentBackend {
     files?: FileInput[],
   ): Promise<void>;
   cancel(): void;
-  steer(text: string): void | Promise<void>;
+  steer(text: string): void | Promise<void | string>;
   subscribe(fn: (event: AgentEvent) => void): () => void;
 }
 export interface Plugin {

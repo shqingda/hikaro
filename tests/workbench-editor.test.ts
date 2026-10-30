@@ -126,6 +126,10 @@ it("maps completion clicks after the cropped input without submitting or moving 
   expect(editor.render(40).join("\n")).not.toContain(CURSOR_MARKER);
   expect(editor.focused).toBe(false);
   expect(editor.getCursor()).toEqual(before);
+  expect(editor.render(40).join("\n")).not.toContain("file0");
+  // A completion row can only be clicked once focus and its visible layout return.
+  editor.focused = true;
+  editor.render(40);
   editor.handleMouse({
     type: "click",
     button: "left",

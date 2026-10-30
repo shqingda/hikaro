@@ -68,7 +68,7 @@ it("keeps a rejected attachment draft, then sends file and image bytes through t
     }),
   );
   try {
-    await vi.waitFor(() => expect(output).toContain("/help"), {
+    await vi.waitFor(() => expect(output).toContain("Enter send"), {
       timeout: 10000,
     });
     child.write("Review @missing.ts\r");

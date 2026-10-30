@@ -571,6 +571,7 @@ export class Agent implements AgentBackend {
           throw error;
         }
       }
+      return id;
     });
   }
   pendingSteering() {

@@ -36,14 +36,35 @@ export class AttachedWorkflows {
   private stopped = false;
   private epoch = 0;
   private permissionLabel?: string;
-  private timer: ReturnType<typeof setInterval>;
+  private timer?: ReturnType<typeof setInterval>;
+  private waitingQuestion = false;
+  private refreshRequested = false;
+  get attentionCount() {
+    return this.waitingQuestion ? 1 : 0;
+  }
   constructor(
     private client: ClientConnection,
     private view: HikaroView,
     private cwd: string,
+    private options: {
+      polling?: boolean;
+      active?(): boolean;
+      attentionChanged?(): void;
+    } = {},
   ) {
-    this.timer = setInterval(() => void this.poll(), 750);
-    this.timer.unref();
+    if (options.polling !== false) {
+      this.timer = setInterval(() => void this.refresh(), 750);
+      this.timer.unref();
+    }
+  }
+  refresh() {
+    if (this.stopped) return Promise.resolve();
+    if (this.polling || this.modal === "menu") {
+      this.refreshRequested = true;
+      return Promise.resolve();
+    }
+    this.refreshRequested = false;
+    return this.poll();
   }
   private async request<T>(
     method: RpcMethod,
@@ -99,6 +120,7 @@ export class AttachedWorkflows {
       await action();
     } finally {
       if (this.modal === "menu") this.modal = undefined;
+      if (this.options.polling === false) void this.refresh();
     }
   }
   private async poll() {
@@ -120,6 +142,11 @@ export class AttachedWorkflows {
         questions: Questions;
         recovered?: boolean;
       } | null>("questions.read", id);
+      if (this.waitingQuestion !== !!q) {
+        this.waitingQuestion = !!q;
+        this.options.attentionChanged?.();
+      }
+      if (this.options.active?.() === false) return;
       if (this.modal === "menu") return;
       if (
         this.question &&
@@ -138,6 +165,7 @@ export class AttachedWorkflows {
             if (this.question?.abort === abort) {
               this.question = undefined;
               this.modal = undefined;
+              if (this.options.polling === false) void this.refresh();
             }
           });
         return;
@@ -167,6 +195,7 @@ export class AttachedWorkflows {
       if (this.client.state.canAct) this.view.setError(String(error));
     } finally {
       this.polling = false;
+      if (this.refreshRequested) void this.refresh();
     }
   }
   private async answer(
@@ -248,6 +277,7 @@ export class AttachedWorkflows {
         this.view.notice("Plan kept read-only. Use /plan to review again.");
     } finally {
       if (this.modal === "plan") this.modal = undefined;
+      if (this.options.polling === false) void this.refresh();
     }
   }
   async command(
@@ -335,6 +365,7 @@ export class AttachedWorkflows {
         return;
       } finally {
         if (this.modal === "plan") this.modal = undefined;
+        if (this.options.polling === false) void this.refresh();
       }
     }
     this.modal = command;
@@ -529,6 +560,7 @@ export class AttachedWorkflows {
       }
     } finally {
       if (this.modal === command) this.modal = undefined;
+      if (this.options.polling === false) void this.refresh();
     }
   }
 }

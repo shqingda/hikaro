@@ -34,7 +34,7 @@ it("enters fullscreen, handles Unicode and restores terminal on exit", async () 
       }, 10000);
       child.onData((data) => {
         output += data;
-        if (phase === 0 && output.includes("/help")) {
+        if (phase === 0 && output.includes("Enter send")) {
           phase = 1;
           child.write("你好 👋\r");
         }
@@ -285,7 +285,7 @@ async function withCriticalTui(
       await wait("Enter send", beforeFinish);
       return request;
     };
-    await wait("/help", 0);
+    await wait("Enter send", 0);
     const verify = await scenario({
       home,
       cwd,
@@ -535,7 +535,7 @@ describe("permissions and execution status", () => {
       await tui.wait("Permissions: Full Access", tui.send("\r"));
       const after = tui.send("activity-check\r");
       const request = await tui.nextRequest();
-      await tui.wait("Working", after);
+      await tui.wait("Enter intervene", after);
       const quiet = tui.send("");
       await new Promise<void>((done) => setTimeout(done, 240));
       expect(tui.outputSince(quiet)).toBe("");

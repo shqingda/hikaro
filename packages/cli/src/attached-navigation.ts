@@ -45,11 +45,26 @@ export class AttachedNavigation {
     private catalog: () => Promise<ProviderCatalog>,
     private flush: () => Promise<void>,
     private synchronize: () => Promise<void>,
+    private sessions?: {
+      open(id: string): Promise<Session>;
+      create(): Promise<Session>;
+      removed?(id: string): Promise<void>;
+      prepareRemoval?(id: string): Promise<boolean>;
+      affected?(provider: string): string[];
+      credentialBlocked?(provider: string): string | undefined;
+      credentialsChanged?(): void;
+      preferences?(): TuiPreferences;
+      preferencesChanged?(value: TuiPreferences): void;
+    },
   ) {}
   private async request<T>(
     method: RpcMethod,
     p: Record<string, unknown> = {},
   ): Promise<T> {
+    if (method === "session.resume" && this.sessions)
+      return (await this.sessions.open(String(p.sessionId))) as T;
+    if (method === "session.create" && this.sessions)
+      return (await this.sessions.create()) as T;
     const epoch = this.epoch;
     if (!this.client.state.canAct)
       throw Error("Host disconnected or synchronizing; reopen the menu");
@@ -148,6 +163,7 @@ export class AttachedNavigation {
       return;
     }
     if (command === "/sessions" || command === "/resume") {
+      let replacementPrepared = false;
       await sessionCommand(
         this.view,
         command.slice(1) as "sessions" | "resume",
@@ -164,14 +180,18 @@ export class AttachedNavigation {
             this.view.notice(`Session opened: ${opened.title}.`);
           },
           create: async () => {
-            await this.request("session.create");
+            if (!replacementPrepared) await this.request("session.create");
           },
-          remove: async (sessionId) =>
-            (
-              await this.request<{ cleanupError?: string }>("session.delete", {
-                sessionId,
-              })
-            ).cleanupError,
+          remove: async (sessionId) => {
+            replacementPrepared =
+              (await this.sessions?.prepareRemoval?.(sessionId)) ?? false;
+            const result = await this.request<{ cleanupError?: string }>(
+              "session.delete",
+              { sessionId },
+            );
+            await this.sessions?.removed?.(sessionId);
+            return result.cleanupError;
+          },
           rename: async (sessionId, title) => {
             await this.request("session.rename", { sessionId, title });
           },
@@ -184,13 +204,18 @@ export class AttachedNavigation {
         throw Error(
           "Use /context, /thinking, /speed or /permissions for host settings",
         );
-      await openGeneralSettings(this.view, this.preferences, async (next) => {
-        const saved = parseTuiPreferences(next);
-        await this.files.savePreferences(saved);
-        this.preferences = saved;
-        this.view.setPreferences(saved);
-        this.view.notice("Display preferences saved for this attached view.");
-      });
+      await openGeneralSettings(
+        this.view,
+        this.sessions?.preferences?.() ?? this.preferences,
+        async (next) => {
+          const saved = parseTuiPreferences(next);
+          await this.files.savePreferences(saved);
+          this.preferences = saved;
+          this.view.setPreferences(saved);
+          this.sessions?.preferencesChanged?.(saved);
+          this.view.notice("Display preferences saved for this attached view.");
+        },
+      );
       return;
     }
     if (command === "/resources") {
@@ -297,7 +322,7 @@ export class AttachedNavigation {
       }
       return;
     }
-    this.idle();
+    if (!["/model", "/login", "/logout"].includes(command)) this.idle();
     if (command === "/permissions") {
       const state = await this.request<{ permissionMode: PermissionMode }>(
         "workspace.current",
@@ -312,7 +337,7 @@ export class AttachedNavigation {
       else await openPermissions(this.view, state.permissionMode, apply);
       return;
     }
-    if (command === "/model" || command === "/login") {
+    if (command === "/model" || command === "/login" || command === "/logout") {
       const select = async (
         provider: string,
         model: string,
@@ -339,6 +364,10 @@ export class AttachedNavigation {
         this.view,
         {
           providers: () => local.providers(),
+          logout: (provider, signal) => local.logout(provider, signal),
+          readPreferences: () => local.readPreferences(),
+          setFavorite: (model, favorite) => local.setFavorite(model, favorite),
+          recordRecent: (model) => local.recordRecent(model),
           available: async (provider) => {
             const all: ModelChoice[] = [];
             for (let offset = 0; ;) {
@@ -362,7 +391,6 @@ export class AttachedNavigation {
             await local.login(provider, type, interaction);
             this.view.notice("Sign-in saved in the local credential store.");
             this.selected(id);
-            await this.request("providers.reload");
           },
           refresh: async (provider, signal) => {
             const warning = await local.refresh(provider, signal);
@@ -372,7 +400,34 @@ export class AttachedNavigation {
           },
         },
         select,
-        command === "/login",
+        {
+          mode:
+            command === "/model"
+              ? "models"
+              : command === "/login"
+                ? "login"
+                : "logout",
+          ...(arg && command !== "/model" ? { provider: arg.trim() } : {}),
+          current: this.client.state.session?.modelSelection,
+          ownerLabel: "Local Keychain · shared Hikaro host home",
+          switchBlockedReason: () =>
+            !this.client.state.canAct
+              ? "Host is disconnected or synchronizing."
+              : this.client.state.busy
+                ? "Finish or cancel this session's run before switching models."
+                : undefined,
+          credentialChangeBlockedReason: (provider) =>
+            !this.client.state.canAct
+              ? "Host is disconnected or synchronizing."
+              : this.sessions?.credentialBlocked?.(provider),
+          affectedSessions: (provider) =>
+            this.sessions?.affected?.(provider) ?? [],
+          onCredentialsChanged: async () => {
+            this.selected(id);
+            await this.request("providers.reload");
+            this.sessions?.credentialsChanged?.();
+          },
+        },
         () => this.command("/settings"),
       );
       return;

@@ -14,16 +14,27 @@ import { accent, muted as dim, selected, error as red } from "./theme.ts";
 export type Selection = {
   value: string;
   makeDefault: boolean;
-  action?: "delete" | "rename";
+  action?: string;
   query?: string;
 };
-type ActionCapability = boolean | ((item: SelectItem) => boolean);
+export type PanelItem = SelectItem & {
+  section?: string;
+  detail?: string;
+  searchText?: string;
+};
+type ActionCapability = boolean | ((item: PanelItem) => boolean);
+export type PanelAction = {
+  id: string;
+  key: Parameters<typeof matchesKey>[1];
+  label: string | ((item: PanelItem | undefined) => string);
+  enabled?: ActionCapability;
+};
 
 /** Selection state belongs to Hikaro; the editor still owns text input. */
 class MenuSelection {
   private index = 0;
   onSelect?: (item: SelectItem) => void;
-  constructor(private items: SelectItem[]) {}
+  constructor(private items: PanelItem[]) {}
   setSelectedIndex(index: number) {
     this.index = Math.max(0, Math.min(index, this.items.length - 1));
   }
@@ -50,6 +61,12 @@ export class ModelPanel implements Component {
     lines: string[];
     offset: number;
     height: number;
+    lineOffsets: number[];
+    query: string;
+    find: Input;
+    searching: boolean;
+    matches: number[];
+    match: number;
   };
   private documentReady = true;
   private requireNoticeVisible = false;
@@ -57,6 +74,9 @@ export class ModelPanel implements Component {
   private message = "";
   private error = "";
   private help?: string;
+  private actions: PanelAction[] = [];
+  private tabs: Array<{ value: string; label: string }> = [];
+  private activeTab?: string;
   private allowDelete: ActionCapability = false;
   private allowRename: ActionCapability = false;
   private allowDefault: ActionCapability = false;
@@ -68,8 +88,8 @@ export class ModelPanel implements Component {
   private descriptionOffset = 0;
   private descriptionHeight = 1;
   private descriptionRows = 0;
-  private items: SelectItem[] = [];
-  private matches: SelectItem[] = [];
+  private items: PanelItem[] = [];
+  private matches: PanelItem[] = [];
   private emptyMessage = "No matching options";
   private secret = false;
   private loadItems?: (query: string) => Promise<SelectItem[]>;
@@ -92,13 +112,16 @@ export class ModelPanel implements Component {
       () => {
         this.pending?.reject(new DOMException("Cancelled", "AbortError"));
         this.pending = undefined;
+        this.input?.setValue("");
+        this.input = undefined;
+        this.list = undefined;
       },
       { once: true },
     );
   }
   choose(
     title: string,
-    items: SelectItem[],
+    items: PanelItem[],
     warning = "",
     help?: string,
     options?: {
@@ -113,6 +136,10 @@ export class ModelPanel implements Component {
       loadItems?: (query: string) => Promise<SelectItem[]>;
       searchQuery?: string;
       requireNoticeVisible?: boolean;
+      actions?: PanelAction[];
+      tabs?: Array<{ value: string; label: string }>;
+      activeTab?: string;
+      description?: string;
     },
   ): Promise<Selection> {
     this.signal.throwIfAborted();
@@ -123,9 +150,12 @@ export class ModelPanel implements Component {
     this.searching = false;
     this.document = undefined;
     this.title = title;
-    this.message = "";
+    this.message = options?.description ?? "";
     this.error = warning;
     this.help = help;
+    this.actions = options?.actions ?? [];
+    this.tabs = options?.tabs ?? [];
+    this.activeTab = options?.activeTab;
     this.allowDelete = options?.allowDelete ?? false;
     this.allowRename = options?.allowRename ?? false;
     this.allowDefault = options?.allowDefault ?? false;
@@ -178,18 +208,28 @@ export class ModelPanel implements Component {
       { search: false, cancelValue: "back" },
     );
     this.document = {
-      text: clean(text),
+      text: clean(text).replace(/\t/g, "   "),
       width: 0,
       lines: [],
       offset: 0,
       height: 1,
+      lineOffsets: [],
+      query: "",
+      find: new Input({
+        prompt: "/ ",
+        placeholder: "Find in this part…",
+        placeholderStyle: dim,
+      }),
+      searching: false,
+      matches: [],
+      match: 0,
     };
     this.documentReady = false;
     this.refresh();
     return pending;
   }
   updateDocument(title: string, text: string) {
-    const next = clean(text);
+    const next = clean(text).replace(/\t/g, "   ");
     if (!this.document || (this.title === title && this.document.text === next))
       return;
     this.title = title;
@@ -202,9 +242,12 @@ export class ModelPanel implements Component {
     const matches = this.loadItems
       ? this.items
       : this.items.filter((item) =>
-          [item.label, item.description ?? "", item.value].some((text) =>
-            clean(text).toLowerCase().includes(query),
-          ),
+          [
+            item.label,
+            item.description ?? "",
+            item.searchText ?? "",
+            item.value,
+          ].some((text) => clean(text).toLowerCase().includes(query)),
         );
     this.matches = matches;
     this.list = new MenuSelection(matches);
@@ -219,7 +262,7 @@ export class ModelPanel implements Component {
   }
   private resolveSelection(selection: Selection) {
     if (this.searching) return;
-    if (this.loadItems) selection.query = this.searchQuery;
+    if (this.input) selection.query = this.searchQuery;
     this.searchRevision++;
     const pending = this.pending;
     this.pending = undefined;
@@ -241,6 +284,8 @@ export class ModelPanel implements Component {
     this.error = "";
     this.message = "";
     this.secret = secret;
+    this.tabs = [];
+    this.actions = [];
     this.onInputChange = secret ? undefined : options?.onChange;
     this.list = undefined;
     this.input = new Input({ prompt: "> " });
@@ -270,6 +315,12 @@ export class ModelPanel implements Component {
     this.refresh();
   }
   cancelStep() {
+    if (this.document?.searching) {
+      this.document.searching = false;
+      this.document.find.focused = false;
+      this.refresh();
+      return true;
+    }
     if (!this.pending || this.cancelValue === undefined) return false;
     this.searchRevision++;
     this.pending.resolve(
@@ -282,6 +333,7 @@ export class ModelPanel implements Component {
     return true;
   }
   progress(text: string) {
+    if (this.signal.aborted) return;
     if (!this.pending) {
       this.document = undefined;
       this.title = "";
@@ -289,16 +341,47 @@ export class ModelPanel implements Component {
       this.list = undefined;
       this.input = undefined;
       this.onInputChange = undefined;
+      this.tabs = [];
+      this.actions = [];
     }
     this.message = text;
     this.refresh();
   }
   showError(text: string) {
+    if (this.signal.aborted) return;
     this.error = text;
     this.refresh();
   }
   handleInput(data: string) {
     if (!this.pending || isKeyRelease(data)) return;
+    if (
+      this.tabs.length > 1 &&
+      (matchesKey(data, "tab") || matchesKey(data, "shift+tab"))
+    ) {
+      const index = this.tabs.findIndex((tab) => tab.value === this.activeTab);
+      const offset = matchesKey(data, "shift+tab") ? -1 : 1;
+      const next =
+        this.tabs[(index + offset + this.tabs.length) % this.tabs.length]!;
+      this.resolveSelection({
+        value: next.value,
+        makeDefault: false,
+        action: "tab",
+      });
+      return;
+    }
+    const action = this.actions.find(
+      (item) =>
+        matchesKey(data, item.key) &&
+        (item.enabled === undefined || this.actionEnabled(item.enabled)),
+    );
+    if (action) {
+      this.resolveSelection({
+        value: this.list?.getSelectedItem()?.value ?? "",
+        makeDefault: false,
+        action: action.id,
+      });
+      return;
+    }
     if (
       this.requireNoticeVisible &&
       !this.noticeVisible &&
@@ -307,7 +390,29 @@ export class ModelPanel implements Component {
       return;
     if (this.document) {
       const doc = this.document;
-      if (matchesKey(data, "pageUp"))
+      if (doc.searching) {
+        if (matchesKey(data, "enter") || matchesKey(data, "escape")) {
+          doc.searching = false;
+          doc.find.focused = false;
+        } else {
+          doc.find.handleInput(data);
+          doc.query = doc.find.getValue();
+          this.findInDocument(true);
+        }
+        this.refresh();
+        return;
+      }
+      if (data === "/" || matchesKey(data, "ctrl+f")) {
+        doc.searching = true;
+        doc.find.focused = this.focused;
+      } else if ((data === "n" || data === "N") && doc.query) {
+        if (doc.matches.length) {
+          doc.match =
+            (doc.match + (data === "n" ? 1 : doc.matches.length - 1)) %
+            doc.matches.length;
+          doc.offset = Math.max(0, doc.matches[doc.match]! - 1);
+        }
+      } else if (matchesKey(data, "pageUp"))
         doc.offset = Math.max(0, doc.offset - doc.height);
       else if (matchesKey(data, "pageDown"))
         doc.offset = Math.min(
@@ -447,6 +552,49 @@ export class ModelPanel implements Component {
       (typeof capability === "function" ? capability(item) : capability)
     );
   }
+  private findInDocument(reset: boolean) {
+    const doc = this.document!;
+    const text = doc.text.toLowerCase(),
+      query = doc.query.toLowerCase();
+    doc.matches = [];
+    if (query) {
+      let row = 0;
+      for (
+        let at = text.indexOf(query);
+        at >= 0;
+        at = text.indexOf(query, at + query.length)
+      ) {
+        while (
+          row + 1 < doc.lineOffsets.length &&
+          doc.lineOffsets[row + 1]! <= at
+        )
+          row++;
+        doc.matches.push(row);
+      }
+    }
+    doc.match = reset
+      ? 0
+      : Math.min(doc.match, Math.max(0, doc.matches.length - 1));
+    if (reset && doc.matches.length)
+      doc.offset = Math.max(0, doc.matches[doc.match]! - 1);
+  }
+  private layoutDocument(width: number) {
+    const doc = this.document!;
+    if (doc.width === width) return;
+    doc.lines = new Text(doc.text, 1, 0).render(width);
+    const padding = Math.min(1, Math.max(0, Math.floor((width - 1) / 2)));
+    let cursor = 0;
+    // Match against original text so a search can cross terminal soft wraps.
+    doc.lineOffsets = doc.lines.map((line) => {
+      const content = line.slice(padding).trimEnd();
+      const start = content ? doc.text.indexOf(content, cursor) : cursor;
+      const offset = start < 0 ? cursor : start;
+      cursor = offset + content.length;
+      return offset;
+    });
+    doc.width = width;
+    this.findInDocument(false);
+  }
   private helpLines(width: number, compact: boolean) {
     if (!this.list)
       return new Text(
@@ -469,6 +617,16 @@ export class ModelPanel implements Component {
       ? `↑↓ · Enter ${action} · Esc`
       : (this.help ?? `↑↓ select · Enter ${action} · Esc cancel`);
     const extras = [
+      ...(this.tabs.length > 1 ? ["Tab page"] : []),
+      ...this.actions
+        .filter(
+          (action) =>
+            action.enabled === undefined || this.actionEnabled(action.enabled),
+        )
+        .map(
+          (action) =>
+            `${action.key.replace("ctrl+", "Ctrl+")} ${typeof action.label === "function" ? action.label(item) : action.label}`,
+        ),
       ...(this.actionEnabled(this.allowDefault)
         ? ["Ctrl+S active + default"]
         : []),
@@ -490,12 +648,12 @@ export class ModelPanel implements Component {
         .slice(0, available);
     const current = this.list!.getSelectedItem()!;
     const index = this.matches.indexOf(current);
-    const count = Math.min(
+    let count = Math.min(
       8,
       this.matches.length,
       Math.max(1, available - (this.matches.length > available ? 1 : 0)),
     );
-    const start = Math.max(
+    let start = Math.max(
       0,
       Math.min(index - Math.floor(count / 2), this.matches.length - count),
     );
@@ -503,7 +661,27 @@ export class ModelPanel implements Component {
       clean(value)
         .replace(/[\r\n]+/g, " ")
         .trim();
-    const rows = this.matches.slice(start, start + count).map((item) => {
+    const sectionCount = () =>
+      this.matches
+        .slice(start, start + count)
+        .filter(
+          (item, i, items) =>
+            item.section && (i === 0 || items[i - 1]?.section !== item.section),
+        ).length;
+    while (count > 1 && count + sectionCount() > available) {
+      count--;
+      start = Math.max(
+        0,
+        Math.min(index - Math.floor(count / 2), this.matches.length - count),
+      );
+    }
+    const rows: string[] = [];
+    const showSections = count + sectionCount() <= available;
+    let previousSection: string | undefined;
+    for (const item of this.matches.slice(start, start + count)) {
+      if (item.section && item.section !== previousSection && showSections)
+        rows.push(dim(truncateToWidth(` ${item.section}`, width, "…")));
+      previousSection = item.section;
       const label = text(item.label);
       const description = text(item.description ?? "");
       const prefix = item === current ? "→ " : "  ";
@@ -518,8 +696,8 @@ export class ModelPanel implements Component {
         Math.max(1, width - 2),
         "…",
       );
-      return " " + (item === current ? selected(row) : row);
-    });
+      rows.push(" " + (item === current ? selected(row) : row));
+    }
     if (
       (start || start + count < this.matches.length) &&
       rows.length < available
@@ -539,7 +717,7 @@ export class ModelPanel implements Component {
     const item = this.list?.getSelectedItem();
     if (!item) return [];
     const label = clean(item.label);
-    const description = clean(item.description ?? "");
+    const description = clean(item.detail ?? item.description ?? "");
     const text = [visibleWidth(label) > width - 4 ? label : "", description]
       .filter(Boolean)
       .join("\n");
@@ -580,33 +758,45 @@ export class ModelPanel implements Component {
         .slice(0, budget);
     if (this.document) {
       const doc = this.document;
+      this.layoutDocument(width);
+      doc.find.focused = this.focused && doc.searching;
+      const search = doc.searching ? doc.find.render(width) : [];
       const actions = this.choiceRows(
         width,
         Math.min(6, this.matches.length + 1),
       );
       const help = new Text(
-        dim("PgUp/PgDn scroll · ↑↓ action · Enter · Esc back"),
+        dim(
+          doc.searching
+            ? "Enter finish search · Esc cancel search"
+            : "PgUp/PgDn read · / find · n/N match · ↑↓ action · Enter · Esc",
+        ),
         1,
         0,
       ).render(width);
-      const height = budget - actions.length - help.length - 2;
+      const height = budget - actions.length - help.length - search.length - 2;
       this.documentReady = height >= 2;
       if (!this.documentReady)
         return new Text(dim("Resize to read diff · Esc back"), 0, 0)
           .render(width)
           .slice(0, budget);
-      if (doc.width !== width) {
-        doc.lines = new Text(doc.text, 1, 0).render(width);
-        doc.width = width;
-      }
       doc.height = height;
       doc.offset = Math.min(doc.offset, Math.max(0, doc.lines.length - height));
       return [
         accent(truncateToWidth(clean(this.title), width, "…")),
-        ...doc.lines.slice(doc.offset, doc.offset + height),
+        ...search,
+        ...doc.lines
+          .slice(doc.offset, doc.offset + height)
+          .map((line, index) =>
+            doc.query && doc.matches[doc.match] === doc.offset + index
+              ? accent(line)
+              : line,
+          ),
         dim(
           truncateToWidth(
-            `Lines ${doc.offset + 1}–${Math.min(doc.offset + height, doc.lines.length)}/${doc.lines.length}`,
+            doc.query
+              ? `${doc.matches.length ? `Match ${doc.match + 1}/${doc.matches.length}` : "No matches"} · n/N · ${clean(doc.query)}`
+              : `Lines ${doc.offset + 1}–${Math.min(doc.offset + height, doc.lines.length)}/${doc.lines.length}`,
             width,
             "…",
           ),
@@ -620,6 +810,18 @@ export class ModelPanel implements Component {
       ? truncateToWidth(clean(this.title), Math.max(1, width - 2), "…")
       : this.title;
     const lines = new Text(accent(clean(title)), 1, 0).render(width);
+    if (this.tabs.length)
+      lines.push(
+        truncateToWidth(
+          this.tabs
+            .map((tab) =>
+              tab.value === this.activeTab ? `[${tab.label}]` : tab.label,
+            )
+            .join("  "),
+          width,
+          "…",
+        ),
+      );
     const titleRows = lines.length;
     if (this.input) {
       lines.push(

@@ -261,3 +261,37 @@ it("preserves text and image snapshots for replay after the source files are rem
     await reopened.close();
   }
 });
+
+it("previews explicit local files with the submission path checks and a bounded body", async () => {
+  const { previewAttachment } =
+    await import("../packages/runtime/src/attachments.ts");
+  const { cwd, root } = await fixture();
+  await writeFile(join(cwd, "normal.txt"), "preview 中文\n".repeat(3000));
+  await writeFile(join(root, "outside.txt"), "outside preview");
+  await symlink(join(root, "outside.txt"), join(cwd, "alias.txt"));
+  await writeFile(join(cwd, ".env"), "fixture secret");
+  const approve = vi.fn(async () => false);
+  const options = { cwd, signal: new AbortController().signal, approve };
+  const text = await previewAttachment("normal.txt", options);
+  expect(text).toContain("Local preview; not sent");
+  expect(text).toContain("Preview limited to 16000 characters");
+  expect(text.length).toBeLessThan(16300);
+  expect(approve).not.toHaveBeenCalled();
+  await expect(previewAttachment("alias.txt", options)).rejects.toThrow(
+    "Permission denied",
+  );
+  expect(approve).toHaveBeenLastCalledWith(
+    expect.objectContaining({ outside: true, path: join(root, "outside.txt") }),
+  );
+  await expect(previewAttachment(".env", options)).rejects.toThrow(
+    "Permission denied",
+  );
+  expect(approve).toHaveBeenLastCalledWith(
+    expect.objectContaining({ sensitive: true }),
+  );
+  const abort = new AbortController();
+  abort.abort();
+  await expect(
+    previewAttachment("normal.txt", { ...options, signal: abort.signal }),
+  ).rejects.toThrow();
+});

@@ -1,13 +1,19 @@
 // Import the pinned TUI modules directly: its root also initializes Markdown.
 export { TuiAltScreen } from "@earendil-works/pi-tui/dist/tui-alt-screen.js";
 export { ProcessTerminal } from "@earendil-works/pi-tui/dist/terminal.js";
-export { Container, CURSOR_MARKER } from "@earendil-works/pi-tui/dist/tui.js";
+export {
+  Container,
+  CURSOR_MARKER,
+  FAKE_CURSOR_START,
+  FAKE_CURSOR_END,
+} from "@earendil-works/pi-tui/dist/tui.js";
 export { Text } from "@earendil-works/pi-tui/dist/components/text.js";
 export { Editor } from "@earendil-works/pi-tui/dist/components/editor.js";
 export { Input } from "@earendil-works/pi-tui/dist/components/input.js";
 export { SelectList } from "@earendil-works/pi-tui/dist/components/select-list.js";
 export { ScrollView } from "@earendil-works/pi-tui/dist/components/scroll-view.js";
 export { VStack } from "@earendil-works/pi-tui/dist/components/v-stack.js";
+export { HStack } from "@earendil-works/pi-tui/dist/components/h-stack.js";
 export { matchesKey, isKeyRelease } from "@earendil-works/pi-tui/dist/keys.js";
 export {
   visibleWidth,

@@ -55,7 +55,7 @@ it("recovers crash and Ctrl+D drafts with --continue and clears only after submi
   try {
     const first = start();
     children.push(first);
-    await vi.waitFor(() => expect(first.screen()).toContain("/help"), {
+    await vi.waitFor(() => expect(first.screen()).toContain("Enter send"), {
       timeout: 10000,
     });
     const text = "恢复草稿-CRASH-RECOVERY";

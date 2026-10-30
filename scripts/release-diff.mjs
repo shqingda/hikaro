@@ -19,7 +19,7 @@ export async function verifyReleaseDiff({
   );
   const hash = (text) => createHash("sha256").update(text).digest("hex");
   const before = "before release diff\n";
-  const lines = Array.from({ length: 700 }, (_, i) => `line-${i} 中文😀`);
+  const lines = Array.from({ length: 1500 }, (_, i) => `line-${i} 中文😀`);
   lines.push("release-diff-tail 😀");
   const after = lines.join("\n");
   const file = join(workspace, "release-diff.txt");
@@ -70,18 +70,23 @@ export async function verifyReleaseDiff({
     [
       `--- ${file}`,
       `+++ ${file}`,
-      `@@ -1,1 +1,701 @@`,
+      `@@ -1,1 +1,1501 @@`,
       "-before release diff",
       ...lines.map((line) => `+${line}`),
       "\\ No newline at end of file",
     ].join("\n"),
   );
-  await terminal.text("File changes · page 1", terminal.send("/changes\r"));
-  await terminal.text("release-diff.txt · committed", terminal.send("\r"));
-  await terminal.text("release-diff-tail", terminal.send("\x1b[F"));
+  await terminal.text(
+    "File edits and observed changes",
+    terminal.send("/changes\r"),
+  );
+  await terminal.text("Next part", terminal.send("\r"));
+  await terminal.text("Part 2 · final", terminal.send("1"));
+  await terminal.text("release-diff-tail", terminal.send("\x1b[6~".repeat(60)));
   await terminal.text("No newline at end of file");
-  await terminal.text("File changes · page 1", terminal.send("\x1b"));
-  await terminal.text("Enter send", terminal.send("\x1b"));
+  await terminal.text("Search commands and actions", terminal.send("\x10"));
+  await terminal.text("Open Conversation", terminal.send("Open Conversation"));
+  await terminal.text("Enter send", terminal.send("\r"));
   assert.equal(
     await readFile(file, "utf8"),
     after,

@@ -17,13 +17,13 @@ TUI and bidirectional Pi integration are active. Session grants, approval author
 
 ## Defects corrected during review
 
-| Initial defect                                             | Change                                                                                    |
-| ---------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| QuickJS ran on the host event loop                         | Separate worker, memory budget, shared interrupt flag, tool calls through the host broker |
-| Opening history loaded large transcripts                   | Cursor-based pages; bounded visible windows and streaming previews                        |
-| Each client could create a separate execution owner        | One host RPC process with independent authenticated local client scopes                    |
-| Pi completion used incomplete lifecycle assumptions        | `agent_settled`, handled prompts, UI response protocol and cancellation ordering          |
-| Shared jobs could execute from the wrong workspace         | Workspace-filtered job claims and execution leases                                        |
+| Initial defect                                      | Change                                                                                    |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| QuickJS ran on the host event loop                  | Separate worker, memory budget, shared interrupt flag, tool calls through the host broker |
+| Opening history loaded large transcripts            | Cursor-based pages; bounded visible windows and streaming previews                        |
+| Each client could create a separate execution owner | One host RPC process with independent authenticated local client scopes                   |
+| Pi completion used incomplete lifecycle assumptions | `agent_settled`, handled prompts, UI response protocol and cancellation ordering          |
+| Shared jobs could execute from the wrong workspace  | Workspace-filtered job claims and execution leases                                        |
 
 ## Execution and resource invariants
 
@@ -55,6 +55,18 @@ TUI draft saving coalesces input on a 300 ms timer, serializes writes, and flush
 
 ## Interface rules
 
-Use the existing brand colors, a single conversation column, and details on demand. Status changes appear immediately. There are no decorative infinite animations. Terminal rendering only requests frames when content/input changes.
+Use the existing brand colors with session navigation, five independent work views and details on demand. Wide terminals show multiple regions; narrow terminals navigate full pages. Status changes appear immediately. There are no decorative infinite animations. Terminal rendering only requests frames when content/input changes.
 
 Keep completed Markdown components stable while text streams. Preserve the user's scroll position when reading older content. Show when a preview/page is bounded; retain the authoritative history in storage. Do not send provider-native payloads or image bytes in every UI event.
+
+## Task workbench boundaries
+
+`packages/cli` assembles the native, attached, external Pi and embedded entry adapters. `native-tui.ts` keeps one Agent and view per monitored session; `session-workspace.ts` serializes selection and capacity transitions without cancelling background runs. Attached views own stable client scopes, persisted scope/session mappings and independent receipts/drafts; layout and startup preferences retain their existing workspace home. There are at most eight monitored views, including hidden busy or attention-bearing sessions.
+
+`packages/tui` owns the action registry, responsive frame, focus, cached message/execution components, object list/detail readers and structured status. `workbench-sources.ts` adapts existing runtime/RPC changes, execution, plans and resources to UI objects. Viewing does not acquire a queue hold; mutations hold briefly, re-read identity/state, and release in finally. Host/session/connection changes invalidate pending actions; ordinary streamed event revisions do not. Closing a view, disconnecting, stopping a run and rejecting permission are distinct operations.
+
+Run-bound steering adds negotiated optional `expectedRunId` validation inside Agent's serialized queue operation. Older clients keep their previous semantics. The existing generated steering ID is returned as optional `steeringId`; its durable message event identifies application. Unconsumed targeted instructions become explicit recovery items, never automatic input to another run. No database format or Pi public RPC changes are involved.
+
+ProviderCatalog keeps credential ownership at the selected Hikaro home; Models/Providers share one center and call the existing login/logout APIs. The Pi extension imports the host TUI and Markdown through the build's external module mapping. It must not bundle a second terminal instance. CLI Markdown retains its lazy import path.
+
+CLI migration: active `apps/cli` paths moved to `packages/cli`; the package name, `hikaro` binary and `dist/hikaro.mjs` remain unchanged. Historical validation/diff records retain old paths. Official `node-forge` 1.4.2 is pinned and verified against its release integrity and complete file manifest. Historical backport files live under `docs/validation/forge-backport-source`; they do not participate in install or release.

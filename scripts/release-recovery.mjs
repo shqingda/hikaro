@@ -157,19 +157,20 @@ export async function verifyReleaseRecovery({ bin, spawn, home, workspace }) {
       session.id,
     ]);
     await attached.text("Attached to shared host");
-    await attached.text("Execution manager", attached.send("/tasks\r"));
+    await attached.text("Queue · steering", attached.send("/tasks\r"));
+    await attached.text("Reference this activity", attached.send("\r"));
+    await attached.text("Apply recovered steering", attached.send("\t"));
     await attached.text(
-      "Steering messages · page 1",
-      attached.send("\x1b[B".repeat(3) + "\r"),
+      "This permits the recovered message",
+      attached.send("2"),
     );
-    await attached.text("Apply recovered steering", attached.send("\r"));
-    await attached.text("Apply recovered steering?", attached.send("\x1b[B\r"));
+    await attached.text("Pending next model turn", attached.send("\x1b[B\r"));
+    await attached.text("Search commands and actions", attached.send("\x10"));
     await attached.text(
-      "Steering messages · page 1",
-      attached.send("\x1b[B\r"),
+      "Open Conversation",
+      attached.send("Open Conversation"),
     );
-    await attached.text("Execution manager", attached.send("\x1b"));
-    await attached.text("Enter send", attached.send("\x1b"));
+    await attached.text("Enter send", attached.send("\r"));
     assert.equal(
       (await events()).filter((event) => event.type === "run.start").length,
       0,

@@ -1,3 +1,4 @@
+import { workbenchKeys } from "./workbench-pty-helpers.ts";
 import { spawn as spawnProcess } from "node:child_process";
 import { spawn } from "node-pty";
 import { expect, it, vi } from "vitest";
@@ -144,27 +145,40 @@ it("recovers a durably accepted queue after host SIGKILL and explicitly resumes 
         { timeout: 8000 },
       );
     };
-    await wait("/help");
-    await wait("Execution manager", send("/tasks\r"));
-    await wait("Pending messages · page 1", send("\r"));
-    await wait("Resume recovered message", send("\r"));
+    await wait("Enter send");
+    const keys = workbenchKeys(send, wait, () => output);
+    await keys.tab("Activity");
+    await keys.object(
+      "RECOVER-PENDING",
+      "RECOVER-PENDING",
+      "Resume recovered message",
+    );
     expect(await store.messages(session.id)).toEqual([]);
-    await wait("Pending messages · page 1", send("\x1b"));
-    await wait("Execution manager", send("\x1b"));
-    // Wait for the editor: a following slash before standalone Escape is
-    // decoded can form Alt+/ instead of closing the manager.
-    await wait("Enter send", send("\x1b"));
-    // Check persisted history independently after the panel has closed.
+    await keys.cancel(
+      "2",
+      "Resume recovered message",
+      "Resume recovered message",
+    );
+    await keys.tab("Conversation");
+    // Merely reading or default-cancelling recovery never dispatches a task.
     client = await SharedHostClient.connect({ home, cwd, clientId: "probe" });
     await client.request("hello");
     expect(await store.messages(session.id)).toEqual([]);
-    await wait("Execution manager", send("/tasks\r"));
-    await wait("Pending messages · page 1", send("\r"));
-    await wait("Resume recovered message", send("\r"));
-    await wait("Resume recovered message?", send("\x1b[B\r"));
-    await wait("Pending messages · page 1", send("\x1b[B\r"));
-    await wait("Execution manager", send("\x1b"));
-    await wait("You wrote:", send("\x1b"));
+    await keys.tab("Activity");
+    await keys.object(
+      "RECOVER-PENDING",
+      "RECOVER-PENDING",
+      "Resume recovered message",
+    );
+    await wait("This permits the recovered message", send("2"));
+    await send("\x1b[B\r");
+    await vi.waitFor(async () =>
+      expect(
+        (await store.messages(session.id)).some((m) => m.role === "assistant"),
+      ).toBe(true),
+    );
+    await keys.tab("Conversation");
+    await wait("You wrote:");
     expect(
       (await store.messages(session.id))
         .filter((m) => m.role === "user")

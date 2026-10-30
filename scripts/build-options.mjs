@@ -58,6 +58,17 @@ export function piExtensionBuildOptions() {
       {
         name: "pi-host-tui",
         setup(build) {
+          // The CLI lazily loads Markdown through CommonJS. An ESM extension
+          // must import its host's constructor rather than dynamically require it.
+          build.onResolve({ filter: /^\.\/markdown\.cjs$/ }, () => ({
+            path: "host-markdown",
+            namespace: "pi-host-markdown",
+          }));
+          build.onLoad({ filter: /.*/, namespace: "pi-host-markdown" }, () => ({
+            contents:
+              'import { Markdown } from "@earendil-works/pi-tui"; export function createMarkdown(...args) { return new Markdown(...args); }',
+            loader: "js",
+          }));
           // Shared Hikaro presentation imports pinned leaf modules in the CLI;
           // an extension must instead use the classes supplied by its Pi host.
           build.onResolve(

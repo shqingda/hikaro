@@ -141,7 +141,7 @@ try {
     }, 15000);
     terminal.onData((data) => {
       output = (output + data).slice(-16000);
-      if (!ready && stripVTControlCharacters(output).includes("/help")) {
+      if (!ready && stripVTControlCharacters(output).includes("Enter send")) {
         ready = true;
         exitWhenReady();
       }

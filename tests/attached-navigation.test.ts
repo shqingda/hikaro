@@ -164,9 +164,21 @@ it("signs in through the real secret-input panel without sending credentials to 
       ).length;
     expect(reloads()).toBeGreaterThan(0);
     const before = reloads();
-    const cancelled = menu.command("/login");
+    const declined = menu.command("/login", "opencode-go");
+    await wait("Replace sign-in");
+    expect(panel!.render(100).join("\n")).toContain("shared Hikaro host home");
+    panel!.handleInput("\r");
     await wait("Select provider to configure");
-    panel!.handleInput("opencode-go");
+    abort.abort();
+    await declined;
+    expect(await credentials.read("opencode-go")).toMatchObject({
+      key: "fixture-private-key",
+    });
+    expect(reloads()).toBe(before);
+
+    const cancelled = menu.command("/login", "opencode-go");
+    await wait("Replace sign-in");
+    panel!.handleInput("\x1b[B");
     panel!.handleInput("\r");
     await wait("Select authentication method");
     panel!.handleInput("\r");

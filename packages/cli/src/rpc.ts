@@ -182,7 +182,17 @@ export async function serveRpc(
     },
     shared?.store,
   );
-  workflows = new RpcWorkflows(runtime, hostInstanceId, !!shared);
+  workflows = new RpcWorkflows(
+    runtime,
+    hostInstanceId,
+    !!shared,
+    (sessionId, origin) => {
+      // Questions are durable before invalidation. Existing clients reconcile via
+      // the usual snapshot path; no question content is added to the event stream.
+      for (const [scope] of approvalRecipients(sessionId, origin))
+        sendScoped({ type: "session.invalidated", scope });
+    },
+  );
   runtime.startJobs();
   const requireLive = (scope: string, state: ScopeState) => {
     if (shuttingDown || scopes.get(scope) !== state)
@@ -989,8 +999,8 @@ export async function serveRpc(
             );
           requireSameSelection();
           requireUncancelled();
-          await agent.steer(text, scope, expectedRunId);
-          result = {};
+          const steeringId = await agent.steer(text, scope, expectedRunId);
+          result = { steeringId };
           break;
         }
         case "cancel":

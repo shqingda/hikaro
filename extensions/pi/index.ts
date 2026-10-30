@@ -50,6 +50,7 @@ interface BridgeState {
   opening: boolean;
   autoSeen: boolean;
   view?: PiBridgeView;
+  drafts?: Record<string, string>;
 }
 const stateKey = Symbol.for("hikaro.piBridge.state.v1");
 const processState = globalThis as unknown as Record<
@@ -114,10 +115,25 @@ export function createPiExtension(
         const resumeSessionId = await piLastSession(home, ctx.cwd).catch(
           () => undefined,
         );
+        const [{ ProviderCatalog }, { KeychainCredentials }] =
+          await Promise.all([
+            import("../../packages/provider-pi/src/catalog.ts"),
+            import("../../packages/provider-pi/src/credentials.ts"),
+          ]);
+        const modelCatalog = new ProviderCatalog(
+          home,
+          new KeychainCredentials(home),
+        );
         await ctx.ui.custom(
           (tui, _theme, _keys, done) => {
             const view = new PiBridgeView(tui, createClient(ctx.cwd), done, {
               resumeSessionId,
+              cwd: ctx.cwd,
+              modelCatalog,
+              draft: state.drafts?.[ctx.cwd],
+              onDraft: (text) => {
+                (state.drafts ??= {})[ctx.cwd] = text;
+              },
               onSession: (id) => {
                 void setPiLastSession(home, ctx.cwd, id).catch((error) =>
                   ctx.ui.notify(`Hikaro settings: ${String(error)}`, "error"),

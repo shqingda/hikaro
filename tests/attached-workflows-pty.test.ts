@@ -1,3 +1,4 @@
+import { workbenchKeys } from "./workbench-pty-helpers.ts";
 import { spawn as spawnProcess } from "node:child_process";
 import { expect, it, vi } from "vitest";
 import { spawn } from "node-pty";
@@ -261,14 +262,12 @@ it("runs Plan, questions, rollback and execution management through an attached 
     await wait("file edits recorded since approval", progress);
     await wait("Enter send", send("\x1b"));
     expect(await readFile(join(cwd, "sample.txt"), "utf8")).toBe("implemented");
-    await wait("File changes", send("/changes\r"));
-    await wait("Roll back this edit", send("\r"));
-    await wait("Confirm file rollback", send("\x1b[B\r"));
-    const rollback = send("\x1b[B\r");
-    await wait("Rolled back sample.txt", rollback);
-    await wait("File changes", rollback);
+    const keys = workbenchKeys(send, wait, () => output);
+    await keys.tab("Changes");
+    await keys.object("sample.txt", "sample.txt", "Roll back this edit");
+    await keys.confirm("3", "Roll back edit", "Reapply this edit");
     expect(await readFile(join(cwd, "sample.txt"), "utf8")).toBe("original");
-    await wait("Enter send", send("\x1b[B".repeat(2) + "\r"));
+    await keys.tab("Conversation");
     const executionOffset = send("start execution\r");
     await vi.waitFor(
       () =>
@@ -280,46 +279,43 @@ it("runs Plan, questions, rollback and execution management through an attached 
         ).toBe(true),
       { timeout: 8000 },
     );
-    await wait("Message queued on host", send("discard me\r"));
-    await wait("Message queued on host", send("kept message\r"));
-    await wait("Message queued on host", send("prioritized queued\r"));
-    await wait("Execution manager", send("/tasks\r"));
-    await wait("Pending messages · page 1", send("\r"));
-    await wait("Remove message", send("\r"));
-    await wait("Remove pending message?", send("\x1b[B".repeat(3) + "\r"));
-    await wait("Pending messages · page 1", send("\x1b[B\r"));
-    await wait("Edit message", send("\r"));
-    await wait("Edit pending message", send("\x1b[B\r"));
-    await wait("Pending messages · page 1", send("\x01\x0bedited queued\r"));
-    await wait("Move to front", send("\x1b[B\r"));
-    await wait("1. prioritized queued", send("\x1b[B".repeat(2) + "\r"));
-    await wait("Execution manager", send("\x1b"));
-    await wait("Background terminals · page 1", send("\x1b[B\r"));
-    await wait("Send a line", send("\r"));
-    await wait("Send a line to terminal", send("\x1b[B\r"));
+    await wait("Message queued on host", send("discard me\x18\r"));
+    await wait("Message queued on host", send("kept message\x18\r"));
+    await wait("Message queued on host", send("prioritized queued\x18\r"));
+    await keys.tab("Activity");
+    await keys.object("discard me", "discard me", "Remove message");
+    await keys.confirm("4", "Remove message", "↑↓ select");
+    await keys.object("kept message", "kept message", "Edit message");
+    await wait("Edit message", send("2"));
+    await wait("↑↓ select", send("\x01\x0bedited queued\r"));
+    await keys.object("edited queued", "edited queued", "Edit message");
+    await keys.object(
+      "prioritized queued",
+      "prioritized queued",
+      "Move to front",
+    );
+    await wait("1. prioritized queued", send("3"));
+    await keys.object("terminals", "printf", "Send a line");
+    await wait("Send a line", send("2"));
     await wait("Send terminal input?", send("hello\r"));
-    await wait("Background terminals · page 1", send("\x1b[B\r"));
-    await wait("RESPONSE:hello", send("\r"));
-    await wait("Stop this task?", send("\x1b[B".repeat(2) + "\r"));
-    await wait("Background terminals · page 1", send("\x1b[B\r"));
-    await wait("State: exited", send("\r"));
-    await wait("Background terminals · page 1", send("\x1b"));
-    await wait("Execution manager", send("\x1b"));
-    await wait("Child agents · page 1", send("\x1b[B".repeat(2) + "\r"));
-    await wait("Task: child fixture", send("\r"));
-    await wait("Stop this task?", send("\x1b[B\r"));
-    await wait("Child agents · page 1", send("\x1b[B\r"));
+    send("\x1b[B\r");
+    await keys.refresh("RESPONSE:hello");
+    await keys.confirm("3", "Stop terminal", "1/");
+    await keys.refresh("State: exited");
+    await keys.object("children", "child fixture", "Stop child agent");
+    await keys.confirm("2", "Stop child agent", "1/");
+    await keys.refresh("State: cancelled");
+    // Task completion releases queued prompts even while this reader remains open.
+    await vi.waitFor(
+      () =>
+        expect(
+          [...counts.keys()].some((text) => text.includes("edited queued")),
+        ).toBe(true),
+      { timeout: 8000 },
+    );
+    await keys.tab("Conversation");
     await wait("Main finished");
-    await wait("State: cancelled", send("\r"));
-    expect(
-      [...counts.keys()].some(
-        (text) =>
-          text.includes("edited queued") || text.includes("prioritized queued"),
-      ),
-    ).toBe(false);
-    await wait("Child agents · page 1", send("\x1b"));
-    await wait("Execution manager", send("\x1b"));
-    await wait("Queued edit executed", send("\x1b"));
+    await wait("Queued edit executed");
     const requests = [...counts.keys()];
     expect(requests.some((text) => text.includes("discard me"))).toBe(false);
     expect(requests.some((text) => text.includes("kept message"))).toBe(false);

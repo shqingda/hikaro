@@ -1,6 +1,8 @@
 import {
   Editor,
   CURSOR_MARKER,
+  FAKE_CURSOR_START,
+  FAKE_CURSOR_END,
   truncateToWidth,
   visibleWidth,
   type TUI,
@@ -105,7 +107,8 @@ export class ActivityEditor extends Editor {
     this.sourceHeight = source.length;
     this.sourceRows = [0];
     for (let row = start + 1; row <= end; row++) this.sourceRows.push(row);
-    for (let row = bottom; row < source.length; row++)
+    // Completion belongs to the editor focus, not a background preserved draft.
+    for (let row = bottom; row < (focused ? source.length : bottom + 1); row++)
       this.sourceRows.push(row);
     const result = this.sourceRows.map((row) => source[row]!);
     const overflowAbove = this.above + start;
@@ -126,7 +129,12 @@ export class ActivityEditor extends Editor {
     result[end - start + 1] = muted(truncateToWidth(` ${hint}`, width, ""));
     return focused
       ? result
-      : result.map((line) => line.replaceAll(CURSOR_MARKER, ""));
+      : result.map((line) =>
+          line
+            .replaceAll(CURSOR_MARKER, "")
+            .replaceAll(FAKE_CURSOR_START, "")
+            .replaceAll(FAKE_CURSOR_END, ""),
+        );
   }
 
   override handleMouse(event: TuiMouseEvent) {

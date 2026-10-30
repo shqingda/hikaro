@@ -101,7 +101,7 @@ it.each([false, true])(
         return offset;
       };
       if (attached) {
-        await wait("/help");
+        await wait("Enter send");
         await wait("Tool details enabled", send("/tools\r"));
         // /tools now expands the already loaded result; no history refresh is needed.
       }

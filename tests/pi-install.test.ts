@@ -3,6 +3,8 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { build } from "esbuild";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { installPi } from "../packages/pi-bridge/src/install.ts";
 import { PiBackend } from "../packages/pi-bridge/src/index.ts";
 
@@ -112,6 +114,10 @@ it("builds an extension with external Pi dependencies and launches its sibling C
   const { piExtensionBuildOptions } = await import(optionsPath);
   const result = await build({
     ...piExtensionBuildOptions(),
+    entryPoints: {
+      "pi-extension": "extensions/pi/index.ts",
+      "embedded-view": "packages/pi-bridge/src/view.ts",
+    },
     outdir: directory,
   });
   expect(
@@ -132,4 +138,24 @@ it("builds an extension with external Pi dependencies and launches its sibling C
     join(directory, "hikaro.mjs"),
     "--rpc",
   ]);
+  const viewModule = pathToFileURL(join(directory, "embedded-view.mjs")).href;
+  const { stdout } = await promisify(execFile)(process.execPath, [
+    "--input-type=module",
+    "--eval",
+    `import { PiBridgeView } from ${JSON.stringify(viewModule)};
+    import { stripVTControlCharacters } from 'node:util';
+    const client = {
+      subscribe: () => () => {}, onExit: () => () => {}, close: async () => {},
+      request: async method => method === 'messages.read'
+        ? { items: [{ message: { role: 'assistant', text: '**Host Markdown**' } }] }
+        : { id: 'embedded' },
+    };
+    const view = new PiBridgeView({ terminal: { rows: 24, columns: 80 }, requestRender() {} }, client, () => {}, { resumeSessionId: 'embedded' });
+    await new Promise(resolve => setImmediate(resolve));
+    const output = stripVTControlCharacters(view.render(80).join('\\n'));
+    if (!output.includes('Host Markdown') || output.includes('**Host Markdown**')) throw Error('Packaged host Markdown did not render');
+    view.dispose();
+    process.stdout.write('rendered');`,
+  ]);
+  expect(stdout).toBe("rendered");
 });

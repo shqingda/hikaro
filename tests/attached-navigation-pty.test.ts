@@ -163,7 +163,25 @@ it("navigates sessions, model/defaults, settings, resources and login from the a
     await wait("Sessions · page 1", send("/sessions Target\r"));
     await wait("Rename session", send("\x12"));
     await wait("Sessions · page 1", send("\x01\x0bRenamed target\r"));
-    await wait("Session opened: Renamed target", send("\r"));
+    const resumed = send("\r");
+    await wait("Renamed target", resumed);
+    await wait("Enter send", resumed);
+    await vi.waitFor(async () => {
+      expect(await files.workspace()).toMatchObject({ selected: target.id });
+    });
+    const workspaceState = (await files.workspace()) as {
+      sessions: Array<{ id: string; clientId: string }>;
+      selected: string;
+    };
+    expect(workspaceState.selected).toBe(target.id);
+    const selectedClient = workspaceState.sessions.find(
+      (session) => session.id === target.id,
+    )!;
+    const selectedFiles = await ClientFiles.open(
+      probe.endpoint.home,
+      probe.endpoint.key,
+      `local:${selectedClient.clientId}`,
+    );
     await probe.request("session.resume", { sessionId: target.id });
     expect((await probe.request("session.current")).session.title).toBe(
       "Renamed target",
@@ -228,7 +246,7 @@ it("navigates sessions, model/defaults, settings, resources and login from the a
     await wait("Select model", send("/model\r"));
     await wait("Offline demo", send("demo/offline"));
     await wait("Active model: demo/offline", send("\r"));
-    await wait("/context · active", send("/context\r"));
+    await wait("/context · active", send("/context active\r"));
     await wait("applied to this session", send("\x1b[B\r"));
     expect(
       (await probe.request("model.read")).current.settings.contextWindow,
@@ -248,8 +266,10 @@ it("navigates sessions, model/defaults, settings, resources and login from the a
       permissionMode: "auto",
     });
     await wait("Settings · saved immediately", send("/settings\r"));
-    await wait("Display preferences saved", send("\x1b[B".repeat(2) + "\r"));
-    expect(await files.preferences()).toMatchObject({ showUsage: false });
+    await wait("Usage footer  Hide", send("\x1b[B".repeat(2) + "\r"));
+    expect(await files.preferences()).toMatchObject({
+      showUsage: false,
+    });
     await wait("Enter send", send("\x1b"));
     await wait(
       "Host resources · search loaded entries",
@@ -270,7 +290,9 @@ it("navigates sessions, model/defaults, settings, resources and login from the a
     send("\x04");
     expect(await exited).toBe(0);
     term = undefined;
-    await files.save([{ id: "unresolved-ui-proof", method: "tool.manual" }]);
+    await selectedFiles.save([
+      { id: "unresolved-ui-proof", method: "tool.manual" },
+    ]);
     const reopened = output.length;
     launch();
     await wait("Attached to shared host", reopened);
@@ -279,7 +301,7 @@ it("navigates sessions, model/defaults, settings, resources and login from the a
     await wait("No durable receipt found", send("\r"));
     await wait("Recovery · operation receipts", send("\x1b"));
     await wait("Enter send", send("\x1b"));
-    expect(await files.load()).toContainEqual({
+    expect(await selectedFiles.load()).toContainEqual({
       id: "unresolved-ui-proof",
       method: "tool.manual",
     });
@@ -288,9 +310,13 @@ it("navigates sessions, model/defaults, settings, resources and login from the a
     await wait("Enter send", send("\x1b"));
     await wait("Settings · saved immediately", send("/settings\r"));
     await wait("Hide", reopened);
-    expect(await files.preferences()).toMatchObject({ showUsage: false });
-    await wait("Display preferences saved", send("\x1b[B".repeat(4) + "\r"));
-    expect(await files.preferences()).toMatchObject({ resumeOnStart: false });
+    expect(await files.preferences()).toMatchObject({
+      showUsage: false,
+    });
+    await wait("Startup  New session", send("\x1b[B".repeat(4) + "\r"));
+    expect(await files.preferences()).toMatchObject({
+      resumeOnStart: false,
+    });
     await wait("Enter send", send("\x1b"));
     const before = (await probe.request("session.list", { limit: 100 })).length;
     send("\x04");
@@ -303,7 +329,9 @@ it("navigates sessions, model/defaults, settings, resources and login from the a
       before + 1,
     );
     await wait("Sessions · page 1", send("/sessions Renamed target\r"));
-    await wait("Session opened: Renamed target", send("\r"));
+    const selectedAgain = send("\r");
+    await wait("Renamed target", selectedAgain);
+    await wait("Enter send", selectedAgain);
     await wait("Sessions · page 1", send("/sessions Renamed target\r"));
     await wait("Delete “Renamed target”?", send("\x1b[3~"));
     await wait("Sessions · page 1", send("\x1b"));
@@ -311,11 +339,12 @@ it("navigates sessions, model/defaults, settings, resources and login from the a
       await probe.request("session.list", { query: "Renamed target" }),
     ).toHaveLength(1);
     await wait("Delete “Renamed target”?", send("\x1b[3~"));
-    await wait("No matching sessions", send("\r"));
-    expect(
-      await probe.request("session.list", { query: "Renamed target" }),
-    ).toHaveLength(0);
-    await wait("Enter send", send("\x1b"));
+    await wait("Enter send", send("\r"));
+    await vi.waitFor(async () => {
+      expect(
+        await probe!.request("session.list", { query: "Renamed target" }),
+      ).toHaveLength(0);
+    });
     send("\x04");
     expect(await exited).toBe(0);
     term = undefined;

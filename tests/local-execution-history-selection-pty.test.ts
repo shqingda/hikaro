@@ -16,7 +16,7 @@ import { DatabaseSync } from "node:sqlite";
 import { SQLiteStore } from "../packages/storage/src/index.ts";
 
 it.each(["direct", "manager", "during-switch"] as const)(
-  "invalidates ordinary history across a session switch (%s)",
+  "isolates late history from the foreground session across a session switch (%s)",
   async (mode) => {
     const home = await realpath(
       await mkdtemp(join(tmpdir(), "hikaro-history-selection-")),
@@ -142,24 +142,23 @@ for (const method of ["choose", "readDocument"]) {
     const release = (name: string) =>
       writeFile(join(home, `release-${name}`), "");
     try {
-      await wait("/help");
+      await wait("Enter send");
       send(`/resume ${next.id}\r`);
       await observed("resume-started");
       if (mode === "during-switch") {
         await release("resume");
         await observed("bind-started");
-        // bind is now waiting for storage. Opening here must not bind a new
-        // reader to the old task while that task is being replaced.
+        // The new layout is already selected while remembering selection waits.
+        // An old run ID must be rejected by the new session, never cross-read.
         const attempt = send("/tasks history OLD-SESSION-HISTORY\r");
-        await wait("Session is changing", attempt);
+        await wait("Recorded run not found in this session", attempt);
         expect(await readFile(log, "utf8")).not.toContain(
           "old-history-started",
         );
       } else {
         if (mode === "direct") send("/tasks history OLD-SESSION-HISTORY\r");
         else {
-          await wait("Execution manager", send("/tasks\r"));
-          send("\x1b[B".repeat(4) + "\r");
+          send("/tasks\r");
         }
         await observed("old-history-started");
         await release("resume");
@@ -180,19 +179,12 @@ for (const method of ["choose", "readDocument"]) {
       } finally {
         db.close();
       }
+      const lateOffset = output.length;
       await release("history");
-      if (mode !== "during-switch") {
-        await observed("old-history-settled");
-        expect(
-          (await readFile(log, "utf8"))
-            .split("\n")
-            .filter((line) => line.startsWith("panel:")),
-        ).not.toEqual(
-          expect.arrayContaining([
-            expect.stringContaining("OLD-SESSION-HISTORY"),
-          ]),
-        );
-      }
+      if (mode !== "during-switch") await observed("old-history-settled");
+      expect(stripVTControlCharacters(output.slice(lateOffset))).not.toContain(
+        "OLD-SESSION-HISTORY",
+      );
       // A late response cannot leave the old panel open or prevent reading the
       // newly selected task after the transition has finished.
       await wait(

@@ -1,3 +1,4 @@
+import { workbenchKeys } from "./workbench-pty-helpers.ts";
 import { spawn as spawnProcess } from "node:child_process";
 import { spawn } from "node-pty";
 import { expect, it, vi } from "vitest";
@@ -85,19 +86,15 @@ it("confirms and cancels redo through built attached TUI and preserves later edi
           ),
         { timeout: 8000 },
       );
-    await wait("/help");
-    await wait("File changes", send("/changes\r"));
-    await wait("Reapply this edit", send("\r"));
-    await wait("Confirm reapply edit", send("\x1b[B\r"));
-    await wait("File changes", send("\x1b"));
+    await wait("Enter send");
+    const keys = workbenchKeys(send, wait, () => output);
+    await keys.tab("Changes");
+    await keys.object("redo.txt", "redo.txt", "Reapply this edit");
+    await keys.cancel("3", "Reapply edit", "Reapply this edit");
     expect(await readFile(path, "utf8")).toBe("before");
-    await wait("Reapply this edit", send("\r"));
-    await wait("Confirm reapply edit", send("\x1b[B\r"));
-    const applied = send("\x1b[B\r");
-    await wait("Reapplied redo.txt", applied);
-    await wait("Edited · committed", applied);
+    await keys.confirm("3", "Reapply edit", "committed");
     expect(await readFile(path, "utf8")).toBe("after 中文");
-    await wait("Enter send", send("\x1b"));
+    await keys.tab("Conversation");
     const newEntry = (await journal.list(session.id)).find(
       (e) => e.id !== entry!.id,
     )!;

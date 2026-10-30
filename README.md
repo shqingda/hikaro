@@ -24,7 +24,7 @@ pnpm start --demo
 
 Interactive `--demo` starts a fresh offline session unless an offline session is explicitly selected; it cannot restore a live-model session implicitly. The demo model never calls tools. An explicit `!COMMAND` still runs a real sandboxed command under the normal permission policy.
 
-For a real model, start the TUI and enter `/login`. For an xAI subscription, choose **xAI → Sign in with SuperGrok or X Premium**. Existing subscribers can use their saved login directly; no API key is required:
+For a real model, open **Actions → Models and provider accounts**, or enter `/model` and switch to **Providers**. For an xAI subscription, choose **xAI → Sign in with SuperGrok or X Premium**. Existing subscribers can use their saved login directly; no API key is required:
 
 ```sh
 pnpm start --provider xai --model grok-4.7
@@ -43,7 +43,7 @@ Native TUI permissions default to **Ask for approval**: workspace file edits and
 
 **Approve for me** uses conservative local rules, with no extra model request. Ordinary workspace file operations and literal directory commands can pass automatically. File reads and text searches share per-resource authorization, including canonical paths; sensitive resources require approval before content is scanned. Shell content scans and Git queries ask because they can read multiple sensitive files. The optional index excludes sensitive paths and rechecks cached hits. Git control files require approval even in Ask mode; Git queries always use the workspace sandbox with execution hooks disabled. Commands remain in the macOS workspace sandbox with no network. **Full Access** permits external file tools and runs shell/PTY commands on the host with network access, without approval. Existing processes retain the access they had when started.
 
-When approval is needed, a panel above the editor shows the tool, target or command, and reason. Use ↑/↓ to choose **Allow once** or **Deny**, then Enter; Esc or Ctrl+C denies. PgUp/PgDn scroll long details. Your draft stays intact. If the window cannot show the controls and details, resize it before allowing. Ordinary workspace files such as `README.md` do not require manual approval in **Approve for me**; a guessed path outside the workspace still does.
+When approval is needed in the foreground session, its work area shows the tool, target or command, and reason. Background approvals add a Needs attention badge; they do not take the current input focus. Use ↑/↓ to choose **Allow once** or **Deny**, then Enter; Esc or Ctrl+C denies. PgUp/PgDn scroll long details. Your draft stays intact. If the window cannot show the controls and details, resize it before allowing. Ordinary workspace files such as `README.md` do not require manual approval in **Approve for me**; a guessed path outside the workspace still does.
 
 Noninteractive/RPC hosts keep the existing `--trust` and per-operation approval behavior; they do not inherit the TUI's saved mode. Third-party in-process plugins are trusted code. The external Pi backend owns its own permissions; Hikaro's selector cannot change those.
 
@@ -51,7 +51,17 @@ The current permission mode stays visible independently of the usage footer. Sho
 
 Ctrl+S appears only on actual model choices and active model-setting values. Provider/authentication steps and default-only settings use Enter. Narrow panels wrap values and descriptions, keep the selected choice and reserve Enter/Esc hints. If the available space cannot show the selected content, the panel asks you to resize. Real PTY acceptance at 36×18, 60×18 and 100×24 covers keyboard navigation, resizing, cancellation, draft retention and status feedback. See [validation evidence](docs/validation.md). macOS Terminal appearance, IME and assistive-technology acceptance remain pending.
 
-File candidates use the required `rg` executable and respect ignore rules. Type `@rdme` for fuzzy matches or `@docs/` to narrow the directory; paths containing spaces are quoted automatically. Search is asynchronous and cancellable, capped at 20,000 file paths / 4 MiB of listing output and 20 displayed candidates; narrow the directory in very large workspaces. File contents and permission checks are handled only when submitting. `pnpm dev` runs source directly; after pulling changes, use `pnpm build` before `pnpm start`.
+File candidates use the required `rg` executable and respect ignore rules. Type `@rdme` for fuzzy matches or `@docs/` to narrow the directory; paths containing spaces are quoted automatically. Search is asynchronous and cancellable, capped at 20,000 file paths / 4 MiB of listing output and 20 displayed candidates; narrow the directory in very large workspaces. Context can preview a selected attachment locally with the same protected path checks. Submission validates the file again; previewing does not send it to a model. `pnpm dev` runs source directly; after pulling changes, use `pnpm build` before `pnpm start`.
+
+## Task workbench
+
+Conversation, Changes, Activity, Plan and Context are separate working views. Changes opens file diffs, read markers and existing rollback/redo operations. Activity manages queue entries, interventions, terminals, child tasks and durable run history; reading it never pauses execution. Object readers retain selection, support search and show actions next to the inspected object. Long message readers provide bounded parts, search, copy and reference-to-draft actions.
+
+At 144 columns navigation, main view and details can coexist. At 100–143 columns details replace navigation; below 100 columns navigation and details become full pages. Native and attached clients monitor up to eight sessions, including background work and approvals. Closing a running view keeps it monitored. Close an idle view through Actions to free a slot; no running session is terminated to make room.
+
+Running Enter submits an intervention to the observed run. Submitted, applied and unapplied states follow durable receipts and consumption events; they do not imply a tool was interrupted. A run ending concurrently preserves the draft rather than silently starting another task. Reconnection never resends an uncertain prompt, intervention or approval automatically.
+
+`/model` includes Models and Providers with a continuous return path. Disconnect removes the saved local credential, not a remote token; environment credentials can remain active. Saved credential metadata is not proof that a service call succeeded. The external Pi backend exposes its real model RPC and displays **Managed by Pi** for authentication and permissions. The embedded Hikaro view uses its own Hikaro backend and retains `/back`.
 
 ## Terminal controls
 
@@ -63,10 +73,12 @@ File candidates use the required `rg` executable and respect ignore rules. Type 
 | `/skill:NAME [TASK]` | Invoke a discovered Skill; Skill and plugin commands appear in completion |
 | `/fork`, `/compact` | Branch history or create a continuation summary |
 | `/attach PATH`, `@file`, `@"path with spaces"` | Attach UTF-8 files or PNG/JPEG/GIF/WebP images; `@` opens fuzzy file search, ↑/↓ selects, Tab/Enter completes, Esc closes |
-| `/model`, `/login` | Search models or connect a provider |
+| `/model` | Models and Providers: search, favorites/recent models, defaults, reasoning/context, Connect, Sign in again, Disconnect |
+| `/login`, `/logout` | Compatibility routes into the model center; no separate authentication forms |
 | `/settings` | Tool details, thinking visibility, usage footer, completion bell and startup behavior |
 | `/permissions [ask\|auto\|full]` | Select workspace permissions; Enter applies and saves; Esc closes |
-| `/context`, `/thinking`, `/speed` | Choose and apply a model setting immediately; append `default` for new-session defaults |
+| `/context` | Open Context: draft attachments, resources and model controls |
+| `/thinking`, `/speed`, `/context default` | Compatibility routes for model controls also available inside the model center |
 | `!COMMAND` | Run a terminal command under the current permission mode, without a model request |
 | `/resources`, `/status` | Skills/instructions and current session/model usage |
 | `/model provider/model` | Switch model directly while idle |
@@ -74,16 +86,19 @@ File candidates use the required `rg` executable and respect ignore rules. Type 
 | `/older`, `/newer`, `/latest` | Page through history |
 | `/read NUMBER PART` | Read a long message in bounded sections |
 | `/tools` | Toggle tool details |
-| `Ctrl+C` | Cancel; exit when idle |
+| `Ctrl+P`, `Ctrl+O` | Search available actions; switch sessions |
+| `F6`, `Shift+F6`, `Esc` | Move focus between regions; return from the current local view |
+| `Enter`, `Ctrl+X` then `Enter` | Send when idle; intervene when running. The separate shortcut queues a later task |
+| `Ctrl+C` | Stop the selected run; exit when idle |
 | `Ctrl+D`, `/quit` | Exit |
 | `Shift+Enter` | New line |
 | `Ctrl+Shift+F` | Search the visible terminal document |
 
-Draft edits are coalesced and scheduled for saving after 300 ms, including during continuous typing. Saves are serialized per TUI instance, flushed on submission/session switches/orderly exit, and restored after a process crash. The last interval plus any pending storage write can still be lost; this is not recovery of in-memory queued prompts or an interrupted model run. Expanded pasted text is saved, while transient extension-dialog answers are excluded. Storage failures appear near the editor. The existing 100,000-character draft limit remains. The last session can be deleted; deleting the current session opens a fresh blank session.
+Draft edits are coalesced and scheduled for saving after 300 ms, including during continuous typing. Saves are serialized per TUI instance, flushed on submission/session switches/orderly exit, and restored after a process crash. The last interval plus any pending storage write can still be lost; this is not recovery of in-memory queued prompts or an interrupted model run. Expanded pasted text is saved, while transient extension-dialog answers are excluded. Storage failures appear near the editor. The existing 100,000-character draft limit remains. Each monitored session retains its editor, view selection, search and reading position. Deleting the current session first activates an available replacement or a new blank session.
 
-File references are loaded on submission, including `--prompt`. External and sensitive files follow the current permission policy and protected reads. Failed or cancelled preparation keeps the draft. Limits remain eight references, 128 KiB per text file, 256 KiB combined text and 4 MiB combined attachment bytes. Images require explicitly supported provider capabilities. General binary files are saved with the turn for portable `/export`; their bytes never enter model requests or UI snapshots. Attached submissions must also fit the host's 1 MiB frame; oversized input is rejected before sending. Export includes an `.assets` directory and explains unavailable files. macOS clipboard-image capture is available. See the [input contract](docs/specs/prompt-attachments.md).
+File references are loaded on submission, including `--prompt`; Context also supports a bounded local preview. Text and image attachments cannot be sent as interventions: use Queue, and the draft remains intact until that explicit choice. External and sensitive files follow the current permission policy and protected reads. Failed or cancelled preparation keeps the draft. Limits remain eight references, 128 KiB per text file, 256 KiB combined text and 4 MiB combined attachment bytes. Images require explicitly supported provider capabilities. General binary files are saved with the turn for portable `/export`; their bytes never enter model requests or UI snapshots. Attached submissions must also fit the host's 1 MiB frame; oversized input is rejected before sending. Export includes an `.assets` directory and explains unavailable files. macOS clipboard-image capture is available. See the [input contract](docs/specs/prompt-attachments.md).
 
-The editor's top border shows an animated **Working**, **Thinking**, **Running TOOL**, or **Compacting** indicator. It pauses while waiting for approval/input and stops on completion, cancellation, session binding and exit. Thinking status is independent of whether reasoning text is displayed.
+Execution, connection, permission and intervention states appear in the bottom status bar; the editor shows input intent. Thinking status is independent of whether reasoning text is displayed.
 
 Data defaults to `~/.hikaro`; override with `--home` or `HIKARO_HOME`. Sessions are SQLite event streams. Large tool results are saved as artifacts. Process logs have a 50 MiB cap, reported when reached.
 

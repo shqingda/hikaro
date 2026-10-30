@@ -1,3 +1,13 @@
+import {
+  ActionRegistry,
+  WorkbenchFrame,
+  workspaceTabs,
+  type WorkspaceTab,
+  type WorkspaceSession,
+} from "./workbench.ts";
+import { ObjectPage, type ObjectSource } from "./object-page.ts";
+import { AttachmentStrip } from "./attachment-strip.ts";
+import { parseFileReferences } from "../../core/src/file-references.ts";
 import { FileAutocompleteProvider } from "./file-autocomplete.ts";
 import {
   TuiAltScreen,
@@ -12,7 +22,6 @@ import {
   truncateToWidth,
   type Component,
 } from "./primitives.ts";
-import { createMarkdown } from "./markdown.cjs";
 import { ModelPanel } from "./model-panel.ts";
 import { ActivityEditor } from "./activity-editor.ts";
 import { ApprovalPanel } from "./approval-panel.ts";
@@ -36,291 +45,20 @@ import {
   error as errorText,
   selected,
   setColorScheme,
-  markdownTheme as theme,
 } from "./theme.ts";
 import { renderHeader, renderStatus, type ViewStatus } from "./status.ts";
-const MESSAGE_PAGE_CHARS = 16_000;
 const STREAM_PREVIEW_CHARS = 64_000;
 const MAX_VISIBLE_ITEMS = 40;
-
-/**
- * End of the last blank-line block boundary that later text cannot change: outside
- * fences, after the whole blank run, before a complete line that does not open a
- * list, table, quote or indented block. Reference definitions can restyle earlier
- * text, so their presence disables the split. Returns 0 when no boundary is safe.
- */
-export function stableMarkdownBoundary(text: string) {
-  if (/^ {0,3}\[[^\]\n]+\]:/m.test(text)) return 0;
-  let fence: string | undefined,
-    boundary = 0;
-  const line = /^.*$/gm;
-  let blank = false;
-  for (let match = line.exec(text); match; match = line.exec(text)) {
-    const row = match[0];
-    if (match.index === text.length) break;
-    const marker = /^ {0,3}(`{3,}|~{3,})/.exec(row)?.[1];
-    if (fence) {
-      if (
-        marker &&
-        marker[0] === fence[0] &&
-        marker.length >= fence.length &&
-        !row.trim().slice(marker.length).trim()
-      )
-        fence = undefined;
-    } else if (!row.trim()) blank = true;
-    else {
-      if (
-        blank &&
-        match.index > 0 &&
-        match.index + row.length < text.length &&
-        !/^(\s|[-*+]\s|\d{1,9}[.)]\s|[|>])/.test(row)
-      )
-        boundary = match.index;
-      blank = false;
-      if (marker) fence = marker;
-    }
-    line.lastIndex = match.index + row.length + 1;
-  }
-  return boundary;
-}
-
-/** Streaming preview: only the tail after the stable boundary is parsed again per delta. */
-class StreamingMarkdown implements Component {
-  private prefixText = "";
-  private prefix = createMarkdown("", 1, 0, theme);
-  private tail = createMarkdown("", 1, 0, theme);
-  private blank = true;
-  private last?: { width: number; a: string[]; b: string[]; lines: string[] };
-  setText(text: string) {
-    this.blank = !text.trim();
-    const split = stableMarkdownBoundary(text);
-    const prefix = text.slice(0, split);
-    if (prefix !== this.prefixText) {
-      this.prefixText = prefix;
-      this.prefix.setText(prefix);
-    }
-    this.tail.setText(text.slice(split));
-  }
-  /** Same lines as one Markdown(text, 1, 1): padding wraps both parts. */
-  render(width: number) {
-    const a = this.prefix.render(width),
-      b = this.tail.render(width);
-    if (this.last?.width === width && this.last.a === a && this.last.b === b)
-      return this.last.lines;
-    // At paddingY 0 a part with no visible block renders a lone "" placeholder.
-    const content = [a, b].flatMap((part) =>
-      part.length === 1 && part[0] === "" ? [] : part,
-    );
-    const pad = " ".repeat(width);
-    const lines = this.blank ? [] : [pad, ...content, pad];
-    this.last = { width, a, b, lines };
-    return lines;
-  }
-  invalidate() {
-    this.last = undefined;
-    this.prefix.invalidate();
-    this.tail.invalidate();
-  }
-}
-
-let textShapingWarm = false;
-/**
- * The first emoji/CJK frame compiles pi-tui's RGI_Emoji regex and loads ICU
- * segmentation (~20–35 ms once per process). Pay it when the user submits, before
- * the run exists, instead of in the first streamed frame. Returns whether it ran.
- */
-export function warmTextShaping() {
-  if (textShapingWarm) return false;
-  textShapingWarm = true;
-  createMarkdown(
-    sanitize(
-      "## 中文 🙂\n\n**粗体** `code` 👍🏽 text, 한국어 かな.\n\n- 项目 🎉",
-    ),
-    1,
-    1,
-    theme,
-  ).render(80);
-  return true;
-}
-
-/** Keep Markdown parsing bounded and defer it until the renderer requests a frame. */
-export class MessageComponent implements Component {
-  private text: string;
-  private page = 0;
-  private dirty = true;
-  private readGeneration = 0;
-  private loadedPage?: { page: number; text: string };
-  private body = new Container();
-  private live?: StreamingMarkdown;
-  private rendered?: { width: number; lines: string[] };
-
-  readonly streaming: boolean;
-  constructor(
-    readonly number: number,
-    readonly role: "user" | "assistant" | "tool",
-    text: string,
-    streaming = false,
-    private options: {
-      label?: string;
-      tool?: { name: string; target: string; state: string };
-      details?: boolean;
-      manual?: boolean;
-      textLength?: number;
-      read?: (offset: number, limit: number) => Promise<string>;
-    } = {},
-  ) {
-    this.text = role === "tool" ? sanitize(text) : text;
-    this.streaming = streaming;
-  }
-  setText(text: string) {
-    const next = this.role === "tool" ? sanitize(text) : text;
-    if (this.text === next) return;
-    this.text = next;
-    this.dirty = true;
-  }
-  setDetails(details: boolean) {
-    details ||= this.options.manual === true;
-    if (this.options.details === details) return;
-    this.options.details = details;
-    this.dirty = true;
-  }
-  completeTool(text: string, state: string, manual = false) {
-    if (manual) {
-      this.options.manual = true;
-      this.options.details = true;
-    }
-    if (this.options.tool) this.options.tool.state = state;
-    this.setText(text);
-    this.dirty = true;
-  }
-  get toolState() {
-    return this.options.tool?.state;
-  }
-  get toolName() {
-    return this.options.tool?.name;
-  }
-  get pages() {
-    return Math.max(
-      1,
-      Math.ceil(
-        (this.options.textLength ?? this.text.length) / MESSAGE_PAGE_CHARS,
-      ),
-    );
-  }
-  async selectPage(page: number) {
-    const next = Math.min(this.pages - 1, Math.max(0, page));
-    const generation = ++this.readGeneration;
-    if (this.options.read) {
-      const text = await this.options.read(
-        next * MESSAGE_PAGE_CHARS,
-        MESSAGE_PAGE_CHARS,
-      );
-      if (generation !== this.readGeneration) return;
-      this.loadedPage = { page: next, text: sanitize(text) };
-    }
-    this.page = next;
-    this.dirty = true;
-  }
-  render(width: number) {
-    if (!this.dirty && this.rendered?.width === width)
-      return this.rendered.lines;
-    if (this.rendered && this.rendered.width !== width) this.dirty = true;
-    if (this.dirty) {
-      this.body.clear();
-
-      // A start that only moves in 2k steps keeps the stable Markdown prefix reusable.
-      const text = this.streaming
-        ? this.text.slice(
-            Math.ceil(
-              Math.max(0, this.text.length - MESSAGE_PAGE_CHARS) / 2000,
-            ) * 2000,
-          )
-        : this.loadedPage?.page === this.page
-          ? this.loadedPage.text
-          : this.text.slice(
-              this.page * MESSAGE_PAGE_CHARS,
-              (this.page + 1) * MESSAGE_PAGE_CHARS,
-            );
-      if (this.options.tool) {
-        const { name, target, state } = this.options.tool;
-        this.body.addChild(
-          new Text(
-            muted(
-              truncateToWidth(
-                sanitize(`${state}  ${name}${target ? `  ${target}` : ""}`),
-                Math.max(1, width - 2),
-              ),
-            ),
-            1,
-            0,
-          ),
-        );
-        if (!this.options.details) {
-          if (state === "Failed")
-            this.body.addChild(
-              new Text(
-                errorText(
-                  sanitize(this.text.slice(0, 200)).replace(/[\r\n]+/g, " "),
-                ),
-                3,
-                0,
-              ),
-            );
-          this.dirty = false;
-          const lines = this.body.render(width);
-          this.rendered = { width, lines };
-          return lines;
-        }
-      } else if (this.role !== "tool") {
-        this.body.addChild(
-          new Text(
-            this.role === "user" ? bold("YOU") : accent(bold("HIKARO")),
-            1,
-            0,
-          ),
-        );
-      }
-      if (this.options.label && !this.options.tool)
-        this.body.addChild(new Text(muted(sanitize(this.options.label)), 1, 0));
-      if (this.role === "tool") this.body.addChild(new Text(muted(text), 1, 1));
-      else if (this.streaming) {
-        this.live ??= new StreamingMarkdown();
-        this.live.setText(sanitize(text));
-        this.body.addChild(this.live);
-      } else this.body.addChild(createMarkdown(sanitize(text), 1, 1, theme));
-      if (this.streaming && this.text.length > MESSAGE_PAGE_CHARS) {
-        this.body.addChild(
-          new Text(
-            muted(
-              "Streaming preview · full response is available when the turn finishes",
-            ),
-            1,
-            0,
-          ),
-        );
-      } else if (this.pages > 1) {
-        this.body.addChild(
-          new Text(
-            muted(
-              `Message ${this.number} · part ${this.page + 1}/${this.pages} · /read ${this.number} PART`,
-            ),
-            1,
-            1,
-          ),
-        );
-      }
-      this.dirty = false;
-    }
-    const lines = this.body.render(width);
-    this.rendered = { width, lines };
-    return lines;
-  }
-  invalidate() {
-    this.dirty = true;
-    this.body.invalidate();
-  }
-}
-
+import {
+  ExecutionGroup,
+  MessageComponent,
+  warmTextShaping,
+} from "./messages.ts";
+export {
+  MessageComponent,
+  warmTextShaping,
+  stableMarkdownBoundary,
+} from "./messages.ts";
 export type HistoryDirection = "older" | "newer" | "latest";
 export type HistoryPage = {
   messages: Message[];
@@ -361,11 +99,17 @@ export class HikaroView {
   });
   private viewStatus: ViewStatus;
   private phase = "Ready";
+  private interventionState?: "pending" | "applied" | "unapplied";
+  private interventions = new Map<string, string | undefined>();
+  private appliedInterventions = new Set<string>();
   readonly footer: Component = {
     render: (width) =>
       renderStatus(
         this.viewStatus,
-        this.phase,
+        this.phase +
+          (this.interventionState
+            ? ` · intervention ${this.interventionState}`
+            : ""),
         this.preferences.showUsage,
         width,
       ),
@@ -382,9 +126,43 @@ export class HikaroView {
   readonly historyHint = new Text("", 1, 0);
   readonly header: Component;
   readonly editor: ActivityEditor;
+  readonly attachments: AttachmentStrip;
   readonly layout: VStack;
+  readonly frame: WorkbenchFrame;
+  readonly actions = new ActionRegistry();
+  private pageSlot = new VStack();
+  private workspaceSources: Partial<Record<WorkspaceTab, ObjectSource>> = {};
+  private pages = new Map<WorkspaceTab, ObjectPage>();
+  private visible = true;
+  private parkedFocus?: Component;
+  private runId?: string;
+  private queuePrefix = false;
+  private submitMode: "auto" | "queue" = "auto";
+  private inspector = false;
+  private pendingApprovals: Array<{
+    request: PermissionRequest;
+    signal: AbortSignal;
+    resolve: (value: boolean) => void;
+  }> = [];
+  get active() {
+    return this.visible;
+  }
+  get isBusy() {
+    return this.busy;
+  }
+  get runIdentity() {
+    return this.runId;
+  }
+  get attentionCount() {
+    return this.pendingApprovals.length + (this.approval ? 1 : 0);
+  }
+  removeDraftAttachment(path: string) {
+    this.attachments.remove(path);
+  }
+
   private draft?: MessageComponent;
   private draftText = "";
+  private liveText = "";
   private nextMessage = 1;
   private busy = false;
   private panelCancel?: () => void;
@@ -409,6 +187,7 @@ export class HikaroView {
   private history = { hasOlder: false, hasNewer: false };
   private historyLoading = false;
   private pendingMessages = false;
+  private welcome?: Text;
   private status = new Map<string, string>();
   private tools = new Map<string, MessageComponent>();
   private activeTools = new Map<string, string>();
@@ -435,6 +214,13 @@ export class HikaroView {
       }>;
       onCommand: (text: string) => Promise<string | void>;
       onExit: () => void;
+      onSteer?: (
+        text: string,
+        expectedRunId?: string,
+      ) => Promise<string | void>;
+      onCancelRun?: (runId: string) => void | Promise<void>;
+      onSelectSession?: (id: string) => Promise<void>;
+      onStateChange?: () => void;
       /** Shared-host views can detach while an approval or unsent draft is open. */
       detachOnCtrlD?: boolean;
       onHistory?: (direction: HistoryDirection) => Promise<HistoryPage>;
@@ -446,8 +232,16 @@ export class HikaroView {
       onPreferences?: (patch: Partial<TuiPreferences>) => Promise<void>;
       onDraftChange?: (text: string) => void;
       commands?: Array<{ name: string; description: string }>;
+      /** An explicit backend capability set; omitted by full Hikaro clients. */
+      availableActions?: readonly string[];
+      active?: boolean;
+      previewAttachment?: (
+        path: string,
+        signal: AbortSignal,
+      ) => Promise<string>;
     },
   ) {
+    this.visible = options.active ?? true;
     this.viewStatus = {
       connection: "connected",
       model: options.model,
@@ -457,6 +251,12 @@ export class HikaroView {
     this.header = {
       render: (width) => renderHeader(this.viewStatus, width),
       invalidate() {},
+      handleMouse: (event) => {
+        if (event.type === "press" && event.button === "left") {
+          void this.openActions();
+          return { handled: true };
+        }
+      },
     };
     this.editor = new ActivityEditor(
       tui,
@@ -476,6 +276,20 @@ export class HikaroView {
       if (!this.dialog && !this.disposed)
         options.onDraftChange?.(this.editor.getExpandedText());
     };
+    this.attachments = new AttachmentStrip(
+      () => this.editor.getExpandedText(),
+      (text) => {
+        this.editor.setText(text);
+        options.onDraftChange?.(text);
+      },
+      (path) => {
+        void this.openWorkspaceObject(
+          "Context",
+          `attachment:${JSON.stringify(path)}`,
+        ).catch((error) => this.setError(String(error)));
+      },
+      () => tui.requestRender(),
+    );
     this.editor.setAutocompleteProvider(
       new FileAutocompleteProvider(
         [
@@ -506,7 +320,6 @@ export class HikaroView {
             name: "model",
             description: "Select a model or connect a provider",
           },
-          { name: "login", description: "Connect a provider" },
           {
             name: "settings",
             description: "Display, notifications and startup preferences",
@@ -534,33 +347,161 @@ export class HikaroView {
           },
           { name: "tools", description: "Toggle tool details" },
           { name: "quit", description: "Exit" },
-          ...(options.commands ?? []),
-        ],
+          ...(options.commands ?? []).filter(
+            (command) => !["login", "logout"].includes(command.name),
+          ),
+        ].filter(
+          (command) =>
+            !options.availableActions ||
+            [
+              "model",
+              "tools",
+              "read",
+              "latest",
+              "older",
+              "quit",
+              "steer",
+              ...(options.commands ?? []).map((command) => command.name),
+            ].includes(command.name),
+        ),
         options.cwd,
       ),
     );
-    this.layout = new VStack([
-      { component: this.header, basis: "auto", shrink: 0 },
-      this.historyHint,
-      { component: this.scroll, basis: 0, grow: 1, minSize: 1 },
+    const workspace = new VStack([
+      {
+        component: this.historyHint,
+        shrink: 0,
+        visible: () =>
+          this.frame.tab === "Conversation" &&
+          !this.modelPanel &&
+          !this.approval,
+      },
+      {
+        component: this.scroll,
+        basis: 0,
+        grow: 1,
+        minSize: 1,
+        visible: () =>
+          this.frame.tab === "Conversation" &&
+          !this.modelPanel &&
+          !this.approval,
+      },
+      {
+        component: this.pageSlot,
+        basis: 0,
+        grow: 1,
+        minSize: 1,
+        visible: () =>
+          this.frame.tab !== "Conversation" &&
+          !this.modelPanel &&
+          !this.approval,
+      },
       {
         component: this.modelSlot,
-        basis: "auto",
-        maxSize: 18,
-        shrink: 0,
-        visible: () => !!this.modelPanel,
+        basis: 0,
+        grow: 1,
+        minSize: 1,
+        visible: () => !!this.modelPanel && !this.approval,
       },
       {
         component: this.approvalSlot,
-        basis: "auto",
-        maxSize: 12,
-        shrink: 0,
+        basis: 0,
+        grow: 1,
+        minSize: 1,
         visible: () => !!this.approval,
       },
-      { component: this.editor, basis: "auto", shrink: 0 },
-      { component: this.inputError, basis: "auto", maxSize: 2 },
-      { component: this.footer, basis: "auto", shrink: 0 },
     ]);
+    this.frame = new WorkbenchFrame(tui, workspace, {
+      selectTab: (tab) => this.selectWorkspace(tab),
+      selectSession: (id) => {
+        void options
+          .onSelectSession?.(id)
+          .catch((error) => this.setError(String(error)));
+      },
+      sessions: () => {
+        void this.command("/sessions");
+      },
+      actions: () => {
+        void this.openActions();
+      },
+      inspector: () => this.inspector || !!this.modelPanel || !!this.approval,
+      sessionNavigation:
+        !options.availableActions ||
+        options.availableActions.includes("sessions"),
+    });
+    this.layout = new VStack([
+      { component: this.header, shrink: 0 },
+      { component: this.frame, basis: 0, grow: 1, minSize: 1 },
+      {
+        component: this.attachments,
+        shrink: 0,
+        visible: () =>
+          this.attachments.visible &&
+          !this.modelPanel &&
+          !this.approval &&
+          !(
+            tui.terminal.rows < 18 &&
+            this.frame.tab !== "Conversation" &&
+            tui.getFocusedComponent() !== this.editor
+          ),
+      },
+      {
+        component: this.editor,
+        shrink: 0,
+        visible: () =>
+          !(
+            tui.terminal.rows < 18 &&
+            (this.modelPanel ||
+              this.approval ||
+              (this.frame.tab !== "Conversation" &&
+                tui.getFocusedComponent() !== this.editor))
+          ),
+      },
+      { component: this.inputError, shrink: 0, maxSize: 2 },
+      { component: this.footer, shrink: 0 },
+    ]);
+    this.setWorkspaceSources({
+      Context: {
+        title: "Context",
+        description: "Draft references and model context settings",
+        load: async () => [
+          { id: "draft", title: "Draft and file references" },
+          { id: "resources", title: "Workspace instructions and skills" },
+          { id: "model", title: "Model context and reasoning" },
+        ],
+        detail: async (item) => ({
+          title: item.title,
+          text:
+            item.id === "draft"
+              ? this.editor.getExpandedText() ||
+                "No draft attachments. Add files using @ or /attach."
+              : item.id === "model"
+                ? this.viewStatus.model
+                : "Inspect the resources loaded by this backend.",
+          actions:
+            item.id === "draft"
+              ? [
+                  {
+                    id: "edit",
+                    title: "Return to input",
+                    run: () => {
+                      this.tui.setFocus(this.editor);
+                    },
+                  },
+                ]
+              : [
+                  {
+                    id: "open",
+                    title: "Open " + item.title,
+                    run: () =>
+                      this.command(
+                        item.id === "model" ? "/model" : "/resources",
+                      ),
+                  },
+                ],
+        }),
+      },
+    });
     this.updateFooter();
     this.editor.onSubmit = (text) => {
       if (this.disposed) return;
@@ -595,7 +536,7 @@ export class HikaroView {
       }
       if (text.startsWith("/read ")) {
         const [, number, part] = text.trim().split(/\s+/);
-        const message = this.content.children.find(
+        const message = this.loadedMessages().find(
           (item) =>
             item instanceof MessageComponent && item.number === Number(number),
         );
@@ -618,13 +559,24 @@ export class HikaroView {
       }
       // Before dispatch: an attached host may already stream when run.start arrives.
       warmTextShaping();
+      const mode = this.submitMode;
+      this.submitMode = "auto";
+      const tabCommand = (
+        {
+          "/changes": "Changes",
+          "/tasks": "Activity",
+          "/context": "Context",
+        } as const
+      )[text as "/changes" | "/tasks" | "/context"];
+      if (tabCommand && this.workspaceSources[tabCommand]) {
+        this.selectWorkspace(tabCommand);
+        return;
+      }
       const work = text.startsWith("/")
         ? options.onCommand(text).then((result) => {
             if (result) this.notice(result);
           })
-        : options.preparePrompt
-          ? this.submitPrompt(text)
-          : options.onPrompt(text);
+        : this.submitPrompt(text, mode);
       void work.catch((error) => {
         if (error instanceof Error && error.name === "AbortError") return;
         this.setError(
@@ -633,7 +585,7 @@ export class HikaroView {
       });
     };
     this.removeInput = tui.addInputListener((data) => {
-      if (this.disposed) return undefined;
+      if (this.disposed || !this.visible) return undefined;
       if (isKeyRelease(data)) return { consume: true };
       if (
         options.detachOnCtrlD &&
@@ -642,6 +594,70 @@ export class HikaroView {
       ) {
         options.onExit();
         return { consume: true };
+      }
+      if (
+        !this.approval &&
+        !this.dialog &&
+        !this.modelPanel &&
+        !this.preparingPrompt
+      ) {
+        if (matchesKey(data, "ctrl+p")) {
+          void this.openActions();
+          return { consume: true };
+        }
+        if (
+          matchesKey(data, "ctrl+o") &&
+          (!options.availableActions ||
+            options.availableActions.includes("sessions"))
+        ) {
+          void this.command("/sessions");
+          return { consume: true };
+        }
+        if (matchesKey(data, "f6") || matchesKey(data, "shift+f6")) {
+          const targets: Component[] = [
+            this.editor,
+            this.frame.tabBar,
+            ...(this.frame.sessions.length ? [this.frame.navigation] : []),
+            ...(this.pages.get(this.frame.tab)
+              ? [this.pages.get(this.frame.tab)!]
+              : [this.scroll]),
+            ...(this.attachments.visible ? [this.attachments] : []),
+          ];
+          const i = targets.indexOf(this.tui.getFocusedComponent()!);
+          this.tui.setFocus(
+            targets[
+              (i + (matchesKey(data, "shift+f6") ? targets.length - 1 : 1)) %
+                targets.length
+            ]!,
+          );
+          if (
+            this.tui.getFocusedComponent() === this.frame.navigation &&
+            this.tui.terminal.columns < 100
+          )
+            this.frame.navigationOpen = true;
+          else this.frame.navigationOpen = false;
+          this.tui.requestRender();
+          return { consume: true };
+        }
+        if (this.tui.getFocusedComponent() === this.editor) {
+          if (matchesKey(data, "ctrl+x")) {
+            this.queuePrefix = true;
+            this.editor.setHint(
+              "Enter queue · another key cancels queue shortcut",
+            );
+            return { consume: true };
+          }
+          if (this.queuePrefix) {
+            this.queuePrefix = false;
+            this.updateFooter();
+            if (matchesKey(data, "enter")) {
+              this.submitMode = "queue";
+              queueMicrotask(() => {
+                this.submitMode = "auto";
+              });
+            }
+          }
+        }
       }
       if (this.approval) {
         this.approval.panel.handleInput(data);
@@ -667,13 +683,23 @@ export class HikaroView {
       }
       if (matchesKey(data, "ctrl+c")) {
         if (this.dialog) void this.answerDialog(undefined);
-        else if (this.busy) this.backend?.cancel();
+        else if (this.busy)
+          void this.actions
+            .run("stop")
+            .catch((error) => this.setError(String(error)));
         else options.onExit();
         return { consume: true };
       }
       if (matchesKey(data, "escape") && this.dialog) {
         void this.answerDialog(undefined);
         return { consume: true };
+      }
+      if (matchesKey(data, "escape") && this.frame.tab !== "Conversation") {
+        const page = this.pages.get(this.frame.tab);
+        if (page && !page.inspecting && !page.searchActive) {
+          this.selectWorkspace("Conversation");
+          return { consume: true };
+        }
       }
       if (matchesKey(data, "ctrl+d") && !this.dialog) {
         options.onExit();
@@ -683,6 +709,304 @@ export class HikaroView {
     });
   }
 
+  setActive(active: boolean) {
+    if (!active && this.visible)
+      this.parkedFocus = this.tui.getFocusedComponent() ?? undefined;
+    this.visible = active;
+    if (active) {
+      this.nextDialog();
+      this.presentApproval();
+      this.tui.setFocus(
+        this.approval?.panel ??
+          this.modelPanel ??
+          this.parkedFocus ??
+          this.editor,
+      );
+      this.tui.requestRender();
+    }
+  }
+  setSessions(sessions: WorkspaceSession[]) {
+    this.frame.setSessions(sessions);
+    this.setStatus({
+      sessionTitle: sessions.find((session) => session.current)?.title,
+    });
+  }
+  setWorkspaceSources(sources: Partial<Record<WorkspaceTab, ObjectSource>>) {
+    let reopen = false;
+    for (const tab of workspaceTabs) {
+      if (
+        sources[tab] &&
+        sources[tab] !== this.workspaceSources[tab] &&
+        this.pages.has(tab)
+      ) {
+        const old = this.pages.get(tab)!;
+        if (this.parkedFocus === old) this.parkedFocus = this.editor;
+        old.dispose();
+        this.pages.delete(tab);
+        if (this.frame.tab === tab) reopen = true;
+      }
+    }
+    Object.assign(this.workspaceSources, sources);
+    this.frame.setTabs([
+      "Conversation",
+      ...workspaceTabs.filter((tab) => !!this.workspaceSources[tab]),
+    ]);
+    this.actions.set(
+      [
+        ...workspaceTabs
+          .filter((tab) => tab === "Conversation" || this.workspaceSources[tab])
+          .map((tab) => ({
+            id: `view.${tab}`,
+            title: `Open ${tab}`,
+            description: "Workspace view",
+            run: () => this.selectWorkspace(tab),
+          })),
+        {
+          id: "sessions",
+          title: "Switch session",
+          shortcut: "Ctrl+O",
+          run: () => this.command("/sessions"),
+        },
+        { id: "new", title: "New session", run: () => this.command("/new") },
+        {
+          id: "close",
+          title: "Close this session view",
+          description: "Running work remains monitored",
+          run: () => this.command("/close"),
+        },
+        {
+          id: "model",
+          title: "Models and provider accounts",
+          run: () => this.command("/model"),
+        },
+        {
+          id: "settings",
+          title: "Settings",
+          run: () => this.command("/settings"),
+        },
+        {
+          id: "permissions",
+          title: "Review permissions",
+          run: () => this.command("/permissions"),
+        },
+        {
+          id: "search",
+          title: "Search this conversation",
+          run: () => this.command("/search"),
+        },
+        {
+          id: "inspect",
+          title: "Inspect messages and execution results",
+          run: () => this.inspectMessages(this.loadedMessages()),
+        },
+        {
+          id: "queue",
+          title: "Queue draft for later",
+          shortcut: "Ctrl+X Enter",
+          enabled: () =>
+            !!this.editor.getExpandedText().trim() || "The draft is empty",
+          run: () => {
+            this.submitMode = "queue";
+            this.editor.onSubmit?.(this.editor.getExpandedText());
+          },
+        },
+        {
+          id: "stop",
+          title: "Stop current run",
+          shortcut: "Ctrl+C",
+          enabled: () =>
+            !this.busy
+              ? "No run is active"
+              : this.viewStatus.connection !== "connected"
+                ? "Disconnected or synchronizing"
+                : this.options.onCancelRun && !this.runId
+                  ? "Run identity is unknown; wait for synchronization"
+                  : true,
+          run: async () => {
+            if (this.runId && this.options.onCancelRun)
+              await this.options.onCancelRun(this.runId);
+            else this.backend?.cancel();
+          },
+        },
+        {
+          id: "latest",
+          title: "Return to latest messages",
+          run: () => {
+            this.selectWorkspace("Conversation");
+            this.scroll.scrollToEnd();
+            this.pendingMessages = false;
+            this.updateHistoryHint();
+            if (this.history.hasNewer) void this.loadHistory("latest");
+          },
+        },
+        {
+          id: "older",
+          title: "Read earlier messages",
+          run: () => this.loadHistory("older"),
+        },
+        {
+          id: "export",
+          title: "Export conversation",
+          run: () => this.command("/export"),
+        },
+      ].filter(
+        (action) =>
+          action.id.startsWith("view.") ||
+          !this.options.availableActions ||
+          this.options.availableActions.includes(action.id),
+      ),
+    );
+    if (reopen) this.selectWorkspace(this.frame.tab);
+  }
+  selectWorkspace(tab: WorkspaceTab) {
+    if (tab !== "Conversation" && !this.workspaceSources[tab]) return;
+    this.frame.tab = tab;
+    this.frame.navigationOpen = false;
+    this.pageSlot.clear();
+    if (tab !== "Conversation") {
+      let page = this.pages.get(tab);
+      if (!page) {
+        page = new ObjectPage(
+          this.workspaceSources[tab]!,
+          this.tui,
+          (visible) => {
+            if (this.frame.tab === tab) {
+              this.inspector = visible;
+              this.tui.requestRender();
+            }
+          },
+        );
+        this.pages.set(tab, page);
+      }
+      void page.refresh();
+      this.pageSlot.addChild(page, { basis: 0, grow: 1, minSize: 1 });
+      this.inspector = page.inspecting;
+      if (this.visible) this.tui.setFocus(page);
+    } else {
+      this.inspector = false;
+      if (this.visible) this.tui.setFocus(this.editor);
+    }
+    this.tui.requestRender();
+  }
+  refreshWorkspace(tab?: WorkspaceTab) {
+    const page = this.pages.get(tab ?? this.frame.tab);
+    if (page) void page.refresh();
+  }
+  async openWorkspaceObject(tab: WorkspaceTab, id: string) {
+    this.selectWorkspace(tab);
+    const page = this.pages.get(tab);
+    if (!page) throw Error("This backend does not provide that workspace view");
+    await page.open(id);
+  }
+  async command(text: string) {
+    try {
+      const result = await this.options.onCommand(text);
+      if (result) this.notice(result);
+    } catch (error) {
+      if (!(error instanceof Error && error.name === "AbortError"))
+        this.setError(String(error));
+    }
+  }
+  async openActions() {
+    if (this.modelPanel || this.approval) return;
+    const { panel, close } = this.openModelPanel();
+    try {
+      const choice = await panel.choose(
+        "Actions",
+        this.actions.search().map((action) => ({
+          value: action.id,
+          label: action.title,
+          description: [
+            action.shortcut,
+            typeof action.enabled?.() === "string"
+              ? action.enabled?.()
+              : action.description,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        })),
+        "Search commands and actions for this workspace",
+        undefined,
+        { search: true },
+      );
+      close();
+      await this.actions.run(choice.value);
+    } catch (error) {
+      if (!(error instanceof Error && error.name === "AbortError"))
+        this.setError(String(error));
+    } finally {
+      close();
+    }
+  }
+  private loadedMessages() {
+    return this.content.children.flatMap((item) =>
+      item instanceof ExecutionGroup
+        ? item.messages
+        : item instanceof MessageComponent
+          ? [item]
+          : [],
+    );
+  }
+  async inspectMessages(messages: MessageComponent[]) {
+    if (!messages.length || this.modelPanel || this.approval) return;
+    const { panel, signal, close } = this.openModelPanel();
+    try {
+      const choice =
+        messages.length === 1
+          ? String(messages[0]!.number)
+          : (
+              await panel.choose(
+                "Messages and execution",
+                messages.map((message) => ({
+                  value: String(message.number),
+                  label: message.summary,
+                })),
+                "Choose a result to read, copy, or reference",
+                undefined,
+                { search: true },
+              )
+            ).value;
+      const message = messages.find(
+        (message) => String(message.number) === choice,
+      )!;
+      let page = 0;
+      for (;;) {
+        const text = await message.readPart(page);
+        signal.throwIfAborted();
+        const choice = await panel.readDocument(
+          `${message.summary} · ${page + 1}/${message.pages}`,
+          text,
+          [
+            ...(page ? [{ value: "previous", label: "Previous part" }] : []),
+            ...(page + 1 < message.pages
+              ? [{ value: "next", label: "Next part" }]
+              : []),
+            { value: "reference", label: "Reference this part in draft" },
+            { value: "copy", label: "Copy this part" },
+          ],
+        );
+        if (choice.value === "next") page++;
+        else if (choice.value === "previous") page--;
+        else if (choice.value === "reference") {
+          this.editor.setText(
+            `${this.editor.getExpandedText()}${this.editor.getExpandedText() ? "\n\n" : ""}${message.summary}\n${text}`,
+          );
+          this.options.onDraftChange?.(this.editor.getExpandedText());
+          close();
+          return;
+        } else if (choice.value === "copy") {
+          const { copyText } = await import("./clipboard-text.ts");
+          await copyText(text);
+          this.notice("Copied this part to clipboard");
+        } else return;
+      }
+    } catch (error) {
+      if (!(error instanceof Error && error.name === "AbortError"))
+        this.setError(String(error));
+    } finally {
+      close();
+    }
+  }
   setError(text: string) {
     const message = sanitize(text.slice(0, 2000));
     if (message && message !== this.errorMessage)
@@ -707,30 +1031,26 @@ export class HikaroView {
     if (this.modelPanel) throw Error("Model picker is already open");
     this.panelYieldsToApproval = options?.yieldToApproval ?? false;
     this.setError("");
+    const previousFocus = this.tui.getFocusedComponent();
     const controller = new AbortController();
     const panel = new ModelPanel(
       controller.signal,
       () => this.tui.requestRender(),
-      (width) =>
-        Math.min(
-          18,
-          Math.max(
-            0,
-            this.tui.terminal.rows -
-              this.header.render(width).length -
-              this.historyHint.render(width).length -
-              this.editor.render(width).length -
-              Math.min(2, this.inputError.render(width).length) -
-              this.footer.render(width).length -
-              1,
-          ),
+      () =>
+        Math.max(
+          0,
+          this.tui.terminal.rows -
+            (this.tui.terminal.rows < 18
+              ? 0
+              : this.editor.render(this.tui.terminal.columns).length) -
+            5,
         ),
     );
     this.panelCancel = options?.onCancel;
     this.modelController = controller;
     this.modelPanel = panel;
     this.modelSlot.addChild(panel);
-    this.tui.setFocus(panel);
+    if (this.visible) this.tui.setFocus(panel);
     this.updateFooter();
     this.tui.requestRender();
     const close = () => {
@@ -739,8 +1059,12 @@ export class HikaroView {
       this.modelPanel = undefined;
       this.modelController = undefined;
       this.panelCancel = undefined;
+      if (this.parkedFocus === panel)
+        this.parkedFocus = previousFocus ?? this.editor;
       controller.abort();
-      this.tui.setFocus(this.editor);
+      if (this.visible)
+        this.tui.setFocus(this.approval?.panel ?? previousFocus ?? this.editor);
+      this.presentApproval();
       this.updateFooter();
       this.tui.requestRender();
     };
@@ -766,10 +1090,13 @@ export class HikaroView {
     busy: boolean;
     stream: string;
     streamTruncated: boolean;
+    runId?: string | null;
   }) {
     this.busy = snapshot.busy;
+    this.runId = snapshot.runId ?? this.runId;
     this.phase = snapshot.busy ? "Working" : "Ready";
     this.activity = "Working";
+    this.liveText = snapshot.stream.slice(-STREAM_PREVIEW_CHARS);
     if (snapshot.stream && !this.history.hasNewer) {
       if (!this.draft) {
         this.draft = new MessageComponent(
@@ -835,9 +1162,11 @@ export class HikaroView {
   setPreferences(preferences: TuiPreferences) {
     this.preferences = { ...preferences };
     this.detail = preferences.showToolDetails;
-    for (const item of this.content.children)
-      if (item instanceof MessageComponent && item.role === "tool")
+    for (const item of this.content.children) {
+      if (item instanceof ExecutionGroup) item.setDetails(this.detail);
+      else if (item instanceof MessageComponent && item.role === "tool")
         item.setDetails(this.detail);
+    }
     this.updateFooter();
     this.tui.requestRender();
   }
@@ -846,12 +1175,42 @@ export class HikaroView {
   }
   private append(component: Component) {
     if (this.disposed) return;
-    this.content.addChild(component);
-    while (this.content.children.length > MAX_VISIBLE_ITEMS) {
+    if (component instanceof MessageComponent && this.welcome) {
+      this.content.removeChild(this.welcome);
+      this.welcome = undefined;
+    }
+    if (component instanceof MessageComponent)
+      component.onInspect = () => {
+        void this.inspectMessages([component]);
+      };
+    if (component instanceof MessageComponent && component.role === "tool") {
+      let group = this.content.children.at(-1);
+      if (!(group instanceof ExecutionGroup)) {
+        group = new ExecutionGroup(
+          () => this.tui.requestRender(),
+          (messages) => {
+            void this.inspectMessages(messages);
+          },
+        );
+        this.content.addChild(group);
+      }
+      (group as ExecutionGroup).add(component);
+      if (this.detail) (group as ExecutionGroup).setDetails(true);
+    } else this.content.addChild(component);
+    while (
+      this.content.children.reduce(
+        (n, item) =>
+          n + (item instanceof ExecutionGroup ? item.messages.length : 1),
+        0,
+      ) > MAX_VISIBLE_ITEMS
+    ) {
       const removed = this.content.children[0]!;
-      this.content.removeChild(removed);
+      const message =
+        removed instanceof ExecutionGroup ? removed.messages.shift() : removed;
+      if (!(removed instanceof ExecutionGroup) || !removed.messages.length)
+        this.content.removeChild(removed);
       for (const [id, component] of this.tools)
-        if (component === removed) this.tools.delete(id);
+        if (component === message) this.tools.delete(id);
       this.history.hasOlder = true;
     }
     this.updateHistoryHint();
@@ -878,11 +1237,18 @@ export class HikaroView {
       hasNewer: flags.hasNewer ?? false,
     };
     this.pendingMessages = false;
+    this.welcome = undefined;
     for (const message of messages.slice(-20)) this.showMessage(message);
-    if (!messages.length)
-      this.notice(
-        "What would you like to build?\n\nType a task. /help lists commands.",
+    if (!messages.length) {
+      this.welcome = new Text(
+        muted(
+          "What would you like to work on?\n\nWrite a task below. Ctrl+P opens actions; Ctrl+O switches sessions.\nUse the workspace views to review changes, activity, plans and context.",
+        ),
+        1,
+        1,
       );
+      this.content.addChild(this.welcome);
+    }
     this.updateHistoryHint();
     this.scroll.scrollToEnd();
     this.tui.requestRender();
@@ -894,17 +1260,24 @@ export class HikaroView {
       this.notice("History paging is unavailable for this backend.");
       return;
     }
-    if (this.busy) {
-      this.notice(
-        "Cancel or finish the active run before changing history pages.",
-      );
-      return;
-    }
     this.historyLoading = true;
     this.updateHistoryHint();
     try {
       const page = await this.options.onHistory(direction);
-      if (!this.disposed) this.showMessages(page.messages, page);
+      if (!this.disposed) {
+        this.showMessages(page.messages, page);
+        if (!page.hasNewer && this.busy && this.liveText) {
+          this.draft = new MessageComponent(
+            this.nextMessage++,
+            "assistant",
+            "",
+            true,
+          );
+          this.draftText = this.liveText;
+          this.draft.setText(this.liveText);
+          this.append(this.draft);
+        }
+      }
     } catch (error) {
       this.setError(String(error));
     } finally {
@@ -920,7 +1293,7 @@ export class HikaroView {
         ? muted("Loading history…")
         : this.history.hasOlder || this.history.hasNewer || this.pendingMessages
           ? muted(
-              `${this.history.hasOlder ? "/older · " : ""}${this.history.hasNewer ? "/newer · " : ""}/latest${this.pendingMessages ? " · new messages available" : ""}`,
+              `${this.pendingMessages ? "New messages available · " : ""}Ctrl+P → ${this.history.hasOlder ? "Read earlier / " : ""}Return to latest messages`,
             )
           : "",
     );
@@ -930,30 +1303,40 @@ export class HikaroView {
     number = this.nextMessage++,
   ) {
     const read = this.options.onReadMessage;
-    return new MessageComponent(number, message.role, message.text, false, {
-      label:
-        message.role === "tool"
-          ? `${message.name ?? "tool"}${message.isError ? " failed" : ""}`
-          : undefined,
-      ...(message.role === "tool"
-        ? {
-            tool: {
-              name: message.name ?? "tool",
-              target: message.callId
-                ? (this.toolTargets.get(message.callId) ?? "")
-                : "",
-              state: message.isError ? "Failed" : "Done",
-            },
-            details: this.detail || message.source === "manual",
-            manual: message.source === "manual",
-          }
-        : {}),
-      textLength: message.textLength,
-      read:
-        read && (message.textLength ?? 0) > message.text.length
-          ? (offset, limit) => read(message, offset, limit)
-          : undefined,
-    });
+    const component = new MessageComponent(
+      number,
+      message.role,
+      message.text,
+      false,
+      {
+        label:
+          message.role === "tool"
+            ? `${message.name ?? "tool"}${message.isError ? " failed" : ""}`
+            : undefined,
+        ...(message.role === "tool"
+          ? {
+              tool: {
+                name: message.name ?? "tool",
+                target: message.callId
+                  ? (this.toolTargets.get(message.callId) ?? "")
+                  : "",
+                state: message.isError ? "Failed" : "Done",
+              },
+              details: this.detail || message.source === "manual",
+              manual: message.source === "manual",
+            }
+          : {}),
+        textLength: message.textLength,
+        read:
+          read && (message.textLength ?? 0) > message.text.length
+            ? (offset, limit) => read(message, offset, limit)
+            : undefined,
+      },
+    );
+    component.onInspect = () => {
+      void this.inspectMessages([component]);
+    };
+    return component;
   }
   private showMessage(message: Message, hideThinking = false) {
     if (message.files) message = { ...message, files: undefined };
@@ -1001,13 +1384,24 @@ export class HikaroView {
 
   event(event: AgentEvent) {
     if (this.disposed) return;
+    if (
+      !this.scroll.isFollowingEnd &&
+      ["text.delta", "message", "tool.start", "tool.end"].includes(event.type)
+    ) {
+      this.pendingMessages = true;
+      this.updateHistoryHint();
+    }
     if (event.type === "run.start") {
+      if (!this.interventions.size) this.interventionState = undefined;
       this.setError("");
       this.busy = true;
+      this.runId =
+        typeof event.data.runId === "string" ? event.data.runId : undefined;
       this.activity =
         event.data.operation === "compact" ? "Compacting" : "Working";
       this.draft = undefined;
       this.draftText = "";
+      this.liveText = "";
       this.thinkingDraft = undefined;
       this.thinkingText = "";
     } else if (event.type === "context.compacting") {
@@ -1016,6 +1410,9 @@ export class HikaroView {
       this.activity = "Working";
     } else if (event.type === "text.delta") {
       this.activity = "Working";
+      this.liveText = (this.liveText + String(event.data.text)).slice(
+        -STREAM_PREVIEW_CHARS,
+      );
       if (this.history.hasNewer) {
         this.pendingMessages = true;
         this.updateHistoryHint();
@@ -1031,9 +1428,7 @@ export class HikaroView {
         );
         this.append(this.draft);
       }
-      this.draftText = (this.draftText + String(event.data.text)).slice(
-        -STREAM_PREVIEW_CHARS,
-      );
+      this.draftText = this.liveText;
       this.draft.setText(this.draftText);
     } else if (event.type === "thinking.delta") {
       this.activity = "Thinking";
@@ -1048,7 +1443,21 @@ export class HikaroView {
         this.thinkingDraft.setText(muted(sanitize(this.thinkingText)));
       }
     } else if (event.type === "message") {
+      if (typeof event.data.steeringId === "string") {
+        const id = event.data.steeringId;
+        this.appliedInterventions.add(id);
+        if (this.appliedInterventions.size > 64)
+          this.appliedInterventions.delete(
+            this.appliedInterventions.values().next().value!,
+          );
+        this.interventions.delete(id);
+        this.interventionState = this.interventions.size
+          ? "pending"
+          : "applied";
+        this.notice("Intervention applied at the model turn");
+      }
       const message = event.data.message as Message;
+      if (message.role === "assistant") this.liveText = "";
       if (this.history.hasNewer) {
         this.pendingMessages = true;
         this.updateHistoryHint();
@@ -1154,6 +1563,16 @@ export class HikaroView {
         }
       }
     } else if (event.type === "run.end") {
+      for (const [id, run] of this.interventions) {
+        if (run === this.runId) {
+          this.interventions.delete(id);
+          this.interventionState = "unapplied";
+        }
+      }
+      if (this.interventionState === "unapplied")
+        this.notice(
+          "Intervention not applied · review it in Activity before sending again",
+        );
       this.activeTools.clear();
       this.busy = false;
       this.phase =
@@ -1200,11 +1619,20 @@ export class HikaroView {
         this.status.delete(this.status.keys().next().value!);
     }
     this.updateFooter();
+    if (!["text.delta", "thinking.delta"].includes(event.type))
+      this.options.onStateChange?.();
+    if (
+      ["tool.end", "run.end", "steering.applied"].includes(event.type) &&
+      this.visible &&
+      this.frame.tab !== "Conversation"
+    )
+      this.refreshWorkspace();
     this.tui.requestRender();
   }
 
   private nextDialog() {
-    if (this.dialog || this.approval || !this.dialogs.length) return;
+    if (!this.visible || this.dialog || this.approval || !this.dialogs.length)
+      return;
     this.dialog = this.dialogs.shift()!;
     this.dialogSavedText = this.editor.getExpandedText();
     this.editor.setText(this.dialog.prefill ?? "");
@@ -1262,30 +1690,74 @@ export class HikaroView {
     this.updateFooter();
     this.tui.requestRender();
   }
-  private async submitPrompt(text: string) {
-    if (!this.options.preparePrompt) return this.options.onPrompt(text);
+  private async submitPrompt(text: string, mode: "auto" | "queue" = "auto") {
+    const intervene =
+      mode !== "queue" &&
+      this.busy &&
+      !!this.options.onSteer &&
+      !text.startsWith("!");
+    const runId = this.runId;
     const controller = new AbortController();
     this.preparingPrompt = controller;
-    // Editor.submitValue clears itself first. Restore immediately so both the
-    // display and autosave retain the draft until attachment validation succeeds.
     this.editor.setText(text);
     this.editor.disableSubmit = true;
     this.updateFooter();
-    let prepared: { text: string; images?: ImageInput[]; files?: FileInput[] };
     try {
-      prepared = await this.options.preparePrompt(text, controller.signal);
+      if (intervene && parseFileReferences(text).length)
+        throw Error(
+          "Attachments require Queue. Press Ctrl+X then Enter; your draft is preserved.",
+        );
+      const prepared = this.options.preparePrompt
+        ? await this.options.preparePrompt(text, controller.signal)
+        : { text };
       controller.signal.throwIfAborted();
-    } finally {
+      if (intervene && (prepared.images?.length || prepared.files?.length))
+        throw Error(
+          "Attachments require Queue. Press Ctrl+X then Enter; your draft is preserved.",
+        );
+      if (intervene && (!this.busy || runId !== this.runId))
+        throw Error(
+          "The run ended. Review your draft and send it as a new task.",
+        );
       this.preparingPrompt = undefined;
+      this.editor.disableSubmit = false;
+      this.editor.setText("");
+      if (intervene) {
+        const id = await this.options.onSteer!(prepared.text, runId);
+        if (typeof id === "string") {
+          if (this.appliedInterventions.has(id))
+            this.interventionState = "applied";
+          else if (this.busy && this.runId === runId) {
+            this.interventions.set(id, runId);
+            this.interventionState = "pending";
+          } else this.interventionState = "unapplied";
+        }
+        if (this.interventionState === "unapplied")
+          this.notice(
+            "Intervention not applied · review it in Activity before sending again",
+          );
+        else if (this.interventionState !== "applied")
+          this.notice(
+            "Intervention submitted · waiting for a model turn to apply it",
+          );
+      } else
+        await this.options.onPrompt(
+          prepared.text,
+          prepared.images,
+          prepared.files,
+        );
+    } catch (error) {
+      if (!this.editor.getExpandedText()) this.editor.setText(text);
+      if (!(error instanceof Error && error.name === "AbortError"))
+        this.setError(
+          `Error: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      throw error;
+    } finally {
+      if (this.preparingPrompt === controller) this.preparingPrompt = undefined;
       this.editor.disableSubmit = false;
       this.updateFooter();
     }
-    this.editor.setText("");
-    return this.options.onPrompt(
-      prepared.text,
-      prepared.images,
-      prepared.files,
-    );
   }
   private updateFooter() {
     this.editor.setBodyRows(this.modelPanel || this.approval ? 1 : undefined);
@@ -1303,7 +1775,9 @@ export class HikaroView {
       this.modelPanel || this.approval
         ? "Message · draft preserved"
         : this.busy
-          ? "Message · queued on send"
+          ? this.options.onSteer
+            ? "Message · intervene"
+            : "Message · queued on send"
           : "Message",
     );
     this.editor.setHint(
@@ -1314,21 +1788,40 @@ export class HikaroView {
             ? "Type yes to confirm · Esc cancels"
             : "Enter submits · Esc cancels"
           : this.busy
-            ? "Ctrl+C stops · new prompts queue"
-            : `Enter send · Shift+Enter newline · /help · @ files${this.status.size ? " · " + [...this.status.values()].join(" · ") : ""}`,
+            ? this.options.onSteer
+              ? "Enter intervene · Ctrl+X Enter queue · Ctrl+C stop"
+              : "Ctrl+C stops · new prompts queue"
+            : `Enter send · Ctrl+P actions · @ files${this.status.size ? " · " + [...this.status.values()].join(" · ") : ""}`,
     );
   }
 
   approve(request: PermissionRequest, signal: AbortSignal): Promise<boolean> {
-    if (this.panelYieldsToApproval) this.modelController?.abort();
+    if (signal.aborted || this.disposed) return Promise.resolve(false);
     if (
+      !this.visible ||
       this.approval ||
       this.dialog ||
-      this.modelPanel ||
-      signal.aborted ||
-      this.disposed
-    )
-      return Promise.resolve(false);
+      (this.modelPanel && this.panelYieldsToApproval)
+    ) {
+      return new Promise((resolve) => {
+        const pending = { request, signal, resolve };
+        this.pendingApprovals.push(pending);
+        signal.addEventListener(
+          "abort",
+          () => {
+            const index = this.pendingApprovals.indexOf(pending);
+            if (index >= 0) {
+              this.pendingApprovals.splice(index, 1);
+              resolve(false);
+              this.options.onStateChange?.();
+            }
+          },
+          { once: true },
+        );
+        this.options.onStateChange?.();
+        if (this.panelYieldsToApproval) this.modelController?.abort();
+      });
+    }
     return new Promise((resolve) => {
       const abort = () => this.answer(false);
       signal.addEventListener("abort", abort, { once: true });
@@ -1338,18 +1831,17 @@ export class HikaroView {
         (value) => this.answer(value),
         () => this.tui.requestRender(),
         (width) =>
-          Math.min(
-            12,
-            Math.max(
-              0,
-              this.tui.terminal.rows -
-                this.header.render(width).length -
-                this.historyHint.render(width).length -
-                this.editor.render(width).length -
-                Math.min(2, this.inputError.render(width).length) -
-                this.footer.render(width).length -
-                1,
-            ),
+          Math.max(
+            0,
+            this.tui.terminal.rows -
+              this.header.render(width).length -
+              this.historyHint.render(width).length -
+              (this.tui.terminal.rows < 18
+                ? 0
+                : this.editor.render(width).length) -
+              Math.min(2, this.inputError.render(width).length) -
+              this.footer.render(width).length -
+              1,
           ),
       );
       this.approval = {
@@ -1358,22 +1850,41 @@ export class HikaroView {
         panel,
       };
       this.approvalSlot.addChild(panel);
-      this.tui.setFocus(panel);
+      if (this.visible) this.tui.setFocus(panel);
       this.updateFooter();
+      this.options.onStateChange?.();
       this.tui.requestRender();
     });
+  }
+  private presentApproval() {
+    if (
+      !this.visible ||
+      this.approval ||
+      this.modelPanel ||
+      this.dialog ||
+      this.disposed
+    )
+      return;
+    const pending = this.pendingApprovals.shift();
+    if (pending)
+      void this.approve(pending.request, pending.signal).then(pending.resolve);
   }
   private answer(value: boolean) {
     const approval = this.approval;
     this.approval = undefined;
     if (approval) {
+      if (this.parkedFocus === approval.panel)
+        this.parkedFocus = this.modelPanel ?? this.editor;
       this.approvalSlot.clear();
-      if (!this.disposed) this.tui.setFocus(this.editor);
+      if (!this.disposed && this.visible)
+        this.tui.setFocus(this.modelPanel ?? this.editor);
       approval.cleanup();
       approval.resolve(value);
     }
     this.nextDialog();
+    this.presentApproval();
     this.updateFooter();
+    this.options.onStateChange?.();
     if (!this.disposed) this.tui.requestRender();
   }
   dispose() {
@@ -1382,6 +1893,9 @@ export class HikaroView {
     this.removeScheme?.();
     if (this.disposed) return;
     this.disposed = true;
+    for (const pending of this.pendingApprovals.splice(0))
+      pending.resolve(false);
+    for (const page of this.pages.values()) page.dispose();
     this.editor.dispose();
     this.removeInput();
     this.unsubscribe?.();

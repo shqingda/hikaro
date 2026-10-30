@@ -129,17 +129,15 @@ it("reads completed execution history through attached TUI after host restart wi
         { timeout: 8000 },
       );
     };
-    await wait("/help");
-    await wait("Execution manager", send("/tasks\r"));
-    await wait("Execution history · page 1", send("\x1b[B".repeat(4) + "\r"));
+    await wait("Enter send");
+    await wait("Activity", send("/tasks\r"));
+    await wait("› history", 0);
     await wait("State: completed", send("\r"));
     await wait("Read-only history");
     expect(stripVTControlCharacters(output)).toContain(
       String(completed!.data.runId),
     );
-    await wait("Execution history · page 1", send("\x1b"));
-    await wait("Execution manager", send("\x1b"));
-    await wait("Enter send", send("\x1b"));
+    await wait("Enter inspect", send("\x1b"));
     expect(
       (await store.recentRunEvents(session.id)).filter(
         (e) => e.type === "run.start",

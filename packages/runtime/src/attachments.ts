@@ -6,8 +6,60 @@ import type { ImageInput, FileInput } from "../../core/src/types.ts";
 import { resolvePath, sensitivePath } from "../../tools/src/workspace.ts";
 import { readFileBytes, isFileTooLarge } from "../../tools/src/secure-files.ts";
 
-const maxFiles = 8;
+/** Explicit local inspection uses the same path, alias and size checks as submission. */
+export async function previewAttachment(
+  reference: string,
+  options: {
+    cwd: string;
+    signal: AbortSignal;
+    approve(file: {
+      path: string;
+      reference: string;
+      outside: boolean;
+      sensitive: boolean;
+    }): Promise<boolean>;
+  },
+): Promise<string> {
+  options.signal.throwIfAborted();
+  const path = reference.startsWith("~/")
+    ? join(homedir(), reference.slice(2))
+    : reference;
+  const resolved = await resolvePath(options.cwd, path);
+  const sensitive =
+    sensitivePath.test(resolve(options.cwd, path)) ||
+    sensitivePath.test(resolved.path);
+  if (
+    (!resolved.inside || sensitive) &&
+    !(await options.approve({
+      path: resolved.path,
+      reference,
+      outside: !resolved.inside,
+      sensitive,
+    }))
+  )
+    throw Error("Permission denied for attachment preview");
+  options.signal.throwIfAborted();
+  const bytes = await readFileBytes(
+    resolved.path,
+    options.signal,
+    maxImageBytes,
+  );
+  const mime = imageMime(bytes);
+  if (mime)
+    return `${reference}\n${mime} · ${bytes.length} bytes\nImage preview is not available in this terminal. The image has not been sent.`;
+  let text: string;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return `${reference}\nBinary file · ${bytes.length} bytes\nThe file has not been sent.`;
+  }
+  if (text.includes("\0"))
+    return `${reference}\nBinary file · ${bytes.length} bytes\nThe file has not been sent.`;
+  return `${reference}\n${bytes.length} bytes · Local preview; not sent\n\n${text.slice(0, 16000)}${text.length > 16000 ? "\n\n[Preview limited to 16000 characters]" : ""}`;
+}
+
 const maxImageBytes = 4 * 1024 * 1024;
+const maxFiles = 8;
 const maxTotalBytes = 4 * 1024 * 1024;
 const maxTextBytes = 128 * 1024;
 const maxTotalTextBytes = 256 * 1024;
@@ -28,93 +80,11 @@ const fileExtensions = new Set([
   ".bin",
 ]);
 
-/** Only explicit, whitespace-delimited references outside Markdown code. */
-export function parseFileReferences(text: string): string[] {
-  const paths: string[] = [];
-  let code = 0;
-  let codeMark = "";
-  let fenced = false;
-  for (let i = 0; i < text.length; i++) {
-    if (
-      text[i] === "`" ||
-      (text[i] === "~" &&
-        (codeMark === "~" ||
-          /^ {0,3}$/.test(text.slice(text.lastIndexOf("\n", i - 1) + 1, i))))
-    ) {
-      let end = i;
-      while (text[end] === text[i]) end++;
-      const count = end - i;
-      if (text[i] === "~" && count < 3) continue;
-      if (!code) {
-        code = count;
-        codeMark = text[i]!;
-        fenced =
-          count >= 3 &&
-          /^ {0,3}$/.test(text.slice(text.lastIndexOf("\n", i - 1) + 1, i));
-      } else if (text[i] === codeMark) {
-        const lineEnd = text.indexOf("\n", end);
-        const closesFence =
-          count >= code &&
-          /^ {0,3}$/.test(text.slice(text.lastIndexOf("\n", i - 1) + 1, i)) &&
-          /^\s*$/.test(text.slice(end, lineEnd < 0 ? undefined : lineEnd));
-        if (fenced ? closesFence : count === code) code = 0;
-      }
-      i = end - 1;
-      continue;
-    }
-    if (
-      code ||
-      text[i] !== "@" ||
-      (i && !/\s/.test(text[i - 1]!)) ||
-      text[i + 1] === "@"
-    )
-      continue;
-    let index = i + 1;
-    const quote =
-      text[index] === '"' || text[index] === "'" ? text[index++] : undefined;
-    let path = "";
-    for (; index < text.length; index++) {
-      const char = text[index]!;
-      if (quote ? char === quote : /\s/.test(char)) break;
-      if (char === "\\" && index + 1 < text.length) path += text[++index];
-      else path += char;
-    }
-    if (quote && text[index] !== quote)
-      throw Error("Close the quote around the attachment path.");
-    if (quote && index + 1 < text.length && !/\s/.test(text[index + 1]!))
-      throw Error("Separate attachment references with a space.");
-    if (path) {
-      if (/[\x00-\x1f\x7f]/.test(path) || path.length > 4096)
-        throw Error("Invalid attachment path.");
-      paths.push(path);
-      if (paths.length > maxFiles)
-        throw Error(`Use at most ${maxFiles} attachments per message.`);
-    }
-    i = index;
-  }
-  return paths;
-}
-
-/** One path supplied by /attach; unlike inline @ syntax, spaces are unambiguous. */
-export function attachmentReference(input: string): string {
-  const value = input.trim();
-  let path: string;
-  if (value.startsWith('"') || value.startsWith("'")) {
-    if (value.at(-1) !== value[0])
-      throw Error("Close the quote around the attachment path.");
-    const parsed = parseFileReferences("@" + value);
-    if (parsed.length !== 1) throw Error("Provide one attachment path.");
-    path = parsed[0]!;
-  } else path = value.replace(/\\(.)/g, "$1");
-  const reference = "@" + JSON.stringify(path);
-  if (
-    !path ||
-    /[\x00-\x1f\x7f]/.test(path) ||
-    parseFileReferences(reference)[0] !== path
-  )
-    throw Error("Invalid attachment path.");
-  return reference;
-}
+export {
+  parseFileReferences,
+  attachmentReference,
+} from "../../core/src/file-references.ts";
+import { parseFileReferences } from "../../core/src/file-references.ts";
 
 function imageMime(bytes: Buffer): string | undefined {
   // Verify format framing before forwarding bytes. The provider owns image
@@ -301,7 +271,7 @@ export async function preparePrompt(
         throw Error(
           options.supportsImages === false
             ? "This model does not support images. Choose an image-capable model before sending."
-            : 'Image support is unknown. Declare images:true in the custom endpoint capabilities before sending images.',
+            : "Image support is unknown. Declare images:true in the custom endpoint capabilities before sending images.",
         );
       images.push({ mimeType, data: bytes.toString("base64") });
       records.push({

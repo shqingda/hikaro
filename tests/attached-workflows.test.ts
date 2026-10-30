@@ -20,6 +20,96 @@ import { ModelPanel } from "../packages/tui/src/model-panel.ts";
 import type { HikaroView } from "../packages/tui/src/index.ts";
 import { stripVTControlCharacters } from "node:util";
 
+it("monitors eight event-driven views without idle timers or background plan reads", async () => {
+  vi.useFakeTimers();
+  const requests = Array.from({ length: 8 }, () =>
+    vi.fn(async (method: string) =>
+      method === "questions.read" ? null : { active: false },
+    ),
+  );
+  const flows = requests.map(
+    (request, index) =>
+      new AttachedWorkflows(
+        {
+          state: {
+            canAct: true,
+            session: { id: String(index) },
+            sessionRole: "owner",
+            busy: false,
+          },
+          request,
+        } as unknown as ClientConnection,
+        {
+          setPermissionLabel() {},
+          closeModelPanel() {},
+          setError() {},
+        } as unknown as HikaroView,
+        "/tmp",
+        { polling: false, active: () => index === 0 },
+      ),
+  );
+  try {
+    expect(vi.getTimerCount()).toBe(0);
+    await Promise.all(flows.map((flow) => flow.refresh()));
+    expect(requests[0]).toHaveBeenCalledTimes(2);
+    for (const request of requests.slice(1))
+      expect(request.mock.calls.map(([method]) => method)).toEqual([
+        "questions.read",
+      ]);
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(
+      requests.reduce((sum, request) => sum + request.mock.calls.length, 0),
+    ).toBe(9);
+    for (const flow of flows) flow.close();
+    await Promise.all(flows.map((flow) => flow.refresh()));
+    expect(
+      requests.reduce((sum, request) => sum + request.mock.calls.length, 0),
+    ).toBe(9);
+  } finally {
+    flows.forEach((flow) => flow.close());
+    vi.useRealTimers();
+  }
+});
+
+it("rechecks a persisted background question when its notification arrives during an earlier read", async () => {
+  let finish!: () => void;
+  const waiting = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const request = vi.fn(
+    async () =>
+      ({
+        id: "question",
+        questions: [{ id: "q", question: "Choose" }],
+      }) as unknown,
+  );
+  request.mockImplementationOnce(async () => {
+    await waiting;
+    return null;
+  });
+  const attention = vi.fn();
+  const flow = new AttachedWorkflows(
+    {
+      state: { canAct: true, session: { id: "session" }, sessionRole: "owner" },
+      request,
+    } as unknown as ClientConnection,
+    { closeModelPanel() {}, setError() {} } as unknown as HikaroView,
+    "/tmp",
+    { polling: false, active: () => false, attentionChanged: attention },
+  );
+  try {
+    const reading = flow.refresh();
+    await flow.refresh();
+    finish();
+    await reading;
+    await vi.waitFor(() => expect(flow.attentionCount).toBe(1));
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(attention).toHaveBeenCalledOnce();
+  } finally {
+    flow.close();
+  }
+});
+
 it("does not send an old answer after the same question changes to recovered during beforeSend waits", async () => {
   vi.useFakeTimers();
   let recovered = false;

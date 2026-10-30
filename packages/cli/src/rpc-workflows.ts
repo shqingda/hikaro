@@ -28,6 +28,7 @@ export class RpcWorkflows {
     private runtime: Runtime,
     hostInstanceId: string = randomUUID(),
     enforceAccess = false,
+    private questionChanged?: (sessionId: string, scope: string) => void,
   ) {
     this.questionService = new QuestionService(
       runtime,
@@ -65,6 +66,11 @@ export class RpcWorkflows {
       signal,
       executionSessionId,
       scope,
+      async () =>
+        this.questionChanged?.(
+          this.runtime.approvalAuthority(executionSessionId),
+          scope,
+        ),
     );
   }
   async handle(

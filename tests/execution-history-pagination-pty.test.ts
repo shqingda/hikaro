@@ -33,7 +33,7 @@ it.each([false, true])(
     const observations = join(home, "agent-calls.txt");
     const probe = join(home, "observe-agent.mjs");
     // The probe observes real calls without changing their behavior. A separate
-    // normal /tasks process below proves it patches the CLI's actual Agent class.
+    // Activity and durable history must both remain read-only: neither holds the queue.
     await writeFile(observations, "");
     await writeFile(
       probe,
@@ -171,10 +171,10 @@ for (const method of ["holdQueue", "prompt"]) {
       if (attached) await startHost();
 
       startTerminal(calibration.id);
-      await wait("/help");
-      await wait("Execution manager", send("/tasks\r"));
-      expect(await readFile(observations, "utf8")).toContain("holdQueue\n");
-      await wait("Enter send", send("\x1b"));
+      await wait("Enter send");
+      await wait("Activity", send("/tasks\r"));
+      expect(await readFile(observations, "utf8")).toBe("");
+      // Closing the process from a read-only page must not create execution state.
       await quit();
       await writeFile(observations, "");
 
@@ -197,7 +197,7 @@ for (const method of ["holdQueue", "prompt"]) {
         }
       };
       startTerminal(session.id);
-      await wait("/help");
+      await wait("Enter send");
       await wait("Execution history · page 1", send("/tasks history\r"));
       for (let page = 2; page <= 12; page++) await nextPage(page);
       await wait("old-run-id", send("\x1b[B".repeat(4)));
@@ -216,7 +216,7 @@ for (const method of ["holdQueue", "prompt"]) {
       }
 
       startTerminal(session.id);
-      await wait("/help");
+      await wait("Enter send");
       const exact = send("/tasks history old-run-id\r");
       await wait("Execution history · failed", exact);
       await wait("Run: old-run-id", exact);
