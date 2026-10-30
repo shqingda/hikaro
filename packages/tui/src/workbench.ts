@@ -183,9 +183,9 @@ export class WorkbenchFrame extends VStack {
       render: (width) => {
         this.tabRegions = [];
         const full = this.tabs.map((t) => ` ${t} `).join(" ");
-        if (visibleWidth(full) > width) {
+        if (!this.tabBar.focused || visibleWidth(full) > width) {
           this.tabRegions.push({ tab: this.tab, start: 0, end: width });
-          return [accent(fit(` ${this.tab}  ‹ › · F6 views`, width))];
+          return [muted(fit(` ${this.tab} · F6 views`, width)), ""];
         }
         let offset = 0;
         const line = this.tabs
@@ -204,7 +204,7 @@ export class WorkbenchFrame extends VStack {
               : muted(text);
           })
           .join(" ");
-        return [line];
+        return [line, ""];
       },
       invalidate() {},
       handleInput: (data) => {
@@ -246,11 +246,7 @@ export class WorkbenchFrame extends VStack {
             component: this.navigation,
             basis: 22,
             shrink: 0,
-            visible: () =>
-              tui.terminal.columns >= 100 &&
-              (this.navigationOpen ||
-                workspaceColumns(tui.terminal.columns, callbacks.inspector())
-                  .navigation > 0),
+            visible: () => tui.terminal.columns >= 100 && this.navigationOpen,
           },
           {
             component: this.navigation,

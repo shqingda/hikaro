@@ -27,7 +27,7 @@ export function renderHeader(status: ViewStatus, width: number) {
     status.cwd.replace(/\/$/, "").split("/").at(-1) ?? "",
   );
   const context = fit(
-    `${workspace}${status.branch ? ` / ${single(status.branch)}` : ""}${status.sessionTitle ? ` · ${single(status.sessionTitle)}` : ""}`,
+    `${workspace}${status.branch ? ` / ${single(status.branch)}` : ""}${status.sessionTitle && status.sessionTitle !== "New session" ? ` · ${single(status.sessionTitle)}` : ""}`,
     Math.max(0, room - 29),
   );
   return [

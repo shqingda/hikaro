@@ -37,3 +37,7 @@ The requested ub-mode was applied during final convergence. No crapper/dryer/mut
 After reviewing the user's terminal screenshot, moved Pi completion rows above the composer and reordered the existing mouse-coordinate mapping alongside them. Navigation now reserves the Beam selection background for keyboard focus; removed zero status counts, redundant Ready labels, repeated Actions hints and verbose empty-state instructions. No new component or dependency.
 
 Updated the existing completion-click regression: it failed before the fix and passed afterward, including draft/cursor preservation and no accidental submission. The ten editor tests, typecheck and build passed. Physical IME/mouse acceptance remains unverified. Applied ub-mode subtraction and apple-design spatial grouping; no animations or extra test matrix.
+
+## Quiet default workspace
+
+Reviewed Grok Build's `views/welcome/top_bar.rs`: location metadata is one compact line. Applied that hierarchy to Hikaro rather than importing its renderer. Session navigation now opens explicitly instead of consuming a permanent column; the current view stays visible while the full tab selector appears on focus. Added a blank row between navigation and content, and suppressed the placeholder New session in the header. Existing F6, mouse view switching and session controls remain available. Two relevant suites (13 checks), typecheck and build passed; no expanded matrix or manual terminal claim.
