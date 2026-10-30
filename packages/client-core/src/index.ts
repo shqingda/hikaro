@@ -106,8 +106,12 @@ export class ClientState {
     return this.methods.has(method);
   }
   private generalFiles = false;
+  private runBoundSteering = false;
   get supportsFiles(): boolean {
     return this.generalFiles;
+  }
+  get supportsRunBoundSteering(): boolean {
+    return this.runBoundSteering;
   }
   receipt(id: string): CommandReceipt | undefined {
     const value = this.commands.get(id);
@@ -146,6 +150,7 @@ export class ClientState {
     this.value.connection = "connecting";
     this.methods.clear();
     this.generalFiles = false;
+    this.runBoundSteering = false;
     this.hostNegotiated = false;
     this.helloId = undefined;
     this.snapshotId = undefined;
@@ -190,6 +195,14 @@ export class ClientState {
       throw Error("Client must connect before sending commands");
     if (method !== "hello" && !this.methods.has(method))
       throw Error("Handshake required or method unavailable");
+    if (
+      method === "steer" &&
+      params.expectedRunId !== undefined &&
+      !this.runBoundSteering
+    )
+      throw Error(
+        "Host does not support run-bound steering; update the host or explicitly queue the message",
+      );
     if (
       method !== "hello" &&
       method !== "session.current" &&
@@ -366,6 +379,8 @@ export class ClientState {
       )
         throw Error("Invalid handshake methods");
       this.generalFiles = hello.fileAttachments === true;
+      this.runBoundSteering =
+        hello.runBoundSteering === true && hello.methods.includes("steer");
       this.methods = new Set(
         rpcMethods.filter((method) => hello.methods.includes(method)),
       );

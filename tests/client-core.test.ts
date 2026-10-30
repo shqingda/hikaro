@@ -44,6 +44,27 @@ function event(
     event: { sessionId, seq, type, data, timestamp: 1 },
   };
 }
+it("negotiates run-bound steering and refuses it on an older host", () => {
+  const { client } = ready();
+  expect(client.supportsRunBoundSteering).toBe(true);
+  const epoch = client.beginConnection();
+  expect(client.supportsRunBoundSteering).toBe(false);
+  client.command("old-hello", "hello");
+  const { runBoundSteering: _feature, ...oldCapabilities } = rpcCapabilities();
+  response(client, epoch, "old-hello", oldCapabilities);
+  client.command("old-snapshot", "session.current");
+  response(client, epoch, "old-snapshot", snapshot());
+  expect(() =>
+    client.command("guarded", "steer", {
+      sessionId: "s1",
+      expectedRunId: "run-1",
+      text: "intervene",
+    }),
+  ).toThrow(/run-bound steering/i);
+  expect(client.command("legacy", "steer", { text: "legacy" }).method).toBe(
+    "steer",
+  );
+});
 it("reads isolated control status without copying stream or event history", () => {
   const { client, epoch } = ready();
   client.receive(epoch, event(1, "text.delta", { text: "中".repeat(100000) }));

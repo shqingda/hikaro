@@ -70,6 +70,7 @@ it("negotiates actual protocol capabilities without creating a session", async (
     commandReplay: "never-automatic",
     runIdentity: "events-only",
     runSnapshotIdentity: true,
+    runBoundSteering: true,
   });
   expect(hello.result.methods).toContain("prompt");
   expect(hello.result.methods).toContain("hello");
@@ -163,6 +164,91 @@ it("restores a root session read from SQLite through resume and snapshot", async
     canAct: true,
     syncRequired: false,
   });
+});
+it("validates the selected session and rejects stale guarded steering without enqueueing it", async () => {
+  const host = await rpc();
+  const session = (await host.request("session.create")).result;
+  const wrong = await host.request("steer", {
+    text: "wrong session",
+    sessionId: "other",
+    expectedRunId: "ended",
+  });
+  expect(wrong.error).toMatch(/selected session/i);
+  const missing = await host.request("steer", {
+    text: "missing target",
+    expectedRunId: "ended",
+  });
+  expect(missing.error).toMatch(/session/i);
+  const stale = await host.request("steer", {
+    text: "expired",
+    sessionId: session.id,
+    expectedRunId: "ended",
+  });
+  expect(stale.error).toMatch(/no longer active/i);
+  const attachments = await host.request("steer", {
+    text: "attachment",
+    sessionId: session.id,
+    expectedRunId: "ended",
+    files: [],
+  });
+  expect(attachments.error).toMatch(/text only/i);
+  expect(
+    (
+      await host.request("execution.read", {
+        sessionId: session.id,
+        kind: "steering",
+      })
+    ).result,
+  ).toEqual([]);
+  expect(
+    (await host.request("steer", { text: "legacy" })).error,
+  ).toBeUndefined();
+});
+it("routes a run-bound intervention through RPC into the same run", async () => {
+  const host = await rpc();
+  const session = (await host.request("session.create")).result;
+  let intervention: Promise<any> | undefined;
+  let target: string | undefined;
+  host.observe((raw) => {
+    const frame = raw as any;
+    if (
+      frame.type === "event" &&
+      frame.event.type === "run.start" &&
+      !intervention
+    ) {
+      target = frame.event.data.runId;
+      intervention = host.request("steer", {
+        text: "intervene once",
+        sessionId: session.id,
+        expectedRunId: target,
+      });
+    }
+  });
+  await host.request("prompt", { text: "start" });
+  await vi.waitFor(() => expect(intervention).toBeDefined());
+  expect((await intervention).error).toBeUndefined();
+  await vi.waitFor(() =>
+    expect(
+      host.frames.some(
+        (frame) =>
+          frame.type === "event" &&
+          frame.event.type === "run.end" &&
+          frame.event.data.runId === target,
+      ),
+    ).toBe(true),
+  );
+  const events = (await host.request("events.read", { sessionId: session.id }))
+    .result;
+  expect(
+    events.filter((event: any) => event.type === "run.start"),
+  ).toHaveLength(1);
+  expect(
+    events.filter(
+      (event: any) =>
+        event.type === "message" &&
+        event.data.message.text === "intervene once",
+    ),
+  ).toHaveLength(1);
 });
 it("observes raw responses in order without changing ProcessClient request routing", async () => {
   const client = new ProcessClient(process.execPath, [

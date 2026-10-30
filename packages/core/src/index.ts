@@ -170,6 +170,7 @@ export class Agent implements AgentBackend {
   private draining = false;
   private runActive = false;
   private runId: string | null = null;
+  private steerableRunId?: string;
   private runStatus:
     "idle" | "running" | "completed" | "failed" | "cancelled" | "unknown" =
     "idle";
@@ -310,6 +311,8 @@ export class Agent implements AgentBackend {
     };
   }
   async emit(type: string, data: Record<string, unknown>) {
+    if (type === "run.end" && typeof data.runId === "string")
+      this.endInterventions(data.runId);
     let event: AgentEvent;
     try {
       event = await this.options.store.append(
@@ -532,7 +535,21 @@ export class Agent implements AgentBackend {
       item!.reject(new DOMException("Removed from queue", "AbortError"));
     });
   }
-  steer(text: string, scope?: string) {
+  private assertSteeringRun(expectedRunId: string) {
+    if (
+      !this.runActive ||
+      this.runStatus !== "running" ||
+      this.runId !== expectedRunId ||
+      this.steerableRunId !== expectedRunId ||
+      this.controller?.signal.aborted
+    )
+      throw Error("Run is no longer active; refresh before deciding again");
+  }
+  private endInterventions(runId: string) {
+    if (this.steerableRunId === runId) this.steerableRunId = undefined;
+    this.steering.expireRun(runId);
+  }
+  steer(text: string, scope?: string, expectedRunId?: string) {
     const epoch = this.cancelEpoch,
       scopeEpoch = scope ? this.scopeEpochs.get(scope) : undefined;
     const cancelled = () =>
@@ -540,10 +557,19 @@ export class Agent implements AgentBackend {
       (scope !== undefined && scopeEpoch !== this.scopeEpochs.get(scope));
     return this.queueOperation(async () => {
       if (cancelled()) throw new DOMException("Cancelled", "AbortError");
-      const id = await this.steering.add(text, scope);
+      if (expectedRunId !== undefined) this.assertSteeringRun(expectedRunId);
+      const id = await this.steering.add(text, scope, expectedRunId);
       if (cancelled()) {
         this.steering.block((item) => item.id === id);
         throw new DOMException("Cancelled", "AbortError");
+      }
+      if (expectedRunId !== undefined) {
+        try {
+          this.assertSteeringRun(expectedRunId);
+        } catch (error) {
+          this.steering.expireRun(expectedRunId);
+          throw error;
+        }
       }
     });
   }
@@ -649,6 +675,16 @@ export class Agent implements AgentBackend {
     this.controller?.abort();
     void this.discardPending((item) => !preserveRecovered || !item.recovered);
     this.discardSteering((item) => !preserveRecovered || !item.recovered);
+  }
+  /** Validate and stop in one synchronous step; never cancel a later run. */
+  cancelRun(expectedRunId: string) {
+    if (
+      !this.runActive ||
+      this.runStatus !== "running" ||
+      this.runId !== expectedRunId
+    )
+      throw Error("Run is no longer active; refresh before deciding again");
+    this.cancel();
   }
   private async drain() {
     if (
@@ -1145,6 +1181,7 @@ export class Agent implements AgentBackend {
         files,
         timestamp: Date.now(),
       });
+      this.steerableRunId = runId;
       await this.emit("run.start", {
         runId,
         commandId: this.origin?.commandId,
@@ -1241,7 +1278,15 @@ export class Agent implements AgentBackend {
           signal.throwIfAborted();
           await this.queueSettled();
           await this.waitForSteeringRelease(signal);
-          if (this.steering.ready) continue;
+          const continueRun = await this.queueOperation(async () => {
+            signal.throwIfAborted();
+            if (this.steering.ready) return true;
+            // A late intervention must not enter between this decision and the
+            // durable terminal event. Legacy untargeted steering remains queued.
+            this.endInterventions(runId);
+            return false;
+          });
+          if (continueRun) continue;
           await this.emit("run.end", {
             runId,
             status: "completed",
@@ -1283,6 +1328,7 @@ export class Agent implements AgentBackend {
       signal.throwIfAborted();
       throw e;
     } finally {
+      this.endInterventions(runId);
       try {
         await stopLease?.();
       } finally {

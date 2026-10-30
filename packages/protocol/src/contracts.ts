@@ -151,10 +151,17 @@ export function rpcCapabilities(sharedHost = false) {
     runIdentity: "events-only" as const,
     runSnapshotIdentity: true as const,
     durableCommandReceipts: true as const,
+    runBoundSteering: true as const,
   };
 }
 const id = z.string().check(z.minLength(1)).check(z.maxLength(128));
 export const RunCancelParams = z.object({ sessionId: id, runId: id });
+/** Omitting the target preserves the original queue-for-next-turn semantics. */
+export const SteerParams = z.object({
+  text: z.string().check(z.minLength(1)).check(z.maxLength(100000)),
+  sessionId: z.optional(id),
+  expectedRunId: z.optional(id),
+});
 /** Acceptance records a stop request; the run's terminal event proves its outcome. */
 export const RunCancelResult = z.object({
   accepted: z.literal(true),
@@ -177,6 +184,7 @@ export const HelloResult = z.object({
   hostInstanceId: z.optional(id),
   durableCommandReceipts: z.optional(z.boolean()),
   runSnapshotIdentity: z.optional(z.boolean()),
+  runBoundSteering: z.optional(z.boolean()),
 });
 export const Permission = z.object({
   id,

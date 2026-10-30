@@ -22,6 +22,8 @@ export interface PendingSteeringStore {
   ): Promise<AgentEvent | undefined>;
 }
 type Item = PendingSteering & {
+  /** Live-run guard only; persisted entries always require explicit recovery. */
+  expectedRunId?: string;
   recovered: boolean;
   blocked?: boolean;
   error?: string;
@@ -61,10 +63,16 @@ export class SteeringQueue {
       if (!this.items.some((existing) => existing.id === item.id))
         this.items.push({ ...item, recovered: true });
   }
-  async add(text: string, scope?: string) {
+  async add(text: string, scope?: string, expectedRunId?: string) {
     validText(text);
     if (this.items.length >= 16) throw Error("Steering queue is full");
-    const item = { id: randomUUID(), text, scope, recovered: false };
+    const item = {
+      id: randomUUID(),
+      text,
+      scope,
+      expectedRunId,
+      recovered: false,
+    };
     await this.store?.insertPendingSteering(this.sessionId, item);
     this.items.push(item);
     return item.id;
@@ -92,11 +100,21 @@ export class SteeringQueue {
       throw Error("Restore from the original client identity");
     if (item.blocked) throw Error("Steering cancellation is still pending");
     if (!item.recovered) throw Error("Steering message is already queued");
+    // Explicit recovery is a fresh instruction, not continuation of its old run.
+    item.expectedRunId = undefined;
     item.recovered = false;
     item.error = undefined;
   }
   block(matches: (item: Item) => boolean) {
     for (const item of this.items) if (matches(item)) item.blocked = true;
+  }
+  expireRun(runId: string) {
+    for (const item of this.items) {
+      if (item.expectedRunId !== runId) continue;
+      item.recovered = true;
+      item.error =
+        "Target run ended before this intervention was applied. Review it before sending again.";
+    }
   }
   async discard(matches: (item: Item) => boolean) {
     const failures: string[] = [];

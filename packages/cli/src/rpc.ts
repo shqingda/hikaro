@@ -26,6 +26,7 @@ import {
   HelloParams,
   rpcCapabilities,
   RunCancelParams,
+  SteerParams,
 } from "../../../packages/protocol/src/contracts.ts";
 const integer = (
   value: unknown,
@@ -970,14 +971,28 @@ export async function serveRpc(
           result = { accepted: true };
           break;
         }
-        case "steer":
-          if (!state.agent) throw Error("No session selected");
-          await state.agent.steer(
-            z.string().min(1).max(100000).parse(p.text),
-            scope,
-          );
+        case "steer": {
+          const { text, sessionId, expectedRunId } = SteerParams.parse(p);
+          const agent = state.agent;
+          if (!agent) throw Error("No session selected");
+          if (
+            (sessionId !== undefined && state.session?.id !== sessionId) ||
+            (expectedRunId !== undefined && sessionId === undefined)
+          )
+            throw Error("Command must target the selected session");
+          if (
+            expectedRunId !== undefined &&
+            (p.images !== undefined || p.files !== undefined)
+          )
+            throw Error(
+              "Run-bound steering accepts text only; queue attachments as a separate message",
+            );
+          requireSameSelection();
+          requireUncancelled();
+          await agent.steer(text, scope, expectedRunId);
           result = {};
           break;
+        }
         case "cancel":
           cancel(state);
           result = {};

@@ -73,6 +73,9 @@ export class ClientConnection {
   get supportsFiles(): boolean {
     return this.view.supportsFiles;
   }
+  get supportsRunBoundSteering(): boolean {
+    return this.view.supportsRunBoundSteering;
+  }
   subscribe(fn: () => void) {
     this.listeners.add(fn);
     return () => {
