@@ -5,7 +5,7 @@ const tuiRequire = createRequire(import.meta.resolve("@earendil-works/pi-tui"));
 
 export function cliBuildOptions() {
   return {
-    entryPoints: { hikaro: "apps/cli/src/launcher.ts" },
+    entryPoints: { hikaro: "packages/cli/src/launcher.ts" },
     outdir: "dist",
     entryNames: "[name]",
     chunkNames: "chunk-[hash]",

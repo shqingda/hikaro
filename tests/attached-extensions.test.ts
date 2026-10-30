@@ -9,7 +9,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { serveSharedHost } from "../apps/cli/src/shared-host.ts";
+import { serveSharedHost } from "../packages/cli/src/shared-host.ts";
 import { SharedHostClient } from "../packages/host/src/client.ts";
 
 it("runs local extensions and manual tools, exports results and refuses Plan side effects", async () => {

@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Runtime } from "../packages/runtime/src/index.ts";
-import { RpcWorkflows } from "../apps/cli/src/rpc-workflows.ts";
+import { RpcWorkflows } from "../packages/cli/src/rpc-workflows.ts";
 
 it("restores unanswered questions by identity and saves answers once without executing", async () => {
   const home = await mkdtemp(join(tmpdir(), "hikaro-question-"));

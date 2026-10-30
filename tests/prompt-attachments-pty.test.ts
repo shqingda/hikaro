@@ -42,7 +42,7 @@ it("keeps a rejected attachment draft, then sends file and image bytes through t
     [
       "--import",
       "tsx",
-      resolve("apps/cli/src/index.ts"),
+      resolve("packages/cli/src/index.ts"),
       "--home",
       home,
       "--cwd",

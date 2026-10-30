@@ -141,7 +141,7 @@ it("binds evidence at tool start, preserves ambiguity and delegation, and restor
     expect(progress!.unassigned!.reliable).toBe(2);
     await runtime.planning.load(other.id);
     expect(await runtime.planProgress(other.id)).toBeNull();
-    const { RpcWorkflows } = await import("../apps/cli/src/rpc-workflows.ts");
+    const { RpcWorkflows } = await import("../packages/cli/src/rpc-workflows.ts");
     const rpc = new RpcWorkflows(runtime);
     const tool = progress!.steps[0]!.evidence!.tools.find(
       (t) => t.name === "moving",

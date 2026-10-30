@@ -14,7 +14,7 @@
 
 ## 实现位置和风格
 
-TypeScript/Node，复用现有命名与格式。`packages/tools`：安全更新和快照；`packages/runtime`：会话隔离与回退；`packages/tui`：选择器与差异页；`apps/cli`：命令；`tests`：真实文件和 PTY。采用 `async rollback(...)` 风格，不新增依赖或数据库表。
+TypeScript/Node，复用现有命名与格式。`packages/tools`：安全更新和快照；`packages/runtime`：会话隔离与回退；`packages/tui`：选择器与差异页；`packages/cli`：命令；`tests`：真实文件和 PTY。采用 `async rollback(...)` 风格，不新增依赖或数据库表。
 
 ## 实施顺序与验证
 

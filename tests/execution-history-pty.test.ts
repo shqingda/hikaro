@@ -24,7 +24,7 @@ it("reads completed execution history through attached TUI after host restart wi
     const child = spawnProcess(process.execPath, [
       "--import",
       "tsx",
-      resolve("apps/cli/src/index.ts"),
+      resolve("packages/cli/src/index.ts"),
       "--host",
       "--demo",
       "--home",
@@ -89,7 +89,7 @@ it("reads completed execution history through attached TUI after host restart wi
       [
         "--import",
         "tsx",
-        resolve("apps/cli/src/index.ts"),
+        resolve("packages/cli/src/index.ts"),
         "--attach",
         "--client-id",
         "recovery",

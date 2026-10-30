@@ -56,7 +56,7 @@ import { appendFileSync, existsSync } from "node:fs";
 import { Runtime } from ${JSON.stringify(pathToFileURL(resolve("packages/runtime/src/index.ts")).href)};
 import { SQLiteStore } from ${JSON.stringify(pathToFileURL(resolve("packages/storage/src/index.ts")).href)};
 import { ModelPanel } from ${JSON.stringify(pathToFileURL(resolve("packages/tui/src/model-panel.ts")).href)};
-import { LocalQuestions } from ${JSON.stringify(pathToFileURL(resolve("apps/cli/src/local-questions.ts")).href)};
+import { LocalQuestions } from ${JSON.stringify(pathToFileURL(resolve("packages/cli/src/local-questions.ts")).href)};
 const note = (text) => appendFileSync(${JSON.stringify(log)}, text + "\\n");
 const gate = async (name) => { while (!existsSync(${JSON.stringify(home)} + "/release-" + name)) await new Promise(r => setTimeout(r, 10)); };
 const session = Runtime.prototype.session;
@@ -100,7 +100,7 @@ for (const method of ["choose", "readDocument"]) {
         "tsx",
         "--import",
         probe,
-        resolve("apps/cli/src/index.ts"),
+        resolve("packages/cli/src/index.ts"),
         "--home",
         home,
         "--cwd",

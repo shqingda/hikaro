@@ -19,7 +19,7 @@ it("enters fullscreen, handles Unicode and restores terminal on exit", async () 
         [
           "--import",
           "tsx",
-          resolve("apps/cli/src/index.ts"),
+          resolve("packages/cli/src/index.ts"),
           "--demo",
           "--home",
           home,
@@ -199,7 +199,7 @@ async function withCriticalTui(
       [
         "--import",
         createRequire(import.meta.url).resolve("tsx"),
-        resolve("apps/cli/src/index.ts"),
+        resolve("packages/cli/src/index.ts"),
         "--provider",
         "local",
         "--model",

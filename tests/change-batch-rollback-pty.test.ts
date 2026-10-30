@@ -64,7 +64,7 @@ it("rolls back several model edits to a chosen point from the TUI", async () => 
     [
       "--import",
       "tsx",
-      resolve("apps/cli/src/index.ts"),
+      resolve("packages/cli/src/index.ts"),
       "--new",
       "--provider",
       "local",

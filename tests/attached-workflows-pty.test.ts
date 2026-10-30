@@ -145,7 +145,7 @@ it("runs Plan, questions, rollback and execution management through an attached 
   const host = spawnProcess(process.execPath, [
     "--import",
     "tsx",
-    resolve("apps/cli/src/index.ts"),
+    resolve("packages/cli/src/index.ts"),
     "--host",
     "--provider",
     "local",
@@ -183,7 +183,7 @@ it("runs Plan, questions, rollback and execution management through an attached 
     [
       "--import",
       "tsx",
-      resolve("apps/cli/src/index.ts"),
+      resolve("packages/cli/src/index.ts"),
       "--attach",
       "--new",
       "--home",

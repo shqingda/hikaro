@@ -7,9 +7,9 @@ import { Runtime } from "../packages/runtime/src/index.ts";
 import {
   LocalQuestions,
   localQuestionScope,
-} from "../apps/cli/src/local-questions.ts";
-import { RpcWorkflows } from "../apps/cli/src/rpc-workflows.ts";
-import { QuestionService } from "../apps/cli/src/question-service.ts";
+} from "../packages/cli/src/local-questions.ts";
+import { RpcWorkflows } from "../packages/cli/src/rpc-workflows.ts";
+import { QuestionService } from "../packages/cli/src/question-service.ts";
 import { ModelPanel } from "../packages/tui/src/model-panel.ts";
 import type { HikaroView } from "../packages/tui/src/index.ts";
 

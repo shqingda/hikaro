@@ -1,6 +1,6 @@
 import { expect, it, vi } from "vitest";
 import { stripVTControlCharacters } from "node:util";
-import { AttachedWorkflows } from "../apps/cli/src/attached-workflows.ts";
+import { AttachedWorkflows } from "../packages/cli/src/attached-workflows.ts";
 import type { ClientConnection } from "../packages/client-core/src/connection.ts";
 import type { RpcMethod } from "../packages/protocol/src/contracts.ts";
 import { ModelPanel } from "../packages/tui/src/model-panel.ts";

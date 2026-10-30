@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, rm, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Runtime } from "../packages/runtime/src/index.ts";
-import { serveSharedHost } from "../apps/cli/src/shared-host.ts";
+import { serveSharedHost } from "../packages/cli/src/shared-host.ts";
 import { SharedHostClient } from "../packages/host/src/client.ts";
 
 it("reads local plan history by session and never approves a historical revision", async () => {

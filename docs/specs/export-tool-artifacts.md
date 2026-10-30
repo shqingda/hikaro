@@ -57,7 +57,7 @@ Markdown 附工具产物清单，至少标明来源事件、工具名、资源�
 
 工具清单完成后以及最终 Markdown 句柄关闭后都检查取消信号。调用发布重命名前是取消检查的提交点；最后清单写入或关闭期间收到的取消必须拒绝导出并清理临时产物，不声称能撤回已经提交的重命名。
 
-实现使用现有 TypeScript、SQLite worker、Node 文件 API 和 secure-file-helper，无新依赖。共享授权读取逻辑放在 `packages/runtime/src/session-artifacts.ts`，存储分页在 `packages/storage/src/index.ts` 与 `worker.mjs`，导出协调在 runtime；`apps/cli/src/rpc-library.ts` 复用 helper 并保持现有 `artifact.read` 响应和权限契约。新增逻辑可拆独立导出模块，避免继续扩大 runtime 主文件。
+实现使用现有 TypeScript、SQLite worker、Node 文件 API 和 secure-file-helper，无新依赖。共享授权读取逻辑放在 `packages/runtime/src/session-artifacts.ts`，存储分页在 `packages/storage/src/index.ts` 与 `worker.mjs`，导出协调在 runtime；`packages/cli/src/rpc-library.ts` 复用 helper 并保持现有 `artifact.read` 响应和权限契约。新增逻辑可拆独立导出模块，避免继续扩大 runtime 主文件。
 
 沿用现有命名与格式，白名单投影必须显式构造，例如：
 

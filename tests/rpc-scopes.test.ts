@@ -8,7 +8,7 @@ it("keeps device scopes independent and preserves command idempotency", async ()
   const client = new ProcessClient(process.execPath, [
     "--import",
     "tsx",
-    resolve("apps/cli/src/index.ts"),
+    resolve("packages/cli/src/index.ts"),
     "--rpc",
     "--demo",
     "--home",

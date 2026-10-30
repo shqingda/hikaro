@@ -3,7 +3,7 @@ import { PassThrough } from "node:stream";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { serveRpc } from "../apps/cli/src/rpc.ts";
+import { serveRpc } from "../packages/cli/src/rpc.ts";
 import { ClientState } from "../packages/client-core/src/index.ts";
 import { ProcessClient } from "../packages/protocol/src/client.ts";
 import { JsonLines } from "../packages/protocol/src/index.ts";

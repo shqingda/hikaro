@@ -7,7 +7,7 @@ import { ProcessClient } from "../packages/protocol/src/client.ts";
 import { JsonLines } from "../packages/protocol/src/index.ts";
 import { SQLiteStore } from "../packages/storage/src/index.ts";
 import { Runtime } from "../packages/runtime/src/index.ts";
-import { serveRpc } from "../apps/cli/src/rpc.ts";
+import { serveRpc } from "../packages/cli/src/rpc.ts";
 import type { AgentEvent } from "../packages/core/src/index.ts";
 
 it("reconciles durable RPC outcomes after restart without replaying or crossing scopes", async () => {
@@ -16,7 +16,7 @@ it("reconciles durable RPC outcomes after restart without replaying or crossing 
     new ProcessClient(process.execPath, [
       "--import",
       "tsx",
-      resolve("apps/cli/src/index.ts"),
+      resolve("packages/cli/src/index.ts"),
       "--rpc",
       "--demo",
       "--home",

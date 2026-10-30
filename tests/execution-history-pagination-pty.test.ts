@@ -54,7 +54,7 @@ for (const method of ["holdQueue", "prompt"]) {
       "tsx",
       "--import",
       probe,
-      resolve("apps/cli/src/index.ts"),
+      resolve("packages/cli/src/index.ts"),
       "--home",
       home,
       "--cwd",

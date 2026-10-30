@@ -8,7 +8,7 @@ it("runs a session through the shared RPC protocol and persists its history", as
   const client = new ProcessClient(process.execPath, [
     "--import",
     "tsx",
-    resolve("apps/cli/src/index.ts"),
+    resolve("packages/cli/src/index.ts"),
     "--rpc",
     "--demo",
     "--home",

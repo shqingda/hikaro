@@ -16,7 +16,7 @@ import { once } from "node:events";
 import { createConnection } from "node:net";
 import { spawn as spawnPty, type IPty } from "node-pty";
 import { stripVTControlCharacters } from "node:util";
-import { serveSharedHost } from "../apps/cli/src/shared-host.ts";
+import { serveSharedHost } from "../packages/cli/src/shared-host.ts";
 import { SharedHostClient } from "../packages/host/src/client.ts";
 import { ClientFiles } from "../packages/host/src/client-files.ts";
 import { ClientConnection } from "../packages/client-core/src/connection.ts";
@@ -54,7 +54,7 @@ async function startHost(options: { home: string; cwd: string }) {
   const child = spawn(process.execPath, [
     "--import",
     "tsx",
-    resolve("apps/cli/src/index.ts"),
+    resolve("packages/cli/src/index.ts"),
     "--host",
     "--demo",
     "--home",
@@ -238,7 +238,7 @@ it("attaches the real TUI, restores its draft and pending approval after exit, a
       [
         "--import",
         "tsx",
-        resolve("apps/cli/src/index.ts"),
+        resolve("packages/cli/src/index.ts"),
         "--attach",
         "--home",
         options.home,

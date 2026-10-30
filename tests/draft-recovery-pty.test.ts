@@ -22,7 +22,7 @@ it("recovers crash and Ctrl+D drafts with --continue and clears only after submi
       [
         "--import",
         "tsx",
-        resolve("apps/cli/src/index.ts"),
+        resolve("packages/cli/src/index.ts"),
         "--demo",
         "--home",
         home,

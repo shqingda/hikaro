@@ -71,7 +71,7 @@ it("navigates sessions, model/defaults, settings, resources and login from the a
   const host = processSpawn(process.execPath, [
     "--import",
     "tsx",
-    resolve("apps/cli/src/index.ts"),
+    resolve("packages/cli/src/index.ts"),
     "--host",
     "--demo",
     "--home",
@@ -109,7 +109,7 @@ it("navigates sessions, model/defaults, settings, resources and login from the a
         [
           "--import",
           "tsx",
-          resolve("apps/cli/src/index.ts"),
+          resolve("packages/cli/src/index.ts"),
           "--attach",
           "--client-id",
           "navigation",

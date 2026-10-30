@@ -8,7 +8,7 @@
     "node": ">=26.12.1"
   },
   "scripts": {
-    "dev": "tsx apps/cli/src/index.ts",
+    "dev": "tsx packages/cli/src/index.ts",
     "build": "node scripts/build.mjs",
     "start": "node dist/hikaro.mjs",
     "typecheck": "tsc --noEmit",

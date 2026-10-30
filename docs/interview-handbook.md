@@ -219,5 +219,5 @@
 - `packages/storage/src/index.ts`：数据库 Worker 请求封装。
 - `packages/storage/src/worker.mjs`：WAL、事件、分页、分支、租约和命令去重。
 - `packages/runtime/src/index.ts`：创建续接子会话。
-- `apps/cli/src/rpc.ts`、`packages/protocol/src/index.ts`：RPC、快照游标与事件读取接口。
+- `packages/cli/src/rpc.ts`、`packages/protocol/src/index.ts`：RPC、快照游标与事件读取接口。
 - `README.md`、`TODO.md`：当前范围与未完成验收事项。

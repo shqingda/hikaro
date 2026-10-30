@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
 import { Runtime } from "../packages/runtime/src/index.ts";
 import { SQLiteStore } from "../packages/storage/src/index.ts";
-import { serveSharedHost } from "../apps/cli/src/shared-host.ts";
+import { serveSharedHost } from "../packages/cli/src/shared-host.ts";
 import { SharedHostClient } from "../packages/host/src/client.ts";
 
 it("keeps the host available after history with maximally escaped IDs and details", async () => {

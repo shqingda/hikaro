@@ -11,11 +11,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { Runtime } from "../packages/runtime/src/index.ts";
-import { RpcWorkflows } from "../apps/cli/src/rpc-workflows.ts";
-import { serveSharedHost } from "../apps/cli/src/shared-host.ts";
+import { RpcWorkflows } from "../packages/cli/src/rpc-workflows.ts";
+import { serveSharedHost } from "../packages/cli/src/shared-host.ts";
 import { SharedHostClient } from "../packages/host/src/client.ts";
 import { ClientConnection } from "../packages/client-core/src/connection.ts";
-import { AttachedWorkflows } from "../apps/cli/src/attached-workflows.ts";
+import { AttachedWorkflows } from "../packages/cli/src/attached-workflows.ts";
 import { ModelPanel } from "../packages/tui/src/model-panel.ts";
 import type { HikaroView } from "../packages/tui/src/index.ts";
 import { stripVTControlCharacters } from "node:util";
@@ -384,7 +384,7 @@ it("uses durable host receipts and rejects cross-selection workflow commands", a
 
 it("discards delayed workflow reads after disconnection", async () => {
   const { AttachedWorkflows } =
-    await import("../apps/cli/src/attached-workflows.ts");
+    await import("../packages/cli/src/attached-workflows.ts");
   const response = deferred<unknown>();
   const request = vi.fn(() => response.promise);
   const client = {

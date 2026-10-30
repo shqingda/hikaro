@@ -1,6 +1,5 @@
 packages:
   - "packages/*"
-  - "apps/cli"
 minimumReleaseAge: 0
 overrides:
   # sandbox-runtime explicitly imports zod/v3, which is also shipped by Zod 4.

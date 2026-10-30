@@ -227,7 +227,7 @@ it.each(["message", "plugin.end"])(
 
 it("cancels through the host control lane without replaying the invocation", async () => {
   const { writeFile, readFile } = await import("node:fs/promises");
-  const { serveSharedHost } = await import("../apps/cli/src/shared-host.ts");
+  const { serveSharedHost } = await import("../packages/cli/src/shared-host.ts");
   const { SharedHostClient } = await import("../packages/host/src/client.ts");
   const home = await mkdtemp(join(tmpdir(), "hikaro-plugin-rpc-"));
   await writeFile(

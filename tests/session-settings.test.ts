@@ -11,7 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Runtime } from "../packages/runtime/src/index.ts";
-import { selectInitialSession } from "../apps/cli/src/startup.ts";
+import { selectInitialSession } from "../packages/cli/src/startup.ts";
 import { openModelControl } from "../packages/tui/src/model-settings.ts";
 import {
   loadTuiPreferences,

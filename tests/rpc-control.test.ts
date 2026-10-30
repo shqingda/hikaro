@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { PassThrough } from "node:stream";
 import { setImmediate } from "node:timers/promises";
 import { Runtime, type RuntimeOptions } from "../packages/runtime/src/index.ts";
-import { serveRpc } from "../apps/cli/src/rpc.ts";
+import { serveRpc } from "../packages/cli/src/rpc.ts";
 import type { Session } from "../packages/core/src/index.ts";
 import type { SQLiteStore } from "../packages/storage/src/index.ts";
 import { ResolvedFrame } from "../packages/protocol/src/contracts.ts";

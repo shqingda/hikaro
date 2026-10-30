@@ -120,7 +120,7 @@ it("explores read-only, answers a question, revises and approves a plan before w
     [
       "--import",
       "tsx",
-      resolve("apps/cli/src/index.ts"),
+      resolve("packages/cli/src/index.ts"),
       "--new",
       "--provider",
       "local",

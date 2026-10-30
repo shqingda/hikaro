@@ -45,7 +45,7 @@ it("edits, prioritizes and removes steering through attached TUI before the next
   const host = spawnProcess(process.execPath, [
     "--import",
     "tsx",
-    resolve("apps/cli/src/index.ts"),
+    resolve("packages/cli/src/index.ts"),
     "--host",
     "--provider",
     "local",
@@ -96,7 +96,7 @@ it("edits, prioritizes and removes steering through attached TUI before the next
       [
         "--import",
         "tsx",
-        resolve("apps/cli/src/index.ts"),
+        resolve("packages/cli/src/index.ts"),
         "--attach",
         "--client-id",
         "steering",

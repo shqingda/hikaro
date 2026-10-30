@@ -76,7 +76,7 @@ it("recovers unsubmitted answer drafts after attached TUI and host SIGKILL, then
       [
         "--import",
         "tsx",
-        resolve("apps/cli/src/index.ts"),
+        resolve("packages/cli/src/index.ts"),
         "--attach",
         "--client-id",
         "question-owner",
@@ -111,7 +111,7 @@ it("recovers unsubmitted answer drafts after attached TUI and host SIGKILL, then
     const child = spawnProcess(process.execPath, [
       "--import",
       "tsx",
-      resolve("apps/cli/src/index.ts"),
+      resolve("packages/cli/src/index.ts"),
       "--host",
       "--provider",
       "local",

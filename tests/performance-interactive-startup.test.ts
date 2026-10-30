@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { openInteractive } from "../apps/cli/src/interactive-startup.ts";
+import { openInteractive } from "../packages/cli/src/interactive-startup.ts";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;

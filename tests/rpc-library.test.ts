@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, writeFile, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Runtime } from "../packages/runtime/src/index.ts";
-import { libraryRequest } from "../apps/cli/src/rpc-library.ts";
+import { libraryRequest } from "../packages/cli/src/rpc-library.ts";
 import { publicEvent } from "../packages/protocol/src/index.ts";
 
 it("pages large history and images without provider payloads, and only reads securely referenced session artifacts", async () => {

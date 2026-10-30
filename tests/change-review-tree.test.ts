@@ -82,7 +82,7 @@ it("aggregates only persisted descendants and makes their edits read-only after 
 
 it("opens descendant observations in the attached reviewer without offering rollback", async () => {
   const { AttachedWorkflows } =
-    await import("../apps/cli/src/attached-workflows.ts");
+    await import("../packages/cli/src/attached-workflows.ts");
   const { vi } = await import("vitest");
   const row = {
     id: "change",

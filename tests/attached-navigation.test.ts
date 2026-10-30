@@ -2,7 +2,7 @@ import { expect, it } from "vitest";
 import { mkdtemp, mkdir, realpath, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { serveSharedHost } from "../apps/cli/src/shared-host.ts";
+import { serveSharedHost } from "../packages/cli/src/shared-host.ts";
 import { SharedHostClient } from "../packages/host/src/client.ts";
 
 it("changes defaults without changing the active session and exposes host configuration", async () => {
@@ -79,7 +79,7 @@ it("signs in through the real secret-input panel without sending credentials to 
     await import("../packages/provider-pi/src/catalog.ts");
   const { ModelPanel } = await import("../packages/tui/src/model-panel.ts");
   const { AttachedNavigation } =
-    await import("../apps/cli/src/attached-navigation.ts");
+    await import("../packages/cli/src/attached-navigation.ts");
   const { ClientConnection } =
     await import("../packages/client-core/src/connection.ts");
   const { ClientFiles } = await import("../packages/host/src/client-files.ts");
@@ -192,7 +192,7 @@ it("isolates attached view preferences and rejects delayed configuration reads a
   const { vi } = await import("vitest");
   const { ClientFiles } = await import("../packages/host/src/client-files.ts");
   const { AttachedNavigation } =
-    await import("../apps/cli/src/attached-navigation.ts");
+    await import("../packages/cli/src/attached-navigation.ts");
   const { defaultTuiPreferences } =
     await import("../packages/tui/src/preferences.ts");
   const home = await realpath(

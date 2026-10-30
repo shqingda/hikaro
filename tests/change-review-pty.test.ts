@@ -63,7 +63,7 @@ it("reviews a real model file edit, cancels confirmation, then rolls it back fro
     [
       "--import",
       "tsx",
-      resolve("apps/cli/src/index.ts"),
+      resolve("packages/cli/src/index.ts"),
       "--new",
       "--provider",
       "local",

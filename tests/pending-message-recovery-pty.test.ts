@@ -24,7 +24,7 @@ it("recovers a durably accepted queue after host SIGKILL and explicitly resumes 
     const child = spawnProcess(process.execPath, [
       "--import",
       "tsx",
-      resolve("apps/cli/src/index.ts"),
+      resolve("packages/cli/src/index.ts"),
       "--host",
       "--demo",
       "--home",
@@ -97,7 +97,7 @@ it("recovers a durably accepted queue after host SIGKILL and explicitly resumes 
       [
         "--import",
         "tsx",
-        resolve("apps/cli/src/index.ts"),
+        resolve("packages/cli/src/index.ts"),
         "--attach",
         "--client-id",
         "recovery",

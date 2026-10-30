@@ -6,10 +6,10 @@ import { DatabaseSync } from "node:sqlite";
 import { PassThrough } from "node:stream";
 import { Runtime } from "../packages/runtime/src/index.ts";
 import { SQLiteStore } from "../packages/storage/src/index.ts";
-import { QuestionService } from "../apps/cli/src/question-service.ts";
-import { RpcWorkflows } from "../apps/cli/src/rpc-workflows.ts";
-import { serveRpc } from "../apps/cli/src/rpc.ts";
-import { isMutation } from "../apps/cli/src/rpc-receipts.ts";
+import { QuestionService } from "../packages/cli/src/question-service.ts";
+import { RpcWorkflows } from "../packages/cli/src/rpc-workflows.ts";
+import { serveRpc } from "../packages/cli/src/rpc.ts";
+import { isMutation } from "../packages/cli/src/rpc-receipts.ts";
 import { isControlMethod, JsonLines } from "../packages/protocol/src/index.ts";
 import {
   rpcCapabilities,

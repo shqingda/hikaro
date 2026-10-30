@@ -9,7 +9,7 @@ import {
 } from "../packages/provider-pi/src/catalog.ts";
 import { createPiProvider } from "../packages/provider-pi/src/index.ts";
 import { Runtime } from "../packages/runtime/src/index.ts";
-import { libraryRequest } from "../apps/cli/src/rpc-library.ts";
+import { libraryRequest } from "../packages/cli/src/rpc-library.ts";
 import type { ModelSelection } from "../packages/core/src/types.ts";
 
 const homes: string[] = [];

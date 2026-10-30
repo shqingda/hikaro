@@ -87,7 +87,7 @@ it("recovers ordinary TUI question drafts after SIGKILL without replay and prese
         [
           "--import",
           "tsx",
-          resolve("apps/cli/src/index.ts"),
+          resolve("packages/cli/src/index.ts"),
           "--session",
           session.id,
           "--home",

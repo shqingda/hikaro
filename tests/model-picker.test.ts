@@ -98,7 +98,7 @@ it("opens /model without arguments, then provider/auth selection, and cancels ba
         [
           "--import",
           "tsx",
-          resolve("apps/cli/src/index.ts"),
+          resolve("packages/cli/src/index.ts"),
           "--demo",
           "--home",
           home,

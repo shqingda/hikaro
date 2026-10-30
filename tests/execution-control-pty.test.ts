@@ -78,7 +78,7 @@ it("manages queued messages, terminal input/exit, and child cancellation from a 
     [
       "--import",
       "tsx",
-      resolve("apps/cli/src/index.ts"),
+      resolve("packages/cli/src/index.ts"),
       "--new",
       "--provider",
       "local",

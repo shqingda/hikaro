@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { Runtime } from "../packages/runtime/src/index.ts";
-import { RpcWorkflows } from "../apps/cli/src/rpc-workflows.ts";
+import { RpcWorkflows } from "../packages/cli/src/rpc-workflows.ts";
 
 const questions = [
   {

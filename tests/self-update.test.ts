@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { installerUrl, updatePlan } from "../apps/cli/src/self-update.ts";
+import { installerUrl, updatePlan } from "../packages/cli/src/self-update.ts";
 
 describe("self update", () => {
   it("refuses source checkouts", async () => {

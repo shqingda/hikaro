@@ -15,7 +15,6 @@
   },
   "include": [
     "packages/**/*.ts",
-    "apps/cli/**/*.ts",
     "tests/**/*.ts",
     "extensions/**/*.ts"
   ],
