@@ -81,7 +81,15 @@ it("does not call select while a running session blocks model switching but keep
 });
 
 it("hides and disables saving defaults when the backend does not support it", async () => {
-  const ui = center(fakeCatalog(), { saveDefault: false });
+  const catalog = fakeCatalog();
+  const providers = await catalog.providers();
+  catalog.providers = async () =>
+    providers.map((p) => ({
+      ...p,
+      configured: true,
+      source: "environment" as const,
+    }));
+  const ui = center(catalog, { saveDefault: false });
   await vi.waitFor(() => expect(ui.output()).toContain("Alpha"));
   expect(ui.output()).not.toContain("Ctrl+S");
   ui.panel.handleInput("\x13");
@@ -299,4 +307,34 @@ it("model panel switches pages with Tab without consuming a draft or exposing se
   panel.cancelPrompt();
   expect(await answer).toBe("AbortError");
   expect(panel.render(60).join("\n")).not.toContain("secret-value");
+});
+
+it("routes an unconfigured model to connection before selecting it", async () => {
+  const catalog = fakeCatalog();
+  const ui = center(catalog);
+  await vi.waitFor(() => expect(ui.output()).toContain("Alpha"));
+  ui.panel.handleInput("\r");
+  await vi.waitFor(() =>
+    expect(ui.output()).toContain("Connect Test Provider"),
+  );
+  expect(ui.select).not.toHaveBeenCalled();
+  expect(catalog.login).not.toHaveBeenCalled();
+  expect(ui.panel.cancelStep()).toBe(true);
+  await vi.waitFor(() => expect(ui.output()).toContain("Alpha"));
+  ui.abort.abort();
+  await ui.run;
+});
+
+it("opens provider selection with Ctrl+A from the model center", async () => {
+  const ui = center(fakeCatalog());
+  await vi.waitFor(() =>
+    expect(ui.output()).toContain("Choose provider Ctrl+A"),
+  );
+  ui.panel.handleInput("\x01");
+  await vi.waitFor(() =>
+    expect(ui.output()).toContain("Select provider to configure"),
+  );
+  expect(ui.select).not.toHaveBeenCalled();
+  ui.abort.abort();
+  await ui.run;
 });

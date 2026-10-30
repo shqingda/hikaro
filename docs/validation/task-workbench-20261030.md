@@ -84,3 +84,9 @@ The existing `change-review-pty` integration also passed on the final build: loc
 ## Remove persistent shortcuts
 
 Removed the Sessions/Model toolbar and its rule from Conversation; the header is now location metadata only. Kept the contextual Conversation return control on browsing pages and existing Ctrl+P/Ctrl+O/slash entry points. Full Access is red and bold in the status bar, with its Permissions label neutral; other modes retain neutral styling and NO_COLOR remains supported. Typecheck, build and the two relevant view suites passed.
+
+## Model connection and provider navigation
+
+Model catalog membership previously allowed selection without checking a known missing credential, deferring failure until send. The picker now routes explicitly unconfigured providers to Connect before changing the model; cancel returns to the same query/selection. Unknown externally managed credential state is not treated as missing. A successful connection returns to the model list for selection; no credentials were entered during this verification.
+
+Checked OpenCode's current `packages/tui/src/component/dialog-model.tsx` and `packages/tui/src/config/keybind.ts`: provider navigation is a model-dialog action, bound to Ctrl+A. Hikaro now exposes a clickable Choose provider Ctrl+A control and the same local shortcut. Details uses Ctrl+D rather than F2; no F3 shortcut ships. Added focused regression coverage for missing-credential routing/cancel and Ctrl+A navigation; the existing default-save test now uses a configured provider. Relevant 17 checks, typecheck and build passed.

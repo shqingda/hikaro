@@ -541,7 +541,11 @@ export async function openModelPicker(
       queries.models = picked.query ?? "";
       selections.models = picked.value;
       warning = "";
-      if (picked.action === "tab" || picked.value === "__providers") {
+      if (
+        picked.action === "tab" ||
+        picked.action === "providers" ||
+        picked.value === "__providers"
+      ) {
         page = "providers";
         actionMode = "providers";
         continue;
@@ -581,6 +585,39 @@ export async function openModelPicker(
       const reason = options.switchBlockedReason?.();
       if (reason) {
         warning = reason;
+        continue;
+      }
+      const provider = (await wait(catalog.providers())).find(
+        (p) => p.id === model.provider,
+      );
+      // An unknown/external credential source is not evidence of missing credentials.
+      if (
+        provider &&
+        !provider.configured &&
+        !provider.stored &&
+        provider.source !== "unknown"
+      ) {
+        const connect = await panel.choose(
+          `Connect ${provider.name}`,
+          [
+            {
+              value: "connect",
+              label: provider.methods.length ? "Connect…" : "Provider settings",
+            },
+            { value: "cancel", label: "Back to models" },
+          ],
+          "",
+          undefined,
+          {
+            search: false,
+            cancelValue: "cancel",
+            description: `${model.name} needs ${provider.name} credentials in ${owner}. The current model has not changed.`,
+          },
+        );
+        if (connect.value === "connect") {
+          if (provider.methods.length) await authenticate(provider);
+          else await openProvider(provider);
+        }
         continue;
       }
       try {

@@ -391,7 +391,13 @@ export class ModelPanel implements Component {
         event.x < b.end,
     );
     if (button) {
-      if (button.key === "details") {
+      if (button.key === "provider") {
+        this.resolveSelection({
+          value: "__providers",
+          makeDefault: false,
+          action: "providers",
+        });
+      } else if (button.key === "details") {
         this.detailsExpanded = !this.detailsExpanded;
         this.refresh();
       } else if (button.key === "\x1b") {
@@ -421,7 +427,15 @@ export class ModelPanel implements Component {
   }
   handleInput(data: string) {
     if (!this.pending || isKeyRelease(data)) return;
-    if (this.activeTab === "models" && matchesKey(data, "f2")) {
+    if (this.activeTab === "models" && matchesKey(data, "ctrl+a")) {
+      this.resolveSelection({
+        value: "__providers",
+        makeDefault: false,
+        action: "providers",
+      });
+      return;
+    }
+    if (this.activeTab === "models" && matchesKey(data, "ctrl+d")) {
       this.detailsExpanded = !this.detailsExpanded;
       this.refresh();
       return;
@@ -949,9 +963,12 @@ export class ModelPanel implements Component {
         },
         { label: "Cancel Esc", key: "\x1b" },
         ...(this.activeTab === "models"
+          ? [{ label: "Choose provider Ctrl+A", key: "provider" }]
+          : []),
+        ...(this.activeTab === "models"
           ? [
               {
-                label: this.detailsExpanded ? "Less F2" : "Details F2",
+                label: this.detailsExpanded ? "Less Ctrl+D" : "Details Ctrl+D",
                 key: "details",
               },
             ]
