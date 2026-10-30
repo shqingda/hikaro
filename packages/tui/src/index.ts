@@ -426,11 +426,6 @@ export class HikaroView {
         this.modelController?.abort();
         void this.command("/sessions");
       },
-      model: () => {
-        if (this.approval) return;
-        this.modelController?.abort();
-        void this.command("/model");
-      },
       actions: () => {
         void this.openActions();
       },

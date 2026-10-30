@@ -80,3 +80,7 @@ Actual built CLI pass in isolated `/tmp/hikaro-unified.smZnNW`: sent an offline 
 Related 35 checks, typecheck and build passed. Updated existing PTY/release text expectations to match the new UI labels and visible action layout. Final wording-only changes were checked by build/type checks; interaction logs precede those final wording changes.
 
 The existing `change-review-pty` integration also passed on the final build: local model fixture edits a real temporary file, UI opens its diff, cancels rollback, then confirms rollback and verifies both file contents and session records. Its first run exposed missing refresh feedback after simplifying headings; restored Loading feedback without duplicating empty-state text, then reran successfully. This covers populated diff/rollback in addition to the manual PTY walkthrough; it is not a live provider or physical mouse test.
+
+## Remove persistent shortcuts
+
+Removed the Sessions/Model toolbar and its rule from Conversation; the header is now location metadata only. Kept the contextual Conversation return control on browsing pages and existing Ctrl+P/Ctrl+O/slash entry points. Full Access is red and bold in the status bar, with its Permissions label neutral; other modes retain neutral styling and NO_COLOR remains supported. Typecheck, build and the two relevant view suites passed.

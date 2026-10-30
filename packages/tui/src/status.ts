@@ -1,5 +1,5 @@
 import { truncateToWidth, visibleWidth } from "./primitives.ts";
-import { accent, bold, muted } from "./theme.ts";
+import { accent, bold, muted, error } from "./theme.ts";
 import { sanitize } from "./text.ts";
 
 /** UI-only projection. Missing backend metadata is intentionally not inferred. */
@@ -49,6 +49,13 @@ export function renderStatus(
   const permission = status.permission
     ? `Permissions: ${single(status.permission)}`
     : "";
+  const style = (text: string) =>
+    status.permission === "Full Access"
+      ? text
+          .split("Full Access")
+          .map(muted)
+          .join(error(bold("Full Access")))
+      : muted(text);
   const model = single(status.model);
   const usage = status.usage;
   const extra = showUsage
@@ -71,12 +78,12 @@ export function renderStatus(
   if (visibleWidth(state + right) + 3 > room) right = permission;
   if (visibleWidth(state + right) + 3 <= room) {
     return [
-      ` ${bold(state)}${" ".repeat(Math.max(1, room - visibleWidth(state + right)))}${muted(right)}`,
+      ` ${bold(state)}${" ".repeat(Math.max(1, room - visibleWidth(state + right)))}${style(right)}`,
     ];
   }
   // Permission and connection state survive even when model/usage cannot fit.
   return [
     ` ${bold(fit(state, room))}`,
-    ` ${muted(fit(permission || model, room))}`,
+    ` ${style(fit(permission || model, room))}`,
   ];
 }

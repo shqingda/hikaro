@@ -96,7 +96,6 @@ export class WorkbenchFrame extends VStack {
       selectSession(id: string): void;
       sessions(): void;
       actions(): void;
-      model?(): void;
       inspector(): boolean;
       beforeNavigate?(): boolean;
       sessionNavigation?: boolean;
@@ -193,41 +192,15 @@ export class WorkbenchFrame extends VStack {
         this.toolbarActions = [];
         const full = this.tabs.map((t) => ` ${t} `).join(" ");
         if (!this.tabBar.focused) {
-          let offset = 1;
-          const buttons = [
-            ...(this.tab !== "Conversation"
-              ? [
-                  {
-                    label: "← Conversation",
-                    run: () => callbacks.selectTab("Conversation"),
-                  },
-                ]
-              : []),
-            ...(callbacks.sessionNavigation !== false
-              ? [{ label: "Sessions", run: callbacks.sessions }]
-              : []),
-            ...(callbacks.model
-              ? [{ label: "Model", run: callbacks.model }]
-              : []),
-          ];
-          const lines = [" "];
-          for (const button of buttons) {
-            const text = `[${button.label}]`;
-            if (offset + text.length > width && offset > 1) {
-              lines.push(" ");
-              offset = 1;
-            }
-            this.toolbarActions.push({
-              row: lines.length - 1,
-              start: offset,
-              end: Math.min(width, offset + text.length),
-              run: button.run,
-            });
-            lines[lines.length - 1] += fit(text, width - offset);
-            offset += text.length + 2;
-            if (offset <= width) lines[lines.length - 1] += "  ";
-          }
-          return [...lines, muted("─".repeat(width))];
+          if (this.tab === "Conversation") return [];
+          const text = fit(" [← Conversation]", width);
+          this.toolbarActions.push({
+            row: 0,
+            start: 1,
+            end: visibleWidth(text),
+            run: () => callbacks.selectTab("Conversation"),
+          });
+          return [text, ""];
         }
         if (visibleWidth(full) > width) {
           this.tabRegions.push({ tab: this.tab, start: 0, end: width });
