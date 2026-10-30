@@ -41,22 +41,17 @@ async function run(command, fail = "") {
   }
 }
 
-test("local CI covers root, mobile and relay without deploying", async () => {
+test("local CI covers the CLI without deploying", async () => {
   const result = await run(scripts["ci:check"]);
   assert.equal(result.status, 0);
-  assert.deepEqual(result.commands, [
-    "pnpm check",
-    "pnpm mobile:typecheck",
-    "pnpm check:relay",
-    "pnpm --filter @hikaro/relay build",
-  ]);
+  assert.deepEqual(result.commands, ["pnpm check"]);
 });
 test("a failed local check prevents subsequent checks", async () => {
-  const result = await run(scripts["ci:check"], "mobile:typecheck");
+  const result = await run(scripts["ci:check"], "check");
   assert.notEqual(result.status, 0);
-  assert.deepEqual(result.commands, ["pnpm check", "pnpm mobile:typecheck"]);
+  assert.deepEqual(result.commands, ["pnpm check"]);
 });
-for (const name of ["build:android:release", "release:pack", "release:cli"]) {
+for (const name of ["release:pack", "release:cli"]) {
   test(`${name} never packages after a failed preflight`, async () => {
     const result = await run(scripts[name], "ci:check");
     assert.notEqual(result.status, 0);

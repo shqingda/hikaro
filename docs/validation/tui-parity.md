@@ -1,6 +1,6 @@
 # 附着 TUI 核心工作流验收 · 2026-10-18
 
-分支：`codex/tui-review-rollback`。工作区：`/Users/shqingda/.codex/worktrees/tui-review-rollback/hikaro`。未修改移动端工作目录，未合并或推送。
+分支：`codex/tui-review-rollback`。工作区：`/Users/shqingda/.codex/worktrees/tui-review-rollback/hikaro`。
 
 ## 实际交付
 
@@ -30,7 +30,6 @@ host 维护文件快照、执行记录、问题归属和计划版本。列表按
 ```sh
 node node_modules/vitest/vitest.mjs run tests/attached-workflows.test.ts tests/execution-panel.test.ts tests/planning-panel.test.ts tests/change-review-panel.test.ts tests/tui-interactions.test.ts tests/permissions.test.ts tests/attached-workflows-pty.test.ts
 node node_modules/vitest/vitest.mjs run tests/client-connection.test.ts
-node node_modules/vitest/vitest.mjs run tests/shared-host.test.ts -t 'shares one run and explicitly owned approvals'
 node node_modules/typescript/bin/tsc --noEmit
 node scripts/build.mjs
 ```
@@ -47,7 +46,6 @@ node scripts/build.mjs
 
 ## 尚未完成的范围
 
-- SSE 模型和加密网络使用确定性 fixture，不代表真实账号、生产 relay、手机真机或物理终端验收。
 - 未答问题和执行暂停租约在 host 内存中；host 强退后不能恢复未答问题或待发队列。重连不重放已发送动作。
 - 问题/计划每 750 ms 读取一次；状态不变不重复请求界面渲染。长期 CPU/内存、大文件差异和大历史性能未测。
 - 仅记录原生文件工具编辑，未覆盖 Shell/插件修改、批量回退、redo、嵌套子任务历史树或忽略信号的进程强杀。

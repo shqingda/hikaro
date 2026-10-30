@@ -6,4 +6,3 @@
 - 真实 PTY 短测：1 分钟预热 + 1 分钟测量，7 条任务完成，host/TUI 正常退出码均为 0。报告正确返回 incomplete、stabilityPassed=false、memoryPassed=null，不把短测标为完整验收。
 - 最后采样 RSS 合计 159.625 MiB，系统归属 footprint 合计 81.1198 MiB。两者定义不同，不能推导“省下”了多少内存，也不直接证明某个预算达标。
 - [原始报告](memory-sampling-smoke.json)保留构建指纹、环境和样本。产品构建包含尚未提交的前轮候选优化；此证据仅用于验证测量链路。未重跑产品类型检查或构建，本轮未修改产品代码。
-- Linux 解析测试通过，但尚无 Linux 实机结果。完整 30 分钟 footprint 曲线、平台预算校准、其他 release 阻塞仍待完成。TUI 87%，移动端 35%，未到 95%。

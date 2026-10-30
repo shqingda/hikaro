@@ -88,7 +88,7 @@ it("negotiates actual protocol capabilities without creating a session", async (
   const created = await client.request("session.create");
   expect(created.result.id).toBeTruthy();
   expect(
-    (await client.request("session.current", {}, "mobile")).result.session,
+    (await client.request("session.current", {}, "secondary")).result.session,
   ).toBeNull();
 }, 10000);
 
@@ -102,11 +102,11 @@ it("drives the portable state through the real RPC handler and SQLite without a 
   await rpcHost.send(state.command("create", "session.create"));
   await rpcHost.send(state.command("selected", "session.current"));
   expect(state.state.session?.id).toBeTruthy();
-  await rpcHost.request("session.create", {}, "mobile");
+  await rpcHost.request("session.create", {}, "secondary");
   await rpcHost.request(
     "prompt",
     { text: "consume global event sequence" },
-    "mobile",
+    "secondary",
   );
   await vi.waitFor(
     () =>
@@ -114,7 +114,7 @@ it("drives the portable state through the real RPC handler and SQLite without a 
         rpcHost.frames.some(
           (frame) =>
             frame.type === "event" &&
-            frame.scope === "mobile" &&
+            frame.scope === "secondary" &&
             frame.event.type === "run.end",
         ),
       ).toBe(true),
@@ -146,7 +146,7 @@ it("drives the portable state through the real RPC handler and SQLite without a 
 it("restores a root session read from SQLite through resume and snapshot", async () => {
   const host = await rpc();
   const created = await host.request("session.create");
-  const state = new ClientState("mobile");
+  const state = new ClientState("secondary");
   const epoch = state.beginConnection();
   host.observe((frame) => state.receive(epoch, frame));
   await host.send(state.command("hello-resume", "hello"));

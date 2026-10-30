@@ -1,30 +1,18 @@
 packages:
   - "packages/*"
   - "apps/cli"
-  - "apps/relay"
-  - "apps/mobile"
 minimumReleaseAge: 0
-# Xcode only consumes uuid.v4; 11.1.1 retains CommonJS and fixes buffer bounds.
 overrides:
   # sandbox-runtime explicitly imports zod/v3, which is also shipped by Zod 4.
   "@anthropic-ai/sandbox-runtime>zod": "4.6.7"
-  "xcode@3.0.1>uuid": "11.1.1"
   # October 2026 undici advisories. Stay on the patched release of each major.
   "undici@>=6.0.0 <6.29.1": "6.29.1"
   "undici@>=7.0.0 <7.30.1": "7.30.1"
   "undici@>=8.0.0 <8.12.2": "8.12.2"
 allowBuilds:
-  workerd: true
-  sharp: true
   esbuild: true
   node-pty: true
   "@google/genai": false
   protobufjs: false
-# serve-sim's inspector needs the TypeScript 5 JS compiler API. Keep the
-# repository's TypeScript 7 checker and satisfy the inspector's existing ^5 peer.
-packageExtensions:
-  "serve-sim@0.1.48":
-    dependencies:
-      typescript: "5.9.3"
 patchedDependencies:
   node-forge@1.4.0: patches/node-forge@1.4.0.patch

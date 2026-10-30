@@ -9,13 +9,13 @@ it("shows one command and uses the overriding definition for argument completion
   const provider = new FileAutocompleteProvider(
     [
       { name: "permissions", description: "Workspace approval policy" },
-      { value: "pair", label: "Pair a phone" },
+      { value: "help", label: "Show help" },
       {
         name: "permissions",
         description: "Open permissions",
         getArgumentCompletions: override,
       },
-      { name: "pair", description: "Connect your phone" },
+      { name: "help", description: "Show commands" },
     ],
     process.cwd(),
   );
@@ -29,7 +29,7 @@ it("shows one command and uses the overriding definition for argument completion
     },
   ]);
   expect(
-    (await provider.getSuggestions(["/pair"], 0, 5, options))?.items,
+    (await provider.getSuggestions(["/help"], 0, 5, options))?.items,
   ).toHaveLength(1);
   expect(
     (await provider.getSuggestions(["/permissions c"], 0, 14, options))?.items,

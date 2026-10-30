@@ -1,6 +1,6 @@
 # Plan 与结构化提问验收 · 2026-10-18
 
-独立分支 `codex/tui-review-rollback`，目录 `/Users/shqingda/.codex/worktrees/tui-review-rollback/hikaro`。未改动移动端工作目录。
+独立分支 `codex/tui-review-rollback`，目录 `/Users/shqingda/.codex/worktrees/tui-review-rollback/hikaro`。
 
 ## 真实用户路径
 

@@ -1,6 +1,6 @@
 # 附着导航与设置验收 · 2026-10-19
 
-独立分支 `codex/tui-review-rollback`，工作区 `/Users/shqingda/.codex/worktrees/tui-review-rollback/hikaro`。未修改移动端工作目录；未合并、推送或改变主目录分支。
+独立分支 `codex/tui-review-rollback`，工作区 `/Users/shqingda/.codex/worktrees/tui-review-rollback/hikaro`。未合并、推送或改变主目录分支。
 
 ## 已交付的用户路径
 
@@ -33,7 +33,6 @@
 node node_modules/vitest/vitest.mjs run tests/attached-navigation.test.ts tests/attached-navigation-pty.test.ts
 node node_modules/vitest/vitest.mjs run tests/session-settings.test.ts tests/session-search.test.ts tests/client-core.test.ts tests/rpc-library.test.ts tests/attached-workflows.test.ts
 node node_modules/vitest/vitest.mjs run tests/model-picker.test.ts -t 'browses models|renders picker|uses supported|moves one row'
-node node_modules/vitest/vitest.mjs run tests/shared-host.test.ts -t 'shares one run and explicitly owned approvals'
 node node_modules/typescript/bin/tsc --noEmit
 node scripts/build.mjs
 ```

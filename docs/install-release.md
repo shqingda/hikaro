@@ -14,11 +14,11 @@ curl -fsSL https://github.com/shqingda/hikaro/releases/latest/download/install.s
 
 ### 发版（维护者）
 
-1. 把 `package.json`、`apps/mobile/package.json`、`apps/mobile/app.json` 的版本号改成新版本；Android 每次发版把 `app.json` 的 `android.versionCode` 加 1。
+1.
 2. 写 `docs/releases/vX.Y.Z.md`，第一行 `# 标题` 作为 Release 标题，其余为发版说明。
-3. 提交并推送 `main`，再推送 `vX.Y.Z` 标签。`.github/workflows/release.yml` 在 macOS arm64 上打 CLI 包并实际安装一遍，在 Linux 上构建并签名 APK，两者都成功后创建 Release 并上传附件。
+3. 提交并推送 `main`，再推送 `vX.Y.Z` 标签。`.github/workflows/release.yml` 在 macOS arm64 上打 CLI 包并实际安装一遍，成功后创建 Release 并上传 CLI 附件。
 
-APK 签名密钥保存在仓库 Actions Secrets（`HIKARO_ANDROID_P12_BASE64`、`HIKARO_ANDROID_P12_PASSWORD`），原件在维护者本机 `~/.local/share/hikaro-signing`，需另行备份；换密钥会导致已安装的 App 无法覆盖更新。本地也可分别用 `pnpm release:cli`、`bash scripts/build-android.sh` 构建，产物在 `artifacts/release/`。
+换密钥会导致已安装的 App 无法覆盖更新。
 
 下文为源码安装与 npm tarball 候选流程。
 
@@ -32,7 +32,7 @@ pnpm build
 pnpm start --demo
 ```
 
-`--filter hikaro` 安装根目录 TUI 所需依赖，避免为 TUI 安装移动应用开发依赖。不要单独拷贝 `dist/hikaro.mjs`：运行还依赖同目录生成的 chunks、worker、原生助手及安装后的外部依赖。不要跨平台或架构复制原生构建产物。
+不要单独拷贝 `dist/hikaro.mjs`：运行还依赖同目录生成的 chunks、worker、原生助手及安装后的外部依赖。不要跨平台或架构复制原生构建产物。
 
 退出后去掉 `--demo` 配置真实模型。共享 host 的启动、附着和数据目录规则见 [共享主机](shared-host.md)。
 
@@ -67,10 +67,9 @@ pnpm check:upgrade 3a7bc2b
 
 2026-10-20 已验证 `3a7bc2b` → 当前候选版本 → 升级前备份 + `3a7bc2b`。这不保证任意旧版、Keychain 迁移、运行中备份、直接用旧程序读取新库或用户最新任务无损回退。仍以停止所有写入者和恢复完整备份为回退前提。
 
-
 ## macOS arm64 候选分发包
 
-维护者运行 `pnpm release:pack`，从当前源码重新构建，生成 `artifacts/release/hikaro-0.1.0-darwin-arm64.tgz`、SHA-256 文件及 manifest。包包含 CLI/chunks/workers、已编译文件操作 helper、生产依赖的 npm-shrinkwrap 锁文件，以及带安全回移补丁的 sandbox-runtime/node-forge 依赖树，不包含移动端、开发依赖或个人数据。依赖仍需联网下载，这不是内含 Node 的单文件离线程序。候选保留 private=true 防止误发布到 registry；只允许当前已验证的 darwin-arm64 构建目标。
+维护者运行 `pnpm release:pack`，从当前源码重新构建，生成 `artifacts/release/hikaro-0.1.0-darwin-arm64.tgz`、SHA-256 文件及 manifest。依赖仍需联网下载，这不是内含 Node 的单文件离线程序。候选保留 private=true 防止误发布到 registry；只允许当前已验证的 darwin-arm64 构建目标。
 
 用户在自己的安装目录安装：
 
@@ -92,4 +91,4 @@ npm install --engine-strict --prefix "$HOME/.local/share/hikaro-app" ./hikaro-0.
 
 node-forge 1.4.0 使用固定的上游 PR #1152 安全回移，版本号不变。源码通过 pnpm patchedDependencies 安装；候选包直接携带相同的 49 个 Node 源文件，安装时不需要再执行补丁。TUI 包不包含未修复的浏览器/Flash 预编译文件。原始 registry audit 仍显示该版本命中的 2 个 high 依赖节点（同一公告）；报告明确区分 `registryPassed: false` 与经过完整文件哈希核验的 `remediations`，没有忽略列表或降低审计级别。换版本或出现新公告必须重新评估。
 
-安装验收还会从安装目录实际解析 forge，验证源码一致性并运行 8 组正常/畸形签名回归。该补丁只覆盖此公告的 Node 实现，不代表移动端、浏览器 bundle 或所有发布门槛通过。见 [安全回移验收](validation/forge-backport.md)。
+安装验收还会从安装目录实际解析 forge，验证源码一致性并运行 8 组正常/畸形签名回归。见 [安全回移验收](validation/forge-backport.md)。

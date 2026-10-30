@@ -26,7 +26,6 @@ export class SharedHostClient {
   readonly scope: string;
   private constructor(
     readonly endpoint: HostEndpoint,
-    readonly mode: "local" | "bridge",
     readonly clientId: string,
   ) {
     this.scope = "local:" + clientId;
@@ -34,12 +33,10 @@ export class SharedHostClient {
   static async connect(options: {
     cwd: string;
     home?: string;
-    mode?: "local" | "bridge";
     clientId?: string;
   }) {
     const client = new SharedHostClient(
       await hostEndpoint(options),
-      options.mode ?? "local",
       options.clientId ?? randomUUID(),
     );
     try {
@@ -98,7 +95,7 @@ export class SharedHostClient {
           if (
             frame.type !== "attached" ||
             frame.hostInstanceId !== descriptor.instanceId ||
-            (this.mode === "local" && frame.scope !== this.scope)
+            frame.scope !== this.scope
           )
             throw Error("Invalid host handshake");
           clearTimeout(timer);
@@ -133,12 +130,9 @@ export class SharedHostClient {
         socket.write(
           JSON.stringify({
             type: "attach",
-            mode: this.mode,
+            mode: "local",
             clientId: this.clientId,
-            token:
-              this.mode === "local"
-                ? descriptor.localToken
-                : descriptor.bridgeToken,
+            token: descriptor.localToken,
           }) + "\n",
         ),
       );
@@ -181,9 +175,7 @@ export class SharedHostClient {
     if (!this.ready || !this.socket || this.stopped)
       throw Error("Host is disconnected; outcome unknown");
     const command = Command.parse(raw);
-    if (this.mode === "local") command.scope = this.scope;
-    else if (!command.scope || !/^[A-Za-z0-9_-]{43}$/.test(command.scope))
-      throw Error("Invalid device scope");
+    command.scope = this.scope;
     const line = JSON.stringify(command) + "\n";
     if (
       Buffer.byteLength(line) > 1_048_576 ||
@@ -203,7 +195,7 @@ export class SharedHostClient {
   ): Promise<any> {
     if (!this.ready) return Promise.reject(Error("Host is disconnected"));
     const id = options.id ?? randomUUID(),
-      scope = this.mode === "local" ? this.scope : options.scope;
+      scope = this.scope;
     const key = scope + "\0" + id;
     const critical = [
       "hello",

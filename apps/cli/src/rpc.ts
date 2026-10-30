@@ -60,8 +60,6 @@ export type SharedRpcOptions = {
   instanceId: string;
   store: import("../../../packages/storage/src/index.ts").SQLiteStore;
   localScope(scope: string): boolean;
-  pairedDevice(scope: string): Promise<boolean>;
-  defaultDeviceControl?: boolean;
   beforeClose?(): Promise<void>;
 };
 export async function serveRpc(
@@ -183,12 +181,7 @@ export async function serveRpc(
     },
     shared?.store,
   );
-  workflows = new RpcWorkflows(
-    runtime,
-    hostInstanceId,
-    !!shared,
-    shared?.defaultDeviceControl,
-  );
+  workflows = new RpcWorkflows(runtime, hostInstanceId, !!shared);
   runtime.startJobs();
   const requireLive = (scope: string, state: ScopeState) => {
     if (shuttingDown || scopes.get(scope) !== state)
@@ -213,7 +206,6 @@ export async function serveRpc(
           scope,
           next.id,
           shared.localScope(scope),
-          shared.defaultDeviceControl,
         )
       : null;
     requireLive(scope, state);
@@ -344,15 +336,8 @@ export async function serveRpc(
     };
     try {
       requireLive(scope, state);
-      if (
-        shared &&
-        !shared.localScope(scope) &&
-        command.method !== "client.detach" &&
-        !(await shared.pairedDevice(scope))
-      ) {
-        await revokeClient(scope);
-        throw Error("Device is not confirmed and paired");
-      }
+      if (shared && !shared.localScope(scope))
+        throw Error("Shared host accepts only authenticated local clients");
       const requireUncancelled = () => {
         requireLive(scope, state);
         if (state.generation !== generation) throw Error("Request cancelled");
@@ -368,7 +353,6 @@ export async function serveRpc(
             runtime.options.cwd,
             session.id,
             scope,
-            shared.defaultDeviceControl,
           );
           const read =
             rpcReadMethods.has(command.method) ||
@@ -382,8 +366,6 @@ export async function serveRpc(
       if (shared) {
         if (
           [
-            "session.access",
-            "session.access.read",
             "model.default",
             "permissions.set",
             "providers.reload",
@@ -619,7 +601,6 @@ export async function serveRpc(
                 runtime.options.cwd,
                 savedId,
                 scope,
-                shared.defaultDeviceControl,
               );
               if (shared.localScope(scope) || role)
                 await bind(scope, state, await runtime.session(savedId));
@@ -674,45 +655,6 @@ export async function serveRpc(
           result = publicSession(await bind(scope, state, session));
           break;
         }
-        case "session.access.read": {
-          if (!shared) throw Error("Shared host required");
-          const session = await selected();
-          result = await runtime.store.sessionAccess(
-            runtime.options.cwd,
-            session.id,
-          );
-          break;
-        }
-        case "session.access": {
-          if (!shared) throw Error("Shared host required");
-          const session = await selected();
-          const device = z
-            .string()
-            .regex(/^[A-Za-z0-9_-]{43}$/)
-            .parse(p.deviceId);
-          const role = z.enum(["view", "control"]).nullable().parse(p.role);
-          if (role && !(await shared.pairedDevice(device)))
-            throw Error("Device is not confirmed and paired");
-          await runtime.store.setSessionAccess(
-            runtime.options.cwd,
-            session.id,
-            device,
-            role,
-          );
-          const target = scopes.get(device);
-          if (target?.session?.id === session.id) {
-            target.role = role ?? undefined;
-            if (!role) {
-              target.unsubscribe?.();
-              target.unsubscribe = undefined;
-              target.session = undefined;
-              target.agent = undefined;
-            }
-            sendScoped({ type: "session.invalidated", scope: device });
-          }
-          result = {};
-          break;
-        }
         case "session.list":
           result = (
             await runtime.store.sessions(
@@ -721,7 +663,6 @@ export async function serveRpc(
               runtime.options.cwd,
               z.string().max(200).optional().parse(p.query),
               shared && !shared.localScope(scope) ? scope : undefined,
-              shared?.defaultDeviceControl,
             )
           ).map(publicSession);
           break;
@@ -1091,7 +1032,6 @@ export async function serveRpc(
               runtime.options.cwd,
               approval.request.authoritySessionId ?? approval.request.sessionId,
               scope,
-              shared.defaultDeviceControl,
             );
             if (
               (!shared.localScope(scope) &&
@@ -1266,7 +1206,5 @@ export async function serveRpc(
   return {
     close: shutdown,
     revokeClient,
-    remoteScopes: () =>
-      [...scopes.keys()].filter((scope) => !shared?.localScope(scope)),
   };
 }

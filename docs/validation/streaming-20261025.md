@@ -34,7 +34,7 @@ regression confirms paused provider text flushes within 12 ms (old code failed;
 new code passed). The benchmark correctness test also passed.
 
 The attached half of the focused comparison was contaminated by an independently
-started iOS simulator: system load average rose from 5.9 to 65.1. Both variants
+Both variants
 showed large tail delays, so those samples cannot establish a regression or budget
 compliance. Measurement stopped; an 8 ms artifact was built but never sampled or
 retained. A final integrated run should wait for normal host load.
@@ -99,7 +99,6 @@ Each run's first marker is no worse than before in any cell: long Markdown
 45–62 → 30–34 ms standalone and ~57 → 27–29 ms attached.
 
 The startup gate (`pnpm bench:check`) was attempted afterwards, but an independently
-started iOS simulator raised load from 17 to 104 during the run (p95 1,003 ms startup,
 17.25 ms input; invalid). The startup driver never submits, so the warm-up path does
 not run there, but **P4 stays open until both gates pass on a quiet host.**
 

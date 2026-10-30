@@ -32,4 +32,4 @@
 
 [来源](evidence-20261024/foreground-release-manifest.json)与[实际空缓存安装验收](evidence-20261024/foreground-release-install.json)：发布审计、原生 helper、安装 TUI 启停及既有恢复流程通过。[首次安装](evidence-20261024/foreground-release-network-failure.json)在 npm 下载阶段报 ECONNRESET，尚未运行应用；同一 SHA 重试通过，没有改依赖或放宽检查。
 
-前台 Shell 取消的专项 PTY 证据来自上面的 `1fbe134` 本地构建；安装包检查验证其后仅文档变更的候选。未改移动端，也未重复真实账号、原生移动或完整无障碍验收；没有公开发布。
+前台 Shell 取消的专项 PTY 证据来自上面的 `1fbe134` 本地构建；安装包检查验证其后仅文档变更的候选。没有公开发布。

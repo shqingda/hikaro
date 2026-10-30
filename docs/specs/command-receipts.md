@@ -23,8 +23,6 @@ Terminal updates require the original host instance and an accepted record. A co
 
 ## Recovery API and portable client
 
-`command.receipt({ commandId })` returns `{ receipt: record | null }` within the current workspace and scope. A null result is absence of evidence, not proof an operation was never attempted; query the same host data store. The remote bridge maps the handset ID into the authenticated namespace for lookup, then restores the handset ID in the reply.
-
 `hello`, snapshots and RPC envelopes carry a random `hostInstanceId` for this RPC process incarnation. It is not a stable machine identity or an authorization credential. To retain strict old-v2 handshake compatibility, `runIdentity: "events-only"` remains the legacy marker; `runSnapshotIdentity: true` and `durableCommandReceipts: true` advertise the additions. New snapshots include `runId/runStatus`. On reopen, the latest indexed run event restores a terminal status; an unmatched start restores unknown with `busy:false`, without claiming another process is still running. The normal lease remains the execution authority.
 
 ClientState validates epoch, scope, host identity when present, and snapshot identity. Old hosts and remote response wrappers without envelope identity retain their previous compatibility limits. Unknown or acknowledged local receipts can be explicitly reconciled, including accepted→completed polling, even while a snapshot is required; no method is automatically resent. At most 60 unresolved mutations leave four bounded slots for handshake/snapshot/receipt reads. Completed/failed records and settled reads may be evicted; unresolved mutations cannot.

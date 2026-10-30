@@ -46,7 +46,6 @@ export class QuestionService {
     private runtime: Runtime,
     private hostInstanceId: string = randomUUID(),
     private enforceAccess = false,
-    private defaultDeviceControl = false,
   ) {}
   async ready() {
     while (this.writes.size) await Promise.all([...this.writes]);
@@ -170,7 +169,6 @@ export class QuestionService {
       ...(this.enforceAccess
         ? {
             workspace: this.runtime.options.cwd,
-            defaultControl: this.defaultDeviceControl,
           }
         : {}),
     });
@@ -208,7 +206,6 @@ export class QuestionService {
           ...(this.enforceAccess
             ? {
                 workspace: this.runtime.options.cwd,
-                defaultControl: this.defaultDeviceControl,
               }
             : {}),
         });
@@ -269,7 +266,6 @@ export class QuestionService {
         ...(this.enforceAccess
           ? {
               workspace: this.runtime.options.cwd,
-              defaultControl: this.defaultDeviceControl,
             }
           : {}),
       }),

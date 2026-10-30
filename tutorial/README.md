@@ -1,7 +1,5 @@
 # Hikaro 课程：从模型调用到可靠的 Coding Agent
 
-Hikaro 是一个用 TypeScript 写的本地 Coding Agent（终端界面 + 手机远程查看）。这门课以它的源码为主线，讲清楚一个 Coding Agent 从“调一次模型”到“能可靠地改代码”需要解决的问题。
-
 **读者：** 会 JavaScript / TypeScript、写过一点 Node.js 的前端或全栈开发者。用过 AI 编码工具，想弄懂原理，并能自己写出其中的小模块。
 
 **前置知识：** 每章开头列出了面试复习教程（与本仓库同级的 `interview` 项目）里对应的小节。没把握的概念先去那里打底；本课程只把用到的部分重讲一遍。
@@ -17,7 +15,7 @@ Hikaro 是一个用 TypeScript 写的本地 Coding Agent（终端界面 + 手机
 | [05](05-文件与终端.md) | 文件与终端 | 路径越界、修改冲突、原子替换、子进程与停止 |
 | [06](06-上下文与持久化.md) | 上下文与持久化 | 裁剪与摘要、SQLite 事务、崩溃后不重放 |
 | [07](07-扩展与多Agent.md) | 扩展与多 Agent | 代码检索、LSP、MCP、Skills、子 Agent、任务图 |
-| [08](08-客户端远程与可靠性.md) | 客户端、远程与可靠性 | JSONL 协议、重放防护、命令回执、测试 |
+| [08](08-客户端远程与可靠性.md) | 客户端与可靠性 | JSONL 协议、命令回执、测试 |
 | — | [综合练习](综合练习.md) | 独立实现一个模块 + 面试复盘 |
 
 建议按顺序读。后面的章节会反复用到前面的三条规则：
@@ -58,6 +56,5 @@ node --test labs/03-runner.mjs
 | 子 Agent、MCP 接入、运行时 | `packages/runtime/src/index.ts`、`packages/tools/src/mcp.ts` |
 | SQLite 存储 | `packages/storage/src/worker.mjs` |
 | RPC 协议 | `packages/protocol/src/index.ts` |
-| 加密通道 / 远程宿主 | `packages/crypto/src/index.ts`、`packages/remote/src/host.ts` |
 
 本课程对照 Hikaro 提交 `625f920`（2026-10-24）。

@@ -24,7 +24,7 @@ TypeScript/Node，复用现有命名与格式。`packages/tools`：安全更新�
 
 命令：`pnpm exec vitest run tests/change-review.test.ts`；`pnpm exec vitest run tests/change-review-pty.test.ts`；`pnpm exec vitest run tests/secure-files.test.ts tests/file-coordination.test.ts`；`pnpm typecheck`；`pnpm build`。
 
-测试按切片定向执行，不运行全量或性能基准。文档不以接口存在作为交付，记录实际场景和限制。实现留在独立 worktree，不修改移动端工作区或自动合并其未提交内容。
+测试按切片定向执行，不运行全量或性能基准。文档不以接口存在作为交付，记录实际场景和限制。
 
 ## 当前限制
 

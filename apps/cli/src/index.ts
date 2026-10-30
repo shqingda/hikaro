@@ -23,10 +23,6 @@ const { values } = parseArgs({
     host: { type: "boolean" },
     attach: { type: "boolean" },
     "client-id": { type: "string" },
-    serve: { type: "boolean" },
-    pair: { type: "boolean" },
-    relay: { type: "string" },
-    revoke: { type: "string" },
     backend: { type: "string" },
     "pi-command": { type: "string" },
     "install-pi": { type: "boolean" },
@@ -51,7 +47,7 @@ const { values } = parseArgs({
 async function main() {
   if (values.help) {
     console.log(
-      `hikaro — independent coding agent\n\nUsage: hikaro [--demo] [--provider anthropic --model MODEL]\n       hikaro update | --version   (hk is the same command)\n  --trust             Allow file edits inside this workspace\n  --prompt, -p TEXT   Run once and print the response\n  --host              Run a persistent shared task host\n  --attach            Attach this TUI to the shared host\n  --serve             Connect the shared host to the encrypted relay\n  --client-id ID      Stable attached TUI identity (default: main)\n  --rpc               JSONL protocol over stdin/stdout\n  --install-pi        Install/update the persistent Pi entry for this home\n  --pi-command PATH   Pi executable for install or --backend pi\n  --models            List provider/model identifiers\n  --session ID        Resume a saved session\n  --continue, -c      Resume last opened session (default in TUI)\n  --new               Start a new interactive session\n  --base-url URL      OpenAI-compatible endpoint\n  --endpoint-key-env NAME  Save this environment key for the exact --base-url\n  --endpoint-capabilities JSON  Declare contextWindow, maxOutputTokens, images, reasoning\n  --cwd PATH          Workspace (defaults to current directory)\n  --home PATH         Data directory (defaults to ~/.hikaro)\n\nAPI keys use provider environment variables. Interactive /permissions controls workspace approval mode.\nUse --demo to try the UI without credentials. In the TUI, /pair connects your phone.`,
+      `hikaro — independent coding agent\n\nUsage: hikaro [--demo] [--provider anthropic --model MODEL]\n       hikaro update | --version   (hk is the same command)\n  --trust             Allow file edits inside this workspace\n  --prompt, -p TEXT   Run once and print the response\n  --host              Run a persistent shared task host\n  --attach            Attach this TUI to the shared host\n  --client-id ID      Stable attached TUI identity (default: main)\n  --rpc               JSONL protocol over stdin/stdout\n  --install-pi        Install/update the persistent Pi entry for this home\n  --pi-command PATH   Pi executable for install or --backend pi\n  --models            List provider/model identifiers\n  --session ID        Resume a saved session\n  --continue, -c      Resume last opened session (default in TUI)\n  --new               Start a new interactive session\n  --base-url URL      OpenAI-compatible endpoint\n  --endpoint-key-env NAME  Save this environment key for the exact --base-url\n  --endpoint-capabilities JSON  Declare contextWindow, maxOutputTokens, images, reasoning\n  --cwd PATH          Workspace (defaults to current directory)\n  --home PATH         Data directory (defaults to ~/.hikaro)\n\nAPI keys use provider environment variables. Interactive /permissions controls workspace approval mode.\nUse --demo to try the UI without credentials.`,
     );
     return;
   }
@@ -115,28 +111,8 @@ async function main() {
       apiKey,
     );
   }
-  if (values.pair) {
-    const { pairDevice } = await import("../../../packages/remote/src/host.ts");
-    const code = await pairDevice({
-      home: options.home,
-      relay: values.relay,
-      bootstrap: process.env.HIKARO_RELAY_BOOTSTRAP,
-    });
-    if (process.stdout.isTTY) {
-      const qr = await import("qrcode-terminal");
-      qr.default.generate(code, { small: true });
-    }
-    console.log(code);
-    return;
-  }
-  if (values.revoke) {
-    const { revokeDevice } =
-      await import("../../../packages/remote/src/host.ts");
-    await revokeDevice(options.home, values.revoke);
-    return;
-  }
   if (
-    (values.attach || values.serve) &&
+    values.attach &&
     (values.demo ||
       values.provider ||
       values.model ||
@@ -147,7 +123,7 @@ async function main() {
       "Configure --demo, provider, model, endpoint and trust on --host; clients attach to its existing configuration",
     );
   if (values.host) {
-    if (values.attach || values.serve || values.rpc || values.prompt)
+    if (values.attach || values.rpc || values.prompt)
       throw Error("--host runs independently of client modes");
     const { serveSharedHost } = await import("./shared-host.ts");
     const host = await serveSharedHost(options);
@@ -155,8 +131,7 @@ async function main() {
     return;
   }
   if (values.attach) {
-    if (values.serve || values.rpc || values.prompt)
-      throw Error("Choose one client mode");
+    if (values.rpc || values.prompt) throw Error("Choose one client mode");
     const { attachTui } = await import("./attached-tui.ts");
     await attachTui({
       ...options,
@@ -164,12 +139,6 @@ async function main() {
       newSession: values.new,
       clientId: values["client-id"],
     });
-    return;
-  }
-  if (values.serve) {
-    const { serveRemote } =
-      await import("../../../packages/remote/src/host.ts");
-    await serveRemote(options);
     return;
   }
   if (values.rpc) {
@@ -255,16 +224,6 @@ async function main() {
     throw Error(
       "Interactive mode requires a terminal. Use --prompt TEXT or --rpc.",
     );
-  const { hasMobileConfig } = await import("./mobile-pairing.ts");
-  if (await hasMobileConfig(options.home)) {
-    const { openMobileTui } = await import("./mobile-tui.ts");
-    await openMobileTui({
-      ...options,
-      session: values.session,
-      newSession: values.new,
-    });
-    return;
-  }
   let view: import("../../../packages/tui/src/index.ts").HikaroView;
   let exiting = false;
   const { loadPermissionMode, permissionOptions } =
@@ -495,7 +454,6 @@ async function main() {
     onPreferences: (patch) => applyPreferences({ ...preferences, ...patch }),
     onDraftChange: (text) => drafts.update(draftSessionId, text),
     commands: [
-      { name: "pair", description: "连接手机 · 显示二维码与配对码" },
       {
         name: "storage",
         description: "Preview session storage and explicitly clean snapshots",
@@ -558,28 +516,6 @@ async function main() {
     onCommand: async (text) => {
       const [command, ...parts] = text.slice(1).split(" ");
       const arg = parts.join(" ");
-      if (command === "pair") {
-        if (!runtime.canCloseForMobile() || sessionTransitions)
-          return "请先结束或停止正在执行的任务和后台操作，再首次启用手机接续。";
-        const { MobilePairing } = await import("./mobile-pairing.ts");
-        const code = await new MobilePairing(options).prepare(view);
-        if (!code || exiting) return;
-        if (!runtime.canCloseForMobile() || sessionTransitions)
-          return "配对配置已保存；请在当前任务结束后再次输入 /pair。";
-        const initialDraft = view.editor.getExpandedText();
-        await shutdown(true);
-        const { openMobileTui } = await import("./mobile-tui.ts");
-        await openMobileTui({
-          ...options,
-          session: session.id,
-          pairingCode: code,
-          initialDraft,
-        }).catch((error) => {
-          console.error(error);
-          process.exitCode = 1;
-        });
-        return;
-      }
       const reviewChanges = async (
         filter: import("../../../packages/runtime/src/change-review.ts").ReviewFilter = {},
       ) => {
@@ -877,7 +813,6 @@ async function main() {
           return "Attachment added. Add your question and press Enter.";
         }
         case "help":
-          view.notice("/pair · 在当前终端配置手机连接并显示二维码/配对码。");
           return '/plan [TASK] · Read-only exploration, questions and plan review\n/plan cancel · Leave without executing\n/plan history · Read saved plan versions\n/plan progress · Read reported step status of the approved plan\n/questions · Answer or dismiss saved questions\n/tasks · Manage queued messages, background terminals and child agents\n/tasks history [RUN_ID] · Read saved runs without pausing the queue\n/search [TEXT] · Search this session and read matching messages\n/changes · Review and roll back recorded file edits\n/new  /sessions  /resume [ID]  /rename TITLE  /export\n/fork  /compact  /model provider/model\n/attach PATH · @file or @"path with spaces" attaches text/images\n/settings  /permissions [ask|auto|full]\n/context [default]  /thinking [default]  /speed [default]\n/status  /resources  /storage\n/steer instructions  /tools  /older  /newer  /latest  /quit\n![--unrestricted] COMMAND follows the current permission mode. Ctrl+C cancels. Ctrl+D exits. Shift+Enter adds a line.\nNew prompts queue while the agent works.';
         case "new":
           await bind(await runtime.session());

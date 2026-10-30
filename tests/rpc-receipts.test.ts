@@ -56,7 +56,7 @@ it("reconciles durable RPC outcomes after restart without replaying or crossing 
           "command.receipt",
           { commandId: "prompt-stable" },
           false,
-          { scope: "phone" },
+          { scope: "secondary" },
         )
       ).receipt,
     ).toBeNull();

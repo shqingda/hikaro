@@ -1,6 +1,5 @@
 import { it, expect } from "vitest";
 import { ProcessClient } from "../packages/protocol/src/client.ts";
-import { dispatchRemote } from "../packages/remote/src/host.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -45,40 +44,3 @@ it("keeps device scopes independent and preserves command idempotency", async ()
     await rm(home, { recursive: true, force: true });
   }
 }, 10000);
-it("does not trust a handset-provided scope", async () => {
-  let seen: any;
-  await dispatchRemote(
-    {
-      async request(...args: any[]) {
-        seen = args;
-        return {};
-      },
-    },
-    "authenticated-device",
-    { id: "request", scope: "spoofed", method: "session.list", params: {} },
-  );
-  expect(seen[3].scope).toBe("authenticated-device");
-  expect(seen[3].id).toHaveLength(64);
-});
-
-it("maps remote receipt queries to the authenticated ID namespace and restores handset IDs", async () => {
-  let seen: any;
-  const rpc = {
-    async request(...args: any[]) {
-      seen = args;
-      return {
-        receipt: { id: "host-internal", scope: "device", status: "unknown" },
-      };
-    },
-  };
-  const result = await dispatchRemote(rpc, "device", {
-    id: "lookup",
-    scope: "spoofed",
-    method: "command.receipt",
-    params: { commandId: "original" },
-  });
-  expect(seen[1].commandId).toHaveLength(64);
-  expect(seen[1].commandId).not.toBe(seen[3].id);
-  expect(seen[3].scope).toBe("device");
-  expect(result.receipt.id).toBe("original");
-});

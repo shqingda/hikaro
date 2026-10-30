@@ -4,7 +4,7 @@
 
 后台终端在启动、退出以及停止结果确定时写入新表 `terminal_records`：命令、状态、退出码，以及最后 64,000 字符预览输出（存储模块 `terminal-records.mjs` 已加入构建复制清单）。写入失败不影响终端本身。打开 `/tasks` 的 Background terminals 时，先加载该会话保存的记录，再与实时终端合并，实时记录优先。
 
-host 重启后：已观察到退出的终端显示 `exited · exit N` 和保存的输出；没有退出记录的显示为 `unknown after host restart`，详情注明“Saved by an earlier host. This process was not stopped or verified after restart.”。这些记录都不提供发送或停止操作，也不会被重启或续跑。删除会话时一并清理。普通/附着 TUI 与移动端共用 `executionItems`，host 的 `execution.read` 同样先加载。
+host 重启后：已观察到退出的终端显示 `exited · exit N` 和保存的输出；没有退出记录的显示为 `unknown after host restart`，详情注明“Saved by an earlier host. This process was not stopped or verified after restart.”。这些记录都不提供发送或停止操作，也不会被重启或续跑。删除会话时一并清理。
 
 ## 验证证据
 
@@ -14,4 +14,4 @@ host 重启后：已观察到退出的终端显示 `exited · exit N` 和保存�
 
 ## 未覆盖
 
-本文对应早期实现；后续 macOS 已观察后代实际探测、历史摘要迁移及重启隔离见 [后代观察](terminal-process-observation.md)。跨 host 的真实 TUI 重启流程及该新状态的移动原生显示未单独验收。输出只保留尾部预览，不是完整日志。
+本文对应早期实现；后续 macOS 已观察后代实际探测、历史摘要迁移及重启隔离见 [后代观察](terminal-process-observation.md)。输出只保留尾部预览，不是完整日志。

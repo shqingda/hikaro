@@ -18,8 +18,6 @@
 
 原始报告：[首轮普通](performance-20261024/head-19ae154-standalone.json)、[首轮附着](performance-20261024/head-19ae154-attached.json)、[附着复测](performance-20261024/head-19ae154-attached-repeat.json)、[最终普通](performance-20261024/head-19ae154-standalone-final.json)、[最终附着](performance-20261024/head-19ae154-attached-final.json)。
 
-这是共享开发机测量。原用户应用、模拟器与开发服务保留，另有每 20 秒一轮的隔离 soak；最终启动复核时本轮全量测试和短 soak 已结束。负载与空闲内存随环境变化，样本跨度大，不能断言全部超限由产品代码或全部由主机噪声导致。后续应在可重复的负载条件下定位，当前不再循环采样直到变绿。
-
 ## 诊断与撤回的试验
 
 - [CPU 采样](performance-20261024/attached-startup.cpuprofile)显示 TUI/Markdown 模块初始化是活跃 CPU 消耗之一；[临时阶段插桩](performance-20261024/startup-stage-diagnostic.json)也显示界面加载后还有连接同步及会话创建。插桩和 CPU 采样改变运行条件，只作定位，不替代门槛。
@@ -39,7 +37,7 @@
 | 核心流式   |     8.148 |           50 |
 | 事件循环   |    10.559 |           20 |
 
-该 fixture 的 RSS 诊断峰值 89.058 MiB，未超过其固定回归预算 160 MiB；不能推广为产品总内存预算。此项不测真实 provider、网络到屏幕延迟或移动端。[原始报告](performance-20261024/head-19ae154-harness.json)。
+该 fixture 的 RSS 诊断峰值 89.058 MiB，未超过其固定回归预算 160 MiB；不能推广为产品总内存预算。[原始报告](performance-20261024/head-19ae154-harness.json)。
 
 ## 指纹修复与验证
 

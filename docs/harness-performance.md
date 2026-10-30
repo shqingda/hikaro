@@ -12,19 +12,16 @@
 | 优化后附着     | 203.82 ms | 1.165 ms | 58.67 MiB   | 66.25 MiB    | 124.78 MiB   | 未通过   |
 | 优化后独立 TUI | 230.86 ms | 5.394 ms | 70.78 MiB   | 同进程       | 70.78 MiB    | 未通过   |
 
-接受的改动：协议叶模块、命令 envelope 和 TUI 偏好使用可裁剪的 `zod/mini`，保留原字段限制、可选／空值、默认值及未知字段处理；Runtime/工具 schema 继续用原实现。分析定位了附着客户端提前加载的完整 schema 构造器／JSON-schema 设施；去除不使用的设施后，合计 RSS p95 减少 **1.61 MiB（约 1.27%）**，前后样本区间分离。API 形态参考 [Zod Mini 官方文档](https://zod.dev/packages/mini)。不据此宣称手机 footprint 或启动延迟有同等收益；双进程合计仍超过原单进程 100 MiB。
+接受的改动：协议叶模块、命令 envelope 和 TUI 偏好使用可裁剪的 `zod/mini`，保留原字段限制、可选／空值、默认值及未知字段处理；Runtime/工具 schema 继续用原实现。分析定位了附着客户端提前加载的完整 schema 构造器／JSON-schema 设施；去除不使用的设施后，合计 RSS p95 减少 **1.61 MiB（约 1.27%）**，前后样本区间分离。API 形态参考 [Zod Mini 官方文档](https://zod.dev/packages/mini)。双进程合计仍超过原单进程 100 MiB。
 
-最终图 SHA-256 `62d6331c990f4397580aebd9fc90f401eaef6d4e2e95066f5baba6d09c0d6994`；原始报告 `artifacts/benchmark-m0-memory-ab-after.json`、`artifacts/benchmark-m0-standalone-ab-final.json`。对照报告 `artifacts/benchmark-m0-memory-ab-before.json`，图 `06e447ce3f44850bf1266ddccc8ef70841053a5abec031b98882177f6651bb76`。报告开始时基线 `90b5a0b` + M0 dirty 工作区，最终 CLI 源码随后提交为 `e543e26`；后续 relay 缓存修复与文档不改变该 CLI 图。完整分发图包含当前远程 adapter，但测量不启用网络桥接。
 
-**不能标记启动验收完成。** 同环境的优化前版本也超出 200 ms；运行期间系统负载与空闲内存变化，无法将时延差额全部归因于代码。后续需在稳定环境核验并继续优化，保持原门槛。较早独立 199.23 ms（`benchmark-m0-standalone-final.json`）和附着 199.76 ms（`benchmark-m0-memory-mini-final.json`）的通过观察不替代最后结果，也不以它们挑选“通过”的结论。
 
 尝试记录：
 
-- 初始 H1 基线 `benchmark-m0-memory-baseline.json`：190.97 ms / 126.20 MiB。未配置远程时延迟加载加密模块的尝试仅约 0.5 MiB，收益不足，已撤回。其报告 `benchmark-m0-memory-lazy-remote.json` 与原生预览同时运行，启动 262.43 ms 未通过，不用于隔离收益比较；之前与原生构建重叠的一次采样已中止，未生成接受报告。
 - 初始化重复恢复抑制：真实私有 IPC 观察到首次 `messages.read` 从两次降到一次，但启动中位数只从 191.87 到 191.62 ms，处于波动内；211.17 ms 的启动门槛仍失败，已撤回。报告 `benchmark-m0-attach-init-final.json`；此前 `benchmark-m0-attach-final.json` 的 234.66 ms 失败也保留。
 - 可裁剪协议校验的内存改进在首次与新对照中都可见，保留；没有为追求数字引入缓存、降低持久化或扩大预算。
 
-10k core/storage 的执行代码与采样器均未改变；本轮协议类型在 storage 中是擦除的 type-only import，沿用下方 H1 `0881c95` 的 10,000 事件 + 10,000 chunks、原断言和预算证据，不重复已通过且不受影响的基准。必要协议、权限、真实 host 和移动生命周期测试另见 [validation](validation.md)。原生移动发布性能与长期稳定性仍未验收。
+10k core/storage 的执行代码与采样器均未改变；本轮协议类型在 storage 中是擦除的 type-only import，沿用下方 H1 `0881c95` 的 10,000 事件 + 10,000 chunks、原断言和预算证据，不重复已通过且不受影响的基准。
 
 ## H1 共享 host：2026-10-18 最终复核
 
@@ -41,21 +38,9 @@
 
 最终原始报告：`artifacts/benchmark-shared-host-standalone-delegated-final.json`、`artifacts/benchmark-shared-host-attach-delegated-final.json`。目录按现有规则不入 Git，以上源码版本及命令可用于复现。此前 `0881c95`（`*-final.json`，图 `943409a7…`）和 `c9bc286`（`*-selection-fix.json`，图 `d058beb6…`）的通过报告全部保留；后续控制竞争与委派审批修正改变了分发图，因此最终构建重新测量，不按数值择优。
 
-共享合计 RSS 指 host + TUI，不含可选 `--serve` 桥接、外部工具和其他服务。不能把这项双进程观察外推为完整远程运行的全部内存。
+不能把这项双进程观察外推为完整远程运行的全部内存。
 
 10k core/storage 在源码 `0881c95` 顺序测量，后续两次修正没有改变该基准依赖的 core 执行代码或 storage 实现，因此没有重复运行通过的基准。保持 **10,000 事件 + 10,000 stream chunks**、1 次预热／3 次测量、原正确性断言：append p95 **606.08 ms** ≤1500；replay **19.65 ms** ≤100；message page **0.121 ms** ≤5；context history **2.258 ms** ≤25；stream **4.511 ms** ≤50；event loop **10.052 ms** ≤20；最高 RSS **99.34 MiB** ≤160。全部通过，原始报告 `artifacts/benchmark-shared-host-harness-final.json`。SQLite WAL／FULL 与 native 文件防护未降低。
-
-这些证据不含生产 relay／外部模型、移动真机、耗电或 30 分钟 soak；原生移动性能仍需按路线单独验收。
-
-## TUI / 移动方向调整后的复核
-
-指标只属于现有 TUI 和 core/storage。2026-10-18 本机 Node 26.12.0、macOS arm64 / M3 Pro，最终构建图 SHA-256 `ce18b7f2c605f17c73fe9f7c50c35837680a5e702ce26654ffa603a9cc1257d0`；报告开始采集时基线为 `94fac7b` + dirty shared-client 改动，该源码随后提交为 `e622d85`。
-
-- 最终 TUI 冷 V8 缓存、每次新 data home、当前工作区及用户 Skills 保持开启；30 次测量、3 次预热。启动 p95 **174.02 ms**，输入 p95 **1.765 ms**，就绪 RSS p95 **70.86 MiB**；原 200 ms / 16 ms / 100 MiB 门槛均通过。首个独立启动 180.58 ms。报告：`artifacts/benchmark-tui-mobile-final.json`。
-- 10k core/storage：append p95 **641.24 ms**、replay **20.63 ms**、message page **0.128 ms**、context **2.475 ms**、stream **5.091 ms**、event loop **10.641 ms**、最高 RSS **98.54 MiB**。原断言与预算全部保留并通过；3 次测量、1 次预热。报告：`artifacts/benchmark-harness-tui-mobile-direction.json`。
-- 保留先前观察：`artifacts/benchmark-tui-mobile-direction.json` 启动 p95 178.12 ms、输入 1.320 ms、RSS 70.80 MiB；它与 harness 驱动有短暂并发，不能用于隔离变量的优化收益比较。之后仅因分发 worker 格式化改变文件字节，重新构建并单独运行最终启动门槛；没有筛掉样本或改低预算。仍未覆盖真机移动端、真实网络、真实 provider 或 30 分钟 soak。
-
-方向及下一阶段门槛见 [TUI 与移动端路线](tui-mobile-direction.md)，协议验证见 [validation](validation.md)。
 
 ## 当前可运行的验证
 
@@ -152,7 +137,7 @@ pnpm bench:harness:check    # 固定工作负载与最小采样数，不允许�
 
 本轮续做已完成事务性自动压缩、文件/图片输入和客户端 C0 首切片，验证记录见 [本轮验收](validation.md#automatic-compaction-attachments-and-client-c0-2026-10-18)。尚待完成：provider tokenizer／图像精确预算、跨重启预算与待发队列恢复；大历史真实渲染、生成中滚动、100／1,000 chunk 不同突发模式、30 分钟有负载稳定性；真实 provider 限流、断网和恢复。恢复草稿不代表自动重放未确定是否执行的命令。
 
-下一阶段：将 TUI 与手机附着到同一 host，补齐安全连接、审批归属和客户端恢复。手机的内存、首屏和触控门槛见 [TUI／移动端路线](tui-mobile-direction.md)。主机相关预算在固定设备复测稳定后再接入 CI 性能 job，当前 PR CI 仍负责正确性回归。
+主机相关预算在固定设备复测稳定后再接入 CI 性能 job，当前 PR CI 仍负责正确性回归。
 
 ## C0 durable receipts and secure skill batching — 2026-10-18
 

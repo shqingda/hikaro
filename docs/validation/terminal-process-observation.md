@@ -4,7 +4,7 @@
 
 macOS 后台 PTY 现在按父子关系观察后代，并用 PID + 启动时间持续核实身份。原始进程组停止或主进程自然退出后，已观察后代仍存活时显示 `descendants_running`；探针暂时失败显示 `descendants_unknown`，恢复后重新显示实际观察结果。二者仅供查看，既不提供控制按钮，也不向脱离进程组的 PID 发信号。原始进程组确认消失后不会再次向同一数字 PGID 发信号。
 
-只保存最多 4,096 字符的观察摘要；旧数据库自动加列。重启后显示历史摘要及未知状态，不恢复 PID 控制。普通/附着 TUI 与移动只读详情共用已有入口。完整约束见 [终态规范](../specs/terminal-stop-outcomes.md)。
+只保存最多 4,096 字符的观察摘要；旧数据库自动加列。重启后显示历史摘要及未知状态，不恢复 PID 控制。完整约束见 [终态规范](../specs/terminal-stop-outcomes.md)。
 
 采样最多 256 个节点、16 层，单次超时 1 秒、输出 128 KiB；已知后代未确认消失时仍计入 8 个终端限额。每秒刷新只在观察摘要变化时通知存储。可能漏掉采样间创建并脱离的进程；非 macOS 探针明确不可用。前台 Shell 后续已完成[有界收尾与观察](foreground-process-boundary.md)；跨平台探针和长期占用测量仍待完成。
 
@@ -29,4 +29,4 @@ macOS 后台 PTY 现在按父子关系观察后代，并用 PID + 启动时间�
 
 [包来源](evidence-20261024/process-release-manifest.json)与[空缓存实际安装验收](evidence-20261024/process-release-install.json)：打包审计、原生文件读取、安装后的进程 helper 对直属 PTY 身份读取、TUI 启停及原有恢复场景全部通过。未公开发布。
 
-上轮真实账号、iOS 及辅助功能基本验收仍是上轮包的历史证据，本轮未重复这些流程。上轮包已保存在本机 `artifacts/release/hikaro-0.2.1-darwin-arm64-7fbe09a.tgz`，SHA 不变。
+上轮包已保存在本机 `artifacts/release/hikaro-0.2.1-darwin-arm64-7fbe09a.tgz`，SHA 不变。

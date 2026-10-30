@@ -35,7 +35,6 @@ export async function hostEndpoint(options: { cwd: string; home?: string }) {
 export type HostEndpoint = Awaited<ReturnType<typeof hostEndpoint>>;
 export type HostDescriptor = {
   localToken: string;
-  bridgeToken: string;
   instanceId: string;
   key: string;
 };
@@ -59,7 +58,6 @@ export async function readDescriptor(
     if (
       value.key !== endpoint.key ||
       !/^[A-Za-z0-9_-]{43}$/.test(value.localToken) ||
-      !/^[A-Za-z0-9_-]{43}$/.test(value.bridgeToken) ||
       typeof value.instanceId !== "string"
     )
       throw Error("Invalid shared host credentials");

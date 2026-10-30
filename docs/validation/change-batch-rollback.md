@@ -20,8 +20,6 @@
 - `tests/change-batch-rollback-pty.test.ts` 真实 PTY：同一轮的两次模型修改在列表中显示 run 标记，详情页同时提供两种批量入口，“回退到此处”仍按原结果完成。
 - `pnpm check` 退出码 0：117 个应用测试文件、618 项测试，15 项脚本检查，类型检查与构建通过。日志 `/tmp/hikaro-check-20261024-run-rollback.log`。
 
-移动端的文件修改列表同样解析可选的 `runId`，在每条修改后显示“运行 xxxxxxxx”（只读，手机端不提供回退）。`tests/mobile-inspection-host.test.ts` 经真实 shared host 的“仅查看”设备读取到 `runId`；`tests/mobile*` 全部通过，移动类型检查与 iOS/Android Hermes 导出通过（日志 `/tmp/hikaro-mobile-export-20261024-run-label.log`）。原生界面未截图验证。
-
 ## 未覆盖
 
 附着 TUI 的真实 PTY 批量流程（共享代码，但未单独跑）、“回退这一轮”的真实 PTY 点击、Shell/插件/子 agent 修改、跨文件原子性。同一进程内的修改时间戳现在严格递增，同一毫秒的修改也保持创建顺序（`tests/change-batch-rollback.test.ts` 固定 `Date.now()` 验证）；多个进程同时写同一会话的日志仍可能同时间戳。

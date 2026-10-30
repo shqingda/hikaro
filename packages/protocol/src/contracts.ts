@@ -44,8 +44,6 @@ export const rpcMethods = [
   "session.create",
   "session.list",
   "session.current",
-  "session.access",
-  "session.access.read",
   "session.resume",
   "session.fork",
   "session.compact",
@@ -70,7 +68,6 @@ export const rpcMethods = [
   "run.cancel",
   "approval.respond",
   "client.detach",
-  "push.register",
 ] as const;
 export type RpcMethod = (typeof rpcMethods)[number];
 export const rpcReadMethods: ReadonlySet<string> = new Set([
@@ -96,7 +93,6 @@ export const rpcReadMethods: ReadonlySet<string> = new Set([
   "hello",
   "command.receipt",
   "workspace.current",
-  "session.access.read",
   "session.current",
   "session.list",
   "session.export",
@@ -116,7 +112,6 @@ export type MessageSearchPage = {
 /** Draft CAS and device push settings have no action intent and are never automatically replayed. */
 export const rpcTransientMethods: ReadonlySet<string> = new Set([
   ...rpcReadMethods,
-  "push.register",
   "questions.draft.save",
 ]);
 /** Partial UI state only; restoring a draft never submits any answers. */
@@ -145,12 +140,7 @@ export function rpcCapabilities(sharedHost = false) {
   return {
     protocolVersion,
     supportedProtocolVersions: [protocolVersion],
-    methods: rpcMethods.filter(
-      (method) =>
-        method !== "push.register" &&
-        (sharedHost ||
-          !["session.access", "session.access.read"].includes(method)),
-    ),
+    methods: [...rpcMethods],
     snapshotMethod: "session.current" as const,
     eventSequence: "global-monotonic-filtered-by-session" as const,
     scopeRevision: true as const,

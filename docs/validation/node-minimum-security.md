@@ -10,7 +10,7 @@
 
 ## 生产依赖安全未通过
 
-原生 `pnpm audit --prod --json` 扫描工作区锁文件：2 high、1 moderate；uuid 与 braces 路径来自移动端，node-forge 同时进入根 TUI 和移动端。[工作区摘要](workspace-production-audit.json)。
+原生 `pnpm audit --prod --json` 扫描工作区锁文件：2 high、1 moderate；工作区摘要。
 
 对实际 tarball 中 package.json 与 npm-shrinkwrap.json 执行 npm audit --omit=dev，报告 2 high：node-forge 及其依赖上游 sandbox-runtime。两条均归因于同一个 [GHSA-86w9-cpqp-85rv](https://github.com/advisories/GHSA-86w9-cpqp-85rv)，不是两项独立漏洞。[完整产物审计](production-audit.json)。公告影响 <=1.4.0，当前 npm 最新 node-forge 为 1.4.0，无已发布修复；最新 sandbox-runtime 0.0.81 仍依赖 ^1.4.0，因此没有无效升级或降级。
 
@@ -22,4 +22,4 @@
 
 release:pack 在生产锁生成后、npm pack 前执行同一审计。定向单测通过；真实门禁运行按预期退出 1 并明确阻断高危依赖，未覆盖旧候选包（SHA 已复核不变）。发布门禁测试通过与产品依赖安全通过是两回事。本轮提交的是最低版本证据与阻断逻辑，不是安全修复或发布批准。
 
-本轮构建通过，变更脚本语法和 diff 检查通过；未修改产品 TypeScript，未跑全量测试。TUI 92%、移动端 35%，均未到 95%；安全项仍为 release 阻塞。
+本轮构建通过，变更脚本语法和 diff 检查通过；未修改产品 TypeScript，未跑全量测试。安全项仍为 release 阻塞。

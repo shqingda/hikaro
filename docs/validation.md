@@ -1,63 +1,8 @@
 # Validation status
 
-## M0 native read-only companion: 2026-10-18
+## Local shared task host and recoverable views
 
-M0 now implements reviewed QR/manual pairing, pinned encrypted connection, SecureStore credentials, bounded SQLite WAL/FULL intent metadata, granted-task pagination and read-only history/active-output restoration. The mobile controller has no prompt, approval or cancellation transport escape hatch. Session selection is durably journaled and never automatically replayed. Background releases the connection and hides content; revoked/invalid identities lock the view and erase credentials and intent metadata. Credential commits, journal writes and deletion are serialized, with lifecycle epochs fencing stale results, including a reproduced late-selection-error/revocation race.
-
-Necessary evidence:
-
-- Four controller tests cover review before enrollment, secret-free public state, read-only methods, bounded history, background/secure-load races, expired QR versus persisted identity, terminal revocation and stale selection errors. The real shared Runtime/SQLite plus encrypted adapter case verifies grants, lost selection acknowledgment, no replay, recreated client, host restart and revoked view clearing.
-- The existing Cloudflare Miniflare relay test now exercises authenticated device-status, wrong token, pending confirmation, online host and actual revoke returning 401. Authenticated status responses explicitly use `Cache-Control: no-store`, guarded by a reproduced red/green regression, so cached status cannot mask revocation. Existing client/protocol/TUI/shared-host tests pass: the focused 8-file run contains 49 tests; the subsequent shared-host/handshake run contains 9. Three tooling tests prevent cross-project Metro or unrelated-preview takeover and verify safe reuse. No full suite or duplicate UI snapshot tests were added.
-- Expo 58 / React Native 0.88 iOS development build compiled and installed successfully. Through serve-sim 0.1.48 in the Codex browser, a disposable iOS 27.0 simulator imported a temporary pairing via its native secure field, reviewed identity, saved credentials, established real loopback TLS/WebSocket encryption through the actual relay and host bridge, and displayed the granted synthetic task and history. Background return and terminating/reopening the app restored the saved host and selected task. After the fixture invalidated that enrollment, foreground status probing produced the locked/cleared view. This last check is invalid enrollment after fixture reset, not a claim of production device-revoke delivery.
-- Native SQLite inspection confirmed WAL, one installation marker and a bounded intent row with no token/private key/pairing URI. Temporary credentials, CA and the disposable simulator were removed. The user's normal simulator was preserved. [Native evidence](design/mobile-m0/README.md).
-- Repository, mobile, relay and no-Node/no-DOM client-core typechecks; iOS/Android production Hermes JS export; dependency compatibility and peer checks pass. Expo Go was tried first but lacked native modules in this environment; the successful native evidence uses a local development build. The preview's direct touch and key input were verified; browser bulk paste did not forward, so native secure-field input used individual ASCII key events.
-
-- Native icon follow-up: configured the opaque 1024×1024 horizon/sun asset, verified generated iOS AppIcon pixels match it, rebuilt and updated the existing iPhone 18 Pro installation without uninstalling or erasing data. serve-sim showed the [system home-screen icon](design/mobile-m0/app-icon.png), and tapping that independent Hikaro icon opened the development client. The three existing simulator orchestration tests pass; mobile start now explicitly selects `--dev-client`, matching Kaku's development-build workflow. No task/protocol/performance thresholds changed in this follow-up.
-
-- Historical local lab follow-up (launcher now removed): `pnpm mobile:lab` created a dedicated simulator, trusts its local CA only there, builds the native client without opening DeviceHub, and runs the actual relay/shared host/bridge with persistent synthetic identities and data. Seven necessary tests across three files pass, covering confirmation before grants, view-only enforcement, offline updates, durable relay/host restart, private/no-symlink files, a single owner and cross-project preview protection. Two reproduced failures caught an obsolete Miniflare persistence option and an early confirmation status response; both were fixed. Repository typecheck and formatting checks pass. Native serve-sim verification completed clipboard pairing, explicit confirmation, empty-before-grant list, granted history, offline marking, missed-output recovery, full lab quit/relaunch and terminating/reopening the native App with the same task/identity. See [the current simulator guide](mobile-lab.md) and [offline](design/mobile-m0/lab-offline.png) / [restored](design/mobile-m0/lab-restored.png) screenshots. No public relay was deployed and no performance or harness budget changed.
-
-Simulator workflow correction: removed only the extra Hikaro Mobile Lab device and generated artifacts, preserving the original iPhone 18 Pro (498E27B7-5192-48CE-9B13-F4A27F10F806) and iOS 27.0 runtime. Removed the dedicated-device launcher and its obsolete preview-switch test; retained relay/authorization/recovery integration tests. `pnpm dev:sim` reuses the original device and opens localhost:3200 automatically, without launching DeviceHub, creating devices or installing CAs. Seven necessary tests cover the relay plus browser opening, no device mutation, missing-device refusal and cross-project protection. Repository typecheck passes. After explicitly quitting the previously open DeviceHub, the command was run again: DeviceHub stayed absent from the process list, the original device remained booted, and [the browser preview showed Hikaro on iPhone 18 Pro](design/mobile-m0/original-simulator.png).
-
-Real-device camera QR decoding, Android native runtime, physical network/lock-screen lifecycle, release performance and 30-minute stability remain open. The injected simulator camera displayed a QR feed but did not establish successful barcode decoding; it is not counted as scanner acceptance. No production relay deployment, external model request, signing or store release occurred. M0 requires the updated relay device-status endpoint; see [mobile setup](mobile.md).
-
-The latest original 200 ms startup gate is **not passed**: final same-graph standalone 230.86 ms / attached 203.82 ms. Input and RSS gates pass; shared host + TUI RSS p95 falls from 126.39 to 124.78 MiB in the fresh comparison. All runs, including earlier passing and failing results, are retained. See [performance evidence](harness-performance.md); M0 functional verification does not close performance acceptance.
-
-Dependency audit reports three upstream development-tool advisories: uuid through Expo's Xcode tooling ([GHSA-w5hq-g745-h8pq](https://github.com/advisories/GHSA-w5hq-g745-h8pq)), node-forge through Expo CLI ([GHSA-86w9-cpqp-85rv](https://github.com/advisories/GHSA-86w9-cpqp-85rv)), and braces through Metro's file matcher ([GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)). They are not imported into the mobile credential/transport runtime. The audit supplies no patched release for the latter two; uuid's available major update requires upstream compatibility work. No advisories were ignored or force-overridden. This remains a development prototype, with release acceptance open.
-
-## H1 shared task host and recoverable views: 2026-10-18
-
-Implemented `--host`, `--attach` and a `--serve` bridge to that same Runtime. Canonical workspace/home ownership is elected transactionally; private Unix socket credentials enforce local/device scope injection. Per-session view/control grants and selection are durable. Only authorized control participants viewing the session receive its approvals; the host rechecks the request at decision time. Revocation removes a device's own queued/active work without canceling another owner's run. Replaced view identities stop reconnecting rather than fighting for the socket. See [startup, grants and recovery](shared-host.md).
-
-The attached TUI commits ID/method intent metadata before sending, keeps drafts per view, and restores snapshots/receipts without replay. An injected portable `IntentStore` supports the same contract on future native clients; actual native storage/UI remains M0.
-
-Necessary verification, without a full suite:
-
-- One real two-connection SQLite case covers single-host election, wrong-owner release, workspace/scope access, filtered listing and persisted selection/revocation. Its first-open failure exposed SQLite journal-mode BUSY outside the busy handler; only that initialization has a bounded retry, with WAL/FULL retained.
-- `tests/shared-host.test.ts`: **4 real integration cases**. Unix socket + Runtime + SQLite + encrypted adapter cover denied foreign access, view/control grants, shared run ID, approval races, revoked membership, dropped replies and offline device revocation. A device's queued prompt cannot cancel the local owner's pending run. A recreated view recovers durable intent, and a separately spawned host is SIGKILLed/restarted: its original selection/run ID return as unknown; persisted run.start count proves no replay. Invalid credentials and insecure metadata fail closed. Reusing a view identity fences the older channel. The delegated-task case retains the real child session ID while validating decisions against live root-task authority; arbitrary fork lineage does not receive that delegation mapping.
-- The real PTY case exits with an approval open, reattaches to the same request, receives another view's decision, then restores an unsent multilingual draft after SIGKILL. Its initial timeout exposed Ctrl+D being swallowed by the approval panel; attached views now explicitly detach before panel input handling, with no denial sent to the host.
-- The portable connection case holds an intent commit across a new connection epoch and proves the old mutation is never sent. The affected core/client/RPC/lease/library selection passed **9 files / 61 tests**; subsequent adapter/scope checks passed **5 files / 13 tests**, and the later host/TUI/bridge change passed **2 files / 6 tests**. Final control/Runtime review added a deterministic stalled-receipt/resume race: it first reproduced cancellation of a view-only replacement session, then passed after post-acceptance selection/control fencing. The final host/control/handshake run passed **3 files / 28 tests**, including the real delegated tool approval. Repository and portable typechecks passed after these changes. Counts overlap; they are not a full-suite total.
-- Repository typecheck, no-Node/no-DOM portable typecheck, production build and diff check passed. No deployment, physical mobile device or external provider was used; relay sockets/provider output in the new shared-run case are deterministic fixtures.
-
-Sequential final startup measurements at `30c4697`: original independent TUI **164.67 ms startup p95 / 1.268 ms input / 70.80 MiB RSS**, attached TUI **175.03 ms / 1.080 ms / 59.88 MiB**; 30 measured launches and 3 warmups each. Original thresholds and unchanged 10k core/storage assertions pass (the 10k run is at `0881c95`, with unchanged core/storage execution paths afterward). Shared host RSS is separately **66.25 MiB** and host + TUI combined RSS p95 **126.00 MiB** (excluding relay bridge / external tools), exceeding the old single-process footprint; the new view's RSS pass is not a combined-memory pass. Exact graph fingerprint, raw reports and limits are in [the performance ledger](harness-performance.md).
-
-Native mobile UI, secure storage integration, real network/background/kill/revocation behavior, cold host startup budget, combined-memory optimization and the full independent TUI command surface remain subsequent work. H1 does not change the existing lifetime-only cost budgets or make already executed file effects reversible.
-
-## TUI/mobile direction and shared client APIs: 2026-10-18
-
-The confirmed product direction is TUI plus a mobile companion for viewing, approval, steering and cancellation. Product scope and dependencies are recorded in the [TUI/mobile plan](tui-mobile-direction.md). Only standalone phone layout references are retained. No native mobile app or service deployment is claimed.
-
-Shared work retained: ordered remote raw frames and a portable connection controller; session metadata/search, model and draft APIs; bounded message/image/tool-call content, paged Markdown export and restricted native-helper artifact reads. An invalidation arriving after a snapshot's watermark is buffered and forces a new snapshot rather than reopening actions against stale metadata. Model endpoints remain host-configured and are omitted from session projections.
-
-Verification on macOS arm64 / Node 26.12.0 / pnpm 12.11.2:
-
-- Client-state/connection, local+encrypted-remote fixture, library, RPC controls/handshake/scopes/receipts and remote-host controls: **9 files, 50 tests passed**. The fixture uses the real spawned CLI and SQLite, with an in-process encrypted socket instead of a production relay. It covers duplicate/gap notifications, a lost prompt response, reconnect without replay, durable receipt reconciliation and 65 additional settled draft writes without exhausting unresolved-intent capacity.
-- The later compatibility/isolation adjustment passed **2 files, 3 tests**, overlapping the above selection: older hosts without receipt queries still return successful mutations, and a broken state listener does not break the protocol. Typecheck and the no-Node/no-DOM portable import check passed after that adjustment.
-- Large multilingual history, base64 image ranges, complete paged text export, provider-payload exclusion, artifact change detection and symlink denial have focused coverage. An initial artifact read failed on macOS's symlinked temporary-directory ancestor; the fix canonicalizes only the trusted home and retains the helper's no-symlink walk below it.
-- `pnpm build`, install/lockfile cleanup and `git diff --check` passed. No full suite or new mobile platform tests were added.
-
-Final TUI startup gate: **30 measured launches + 3 warmups**, fresh V8 cache and data home per launch; startup p95 **174.02 ms**, input p95 **1.765 ms**, ready RSS p95 **70.86 MiB**. All original thresholds pass. Raw report: `artifacts/benchmark-tui-mobile-final.json`, graph SHA-256 `ce18b7f2c605f17c73fe9f7c50c35837680a5e702ce26654ffa603a9cc1257d0`. The 10k storage/core gate also passes unchanged (`artifacts/benchmark-harness-tui-mobile-direction.json`). The earlier 178.12 ms startup observation (`artifacts/benchmark-tui-mobile-direction.json`) overlapped briefly with the harness driver and is retained. The final startup run followed formatting of the distributed worker and a rebuild, and ran separately; it is not a selected subset of the first report. No 30-minute soak, native mobile/network acceptance or summary-quality claim follows from these measurements.
-
-The attachment/IPC/approval/local-intent gaps recorded at this stage were subsequently implemented in H1 above. Native device storage, UI and lifecycle verification remain pending.
+The shared host uses authenticated Unix sockets. Local TUI recovery, durable intents, host restart, pending approvals and client identity replacement are covered by `tests/shared-host.test.ts`.
 
 ## Context, session recovery and performance: 2026-10-18
 
@@ -71,11 +16,10 @@ Verification on macOS arm64, Node 26.12.0 / pnpm 12.11.2:
 - `tests/session-search.test.ts`: **4 passed**, including a target beyond page one, paging filtered results, literal wildcard characters, workspace isolation, Unicode case folding and superseded queries. The initial implementation failed the new behavior tests as expected; one existing pagination shortcut test was updated to navigate to the page action with arrow keys because typing now searches session data.
 - Final draft-recovery/session-settings/real draft-recovery PTY selection: **26 passed**. Six draft unit/integration cases plus one actual CLI scenario cover SIGKILL, reconnecting to the saved demo session, restored input and clearing after submission. This count overlaps session-settings in the 80-test selection above; it is not an additional independent total.
 - Final TUI interaction/performance-harness/performance-startup selection: **3 files, 19 passed**. Includes expanded paste, transient dialogs, search/menu compatibility, benchmark parameter/measurement/cleanup guards and lazy SDK loading.
-- Final `pnpm typecheck`, `pnpm build` and `git diff --check`: passed. `pnpm start` build artifacts updated. No full suite, production model, hosted CI or native mobile acceptance was claimed.
 
 Performance: lazy provider SDK loading reduced the 30-run offline startup p50 **291.64 → 229.37 ms**, p95 **405.24 → 324.81 ms**, and ready RSS p95 **96.70 → 81.39 MiB**. Input echo p95 was **3.26 ms**. The **200 ms startup target remains unmet**; the benchmark preserves it and reports failure. Fixed 10k storage/core workload budgets passed, including lossless live and persisted text checks. See [harness-performance.md](harness-performance.md) for raw report locations, workload details, retained/rejected experiments and remaining measurements. Real provider startup and 30-minute stability were not measured.
 
-[Static mobile layout references](design/mobile-controller/README.md) are design artifacts, not released clients. They do not prove native lifecycle, secure storage, production connectivity or performance. The brand candidate is separate from `brand/identity` and still requires final small-size optical work.
+They do not prove native lifecycle, secure storage, production connectivity or performance. The brand candidate is separate from `brand/identity` and still requires final small-size optical work.
 
 ## Approval panel: 2026-10-17
 
@@ -99,7 +43,7 @@ Replaced pathname-based content IO with a small POSIX helper that retains opened
 
 The original path-only implementation failed six deterministic regressions: replacement, creation, editing, reading, and two commit/cleanup cases. Tests use a separate Node process to rename the checked directory and replace its old name with an outside symlink, paused at actual approval or commit boundaries. The final suite adds ten path-race cases, including search, indexing, cached retrieval and ordinary-file behavior, plus seven helper protocol cases for byte framing, symlinks, FIFO/size limits, cancellation, rejected checkpoints, leaf replacement and caller EOF. Existing conflict/lease regressions now use the commit checkpoint rather than an obsolete host `stat()` interception.
 
-Completed verification: `pnpm check` passed **27 files / 187 tests**, TypeScript checking and build on macOS with Node 26.12.0 / pnpm 12.11.2. Relay type checking passed. Deliberately removing directory `O_NOFOLLOW` flags made four approval-race regressions fail; the original source/binary were restored and all 17 new tests passed afterward. This confirms the tests exercise the directory-resolution boundary. A separate review also exercised directory replacement during commit and repeated cancellation cleanup. The actual bundled CLI completed a `read_file` call against a temporary workspace through a loopback-only model fixture, confirming it loads the helper from `dist`; no production service or credentials were used. GitHub Linux/macOS jobs have been updated for native compilation; hosted CI has not been run from this local branch.
+Completed verification: `pnpm check` passed **27 files / 187 tests**, TypeScript checking and build on macOS with Node 26.12.0 / pnpm 12.11.2. Deliberately removing directory `O_NOFOLLOW` flags made four approval-race regressions fail; the original source/binary were restored and all 17 new tests passed afterward. This confirms the tests exercise the directory-resolution boundary. A separate review also exercised directory replacement during commit and repeated cancellation cleanup. The actual bundled CLI completed a `read_file` call against a temporary workspace through a loopback-only model fixture, confirming it loads the helper from `dist`; no production service or credentials were used. GitHub Linux/macOS jobs have been updated for native compilation; hosted CI has not been run from this local branch.
 
 ## Referenced code-review fixes: 2026-10-16
 
@@ -110,12 +54,11 @@ Additional cross-tool and fault-injection review covered Git clean filters readi
 Validation completed on macOS with Node 26.12.0 / pnpm 12.11.2:
 
 - `pnpm check`: **25 files, 170 tests passed**, plus full TypeScript checking and build. This includes the real macOS sandbox, independent-process file coordination, real SQLite connections, loopback HTTP authentication, RPC subprocesses and PTY tests.
-- `pnpm check:relay`: passed.
 - Built CLI offline prompt smoke: passed.
 - Changed-source formatting and `git diff --check`: passed.
 - Deliberately removing the exclusive file-lock flag made the independent-process regression fail; the original implementation was restored. Cancellation, initialization, lease and authentication tests were also observed failing before their fixes.
 
-No production API, actual Keychain sign-in, Cloudflare deployment or live handset acceptance ran. GitHub-hosted CI was configured but not dispatched from this local branch. File locks coordinate cooperating file tools and can remain after a crash; already-started process effects are not made transactional by SQLite fencing. The later directory-replacement repair is recorded above. Third-party plugins remain trusted. Runtime initialization/close limits, Agent-lifetime budgets and continuation-persistence boundaries are explicit in [architecture.md](architecture.md).
+GitHub-hosted CI was configured but not dispatched from this local branch. File locks coordinate cooperating file tools and can remain after a crash; already-started process effects are not made transactional by SQLite fencing. The later directory-replacement repair is recorded above. Third-party plugins remain trusted. Runtime initialization/close limits, Agent-lifetime budgets and continuation-persistence boundaries are explicit in [architecture.md](architecture.md).
 
 Updated: 2026-10-15. Implementation, test coverage, completed verification and pending acceptance are separate states. See [TODO.md](../TODO.md) for delivery order. Documentation and styling edits have no independent tests or benchmarks. Critical TUI workflow verification is recorded below.
 
@@ -169,7 +112,6 @@ Targeted formatting and diff whitespace checks passed. No full suite, build, ben
 ## Current delivery scope
 
 - Independent agent core, fullscreen TUI and bidirectional Pi integration. Hikaro does not adopt Pi's agent loop.
-- The native mobile app is not shipped. Mobile release, notification, store and performance acceptance have their own stages.
 - Cloud configuration remains optional. Configuration sync is not implemented; sync, distribution and remote connection scope still needs a decision.
 - Native provider PTC, automatic cross-provider fallback, advanced plugin UI, browser/index expansion and generic executable Pi extension adaptation remain optional. They are not core TUI acceptance gates.
 
@@ -216,7 +158,7 @@ The following describes existing tests and previously recorded coverage, not a f
 - Model picker key-release handling, xAI authorization URL dispatch, conditional model controls and user-message backgrounds.
 - PTY fullscreen entry, Unicode input, resize and terminal restoration. The original PTY scenario was not rerun; the new critical workflow results are recorded below.
 
-Optional remote coverage remains separate: encryption identity checks, tampering, replay, reflection, reconnection, relay authorization/forwarding/activation/revocation and historical Cloudflare deployment dry-run. None establishes production acceptance of cloud configuration.
+None establishes production acceptance of cloud configuration.
 
 ## Recorded targeted verification
 
@@ -351,9 +293,9 @@ Manual compaction folds persisted message pages into a new continuation session 
 
 ## Optional cloud acceptance
 
-First choose configuration sync, distribution or remote connection scope. If Cloudflare is used, retain user-managed deployment and separately plan production relay/pairing/reconnection/revocation checks. Credentials and non-sensitive settings need separate designs; private configuration uploaded to the cloud requires end-to-end encryption.
+First choose configuration sync, distribution or remote connection scope. Credentials and non-sensitive settings need separate designs; private configuration uploaded to the cloud requires end-to-end encryption.
 
-Remote protocol and third-party plugin security review remains outstanding and belongs to that optional scope. Mobile notifications and store releases are separate from core TUI acceptance gates.
+Remote protocol and third-party plugin security review remains outstanding and belongs to that optional scope.
 
 ## Verification constraints
 
@@ -380,7 +322,7 @@ Focused verification only (macOS arm64, Node 26.12.0, pnpm 12.11.2):
 
 Review caught and repaired sensitive attachment aliases, longer Markdown closing fences, client global-sequence assumptions, nullable restored parent IDs, and detached approval revisions. No additional layout-only tests were added.
 
-Limits: compaction uses a conservative token heuristic and generated text, not a proven lossless semantic summary; original history remains authoritative. A pre-existing single stored user turn over 8 MiB can still block startup repair of interrupted tool pairs. New local attachments are bounded before submission. Budget usage and queued prompts are not recovered across host restarts. Native mobile apps, OS clipboard-image capture and portable image export remain subsequent work; durable host command receipts were added later in this record. The non-letter logo candidate is an independent unverified draft.
+Limits: compaction uses a conservative token heuristic and generated text, not a proven lossless semantic summary; original history remains authoritative. A pre-existing single stored user turn over 8 MiB can still block startup repair of interrupted tool pairs. New local attachments are bounded before submission. Budget usage and queued prompts are not recovered across host restarts. The non-letter logo candidate is an independent unverified draft.
 
 最终启动构建：冷 V8 缓存 3 次预热 + 30 次测量，p95 181.00 ms／输入 p95 1.37 ms／RSS p95 72.67 MiB，原三项门槛均通过。末轮压缩构建的两项插件与启动兼容测试通过；各个失败中间报告完整保留。
 
@@ -406,12 +348,4 @@ Necessary verification, without a full-suite run:
 
 Final original startup gate: **165.54 ms p95** (cold V8 cache, 3 warmups / 30 launches, warm OS caches), ordinary input **1.26 ms p95**, ready RSS **70.66 MiB p95**. The 10k harness passes all existing gates. Failed startup attempts, the shared-load baseline/candidate comparison and the reverted early-worker experiment are preserved in [the performance ledger](harness-performance.md). No successful measurement was used to erase a failure or weaken a threshold.
 
-C0 is still not complete as a whole: remote raw transport wiring, remaining client-facing session/history/attachment APIs and host/native lifecycle remain staged work. No native mobile application, signed mobile package, production relay, external provider or physical-device acceptance is claimed.
-
-## Mobile steering queue — 2026-10-21
-
-Next-turn instructions, queue editing/reordering/deletion, original-client recovery confirmation and receipt reconciliation are implemented. Sixteen distinct targeted cases, repository/mobile typechecks and iOS/Android Hermes exports passed. Native iOS submission, ordering, delete confirmation and release-on-close were verified in Codex's browser preview; automatic renewal no longer disables the editor. Native edit gestures, restore-confirmation interaction and physical-device distribution remain unqualified. See [the complete evidence and boundaries](validation/mobile-steering.md).
-
-## Native mobile control acceptance — 2026-10-21
-
-Native iOS approval/denial, stop confirmation with actual process termination, steering edit/save/discard, original-client recovery confirmation and background release now pass. A separate display correction prevents a previous stop notice appearing in queue details; repository/mobile typechecks and both platform exports pass. Keyboard/IME, Android and physical-device distribution remain open. See [native evidence, code versions and limitations](validation/mobile-native-controls.md).
+C0 is still not complete as a whole: remote raw transport wiring, remaining client-facing session/history/attachment APIs and host/native lifecycle remain staged work.

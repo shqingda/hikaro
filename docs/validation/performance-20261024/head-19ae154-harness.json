@@ -300,7 +300,7 @@
     }
   ],
   "limitations": [
-    "Synthetic local fixtures; no live provider, network, external tools, terminal rendering, or native mobile measurements.",
+    "Synthetic local fixtures; no live provider, network, external tools, terminal rendering.",
     "Fresh temporary SQLite database per sample; WAL and synchronous=FULL remain enabled. OS caches are warm.",
     "10k sequential durable appends include worker messaging and commit cost. Replay timings include correctness assertions.",
     "Burst streaming yields to the event loop every configured burst; it measures core persistence/coalescing, not token network pacing.",

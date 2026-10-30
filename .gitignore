@@ -1,6 +1,5 @@
 node_modules/
 dist/
-.wrangler/
 coverage/
 .DS_Store
 .env
@@ -12,9 +11,3 @@ packages/tools/src/secure-file-helper.*
 packages/tools/src/process-snapshot-helper
 packages/tools/src/process-snapshot-helper.*
 artifacts/
-
-apps/mobile/.expo/
-apps/mobile/ios/
-apps/mobile/android/
-
-apps/mobile/expo-env.d.ts

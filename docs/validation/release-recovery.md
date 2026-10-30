@@ -21,5 +21,3 @@
 真实模型完成读文件、修改、执行测试与 diff；脚本独立核对测试通过且无额外修改。拒绝审批未产生文件，Ctrl+C 后运行 cancelled 且真实 shell PID 消失。等待审批时 SIGKILL host，恢复后原 runId 为 unknown，未批准的命令未执行；明确新请求能继续。进程内断网、429、真实流中途截断、挂起取消四类故障均可见终止、不自动重发，各自后续订阅请求成功。没有修改系统网络、延长超时或重复跑安装 E2E/基准。
 
 [0.1.0 分发草稿](https://github.com/shqingda/hikaro/releases/tag/untagged-21916d3e014efb690aca) 已更新到 cf57c46，仍为 draft，未更改仓库可见性。七个附件包括 tarball、校验和、manifest、原始生产审计、包内安全评估、最低 Node 安装报告及本次同包订阅报告。重新下载全部附件到 artifacts/release-download-cf57c46，七份文件逐字节与上传来源一致，tarball SHA 校验通过；旧包的订阅证据未冒充新包证据。
-
-辅助技术与最终发布仍待完成，完整 TUI/移动端功能目标仍按 TODO 推进。本轮发布估算保持 TUI 98%、移动端 45%。

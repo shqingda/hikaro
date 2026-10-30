@@ -1,6 +1,6 @@
 # hikaro
 
-Independent TypeScript coding agent. Current executable clients: fullscreen TUI and bidirectional Pi integration. See [TODO.md](TODO.md) for implementation and acceptance status. The confirmed direction is [TUI plus a mobile companion](docs/tui-mobile-direction.md): the phone remotely views, approves, supplements and stops work on the computer. The [native M0 companion](docs/mobile.md) now provides pairing, secure credentials and read-only task recovery; physical-device/release acceptance remains pending. Cloud configuration remains optional.
+Independent TypeScript coding agent with a fullscreen TUI and bidirectional Pi integration. See [TODO.md](TODO.md) for implementation and acceptance status.
 
 ## Run
 
@@ -21,8 +21,6 @@ pnpm install
 pnpm build
 pnpm start --demo
 ```
-
-To connect your phone from the current local build, enter `/pair` inside the TUI. Setup, QR code, and device confirmation stay in the same terminal; see [phone pairing](docs/remote.md#pair-in-the-tui-normal-use).
 
 Interactive `--demo` starts a fresh offline session unless an offline session is explicitly selected; it cannot restore a live-model session implicitly. The demo model never calls tools. An explicit `!COMMAND` still runs a real sandboxed command under the normal permission policy.
 
@@ -99,7 +97,7 @@ File reads and updates use opened directory handles, rejecting symbolic links in
 
 Usage and model-call/cost budgets belong to the in-memory Agent and its shared child-agent budget, not to persistent session history. Reconstructing an Agent or restarting the host creates a fresh budget; resuming history does not restore usage limits. Context fitting accounts for system instructions, tool definitions, message payloads, image allowances, output reserve and a safety margin. Its conservative token estimate is not a model tokenizer. At 85% of the available input budget, or before old turns would be omitted, automatic compaction summarizes completed turns into a transactional checkpoint in the same session. Original messages remain available; the current user turn and tool pairs stay exact. Summary requests consume the shared budget, respect cancellation and leases, and must fit before a checkpoint commits. Restart restores the checkpoint. An oversized current turn fails visibly. Manual `/compact` still creates a continuation session. See the [compaction contract](docs/specs/auto-compaction.md).
 
-The client reboot now includes `hello` capability negotiation, a portable `packages/client-core` state layer, run identity snapshots and scoped durable command receipts. `command.receipt` reconciles lost responses; repeated mutation IDs never execute again, and different payloads conflict. Unknown outcomes remain unknown without automatic resend. See the [receipt contract](docs/specs/command-receipts.md) for status and retention boundaries. The shared raw remote adapter and bounded client library APIs are implemented. The opt-in shared host, attached TUI, per-session approval grants and durable local client intents are implemented. Start `pnpm start --host --demo`, then `pnpm start --attach` in another terminal; configured `--serve` attaches the encrypted remote bridge to that same host. Use identical `--cwd` / `--home` values. Ctrl+D detaches the TUI while work continues. See the [shared-host guide](docs/shared-host.md). The [M0 native client](docs/mobile.md) uses this same host. Run `pnpm mobile:ios` once, then `pnpm dev:sim` to reuse the existing iPhone 18 Pro and automatically open the serve-sim browser preview at localhost:3200, without launching DeviceHub or creating another simulator; `pnpm dev:mobile` starts Expo separately. Native-device acceptance remains in the [TUI/mobile plan](docs/tui-mobile-direction.md).
+The shared host supports local TUI connections over authenticated Unix sockets, durable command receipts and recovery without replaying unknown outcomes. Start `pnpm start --host --demo`, then `pnpm start --attach` in another terminal with identical `--cwd` and `--home` values. Ctrl+D detaches the TUI while work continues. See the [shared-host guide](docs/shared-host.md).
 
 ## Pi integration
 
@@ -150,20 +148,14 @@ Copy the relevant entries from [config.example.json](templates/config.example.js
 
 For configured MCP servers, `/mcp` shows connection state, discovered tool count, active calls and the latest error. Use `/mcp connect SERVER`, `/mcp disconnect SERVER`, `/mcp reconnect SERVER` or `/mcp refresh SERVER` to manage them explicitly. In the attached TUI, open `/plugins` and choose the `mcp` command with the same arguments, or the `mcp-status` view. These user commands run through the existing trusted plugin flow; model calls to `mcp_connect` still require approval and accept the same optional `action`. Active calls and competing management operations block connection changes. Failed refreshes retain the previous tools; disconnect and unexpected connection loss remove them. Reconnection is explicit.
 
-## Remote access
-
-See [Cloudflare setup](docs/remote.md). The relay carries encrypted frames; tools run on your computer. No cloud execution, central Hikaro account, or cloud history backup is included.
-
 ## Validation
 
 Use the affected test path or filter once, for example `pnpm exec vitest run tests/session-search.test.ts`. Skip tests for documentation and pure styling. Full suites and benchmarks run only when explicitly needed. Correctness CI runs on pull requests and pushes to main; performance measurement is an explicit local command. See the [harness and performance guide](docs/harness-performance.md) for workloads, budgets and evidence limitations.
 
 `pnpm test` runs the application suites in `tests/` with Vitest, then the release/build script checks with Node's test runner. Use `pnpm test:scripts` for the script checks alone. Generated acceptance workspaces under `artifacts/` are evidence, not application test suites.
 
-Optional cloud configuration can be checked with `pnpm check:relay` and `pnpm --filter @hikaro/relay build` (local dry-run, no deployment).
-
 Read [validation status](docs/validation.md) for measured results and remaining acceptance checks. The core and TUI are implemented; remaining daily-use and Pi acceptance work is tracked in TODO.md.
 
 Source installation, macOS arm64 candidate tarballs (`pnpm release:pack` / `pnpm check:release`), upgrade/rollback precautions and isolated installation checks: [TUI installation guide](docs/install-release.md).
 
-Local preflight: `pnpm ci:check`. Android device builds: `pnpm build:android:release` (checks first, then a signed local APK). GitHub Actions are reserved for explicitly approved releases. See [local validation](docs/local-validation.md).
+Local preflight: `pnpm ci:check`. GitHub Actions are reserved for explicitly approved releases. See [local validation](docs/local-validation.md).

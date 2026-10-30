@@ -16,4 +16,4 @@ PTY 队列超时来自普通 TUI 在 agent.prompt 的异步入队完成前立即
 - pnpm typecheck、pnpm build 通过。
 - 唯一 PTY E2E 覆盖排队删除/编辑、终端输入/退出、子 agent 取消及队列恢复执行。未降低断言或增加超时。
 
-环境 macOS，本地 SSE fixture，不是真实模型账号验收。未运行全量测试、其他 E2E、性能基准或移动端真机验收。自行 setsid 脱离原进程组的 daemon 不在进程组清理保证内；host 被 SIGKILL 后的后台进程接管仍不在本轮范围。
+环境 macOS，本地 SSE fixture，不是真实模型账号验收。自行 setsid 脱离原进程组的 daemon 不在进程组清理保证内；host 被 SIGKILL 后的后台进程接管仍不在本轮范围。

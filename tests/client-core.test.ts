@@ -109,7 +109,7 @@ it("deduplicates only the selected scope/session and freezes mutations on a sequ
   client.receive(epoch, event(3, "text.delta", { text: "foreign" }, "s2"));
   client.receive(
     epoch,
-    event(3, "text.delta", { text: "foreign" }, "s1", "phone"),
+    event(3, "text.delta", { text: "foreign" }, "s1", "secondary"),
   );
   expect(client.state).toMatchObject({
     cursor: 2,
@@ -169,7 +169,7 @@ it("restores approvals at the snapshot barrier and removes resolved requests", (
   expect(client.state.approvals).toHaveLength(1);
   client.receive(epoch, {
     type: "approval.resolved",
-    scope: "phone",
+    scope: "secondary",
     revision: 4,
     id: "approval-1",
     allow: true,

@@ -1,6 +1,6 @@
 # 普通与附着 TUI 核心流程对齐
 
-继续在 codex/tui-review-rollback 独立分支，不合并移动端目录。本切片覆盖 /changes、/tasks、/plan 与结构化提问，复用普通 TUI 面板，不以 JSON 输出或 RPC 方法存在作为交付。
+本切片覆盖 /changes、/tasks、/plan 与结构化提问，复用普通 TUI 面板，不以 JSON 输出或 RPC 方法存在作为交付。
 
 Host 保管文件快照、执行状态、计划版本和未回答问题。新增方法加入 capabilities；所有修改使用原有持久命令回执，不自动重放。所有请求绑定明确 sessionId，控制请求必须仍选中该会话、具备 control/owner 权限。恢复仅查询，未知结果显示并要求核对。
 

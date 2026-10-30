@@ -61,15 +61,15 @@ it("claims a scoped command once across connections and rejects payload conflict
     second.acceptCommand({ ...command, method: "cancel" }),
   ).rejects.toThrow(/conflict/i);
 
-  const phone = { ...command, scope: "phone" };
+  const secondary = { ...command, scope: "secondary" };
   const otherWorkspace = {
     ...command,
     workspace: join(workspace, "other"),
     sessionId: null,
   };
-  expect(await second.commandReceipt(phone)).toBeNull();
+  expect(await second.commandReceipt(secondary)).toBeNull();
   expect(await second.commandReceipt(otherWorkspace)).toBeNull();
-  expect((await second.acceptCommand(phone)).inserted).toBe(true);
+  expect((await second.acceptCommand(secondary)).inserted).toBe(true);
   expect((await second.acceptCommand(otherWorkspace)).inserted).toBe(true);
 });
 

@@ -5,7 +5,7 @@ import { answerQuestion } from "../../../packages/tui/src/planning.ts";
 import { QuestionDraftSaver } from "../../../packages/tui/src/question-drafts.ts";
 import { QuestionService, type QuestionView } from "./question-service.ts";
 
-// Never aliases an RPC default, attached client, or paired device identity.
+// Never aliases an RPC default, attached client identity.
 export const localQuestionScope = "standalone:tui";
 export class LocalQuestions {
   private service: QuestionService;

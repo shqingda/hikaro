@@ -1,6 +1,6 @@
 # 执行管理验收 · 2026-10-18
 
-在独立 worktree `/Users/shqingda/.codex/worktrees/tui-review-rollback/hikaro`、分支 `codex/tui-review-rollback` 完成。未修改、合并或提交移动端工作目录。
+在独立 worktree `/Users/shqingda/.codex/worktrees/tui-review-rollback/hikaro`、分支 `codex/tui-review-rollback` 完成。
 
 ## 用户操作
 

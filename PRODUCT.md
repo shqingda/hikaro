@@ -22,7 +22,7 @@ The agent loop, the file boundaries, and the approval surface are Hikaro's own; 
 
 ## Operating Context
 
-A fullscreen TUI for an 18–36 row terminal; keyboard-first navigation; approval panels above the editor; session history in SQLite; data in `~/.hikaro`; macOS workspace sandbox for commands; optional MCP, Skills, LSP, index, browser, plugins, subagents, scheduled jobs, and remote relay. The brand also appears in the README, package metadata, an app icon, documentation, and release pages. A terminal cell, a 16 px favicon, and a 1024 px app icon are all first-class sizes.
+A fullscreen TUI for an 18–36 row terminal; keyboard-first navigation; approval panels above the editor; session history in SQLite; data in `~/.hikaro`; macOS workspace sandbox for commands; optional MCP, Skills, LSP, index, browser, plugins, subagents, scheduled jobs. The brand also appears in the README, package metadata, an app icon, documentation, and release pages. A terminal cell, a 16 px favicon, and a 1024 px app icon are all first-class sizes.
 
 ## Capabilities and Constraints
 

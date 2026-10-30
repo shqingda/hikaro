@@ -156,7 +156,7 @@ export async function main() {
       "Host reaches Runtime/SQLite readiness before the TUI timer starts. This measures attachment, not cold host startup.",
       "Ready marker is emitted only after hello, snapshot, initial session, history and local draft recovery. Input uses PTY echo, not physical pixels.",
       "RSS values are diagnostics, not release gates. Their sum can double-count shared mappings; no physical-memory acceptance is implied by budget.passed.",
-      "Warm OS caches. Current workspace and user skills remain enabled at host. No network/provider or mobile device. No 30-minute soak.",
+      "Warm OS caches. Current workspace and user skills remain enabled at host. No network/provider. No 30-minute soak.",
     ],
   };
   await saveReport(

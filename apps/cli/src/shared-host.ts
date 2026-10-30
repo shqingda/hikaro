@@ -2,7 +2,7 @@ import { createServer, type Socket } from "node:net";
 import { PassThrough, Writable } from "node:stream";
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { chmod, open, unlink } from "node:fs/promises";
-import { constants, watchFile, unwatchFile } from "node:fs";
+import { constants } from "node:fs";
 import { join } from "node:path";
 import {
   hostEndpoint,
@@ -13,7 +13,7 @@ import { JsonLines, Command } from "../../../packages/protocol/src/index.ts";
 import type { RuntimeOptions } from "../../../packages/runtime/src/index.ts";
 import { serveRpc } from "./rpc.ts";
 
-/** One Runtime for all authenticated local views and the encrypted relay bridge. */
+/** One Runtime for all authenticated local views. */
 export async function serveSharedHost(
   options: Omit<RuntimeOptions, "approve">,
 ) {
@@ -35,12 +35,10 @@ export async function serveSharedHost(
     key: endpoint.key,
     instanceId,
     localToken: randomBytes(32).toString("base64url"),
-    bridgeToken: randomBytes(32).toString("base64url"),
   };
   const input = new PassThrough();
   const clients = new Set<Socket>();
   const routes = new Map<string, Socket>();
-  let bridge: Socket | undefined;
   let closing = false;
   const deliver = (socket: Socket | undefined, message: unknown) => {
     if (!socket || socket.destroyed) return;
@@ -73,17 +71,12 @@ export async function serveSharedHost(
       return;
     }
     clients.add(socket);
-    let mode: "local" | "bridge" | undefined, scope: string | undefined;
+    let mode: "local" | undefined, scope: string | undefined;
     const timer = setTimeout(() => socket.destroy(), 5000);
     const parser = new JsonLines((raw) => {
       if (!mode) {
         const p = raw as Record<string, unknown>;
-        const expected =
-          p.mode === "local"
-            ? descriptor.localToken
-            : p.mode === "bridge"
-              ? descriptor.bridgeToken
-              : "";
+        const expected = p.mode === "local" ? descriptor.localToken : "";
         if (
           p.type !== "attach" ||
           typeof p.token !== "string" ||
@@ -109,16 +102,6 @@ export async function serveSharedHost(
             }) + "\n",
           );
           mode = "local";
-        } else {
-          const previous = bridge;
-          bridge = socket;
-          previous?.end(
-            JSON.stringify({
-              type: "connection.replaced",
-              hostInstanceId: instanceId,
-            }) + "\n",
-          );
-          mode = "bridge";
         }
         clearTimeout(timer);
         deliver(socket, {
@@ -128,20 +111,10 @@ export async function serveSharedHost(
         });
         return;
       }
-      if (
-        (mode === "local" && routes.get(scope!) !== socket) ||
-        (mode === "bridge" && bridge !== socket)
-      )
+      if (routes.get(scope!) !== socket)
         throw Error("Client connection replaced");
       const command = Command.parse(raw);
-      if (mode === "local") command.scope = scope;
-      else {
-        if (!command.scope || !/^[A-Za-z0-9_-]{43}$/.test(command.scope))
-          throw Error("Invalid bridge scope");
-        if (!routes.has(command.scope) && routes.size >= 64)
-          throw Error("Host route capacity exceeded");
-        routes.set(command.scope, socket);
-      }
+      command.scope = scope;
       const line = JSON.stringify(command) + "\n";
       if (input.writableLength + Buffer.byteLength(line) > 2_000_000)
         throw Error("Host input capacity exceeded");
@@ -158,7 +131,6 @@ export async function serveSharedHost(
     socket.once("close", () => {
       clearTimeout(timer);
       clients.delete(socket);
-      if (bridge === socket) bridge = undefined;
       for (const [key, target] of routes)
         if (target === socket) routes.delete(key);
       // Views disconnect; execution, ownership and pending approvals remain at host.
@@ -167,7 +139,6 @@ export async function serveSharedHost(
   const cleanup = async () => {
     if (closing) return;
     closing = true;
-    unwatchFile(join(endpoint.home, "remote.json"));
     for (const socket of clients) socket.destroy();
     if (server.listening)
       await new Promise<void>((done) => server.close(() => done()));
@@ -198,13 +169,6 @@ export async function serveSharedHost(
         instanceId,
         store,
         localScope: (scope) => scope.startsWith("local:"),
-        defaultDeviceControl: true,
-        pairedDevice: async (scope) => {
-          const { readConfig } =
-            await import("../../../packages/remote/src/host-store.ts");
-          const device = (await readConfig(endpoint.home)).devices[scope];
-          return !!device && device.expires === undefined;
-        },
         beforeClose: cleanup,
       },
     );
@@ -234,32 +198,6 @@ export async function serveSharedHost(
     } finally {
       await file.close();
     }
-    let checking = false;
-    watchFile(
-      join(endpoint.home, "remote.json"),
-      { interval: 1000, persistent: false },
-      () => {
-        if (checking || closing) return;
-        checking = true;
-        void (async () => {
-          const { readConfig } =
-            await import("../../../packages/remote/src/host-store.ts");
-          const config = await readConfig(endpoint.home);
-          for (const scope of rpc!.remoteScopes())
-            if (
-              !config.devices[scope] ||
-              config.devices[scope]!.expires !== undefined
-            )
-              await rpc!.revokeClient(scope);
-        })()
-          .catch(() => {
-            /* Invalid metadata cannot authorize requests; per-command checks fail closed. */
-          })
-          .finally(() => {
-            checking = false;
-          });
-      },
-    );
     return { endpoint, close: () => rpc!.close() };
   } catch (error) {
     if (rpc) await rpc.close();

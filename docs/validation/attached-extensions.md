@@ -1,6 +1,6 @@
 # 附着扩展与恢复首切片 · 2026-10-19
 
-分支 `codex/tui-review-rollback`，独立工作目录 `/Users/shqingda/.codex/worktrees/tui-review-rollback/hikaro`。未修改移动端工作目录，未推送或合并。
+分支 `codex/tui-review-rollback`，独立工作目录 `/Users/shqingda/.codex/worktrees/tui-review-rollback/hikaro`。
 
 ## 界面验收
 
@@ -17,7 +17,6 @@
 - attached-navigation：3 项。
 - execution-queue：1 项。
 - rpc-receipts：2 项。
-- shared-host：只选 `shares one run and explicitly owned approvals`，1 项，新增本机 owner 限制覆盖四个接口。
 - lease-fencing：只选 `attaches its lease`、`stops before a tool side effect`，2 项。
 - core：只选 `resumes prompts queued during a manual tool operation`，1 项。
 
@@ -32,7 +31,6 @@
 插件命令和视图沿用已有可信代码接口。它们没有取消信号协议；Esc 只关闭面板，超时不意味着停止。调用期间续期会话租约，结果写入会话历史后返回；显示预览最多 60k 字符，完整文本在历史/导出中。极大插件结果及恶意可信插件不是本轮验收范围，目录超过 256 KB 会明确拒绝而不是撑破 RPC 帧。
 
 恢复本轮交付是“回执核对＋结果留存”，不是自动恢复执行。未决 ID 可跨视图重开保存；已完成回执不是完整跨重启历史索引。待发消息、未答问题跨 host 崩溃恢复、图片附件打包导出、真实第三方插件长期兼容仍待办。恢复 PTY 的缺失回执由隔离持久意图 fixture 构造；host 重启防重放是实际重启测试，不宣称完成断电或任意崩溃时点证明。
-
 
 ## 合并前 CI 修复 · 2026-10-19
 

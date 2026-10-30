@@ -348,7 +348,6 @@ export class ClientState {
       command.error = frame.error;
       return;
     }
-    if (command.method === "push.register") command.status = "completed";
     if (command.method === "hello" && frame.id === this.helloId) {
       const hello = HelloResult.parse(frame.result);
       if (

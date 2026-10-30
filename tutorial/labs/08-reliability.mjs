@@ -1,8 +1,7 @@
-// 第 8 章实验：JSONL 分帧、重放防护、命令回执、会骗人的测试。
-// 加密用 Node 自带 AES-256-GCM 演示认证失败（Hikaro 实际用 NaCl box），不涉及配对与真实网络。
+// 第 8 章实验：JSONL 分帧、命令回执、会骗人的测试。
 // 运行：node --test labs/08-reliability.mjs
 import assert from 'node:assert/strict';
-import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import test from 'node:test';
 
 // ---------- 8.2 JSONL ----------
@@ -28,35 +27,8 @@ export class JsonLines {
   }
 }
 
-// ---------- 8.6 认证加密 + 重放防护 ----------
-function seal(key, obj) {
-  const iv = randomBytes(12);
-  const c = createCipheriv('aes-256-gcm', key, iv);
-  const body = Buffer.concat([c.update(JSON.stringify(obj)), c.final()]);
-  return { iv, body, tag: c.getAuthTag() };
-}
-function open(key, frame) {
-  const d = createDecipheriv('aes-256-gcm', key, frame.iv);
-  d.setAuthTag(frame.tag);
-  const plain = Buffer.concat([d.update(frame.body), d.final()]); // final() 校验通过之后才使用明文
-  return JSON.parse(plain.toString('utf8'));
-}
-
-export class Channel {
-  recvSeq = 0;
-  constructor(key, connection, self) { this.key = key; this.connection = connection; this.self = self; }
-  receive(frame) {
-    const m = open(this.key, frame);
-    if (m.connection !== this.connection) throw Error('Frame belongs to another connection');
-    if (m.from === this.self) throw Error('Reflected frame');
-    if (!Number.isSafeInteger(m.seq) || m.seq !== this.recvSeq + 1) throw Error('Unexpected sequence');
-    this.recvSeq = m.seq;
-    return m.payload;
-  }
-}
-
-// ---------- 8.8 命令回执 ----------
 const digest = (x) => createHash('sha256').update(JSON.stringify(x)).digest('hex');
+
 export class Receipts {
   rows = new Map();
   constructor(hostInstanceId) { this.hostInstanceId = hostInstanceId; }
@@ -121,29 +93,6 @@ test('练习 1：合法 JSON 但没有换行，不交付', () => {
 test('JSONL：超过单帧上限就断开，不无限等', () => {
   const lines = new JsonLines(() => {}, 16);
   assert.throws(() => lines.push(new TextEncoder().encode('{"x":"' + 'a'.repeat(100))), /too large/);
-});
-
-test('练习 2：原样重放被 seq 拒绝；新连接收到旧帧被连接标识拒绝', () => {
-  const key = randomBytes(32);
-  const frame = seal(key, { connection: 'c1', from: 'device', seq: 1, payload: 'stop' });
-  const host = new Channel(key, 'c1', 'host');
-  assert.equal(host.receive(frame), 'stop');
-  assert.throws(() => host.receive(frame), /Unexpected sequence/);
-  const nextConnection = new Channel(key, 'c2', 'host');
-  assert.throws(() => nextConnection.receive(frame), /another connection/);
-});
-
-test('自己发的帧被反射回来：拒绝', () => {
-  const key = randomBytes(32);
-  const frame = seal(key, { connection: 'c1', from: 'host', seq: 1, payload: 'x' });
-  assert.throws(() => new Channel(key, 'c1', 'host').receive(frame), /Reflected/);
-});
-
-test('密文被改一个字节：认证失败，不产生明文', () => {
-  const key = randomBytes(32);
-  const frame = seal(key, { connection: 'c1', from: 'device', seq: 1, payload: 'x' });
-  frame.body[0] ^= 1;
-  assert.throws(() => new Channel(key, 'c1', 'host').receive(frame));
 });
 
 test('回执：同 id 同内容到达两次，只执行一次', () => {

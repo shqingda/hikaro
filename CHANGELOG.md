@@ -3,7 +3,6 @@
 ## 0.3.0 — 2026-10-26
 
 - Install the macOS Apple Silicon CLI with `curl -fsSL https://github.com/shqingda/hikaro/releases/latest/download/install.sh | sh`. The package bundles Node.js 26.12.1; `hk` is a short alias and `hikaro update` reinstalls the latest release, keeping the previous one for rollback.
-- First signed Android APK (arm64-v8a). iOS is not distributed in this release.
 - Pi reopens the workspace's previous Hikaro session; Ctrl+D or `/back` returns to Pi after Hikaro disconnects. Full notes: [v0.3.0](docs/releases/v0.3.0.md). Sections below marked Unreleased shipped in this release.
 
 ## Unreleased — startup latency
@@ -19,23 +18,10 @@
 
 - TUI: `/search [TEXT]` searches the current session's complete message text in standalone and attached mode. Browse bounded result pages and open the original message in sections.
 - TUI: `/export` saves stored message images beside Markdown using relative links. Copy the `.md.assets` directory with the Markdown file. Generic external attachments and tool artifacts are not yet bundled.
-- Mobile: task message search, paginated results and original-message reading are implemented. Type checks, reader tests and both platform bundles pass; native search interaction remains unverified.
-
-## Unreleased — mobile companion
-
-- Read task images on demand with previous/next and zoom controls; browse recorded file changes and Unicode-safe, paged diffs. A negotiated read-only `changes.diff` method shares the TUI diff implementation. Reading clears on context loss and does not resume automatically. View-only host integration and native iOS image/diff/lifecycle acceptance pass.
-- Add instructions for the next model turn and manage their queue: read, edit, move first, delete and explicitly confirm restored items. Management pauses dispatch until close; lost replies are reconciled without replay.
-- Keep queue lease renewal from interrupting the native editor. Host integration, native iOS submission/reordering/deletion/close-release, typechecks and both platform exports pass.
-- Native iOS approval/denial, stop confirmation and actual process termination, queue edit/save/discard, original-client restore confirmation and background release now pass in the existing simulator. Queue receipt messages no longer show an unrelated previous stop notice before a receipt query. Keyboard/IME, Android, physical devices and signed distribution remain unqualified.
-- Send requests from a native multiline editor and queue them while the computer is busy.
-- Save task drafts locally, including offline editing and reopening. Connection recovery never automatically sends drafts.
-- Preserve text and command identity until acceptance is confirmed; reconcile lost replies without replaying requests. Removing a pairing clears its drafts.
-- Controller integration with a real host and both platform exports passed. Native iOS multiline paste, explicit send, offline draft editing, background/process recovery and reconnection without replay passed in the existing simulator. Keyboard/IME, Android, physical devices and signed distribution remain unqualified.
-- `pnpm dev:sim` starts or reuses the simulator and preview without opening the system browser. Open the printed URL in Codex; `--open-browser` explicitly opts into the system browser.
 
 ## 0.1.0 — release candidate, not yet published
 
-Initial supported host: macOS arm64, Node 24.21 or later. The current distribution is an npm tarball; Node, npm and `rg` are external prerequisites. Other host platforms are not release-qualified. The mobile companion is tracked separately and is not part of this TUI release.
+Initial supported host: macOS arm64, Node 24.21 or later. The current distribution is an npm tarball; Node, npm and `rg` are external prerequisites. Other host platforms are not release-qualified.
 
 ### Included
 
