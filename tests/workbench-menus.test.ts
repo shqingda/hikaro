@@ -143,3 +143,41 @@ describe("workbench menus", () => {
     }
   });
 });
+
+it("selects a menu item with the mouse and confirms through its visible button", async () => {
+  const panel = new ModelPanel(new AbortController().signal, () => {});
+  const result = panel.choose(
+    "Choose",
+    [
+      { value: "a", label: "First" },
+      { value: "b", label: "Second" },
+    ],
+    "",
+    undefined,
+    { search: false },
+  );
+  const click = (x: number, y: number) =>
+    panel.handleMouse({
+      type: "press",
+      button: "left",
+      x,
+      y,
+      width: 80,
+      height: 24,
+      screenX: x,
+      screenY: y,
+      shift: false,
+      alt: false,
+      ctrl: false,
+    });
+  let rows = panel.render(80).map(stripVTControlCharacters);
+  click(
+    4,
+    rows.findIndex((row) => row.includes("Second")),
+  );
+  rows = panel.render(80).map(stripVTControlCharacters);
+  expect(rows.join("\n")).toContain("→ Second");
+  const y = rows.findIndex((row) => row.includes("[Confirm]"));
+  click(rows[y]!.indexOf("[Confirm]") + 2, y);
+  expect((await result).value).toBe("b");
+});

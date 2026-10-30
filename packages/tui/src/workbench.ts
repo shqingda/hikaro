@@ -96,6 +96,7 @@ export class WorkbenchFrame extends VStack {
       selectSession(id: string): void;
       sessions(): void;
       actions(): void;
+      model?(): void;
       inspector(): boolean;
       beforeNavigate?(): boolean;
       sessionNavigation?: boolean;
@@ -194,18 +195,12 @@ export class WorkbenchFrame extends VStack {
         if (!this.tabBar.focused) {
           let offset = 1;
           const buttons = [
-            {
-              label: `View: ${this.tab} ▾`,
-              run: () => {
-                if (callbacks.beforeNavigate?.() === false) return;
-                tui.setFocus(this.tabBar);
-                tui.requestRender();
-              },
-            },
             ...(callbacks.sessionNavigation !== false
               ? [{ label: "Sessions", run: callbacks.sessions }]
               : []),
-            { label: "Commands", run: callbacks.actions },
+            ...(callbacks.model
+              ? [{ label: "Model", run: callbacks.model }]
+              : []),
           ];
           const lines = [" "];
           for (const button of buttons) {

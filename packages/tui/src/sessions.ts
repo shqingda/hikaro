@@ -123,16 +123,21 @@ export async function openSessions(
           const confirm = await panel.choose(
             `Delete “${session.title}”?`,
             [
+              { value: "__cancel", label: "Keep session" },
               {
                 value: "delete",
                 label: "Delete session",
-                description:
-                  "Removes history, tasks and outputs. Branches and workspace files stay.",
               },
             ],
             "",
-            "Enter delete · Esc cancel",
-            { cancelValue: "__cancel", enterAction: "delete" },
+            "Choose an action · Esc cancel",
+            {
+              cancelValue: "__cancel",
+              enterAction: "confirm",
+              requireNoticeVisible: true,
+              description:
+                "Removes session history, tasks and outputs. Workspace files stay.",
+            },
           );
           if (confirm.value !== "delete") continue;
           warning = (await remove(session.id)) ?? "";

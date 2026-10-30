@@ -8,6 +8,7 @@ import {
   truncateToWidth,
   visibleWidth,
   type Component,
+  type TuiMouseEvent,
   type SelectItem,
 } from "./primitives.ts";
 import {
@@ -79,6 +80,14 @@ export class ModelPanel implements Component {
   private noticeVisible = true;
   private message = "";
   private error = "";
+  private choiceHits = new Map<number, number>();
+  private choiceTop = 0;
+  onCancel?: () => void;
+  private helpTop = 0;
+  private buttons: { row: number; start: number; end: number; key: string }[] =
+    [];
+  private tabHits: { start: number; end: number; value: string }[] = [];
+  private tabRow = -1;
   private help?: string;
   private actions: PanelAction[] = [];
   private tabs: Array<{ value: string; label: string }> = [];
@@ -357,6 +366,40 @@ export class ModelPanel implements Component {
     if (this.signal.aborted) return;
     this.error = text;
     this.refresh();
+  }
+  handleMouse(event: TuiMouseEvent) {
+    if (event.type !== "press" || event.button !== "left" || !this.list) return;
+    const button = this.buttons.find(
+      (b) =>
+        event.y === this.helpTop + b.row &&
+        event.x >= b.start &&
+        event.x < b.end,
+    );
+    if (button) {
+      if (button.key === "\x1b") {
+        if (!this.cancelStep()) this.onCancel?.();
+      } else this.handleInput(button.key);
+      return { handled: true };
+    }
+    const tab =
+      event.y === this.tabRow
+        ? this.tabHits.find((t) => event.x >= t.start && event.x < t.end)
+        : undefined;
+    if (tab) {
+      this.resolveSelection({
+        value: tab.value,
+        makeDefault: false,
+        action: "tab",
+      });
+      return { handled: true };
+    }
+    const index = this.choiceHits.get(event.y - this.choiceTop);
+    if (index === undefined) return;
+    this.list.setSelectedIndex(index);
+    this.descriptionOffset = 0;
+    this.refresh();
+    // A pointer selects; Enter confirms, including destructive choices.
+    return { handled: true };
   }
   handleInput(data: string) {
     if (!this.pending || isKeyRelease(data)) return;
@@ -691,6 +734,7 @@ export class ModelPanel implements Component {
       const label = text(item.label);
       const prefix = item === current ? "→ " : "  ";
       const row = truncateToWidth(prefix + label, Math.max(1, width - 2), "…");
+      this.choiceHits.set(rows.length, this.matches.indexOf(item));
       rows.push(
         " " +
           (item === current
@@ -751,6 +795,10 @@ export class ModelPanel implements Component {
     return visible;
   }
   render(width: number) {
+    this.choiceHits.clear();
+    this.buttons = [];
+    this.tabHits = [];
+    this.tabRow = -1;
     const budget = Math.max(0, Math.floor(this.maxRows(width)));
     this.noticeVisible = false;
     this.documentReady = false;
@@ -819,7 +867,20 @@ export class ModelPanel implements Component {
           : bold(heading.slice(1))) +
         dim("─".repeat(Math.max(0, width - visibleWidth(heading)))),
     ];
-    if (this.tabs.length)
+    if (this.tabs.length) {
+      this.tabRow = lines.length;
+      let x = 0;
+      for (const tab of this.tabs) {
+        const length = visibleWidth(
+          tab.value === this.activeTab ? `[${tab.label}]` : tab.label,
+        );
+        this.tabHits.push({
+          start: x,
+          end: Math.min(width, x + length),
+          value: tab.value,
+        });
+        x += length + 2;
+      }
       lines.push(
         truncateToWidth(
           this.tabs
@@ -831,6 +892,7 @@ export class ModelPanel implements Component {
           "…",
         ),
       );
+    }
     const titleRows = lines.length;
     if (this.input) {
       lines.push(
@@ -842,6 +904,42 @@ export class ModelPanel implements Component {
       );
     }
     const help = this.helpLines(width, compact);
+    if (this.list) {
+      let row = help.length,
+        x = 1;
+      help.push(" ");
+      for (const button of [
+        {
+          label:
+            typeof this.enterAction === "string" ? this.enterAction : "Open",
+          key: "\r",
+        },
+        { label: "Cancel", key: "\x1b" },
+        ...(this.actionEnabled(this.allowDelete)
+          ? [{ label: "Delete", key: "\x04" }]
+          : []),
+        ...(this.actionEnabled(this.allowRename)
+          ? [{ label: "Rename", key: "\x12" }]
+          : []),
+      ]) {
+        const label = `[${button.label.charAt(0).toUpperCase()}${button.label.slice(1)}]`;
+        if (x + label.length > width && x > 1) {
+          help.push(" ");
+          row++;
+          x = 1;
+        }
+        this.buttons.push({
+          row,
+          start: x,
+          end: Math.min(width, x + label.length),
+          key: button.key,
+        });
+        help[row] +=
+          (button.label.toLowerCase().includes("delete") ? red(label) : label) +
+          " ";
+        x += label.length + 1;
+      }
+    }
     const message = this.message
       ? new Text(dim(clean(this.message)), 1, 0).render(width)
       : [];
@@ -882,6 +980,7 @@ export class ModelPanel implements Component {
             Math.max(2, Math.floor(available / 2)),
           )
         : 0;
+      this.choiceTop = lines.length;
       const choices = this.choiceRows(width, available - detailBudget);
       lines.push(
         ...choices,
@@ -892,6 +991,7 @@ export class ModelPanel implements Component {
         ),
       );
     }
+    this.helpTop = lines.length;
     lines.push(...help);
     return lines;
   }

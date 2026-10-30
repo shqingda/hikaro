@@ -54,8 +54,8 @@ export function workbenchKeys(
     async tab(
       tab: "Conversation" | "Changes" | "Activity" | "Plan" | "Context",
     ) {
-      await sent("\x10", "Search commands and actions");
-      await sent(`Open ${tab}`, `Open ${tab}`);
+      await sent("\x10", "Find models, sessions, changes and settings");
+      await sent(`Show ${tab.toLowerCase()}`, `Show ${tab.toLowerCase()}`);
       await sent(
         "\r",
         tab === "Conversation"

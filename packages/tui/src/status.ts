@@ -47,7 +47,7 @@ export function renderStatus(
         ? "Synchronizing"
         : single(phase);
   const permission = status.permission
-    ? `Permissions · ${single(status.permission)}`
+    ? `Permissions: ${single(status.permission)}`
     : "";
   const model = single(status.model);
   const usage = status.usage;
@@ -57,17 +57,17 @@ export function renderStatus(
           ? [`↑${usage.input} ↓${usage.output} est $${usage.cost.toFixed(3)}`]
           : []),
         ...(status.contextWindow
-          ? [`${Math.round(status.contextWindow / 1000)}k`]
+          ? [`Context: ${Math.round(status.contextWindow / 1000)}k`]
           : []),
-        ...(status.reasoning ? [single(status.reasoning)] : []),
+        ...(status.reasoning ? [`Reasoning: ${single(status.reasoning)}`] : []),
         ...(status.speed && status.speed !== "default"
           ? [single(status.speed)]
           : []),
       ].join(" · ")
     : "";
-  let right = [model, permission, extra].filter(Boolean).join(" · ");
+  let right = [model, permission, extra].filter(Boolean).join("  │  ");
   if (visibleWidth(state + right) + 3 > room)
-    right = [model, permission].filter(Boolean).join(" · ");
+    right = [model, permission].filter(Boolean).join("  │  ");
   if (visibleWidth(state + right) + 3 > room) right = permission;
   if (visibleWidth(state + right) + 3 <= room) {
     return [

@@ -49,3 +49,13 @@ Launched locally installed Grok Build 1.0.70 in a PTY, inspected its welcome scr
 ## Panel boundaries and navigation
 
 Added a neutral toolbar divider and ruled panel headings. Ordinary toolbar controls are neutral; panel selection uses a neutral contrasting background, while destructive labels/headings use red plus explicit wording. Removed inline descriptions from choice rows: the selected explanation remains below. Commands now say Show conversation/changes/etc.; removed redundant Workspace view wording. Corrected the command explanation being passed as a warning (which rendered it red). Toolbar navigation aborts the previous picker before opening the next destination; clicking Commands again closes it. Approval remains protected. Three existing relevant suites (17 checks), typecheck and build passed; physical mouse acceptance not claimed.
+
+## Hands-on PTY interaction pass
+
+Ran the actual built CLI in an isolated `/tmp/hikaro-interaction.*` home/workspace. Drove terminal SGR mouse press/release events, not component-only snapshots or physical macOS pointer input. Compared with the previously exercised local Grok Build 1.0.70 welcome/slash interaction.
+
+Observed and fixed: menu choices had no mouse handler; Models/Providers tabs ignored clicks; Cancel buttons needed the panel cancellation path rather than editor key forwarding; deletion selection changed the button position as duplicate descriptions appeared. Added explicit mouse-selectable choices/tabs and confirm/cancel/delete/rename controls. Deletion now defaults to Keep session, displays its consequence independently and requires full notice visibility. Removed duplicate details that moved its buttons.
+
+Executed Commands → mouse-select Activity → Model → click Providers → Sessions; selected a noncurrent temporary session, opened deletion, canceled, reopened and confirmed deletion through the visible button. Verified it disappeared while the current session remained. Also deleted a temporary current session in the earlier pass and observed replacement activation. Final rebuild: clicked Cancel in Sessions, then typed more text; draft visibly became `draft survives OK` in the editor. All launched Hikaro PTYs exited. No user sessions were deleted or model prompts sent.
+
+Top bar now retains Sessions/Model only. Commands remains in the input hint via Ctrl+P; F6 retains view navigation. Footer separates model/permission/usage groups with rules and uses Permissions: value, Context: value and Reasoning: value. One focused mouse-selection/confirmation regression added; the 18 relevant checks, typecheck and build passed. Physical IME, OS pointer selection and every backend were not re-certified by this pass.
