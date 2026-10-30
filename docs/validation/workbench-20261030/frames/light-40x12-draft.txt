@@ -1,0 +1,14 @@
+Component-rendered fixture, not a terminal screenshot.
+light-40x12-draft
+ hikaro                   hikaro / main
+
+ Done  read_file  src/auth.ts
+ Stopped  shell  pnpm test auth.test.ts
+
+ Stopped
+
+─ Message · ↑ 10 ───────────────────────
+ 草稿 11: check timeout handling 🙂
+ 草稿 12: check timeout handling 🙂
+ Enter send · Shift+Enter newline · /hel
+ Stopped      Permissions · Full Access

@@ -1,0 +1,567 @@
+{
+  "scope": "Local macOS arm64 PTY; no model/network or display-pixel timing",
+  "baselineSource": "02f4449 (git archive in /tmp/hikaro-workbench-baseline, shared node_modules)",
+  "candidate": "UI worktree before final embedded Pi cancellation/file_path correction",
+  "baselineNative": {
+    "bundleSha256": "99bf53930f8f9b93065a96ff6a590b44cf0ef9249ea7a6d3f94d14909c684085",
+    "measuredAt": "2026-10-30T09:34:16.528Z",
+    "runs": 30,
+    "warmups": 3,
+    "startupP50Ms": 165.5746249999993,
+    "startupP95Ms": 167.8739170000008,
+    "inputP95Ms": 2.7832500000004075,
+    "budget": {
+      "passed": true,
+      "warnings": [],
+      "checks": {
+        "startupP95Ms": {
+          "value": 167.8739170000008,
+          "max": 200,
+          "passed": true,
+          "advisory": true
+        },
+        "inputP95Ms": {
+          "value": 2.7832500000004075,
+          "max": 16,
+          "passed": true
+        }
+      }
+    }
+  },
+  "native": {
+    "bundleSha256": "472e135bf626ca71d4389f6683a8cba09ba2d75ff8d3e8914aa153cbc9554a4e",
+    "measuredAt": "2026-10-30T09:34:44.296Z",
+    "runs": 30,
+    "warmups": 3,
+    "startupP50Ms": 165.83775000000014,
+    "startupP95Ms": 168.1394169999994,
+    "inputP95Ms": 2.135833000000275,
+    "budget": {
+      "passed": true,
+      "warnings": [],
+      "checks": {
+        "startupP95Ms": {
+          "value": 168.1394169999994,
+          "max": 200,
+          "passed": true,
+          "advisory": true
+        },
+        "inputP95Ms": {
+          "value": 2.135833000000275,
+          "max": 16,
+          "passed": true
+        }
+      }
+    }
+  },
+  "baselineAttached": {
+    "bundleSha256": "99bf53930f8f9b93065a96ff6a590b44cf0ef9249ea7a6d3f94d14909c684085",
+    "measuredAt": "2026-10-30T09:36:47.405Z",
+    "runs": 30,
+    "warmups": 3,
+    "startupP95Ms": 160.96966599999996,
+    "inputP95Ms": 0.8824169999998048,
+    "budget": {
+      "passed": true,
+      "warnings": [],
+      "checks": {
+        "startupP95Ms": {
+          "value": 160.96966599999996,
+          "max": 200,
+          "passed": true,
+          "advisory": true
+        },
+        "inputP95Ms": {
+          "value": 0.8824169999998048,
+          "max": 16,
+          "passed": true
+        }
+      }
+    }
+  },
+  "attached": {
+    "bundleSha256": "472e135bf626ca71d4389f6683a8cba09ba2d75ff8d3e8914aa153cbc9554a4e",
+    "measuredAt": "2026-10-30T09:36:25.680Z",
+    "runs": 30,
+    "warmups": 3,
+    "startupP95Ms": 161.28866600000038,
+    "inputP95Ms": 1.0462080000006608,
+    "budget": {
+      "passed": true,
+      "warnings": [],
+      "checks": {
+        "startupP95Ms": {
+          "value": 161.28866600000038,
+          "max": 200,
+          "passed": true,
+          "advisory": true
+        },
+        "inputP95Ms": {
+          "value": 1.0462080000006608,
+          "max": 16,
+          "passed": true
+        }
+      }
+    }
+  },
+  "stream": {
+    "bundleSha256": "472e135bf626ca71d4389f6683a8cba09ba2d75ff8d3e8914aa153cbc9554a4e",
+    "runs": 3,
+    "warmups": 1,
+    "status": "passed",
+    "results": [
+      {
+        "mode": "standalone",
+        "scenario": "normal",
+        "metrics": {
+          "streamP95Ms": 21.648166,
+          "burstP95Ms": 23.013208
+        },
+        "budget": {
+          "passed": true,
+          "warnings": [],
+          "checks": {
+            "streamP95Ms": {
+              "value": 21.648166,
+              "max": 33,
+              "passed": true
+            }
+          }
+        }
+      },
+      {
+        "mode": "standalone",
+        "scenario": "burst100",
+        "metrics": {
+          "streamP95Ms": 22.232542,
+          "burstP95Ms": 24.168625
+        },
+        "budget": {
+          "passed": true,
+          "warnings": [],
+          "checks": {
+            "streamP95Ms": {
+              "value": 22.232542,
+              "max": 33,
+              "passed": true
+            }
+          }
+        }
+      },
+      {
+        "mode": "standalone",
+        "scenario": "burst1000",
+        "metrics": {
+          "streamP95Ms": 25.711292,
+          "burstP95Ms": 27.606375
+        },
+        "budget": {
+          "passed": true,
+          "warnings": [],
+          "checks": {
+            "streamP95Ms": {
+              "value": 25.711292,
+              "max": 33,
+              "passed": true
+            }
+          }
+        }
+      },
+      {
+        "mode": "standalone",
+        "scenario": "markdown",
+        "metrics": {
+          "streamP95Ms": 21.514167,
+          "burstP95Ms": 22.988417
+        },
+        "budget": {
+          "passed": true,
+          "warnings": [],
+          "checks": {
+            "streamP95Ms": {
+              "value": 21.514167,
+              "max": 33,
+              "passed": true
+            }
+          }
+        }
+      },
+      {
+        "mode": "standalone",
+        "scenario": "history10000",
+        "metrics": {
+          "streamP95Ms": 20.177583,
+          "burstP95Ms": 21.647583
+        },
+        "budget": {
+          "passed": true,
+          "warnings": [],
+          "checks": {
+            "streamP95Ms": {
+              "value": 20.177583,
+              "max": 33,
+              "passed": true
+            }
+          }
+        }
+      },
+      {
+        "mode": "standalone",
+        "scenario": "interaction",
+        "metrics": {
+          "inputP95Ms": 1.437875
+        },
+        "budget": {
+          "passed": true,
+          "warnings": [],
+          "checks": {
+            "inputP95Ms": {
+              "value": 1.437875,
+              "max": 16,
+              "passed": true
+            }
+          }
+        }
+      },
+      {
+        "mode": "attached",
+        "scenario": "normal",
+        "metrics": {
+          "streamP95Ms": 21.678125,
+          "burstP95Ms": 22.899208
+        },
+        "budget": {
+          "passed": true,
+          "warnings": [],
+          "checks": {
+            "streamP95Ms": {
+              "value": 21.678125,
+              "max": 33,
+              "passed": true
+            }
+          }
+        }
+      },
+      {
+        "mode": "attached",
+        "scenario": "burst100",
+        "metrics": {
+          "streamP95Ms": 21.806875,
+          "burstP95Ms": 23.453125
+        },
+        "budget": {
+          "passed": true,
+          "warnings": [],
+          "checks": {
+            "streamP95Ms": {
+              "value": 21.806875,
+              "max": 33,
+              "passed": true
+            }
+          }
+        }
+      },
+      {
+        "mode": "attached",
+        "scenario": "burst1000",
+        "metrics": {
+          "streamP95Ms": 23.250208,
+          "burstP95Ms": 25.135958
+        },
+        "budget": {
+          "passed": true,
+          "warnings": [],
+          "checks": {
+            "streamP95Ms": {
+              "value": 23.250208,
+              "max": 33,
+              "passed": true
+            }
+          }
+        }
+      },
+      {
+        "mode": "attached",
+        "scenario": "markdown",
+        "metrics": {
+          "streamP95Ms": 21.978708,
+          "burstP95Ms": 23.634958
+        },
+        "budget": {
+          "passed": true,
+          "warnings": [],
+          "checks": {
+            "streamP95Ms": {
+              "value": 21.978708,
+              "max": 33,
+              "passed": true
+            }
+          }
+        }
+      },
+      {
+        "mode": "attached",
+        "scenario": "history10000",
+        "metrics": {
+          "streamP95Ms": 21.296208,
+          "burstP95Ms": 22.584958
+        },
+        "budget": {
+          "passed": true,
+          "warnings": [],
+          "checks": {
+            "streamP95Ms": {
+              "value": 21.296208,
+              "max": 33,
+              "passed": true
+            }
+          }
+        }
+      },
+      {
+        "mode": "attached",
+        "scenario": "interaction",
+        "metrics": {
+          "inputP95Ms": 1.425583
+        },
+        "budget": {
+          "passed": true,
+          "warnings": [],
+          "checks": {
+            "inputP95Ms": {
+              "value": 1.425583,
+              "max": 16,
+              "passed": true
+            }
+          }
+        }
+      }
+    ]
+  },
+  "finalBuild": {
+    "bundleSha256": "ecf7018d55e112a6d842480d3bed150c2d5bdccf522b583fd90c62a561a6b372",
+    "changedSinceMeasurement": [
+      "pi-extension.mjs",
+      "process-snapshot-helper",
+      "secure-file-helper"
+    ],
+    "measuredFiles": {
+      "child-tasks.mjs": "d154ec395bb424f28aaa0d614edec081564407c46223d9fc54851a722e51f5af",
+      "chunk-2PB2Q5ZP.mjs": "e1900e26cfe24ebcb8b75cc3aeee648a559a0a4d759e3b80359e4a7d82799c4d",
+      "chunk-2VZRLK6C.mjs": "4d088b3855e1ac2c47a3d085c90743c37cfc54c9d09720cd048ab8b88d9cd874",
+      "chunk-2YRC2JXH.mjs": "94c2b3974460074a45d6b9c29f4200fb82219f21d1203292e327781aaa9e802b",
+      "chunk-3GDD6LZN.mjs": "20295d27197f708a30e03f0f8c926e3438b7c0527ef15e367ad3f62ae6cecc61",
+      "chunk-4A5JPMMA.mjs": "ae6d6f2433ffd680d095ddd4c4cb4c71d432408661b2ef1d05459a461f553613",
+      "chunk-4P76N5MH.mjs": "5e6c3dcaa7ef7e2b4fe436396f32bfbf9c8f7a224aeaac134ac07a526f5580b5",
+      "chunk-53AKMYO2.mjs": "0c1ddb3722367432bda3b885fe9db54210d4d81da68500f867cae7c65e24f7d0",
+      "chunk-53QUXKVX.mjs": "9e6549e27bcaadf5b3fe8456143a2e89bbd873829bb89f9a861949f053b2582f",
+      "chunk-55NQFCLB.mjs": "9583c2daf0f15fb6f2729e0abd29b15cc0ec82f3440e170ed315172c186fc7eb",
+      "chunk-5CX4T6J7.mjs": "c54b4a1f3e2b1eee44c3f7bddec70b0a454e656daaa8e74794b11b3ad1d6fd73",
+      "chunk-6CSQUXOH.mjs": "7ac5b5292f799b820d4059376d6fe428db6aab407c1c85d63962fd30de61cce8",
+      "chunk-6PLET7YL.mjs": "556f0265e50d3c5a905e8ed56ae8cf40067d81db3907576461950f080168e66c",
+      "chunk-6SI6M66Z.mjs": "a6a0e63cc615c1e50dd33e8ae7dcac4f0af68f37c9ba1071820d2d416a249db7",
+      "chunk-7FCGVHXP.mjs": "4137254021ca39b54506a36bab90351385710c70a111aa5b2d4d9dc2bb0c5a95",
+      "chunk-AFOHHCYI.mjs": "629f5cceb56517bac0a54a07ea5df16d6d3287b496542bca6518c46daa3c868d",
+      "chunk-BDUBEJQQ.mjs": "58b0e8b46e62a9aaf9a449f5ef55d8bfaf38e5482478142b6f795fc7d38171c5",
+      "chunk-BEAXH56U.mjs": "ec293c3291e0afd17a39600fe79197b3186185bf4387eaa14afcc491de521195",
+      "chunk-BHUVGZPN.mjs": "dd92bec5187c4ec118abba37d91362603ecdb3953fa5d2f562368d2498fe1061",
+      "chunk-BKUTZ3B7.mjs": "c37cd8633cfa670880796db00d7fa5215f212a335d3c05d4a060c7a8c08c0ef8",
+      "chunk-BX64KA46.mjs": "4efc22ed7ae1822079e0d0d679df987e922bd999ca36b27558503e7eb1de935c",
+      "chunk-BXRWP43Y.mjs": "362d8fb17d7616cbf36b6969514e165296f051ab72c3d2a3f5b8b09bad78487b",
+      "chunk-CIE2MDLW.mjs": "112d427af22875d44dc15c54bdaf43bb106ce98178f2e266368252ec390aab8f",
+      "chunk-CWC6LXTE.mjs": "870fe27ad56932ba2c843f6a8c169e15624ec05447603f30b7185060f66c406a",
+      "chunk-CYI4BVRF.mjs": "f50e9b0ba7195383ed0f69496fa26a4de6154fb3f73730c67069c87e703cc410",
+      "chunk-CYYQPYD5.mjs": "cfc78987c9e8c2855c2eb2564138834ed996c8413c08a106e8a3004e4bf56a59",
+      "chunk-CZCTKRHR.mjs": "cd475bd52ffc1f661b589075a083a9c13d448d0f1ca3d7b118c78086762fa4e3",
+      "chunk-DVXOYXAM.mjs": "0326009f449e70282e556de6b329277ef5b76159797ab314d246b8bcfa03b00e",
+      "chunk-DX4HPRSI.mjs": "3f88a7c5f8692cae7025c833fbf5053ab310e8b2667282cf976716c2cc2608d1",
+      "chunk-EFLLTLJZ.mjs": "1a7ee3e038afe2d666debad5716783713c66f1cf553c298e8470b43690465d8c",
+      "chunk-EFOSVFR3.mjs": "02a07f02e95db48f9606904d4aca6aa6a43aada95b4e3267c9c78861341fcfcb",
+      "chunk-EQRWGZ7W.mjs": "e17231fe5380dec894d3e5cdf95af079614540697781bbdea6a96aacc5678bfd",
+      "chunk-ESIIZH2T.mjs": "a1cad4c2da7b19bb4f92fdcae73a3f19a3b132ffaf8d1dc70d437c6846d0ad95",
+      "chunk-F66CPQZY.mjs": "211f58d3a11aeef2e2ea7c7c11934b7b9fcc9e5cd0b1a90a078874addcfbb08a",
+      "chunk-FE4PVEG5.mjs": "eb69f8d4a3978912bc5dce64d84b8b9a2cd17c25b892094d9aee4c99b48863a8",
+      "chunk-FGTAP4KS.mjs": "f6d6228d345ad644a74e3c5929092a24f25324bbdd787b74f5a9961b212001ca",
+      "chunk-FNYXDFOI.mjs": "9b9b18bc34ce60f59fe1b14bce7a55aea97fe09b40cb3a052933f6332f2ebdbf",
+      "chunk-FZ3ARZGC.mjs": "60858d5d96c9c0bdf059d7dd0e860e81a799b9c40e68a6fbd80653e748f2171c",
+      "chunk-G2HB5OHT.mjs": "bf99325f15c16ee2b953e91a6a494cc836e657081ef56efde4615875ff51667b",
+      "chunk-GJYJRNCG.mjs": "042faa1e404cbd7a07fd2f457fadc7395c2de4c1a9ecccdf9def115d3cf9c6f7",
+      "chunk-GO5QBXCY.mjs": "35590fd9787fb84991885b2ccdcddfc886b405a52532a41f41a980d95c5c3428",
+      "chunk-GTUOQFED.mjs": "bb474177ee4c5913abec2faa67c1e4485a8ab0be64da9c135668f37f4e8ed345",
+      "chunk-GYOEMP3S.mjs": "7a95f7b86c33e3f5ec74ab9cd51e7044a66fe6b936a90909ce73cfdee5dde43d",
+      "chunk-H2L7QVVE.mjs": "66adcfee5cee56dba2b658ca483d01d26c1b9a1fa09ed464312247e4989539ef",
+      "chunk-H6SBNO2I.mjs": "6e42dbce2b1b019b41bf149d4948819eeacc5d30fc635af2a829d6aa7187279f",
+      "chunk-HDIERCN7.mjs": "9700e36b8e58b0d2ce2149430cfd0bc33fbc24fc9fbdd0d41e702484e56ecca3",
+      "chunk-HQAAOGFO.mjs": "22739fc90ecfcdca939f31c39b6c321691087ab4eb16f87f12d2fd412b0ab57d",
+      "chunk-HZI7AZDX.mjs": "896cbed3508dca404e163c3a2be1cf98a72b897bc98a6c2e9d3f75e3a2af3c7b",
+      "chunk-IAAAEPS3.mjs": "b0ec691350e66eea13960c159808a8f57dd6a64ee0c0a05db6436db7159a335c",
+      "chunk-IMROIUVQ.mjs": "7a205932855aa0812fec36bb71ab67a7b6c02fbf8005cbac3666fbbb768bb9ce",
+      "chunk-JBULSO6T.mjs": "8942f26f6766d964f6347c15903be017f770600388b97f206855b8ec4300672d",
+      "chunk-JPTSRRCK.mjs": "1ebd2dc040da98c4d2f542a60a523bcd7c6829167d32d62a34176b77ef539c73",
+      "chunk-JUAMXSFM.mjs": "b5816c7a689d9682390aaf2c4ca3b921f7b31bd674bcf378331798e6476a3451",
+      "chunk-JUE4YA6Q.mjs": "24a0bf9981595083ea202c31f40b3cc5b646a76ad0bcd2af5dc042cdb79947f9",
+      "chunk-KUINTR5L.mjs": "91034b955946c75dfc5dbb86aea4194ec82ed367ead40faacdebe55d9adfb993",
+      "chunk-KXT4SWRX.mjs": "77d581300356c595deab30add8c0b6c88966460243edf5d84157c9cd245f09ce",
+      "chunk-LEZBMEMS.mjs": "d54376a3450470f6b90048ebabbb9326866f0b654981e625207a64dd71eafb69",
+      "chunk-LLJXNGCI.mjs": "b195ddcfe9178f50cc851d1477dca9fe700a7cc46f961196f691597d49a883b4",
+      "chunk-LRO2HOS7.mjs": "52985e032216fc5a8cd24823ffbebe94ea83566c78b56e97380339a0bdf49c1a",
+      "chunk-LZEZAORZ.mjs": "2126ece6775f765b676226908842436930288090c47fb4aab1c33a0fe07d77d5",
+      "chunk-N7QJ7IWQ.mjs": "969735fbb4adfd8e3d961c95229d2102489023dbd68011718439568ef68052e4",
+      "chunk-NKKYI6VQ.mjs": "860f5796da2582cf26df37dea1f8fd37ac376bf8a0604c1bf89d041100e73d6e",
+      "chunk-NLAEWTR3.mjs": "3ca48c2da08ae5b7d2390de7dfa0003ac8244ef83b7d713384f96a68e4b8ac6f",
+      "chunk-NXH4TNJV.mjs": "7255b3c5bb53e49002eb6b4f70b9eaa9f6ee59f4cf4105b8e9d29425d0d3ca12",
+      "chunk-O7KDNA3Y.mjs": "64017785a0fc1e907ea16ef26f5530c645d8d7c6963446ea84e009adaf5c47c8",
+      "chunk-OBZG62K6.mjs": "0fae478e95855b53ed6e361155c2b455cb5e4c0198310cb65cc54cc397681ca0",
+      "chunk-PBMYRC3K.mjs": "5c16e53d87d4beba276a69a79244d199579fa4e53fca569a8fc72c2cbcf5fdc7",
+      "chunk-PI43GZOI.mjs": "ca87ad848d276bf2531fd04d48adc538e10e0e334a847a35cf80778d3fa85dc4",
+      "chunk-Q5FTXQRQ.mjs": "bf6d4bfd8dfe9eefa028102ffef88a626d7ad4d38010caa6dfe2460e810d2c34",
+      "chunk-Q7PDSZPS.mjs": "5ae9aecf680b723b1355bb7fac94df7241ead7657803b1e0f8dbacab366d2591",
+      "chunk-RQJBACBJ.mjs": "b353f700be3086ab282d57907642f96ba197b146f888a6c7c3a4a513b1f56f11",
+      "chunk-RZKJGORK.mjs": "fe5d5eb977116db14a701968cde7a273ef6bb2a5b279936ca5457d913db731a9",
+      "chunk-S33XMM3Z.mjs": "e54a94fbe89c06d9f6f1a6345620e69110eb4c91fe4a700ae622e995032fba27",
+      "chunk-SJQ4RFY4.mjs": "2d386cac2dec7f118e71bb943fcc19c871c755de1ff9ac0ab447d10b25d527ff",
+      "chunk-SMY6QHLQ.mjs": "19bef652e8afa0ed677a77eae7c68e6b0c4ef0e999ee3b4b6df83d6cab704e16",
+      "chunk-SOYC52YZ.mjs": "2463f79ead5337a108a5d0311b158bc8395f547cb9543e2880d567aeca2d8a32",
+      "chunk-SSZWNJ6W.mjs": "57de7401d0101d018b79d0b6ab0b07d0c24b6d1a29b9dda093e39b8761e08a54",
+      "chunk-SU3FEZYC.mjs": "83022b108649012523d6d968204fb2ae8e4d880f2b26859159f77993f69e9b8d",
+      "chunk-TIF4LOEO.mjs": "5c398848c81f47bfddea4645d03ac9e8a7b0aa3ecd95ab34a5a0c94e3f0358ad",
+      "chunk-UI5NIK52.mjs": "caf10ab9cd729ed58026d041bf64106cca0f05b887512965d1e4ae5c4ad5a5c7",
+      "chunk-UID2HGCB.mjs": "7898978ddd207ed6666bde30b16d3a28fd0f08360ae710901ab07dfedf7cf335",
+      "chunk-UOL5PYLU.mjs": "2843bceb5560e2429b9500a4b5a12c0fb674d96265dd9e99bec00c8b5bbacee9",
+      "chunk-V3LTEOWG.mjs": "8948f9309df0991198da8efbf9442f3731035746136c5e4eb914b4a28a0792d4",
+      "chunk-VEKU4AG3.mjs": "e4afa202266efb7724dc9e77618a42c42cd5488e9059ea710ee2bb87937312fe",
+      "chunk-VNTPTM6W.mjs": "e7dade563f75198ead85f8eea9f5a45bb40476cf43816ce9e45c10d711d29b87",
+      "chunk-VRYPBZTP.mjs": "85c69826369fb84cbfbfcc808ae813c779e44277a0d454eb0aa41b10a56f2187",
+      "chunk-WNPTYPID.mjs": "7496a3160f922ef70b215aa73ef897426f80306d8186b11a5131c42bc1aee32d",
+      "chunk-WPJTU7Y6.mjs": "d8ade217ae9250bfd9142ac4902663de6ba09cdd68634011a5593602ccc93952",
+      "chunk-WZJ2BTQM.mjs": "14200c59fd05c38dd84f0a554cc6851b6b3dabb24450e8a70c375880f85d8b6a",
+      "chunk-YHNGZ5BQ.mjs": "48732052784169bff2e6ece520a3fce62d6043037c33220cb923ef0eca2c3de7",
+      "chunk-YRUK4PPZ.mjs": "cf76d69ad6202be3dbaebd4e16e0dbbddec1162ffc6a6295e5a1fe0bb96eac6a",
+      "chunk-Z2HR6CW2.mjs": "4e6869be156cadc57908cd202c7415015ba268535a60ab71b4aafb31b5346cfe",
+      "chunk-ZEUP7NTJ.mjs": "2d507476cdd187a9ea3d602769f410c6657360ec220a47365d2cfb1e08959163",
+      "chunk-ZKEV3XWC.mjs": "1dbd1019f387438d4a0eb06dd5401da7eb469292d3fc505b0f74a26f871da3bc",
+      "codemode-worker.mjs": "7a70287905ec208be04d52b6d9157fa5068366cb73371be8fca76cd82c64ddd5",
+      "execution-history.mjs": "6b2cd8d0fdedad89a617e5e1fda2cf903d87ee94044056cfe069122bcbdde69b",
+      "hikaro.mjs": "881faba32840d5e03fe4794f91ca93ce2ad89a3c0a46da54b9bcb2b991c10f6b",
+      "pending-steering.mjs": "bf8edc038eac25e5993c1464492e851a3ae4b93636dcb73f20060359d458aa48",
+      "pi-extension.mjs": "0bd718f92504924818245f4e776a76dc8325bfe38105e4935476e954b0619182",
+      "plan-evidence.mjs": "55fe615af10e05efe22dbdd84e2b77891b9776a8dd14790288f658fef5b62f17",
+      "process-snapshot-helper": "618ac816787bc8a2549b22c5ca1c23ef2b776482019a3a1a0d249277f68c2fd9",
+      "question-drafts.mjs": "b778e165b91edfdc1bd8c3bc58fd0297fd1e82598039272e30d7f6748e793502",
+      "sandbox-runner.mjs": "f79151e4405bc24d2adcc1e05a792967a18156eedcb4481cdb6985e3ea7ab7d3",
+      "secure-file-helper": "af157b30867db715c28134e084f2d3de2546a5550b28c0f81401fb9fc14eec16",
+      "statement-cache.mjs": "8c8caa0a0ed1307c3358316b11f126fc8c344b9bada45fe0fe04e04b4c939f90",
+      "terminal-records.mjs": "a3ddda42a4073bcffbbcde5762c95b213bca7ad7020f3ca6f0ac7f00b5dc9462",
+      "worker.mjs": "129f5b94130460af57026fc3360935007d06ac378f25ddf990d97f9ce3b025a2"
+    },
+    "finalFiles": {
+      "child-tasks.mjs": "d154ec395bb424f28aaa0d614edec081564407c46223d9fc54851a722e51f5af",
+      "chunk-2PB2Q5ZP.mjs": "e1900e26cfe24ebcb8b75cc3aeee648a559a0a4d759e3b80359e4a7d82799c4d",
+      "chunk-2VZRLK6C.mjs": "4d088b3855e1ac2c47a3d085c90743c37cfc54c9d09720cd048ab8b88d9cd874",
+      "chunk-2YRC2JXH.mjs": "94c2b3974460074a45d6b9c29f4200fb82219f21d1203292e327781aaa9e802b",
+      "chunk-3GDD6LZN.mjs": "20295d27197f708a30e03f0f8c926e3438b7c0527ef15e367ad3f62ae6cecc61",
+      "chunk-4A5JPMMA.mjs": "ae6d6f2433ffd680d095ddd4c4cb4c71d432408661b2ef1d05459a461f553613",
+      "chunk-4P76N5MH.mjs": "5e6c3dcaa7ef7e2b4fe436396f32bfbf9c8f7a224aeaac134ac07a526f5580b5",
+      "chunk-53AKMYO2.mjs": "0c1ddb3722367432bda3b885fe9db54210d4d81da68500f867cae7c65e24f7d0",
+      "chunk-53QUXKVX.mjs": "9e6549e27bcaadf5b3fe8456143a2e89bbd873829bb89f9a861949f053b2582f",
+      "chunk-55NQFCLB.mjs": "9583c2daf0f15fb6f2729e0abd29b15cc0ec82f3440e170ed315172c186fc7eb",
+      "chunk-5CX4T6J7.mjs": "c54b4a1f3e2b1eee44c3f7bddec70b0a454e656daaa8e74794b11b3ad1d6fd73",
+      "chunk-6CSQUXOH.mjs": "7ac5b5292f799b820d4059376d6fe428db6aab407c1c85d63962fd30de61cce8",
+      "chunk-6PLET7YL.mjs": "556f0265e50d3c5a905e8ed56ae8cf40067d81db3907576461950f080168e66c",
+      "chunk-6SI6M66Z.mjs": "a6a0e63cc615c1e50dd33e8ae7dcac4f0af68f37c9ba1071820d2d416a249db7",
+      "chunk-7FCGVHXP.mjs": "4137254021ca39b54506a36bab90351385710c70a111aa5b2d4d9dc2bb0c5a95",
+      "chunk-AFOHHCYI.mjs": "629f5cceb56517bac0a54a07ea5df16d6d3287b496542bca6518c46daa3c868d",
+      "chunk-BDUBEJQQ.mjs": "58b0e8b46e62a9aaf9a449f5ef55d8bfaf38e5482478142b6f795fc7d38171c5",
+      "chunk-BEAXH56U.mjs": "ec293c3291e0afd17a39600fe79197b3186185bf4387eaa14afcc491de521195",
+      "chunk-BHUVGZPN.mjs": "dd92bec5187c4ec118abba37d91362603ecdb3953fa5d2f562368d2498fe1061",
+      "chunk-BKUTZ3B7.mjs": "c37cd8633cfa670880796db00d7fa5215f212a335d3c05d4a060c7a8c08c0ef8",
+      "chunk-BX64KA46.mjs": "4efc22ed7ae1822079e0d0d679df987e922bd999ca36b27558503e7eb1de935c",
+      "chunk-BXRWP43Y.mjs": "362d8fb17d7616cbf36b6969514e165296f051ab72c3d2a3f5b8b09bad78487b",
+      "chunk-CIE2MDLW.mjs": "112d427af22875d44dc15c54bdaf43bb106ce98178f2e266368252ec390aab8f",
+      "chunk-CWC6LXTE.mjs": "870fe27ad56932ba2c843f6a8c169e15624ec05447603f30b7185060f66c406a",
+      "chunk-CYI4BVRF.mjs": "f50e9b0ba7195383ed0f69496fa26a4de6154fb3f73730c67069c87e703cc410",
+      "chunk-CYYQPYD5.mjs": "cfc78987c9e8c2855c2eb2564138834ed996c8413c08a106e8a3004e4bf56a59",
+      "chunk-CZCTKRHR.mjs": "cd475bd52ffc1f661b589075a083a9c13d448d0f1ca3d7b118c78086762fa4e3",
+      "chunk-DVXOYXAM.mjs": "0326009f449e70282e556de6b329277ef5b76159797ab314d246b8bcfa03b00e",
+      "chunk-DX4HPRSI.mjs": "3f88a7c5f8692cae7025c833fbf5053ab310e8b2667282cf976716c2cc2608d1",
+      "chunk-EFLLTLJZ.mjs": "1a7ee3e038afe2d666debad5716783713c66f1cf553c298e8470b43690465d8c",
+      "chunk-EFOSVFR3.mjs": "02a07f02e95db48f9606904d4aca6aa6a43aada95b4e3267c9c78861341fcfcb",
+      "chunk-EQRWGZ7W.mjs": "e17231fe5380dec894d3e5cdf95af079614540697781bbdea6a96aacc5678bfd",
+      "chunk-ESIIZH2T.mjs": "a1cad4c2da7b19bb4f92fdcae73a3f19a3b132ffaf8d1dc70d437c6846d0ad95",
+      "chunk-F66CPQZY.mjs": "211f58d3a11aeef2e2ea7c7c11934b7b9fcc9e5cd0b1a90a078874addcfbb08a",
+      "chunk-FE4PVEG5.mjs": "eb69f8d4a3978912bc5dce64d84b8b9a2cd17c25b892094d9aee4c99b48863a8",
+      "chunk-FGTAP4KS.mjs": "f6d6228d345ad644a74e3c5929092a24f25324bbdd787b74f5a9961b212001ca",
+      "chunk-FNYXDFOI.mjs": "9b9b18bc34ce60f59fe1b14bce7a55aea97fe09b40cb3a052933f6332f2ebdbf",
+      "chunk-FZ3ARZGC.mjs": "60858d5d96c9c0bdf059d7dd0e860e81a799b9c40e68a6fbd80653e748f2171c",
+      "chunk-G2HB5OHT.mjs": "bf99325f15c16ee2b953e91a6a494cc836e657081ef56efde4615875ff51667b",
+      "chunk-GJYJRNCG.mjs": "042faa1e404cbd7a07fd2f457fadc7395c2de4c1a9ecccdf9def115d3cf9c6f7",
+      "chunk-GO5QBXCY.mjs": "35590fd9787fb84991885b2ccdcddfc886b405a52532a41f41a980d95c5c3428",
+      "chunk-GTUOQFED.mjs": "bb474177ee4c5913abec2faa67c1e4485a8ab0be64da9c135668f37f4e8ed345",
+      "chunk-GYOEMP3S.mjs": "7a95f7b86c33e3f5ec74ab9cd51e7044a66fe6b936a90909ce73cfdee5dde43d",
+      "chunk-H2L7QVVE.mjs": "66adcfee5cee56dba2b658ca483d01d26c1b9a1fa09ed464312247e4989539ef",
+      "chunk-H6SBNO2I.mjs": "6e42dbce2b1b019b41bf149d4948819eeacc5d30fc635af2a829d6aa7187279f",
+      "chunk-HDIERCN7.mjs": "9700e36b8e58b0d2ce2149430cfd0bc33fbc24fc9fbdd0d41e702484e56ecca3",
+      "chunk-HQAAOGFO.mjs": "22739fc90ecfcdca939f31c39b6c321691087ab4eb16f87f12d2fd412b0ab57d",
+      "chunk-HZI7AZDX.mjs": "896cbed3508dca404e163c3a2be1cf98a72b897bc98a6c2e9d3f75e3a2af3c7b",
+      "chunk-IAAAEPS3.mjs": "b0ec691350e66eea13960c159808a8f57dd6a64ee0c0a05db6436db7159a335c",
+      "chunk-IMROIUVQ.mjs": "7a205932855aa0812fec36bb71ab67a7b6c02fbf8005cbac3666fbbb768bb9ce",
+      "chunk-JBULSO6T.mjs": "8942f26f6766d964f6347c15903be017f770600388b97f206855b8ec4300672d",
+      "chunk-JPTSRRCK.mjs": "1ebd2dc040da98c4d2f542a60a523bcd7c6829167d32d62a34176b77ef539c73",
+      "chunk-JUAMXSFM.mjs": "b5816c7a689d9682390aaf2c4ca3b921f7b31bd674bcf378331798e6476a3451",
+      "chunk-JUE4YA6Q.mjs": "24a0bf9981595083ea202c31f40b3cc5b646a76ad0bcd2af5dc042cdb79947f9",
+      "chunk-KUINTR5L.mjs": "91034b955946c75dfc5dbb86aea4194ec82ed367ead40faacdebe55d9adfb993",
+      "chunk-KXT4SWRX.mjs": "77d581300356c595deab30add8c0b6c88966460243edf5d84157c9cd245f09ce",
+      "chunk-LEZBMEMS.mjs": "d54376a3450470f6b90048ebabbb9326866f0b654981e625207a64dd71eafb69",
+      "chunk-LLJXNGCI.mjs": "b195ddcfe9178f50cc851d1477dca9fe700a7cc46f961196f691597d49a883b4",
+      "chunk-LRO2HOS7.mjs": "52985e032216fc5a8cd24823ffbebe94ea83566c78b56e97380339a0bdf49c1a",
+      "chunk-LZEZAORZ.mjs": "2126ece6775f765b676226908842436930288090c47fb4aab1c33a0fe07d77d5",
+      "chunk-N7QJ7IWQ.mjs": "969735fbb4adfd8e3d961c95229d2102489023dbd68011718439568ef68052e4",
+      "chunk-NKKYI6VQ.mjs": "860f5796da2582cf26df37dea1f8fd37ac376bf8a0604c1bf89d041100e73d6e",
+      "chunk-NLAEWTR3.mjs": "3ca48c2da08ae5b7d2390de7dfa0003ac8244ef83b7d713384f96a68e4b8ac6f",
+      "chunk-NXH4TNJV.mjs": "7255b3c5bb53e49002eb6b4f70b9eaa9f6ee59f4cf4105b8e9d29425d0d3ca12",
+      "chunk-O7KDNA3Y.mjs": "64017785a0fc1e907ea16ef26f5530c645d8d7c6963446ea84e009adaf5c47c8",
+      "chunk-OBZG62K6.mjs": "0fae478e95855b53ed6e361155c2b455cb5e4c0198310cb65cc54cc397681ca0",
+      "chunk-PBMYRC3K.mjs": "5c16e53d87d4beba276a69a79244d199579fa4e53fca569a8fc72c2cbcf5fdc7",
+      "chunk-PI43GZOI.mjs": "ca87ad848d276bf2531fd04d48adc538e10e0e334a847a35cf80778d3fa85dc4",
+      "chunk-Q5FTXQRQ.mjs": "bf6d4bfd8dfe9eefa028102ffef88a626d7ad4d38010caa6dfe2460e810d2c34",
+      "chunk-Q7PDSZPS.mjs": "5ae9aecf680b723b1355bb7fac94df7241ead7657803b1e0f8dbacab366d2591",
+      "chunk-RQJBACBJ.mjs": "b353f700be3086ab282d57907642f96ba197b146f888a6c7c3a4a513b1f56f11",
+      "chunk-RZKJGORK.mjs": "fe5d5eb977116db14a701968cde7a273ef6bb2a5b279936ca5457d913db731a9",
+      "chunk-S33XMM3Z.mjs": "e54a94fbe89c06d9f6f1a6345620e69110eb4c91fe4a700ae622e995032fba27",
+      "chunk-SJQ4RFY4.mjs": "2d386cac2dec7f118e71bb943fcc19c871c755de1ff9ac0ab447d10b25d527ff",
+      "chunk-SMY6QHLQ.mjs": "19bef652e8afa0ed677a77eae7c68e6b0c4ef0e999ee3b4b6df83d6cab704e16",
+      "chunk-SOYC52YZ.mjs": "2463f79ead5337a108a5d0311b158bc8395f547cb9543e2880d567aeca2d8a32",
+      "chunk-SSZWNJ6W.mjs": "57de7401d0101d018b79d0b6ab0b07d0c24b6d1a29b9dda093e39b8761e08a54",
+      "chunk-SU3FEZYC.mjs": "83022b108649012523d6d968204fb2ae8e4d880f2b26859159f77993f69e9b8d",
+      "chunk-TIF4LOEO.mjs": "5c398848c81f47bfddea4645d03ac9e8a7b0aa3ecd95ab34a5a0c94e3f0358ad",
+      "chunk-UI5NIK52.mjs": "caf10ab9cd729ed58026d041bf64106cca0f05b887512965d1e4ae5c4ad5a5c7",
+      "chunk-UID2HGCB.mjs": "7898978ddd207ed6666bde30b16d3a28fd0f08360ae710901ab07dfedf7cf335",
+      "chunk-UOL5PYLU.mjs": "2843bceb5560e2429b9500a4b5a12c0fb674d96265dd9e99bec00c8b5bbacee9",
+      "chunk-V3LTEOWG.mjs": "8948f9309df0991198da8efbf9442f3731035746136c5e4eb914b4a28a0792d4",
+      "chunk-VEKU4AG3.mjs": "e4afa202266efb7724dc9e77618a42c42cd5488e9059ea710ee2bb87937312fe",
+      "chunk-VNTPTM6W.mjs": "e7dade563f75198ead85f8eea9f5a45bb40476cf43816ce9e45c10d711d29b87",
+      "chunk-VRYPBZTP.mjs": "85c69826369fb84cbfbfcc808ae813c779e44277a0d454eb0aa41b10a56f2187",
+      "chunk-WNPTYPID.mjs": "7496a3160f922ef70b215aa73ef897426f80306d8186b11a5131c42bc1aee32d",
+      "chunk-WPJTU7Y6.mjs": "d8ade217ae9250bfd9142ac4902663de6ba09cdd68634011a5593602ccc93952",
+      "chunk-WZJ2BTQM.mjs": "14200c59fd05c38dd84f0a554cc6851b6b3dabb24450e8a70c375880f85d8b6a",
+      "chunk-YHNGZ5BQ.mjs": "48732052784169bff2e6ece520a3fce62d6043037c33220cb923ef0eca2c3de7",
+      "chunk-YRUK4PPZ.mjs": "cf76d69ad6202be3dbaebd4e16e0dbbddec1162ffc6a6295e5a1fe0bb96eac6a",
+      "chunk-Z2HR6CW2.mjs": "4e6869be156cadc57908cd202c7415015ba268535a60ab71b4aafb31b5346cfe",
+      "chunk-ZEUP7NTJ.mjs": "2d507476cdd187a9ea3d602769f410c6657360ec220a47365d2cfb1e08959163",
+      "chunk-ZKEV3XWC.mjs": "1dbd1019f387438d4a0eb06dd5401da7eb469292d3fc505b0f74a26f871da3bc",
+      "codemode-worker.mjs": "7a70287905ec208be04d52b6d9157fa5068366cb73371be8fca76cd82c64ddd5",
+      "execution-history.mjs": "6b2cd8d0fdedad89a617e5e1fda2cf903d87ee94044056cfe069122bcbdde69b",
+      "hikaro.mjs": "881faba32840d5e03fe4794f91ca93ce2ad89a3c0a46da54b9bcb2b991c10f6b",
+      "pending-steering.mjs": "bf8edc038eac25e5993c1464492e851a3ae4b93636dcb73f20060359d458aa48",
+      "pi-extension.mjs": "b3535ca12f64592044ef3711a76df0ec2a18c9f20db4951f92d8d7c917664a87",
+      "plan-evidence.mjs": "55fe615af10e05efe22dbdd84e2b77891b9776a8dd14790288f658fef5b62f17",
+      "process-snapshot-helper": "f71eefcb490794c9514ddeb929dc2a50bad4096679622faf65b85ff28f25f24f",
+      "question-drafts.mjs": "b778e165b91edfdc1bd8c3bc58fd0297fd1e82598039272e30d7f6748e793502",
+      "sandbox-runner.mjs": "f79151e4405bc24d2adcc1e05a792967a18156eedcb4481cdb6985e3ea7ab7d3",
+      "secure-file-helper": "13ebc2ae230409de3cefbd37917f16b7bb52245607b907ff24012f576dc56943",
+      "statement-cache.mjs": "8c8caa0a0ed1307c3358316b11f126fc8c344b9bada45fe0fe04e04b4c939f90",
+      "terminal-records.mjs": "a3ddda42a4073bcffbbcde5762c95b213bca7ad7020f3ca6f0ac7f00b5dc9462",
+      "worker.mjs": "129f5b94130460af57026fc3360935007d06ac378f25ddf990d97f9ce3b025a2"
+    }
+  }
+}

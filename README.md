@@ -103,6 +103,17 @@ The shared host supports local TUI connections over authenticated Unix sockets, 
 
 Hikaro uses `pi-ai` and `pi-tui`, but **does not use Pi's agent loop**.
 
+Hikaro owns its workbench presentation: a single horizon above the editor,
+YOU/HIKARO message labels, compact tool summaries, searchable menus and a
+persistent execution/permissions bar. `/tools` also expands results already
+loaded in the view. Menus show full selected-item descriptions with PgUp/PgDn;
+approval panels select **Deny** initially. The theme follows the terminal's
+light/dark background and honors `NO_COLOR`. Native, attached and Pi-backed
+views share this presentation; the embedded Pi view uses the same theme and
+editor while keeping its existing capabilities and `/back` action.
+See the [interface contract](docs/specs/tui-workbench.md) and
+[validation record](docs/validation/workbench-20261030.md).
+
 ```sh
 hikaro --install-pi                         # Persistent Pi entry; opens Hikaro by default
 hikaro --install-pi --pi-command /path/to/pi --home /path/to/hikaro-home

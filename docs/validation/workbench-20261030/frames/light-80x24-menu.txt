@@ -1,0 +1,26 @@
+Component-rendered fixture, not a terminal screenshot.
+light-80x24-menu
+ hikaro                                                           hikaro / main
+
+ 为登录接口补充错误处理
+
+ HIKARO
+
+ 我会先检查认证流程及现有测试。
+
+ 检查 src/auth.ts，保留现有权限边界。
+
+ Done  read_file  src/auth.ts
+ Done  shell  pnpm test auth.test.ts
+ Models
+> Search…
+   Fast  Quick iterations
+ → Balanced  Balanced coding and analysis
+   Careful  Complex changes with longer reasoning
+   Local  Local compatible endpoint
+ Balanced coding and analysis
+ ↑↓ select · Enter confirm · Esc cancel
+─ Message · draft preserved ────────────────────────────────────────────────────
+ 补充超时场景的测试
+ Close the panel to continue editing
+ Ready     local/code-model · Permissions · Full Access · ↑2400 ↓380 est $0.012

@@ -1,0 +1,511 @@
+{
+  "scope": "Real HikaroView / Pi layout component fixtures; not terminal screenshots or IME acceptance",
+  "frames": 36,
+  "failed": [],
+  "results": [
+    {
+      "name": "dark-120x40-conversation",
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "cursorVisible": true,
+        "inputHorizonVisible": true,
+        "relevantContentVisible": true,
+        "roleLabelsVisibleWhenRoomy": true,
+        "monochrome": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-120x40-menu",
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "cursorVisible": true,
+        "inputHorizonVisible": true,
+        "relevantContentVisible": true,
+        "roleLabelsVisibleWhenRoomy": true,
+        "monochrome": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-120x40-draft",
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "cursorVisible": true,
+        "inputHorizonVisible": true,
+        "relevantContentVisible": true,
+        "roleLabelsVisibleWhenRoomy": true,
+        "monochrome": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-80x24-conversation",
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "cursorVisible": true,
+        "inputHorizonVisible": true,
+        "relevantContentVisible": true,
+        "roleLabelsVisibleWhenRoomy": true,
+        "monochrome": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-80x24-menu",
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "cursorVisible": true,
+        "inputHorizonVisible": true,
+        "relevantContentVisible": true,
+        "roleLabelsVisibleWhenRoomy": true,
+        "monochrome": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-80x24-draft",
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "cursorVisible": true,
+        "inputHorizonVisible": true,
+        "relevantContentVisible": true,
+        "roleLabelsVisibleWhenRoomy": true,
+        "monochrome": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-60x18-conversation",
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "cursorVisible": true,
+        "inputHorizonVisible": true,
+        "relevantContentVisible": true,
+        "roleLabelsVisibleWhenRoomy": true,
+        "monochrome": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-60x18-menu",
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "cursorVisible": true,
+        "inputHorizonVisible": true,
+        "relevantContentVisible": true,
+        "roleLabelsVisibleWhenRoomy": true,
+        "monochrome": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-60x18-draft",
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "cursorVisible": true,
+        "inputHorizonVisible": true,
+        "relevantContentVisible": true,
+        "roleLabelsVisibleWhenRoomy": true,
+        "monochrome": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-40x12-conversation",
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "cursorVisible": true,
+        "inputHorizonVisible": true,
+        "relevantContentVisible": true,
+        "roleLabelsVisibleWhenRoomy": true,
+        "monochrome": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-40x12-menu",
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "cursorVisible": true,
+        "inputHorizonVisible": true,
+        "relevantContentVisible": true,
+        "roleLabelsVisibleWhenRoomy": true,
+        "monochrome": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-40x12-draft",
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "cursorVisible": true,
+        "inputHorizonVisible": true,
+        "relevantContentVisible": true,
+        "roleLabelsVisibleWhenRoomy": true,
+        "monochrome": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-120x40-conversation",
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "cursorVisible": true,
+        "inputHorizonVisible": true,
+        "relevantContentVisible": true,
+        "roleLabelsVisibleWhenRoomy": true,
+        "monochrome": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-120x40-menu",
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "cursorVisible": true,
+        "inputHorizonVisible": true,
+        "relevantContentVisible": true,
+        "roleLabelsVisibleWhenRoomy": true,
+        "monochrome": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-120x40-draft",
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "cursorVisible": true,
+        "inputHorizonVisible": true,
+        "relevantContentVisible": true,
+        "roleLabelsVisibleWhenRoomy": true,
+        "monochrome": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-80x24-conversation",
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "cursorVisible": true,
+        "inputHorizonVisible": true,
+        "relevantContentVisible": true,
+        "roleLabelsVisibleWhenRoomy": true,
+        "monochrome": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-80x24-menu",
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "cursorVisible": true,
+        "inputHorizonVisible": true,
+        "relevantContentVisible": true,
+        "roleLabelsVisibleWhenRoomy": true,
+        "monochrome": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-80x24-draft",
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "cursorVisible": true,
+        "inputHorizonVisible": true,
+        "relevantContentVisible": true,
+        "roleLabelsVisibleWhenRoomy": true,
+        "monochrome": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-60x18-conversation",
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "cursorVisible": true,
+        "inputHorizonVisible": true,
+        "relevantContentVisible": true,
+        "roleLabelsVisibleWhenRoomy": true,
+        "monochrome": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-60x18-menu",
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "cursorVisible": true,
+        "inputHorizonVisible": true,
+        "relevantContentVisible": true,
+        "roleLabelsVisibleWhenRoomy": true,
+        "monochrome": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-60x18-draft",
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "cursorVisible": true,
+        "inputHorizonVisible": true,
+        "relevantContentVisible": true,
+        "roleLabelsVisibleWhenRoomy": true,
+        "monochrome": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-40x12-conversation",
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "cursorVisible": true,
+        "inputHorizonVisible": true,
+        "relevantContentVisible": true,
+        "roleLabelsVisibleWhenRoomy": true,
+        "monochrome": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-40x12-menu",
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "cursorVisible": true,
+        "inputHorizonVisible": true,
+        "relevantContentVisible": true,
+        "roleLabelsVisibleWhenRoomy": true,
+        "monochrome": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-40x12-draft",
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "cursorVisible": true,
+        "inputHorizonVisible": true,
+        "relevantContentVisible": true,
+        "roleLabelsVisibleWhenRoomy": true,
+        "monochrome": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-120x40-conversation",
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "cursorVisible": true,
+        "inputHorizonVisible": true,
+        "relevantContentVisible": true,
+        "roleLabelsVisibleWhenRoomy": true,
+        "monochrome": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-120x40-menu",
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "cursorVisible": true,
+        "inputHorizonVisible": true,
+        "relevantContentVisible": true,
+        "roleLabelsVisibleWhenRoomy": true,
+        "monochrome": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-120x40-draft",
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "cursorVisible": true,
+        "inputHorizonVisible": true,
+        "relevantContentVisible": true,
+        "roleLabelsVisibleWhenRoomy": true,
+        "monochrome": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-80x24-conversation",
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "cursorVisible": true,
+        "inputHorizonVisible": true,
+        "relevantContentVisible": true,
+        "roleLabelsVisibleWhenRoomy": true,
+        "monochrome": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-80x24-menu",
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "cursorVisible": true,
+        "inputHorizonVisible": true,
+        "relevantContentVisible": true,
+        "roleLabelsVisibleWhenRoomy": true,
+        "monochrome": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-80x24-draft",
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "cursorVisible": true,
+        "inputHorizonVisible": true,
+        "relevantContentVisible": true,
+        "roleLabelsVisibleWhenRoomy": true,
+        "monochrome": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-60x18-conversation",
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "cursorVisible": true,
+        "inputHorizonVisible": true,
+        "relevantContentVisible": true,
+        "roleLabelsVisibleWhenRoomy": true,
+        "monochrome": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-60x18-menu",
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "cursorVisible": true,
+        "inputHorizonVisible": true,
+        "relevantContentVisible": true,
+        "roleLabelsVisibleWhenRoomy": true,
+        "monochrome": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-60x18-draft",
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "cursorVisible": true,
+        "inputHorizonVisible": true,
+        "relevantContentVisible": true,
+        "roleLabelsVisibleWhenRoomy": true,
+        "monochrome": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-40x12-conversation",
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "cursorVisible": true,
+        "inputHorizonVisible": true,
+        "relevantContentVisible": true,
+        "roleLabelsVisibleWhenRoomy": true,
+        "monochrome": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-40x12-menu",
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "cursorVisible": true,
+        "inputHorizonVisible": true,
+        "relevantContentVisible": true,
+        "roleLabelsVisibleWhenRoomy": true,
+        "monochrome": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-40x12-draft",
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "cursorVisible": true,
+        "inputHorizonVisible": true,
+        "relevantContentVisible": true,
+        "roleLabelsVisibleWhenRoomy": true,
+        "monochrome": true
+      },
+      "issues": []
+    }
+  ]
+}

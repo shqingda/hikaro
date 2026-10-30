@@ -1,0 +1,14 @@
+Component-rendered fixture, not a terminal screenshot.
+dark-40x12-menu
+ hikaro                   hikaro / main
+ Done  read_file  src/auth.ts
+ Done  shell  pnpm test auth.test.ts
+ Models
+> Search…
+ → Balanced
+ Balanced coding and analysis
+ ↑↓ · Enter confirm · Esc
+─ Message · draft preserved ────────────
+ 补充超时场景的测试
+ Close the panel to continue editing
+ Ready        Permissions · Full Access
