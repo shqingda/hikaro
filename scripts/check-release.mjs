@@ -13,7 +13,7 @@ import { join, resolve } from "node:path";
 import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
-import { verifyForge } from "./forge-patch.mjs";
+import { verifyForge } from "./forge-release.mjs";
 import { verifyReleaseRecovery } from "./release-recovery.mjs";
 
 const exec = promisify(execFile);
@@ -84,7 +84,7 @@ try {
   await exec(
     process.execPath,
     [
-      resolve(import.meta.dirname, "check-forge-fix.mjs"),
+      resolve(import.meta.dirname, "check-forge.mjs"),
       join(prefix, "node_modules/hikaro/package.json"),
     ],
     { cwd: workspace, timeout: 30000 },
@@ -152,7 +152,8 @@ try {
       else
         reject(
           Error(
-            `Installed TUI exit=${exitCode}, ready=${ready}, observed=${observed}`,
+            `Installed TUI exit=${exitCode}, ready=${ready}, observed=${observed}: ` +
+              stripVTControlCharacters(output).slice(-2000),
           ),
         );
     });
@@ -198,8 +199,8 @@ try {
     checks: [
       "artifact checksum",
       "npm install --engine-strict",
-      "installed forge complete Node implementation matches source patch",
-      "installed forge accepts valid signatures and rejects malformed DigestAlgorithm (8 cases)",
+      "installed forge complete Node implementation matches official release",
+      "installed forge accepts valid signatures, rejects malformed/noncanonical DER, and accepts PEM Buffer inputs",
       "installed bin version",
       "installed bin demo prompt",
       "packaged native file helper read",

@@ -2,6 +2,8 @@ packages:
   - "packages/*"
 minimumReleaseAge: 0
 overrides:
+  # Official release replaces the temporary RSA backport and fixes canonical DER.
+  "node-forge": "1.4.2"
   # sandbox-runtime explicitly imports zod/v3, which is also shipped by Zod 4.
   "@anthropic-ai/sandbox-runtime>zod": "4.6.7"
   # October 2026 undici advisories. Stay on the patched release of each major.
@@ -13,5 +15,3 @@ allowBuilds:
   node-pty: true
   "@google/genai": false
   protobufjs: false
-patchedDependencies:
-  node-forge@1.4.0: patches/node-forge@1.4.0.patch

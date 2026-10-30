@@ -15,7 +15,11 @@ import { basename, dirname, join, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { auditDirectory, auditArtifact } from "./release-audit.mjs";
 import { isMain } from "./bench-support.mjs";
-import { patchForge, assessPatchedAudit, forgeProof } from "./forge-patch.mjs";
+import {
+  prepareForgeDistribution,
+  forgeProof,
+  verifyForgeLock,
+} from "./forge-release.mjs";
 
 export function releaseManifest(source, platform, arch) {
   if (platform !== "darwin" || arch !== "arm64")
@@ -36,7 +40,7 @@ export function releaseManifest(source, platform, arch) {
     // Preserve the source workspace's scoped security resolution in npm installs.
     overrides: {
       "@anthropic-ai/sandbox-runtime": { zod: source.dependencies.zod },
-      // The backport verifier accepts exactly this reviewed upstream source.
+      // Keep the installed and bundled code on the same reviewed official release.
       "node-forge": forgeProof.version,
     },
     bundledDependencies: ["@anthropic-ai/sandbox-runtime", "node-pty"],
@@ -168,10 +172,13 @@ export async function packageRelease() {
       join(stage, "package-lock.json"),
       join(stage, "npm-shrinkwrap.json"),
     );
-    await patchForge(join(stage, "node_modules/node-forge"));
+    verifyForgeLock(
+      JSON.parse(await readFile(join(stage, "npm-shrinkwrap.json"), "utf8")),
+    );
+    await prepareForgeDistribution(join(stage, "node_modules/node-forge"));
     const debug = join(stage, "debug");
     await prepareReleaseStage(stage, debug);
-    const audit = await assessPatchedAudit(auditDirectory(stage), stage);
+    const audit = auditDirectory(stage);
     await writeFile(
       join(output, "package-audit.json"),
       JSON.stringify(audit, null, 2) + "\n",

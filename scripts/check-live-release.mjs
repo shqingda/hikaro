@@ -17,7 +17,7 @@ import { join, resolve } from "node:path";
 import { promisify, stripVTControlCharacters } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
 import { SharedHostClient } from "../packages/host/src/client.ts";
-import { verifyForge } from "./forge-patch.mjs";
+import { verifyForge } from "./forge-release.mjs";
 
 const exec = promisify(execFile);
 assert.ok(process.argv[2], "Pass the release tarball path");
@@ -142,7 +142,7 @@ try {
   await exec(
     process.execPath,
     [
-      join(root, "scripts/check-forge-fix.mjs"),
+      join(root, "scripts/check-forge.mjs"),
       join(prefix, "node_modules/hikaro/package.json"),
     ],
     { cwd: directory, timeout: 30000 },
@@ -150,7 +150,7 @@ try {
   const bin = join(prefix, "node_modules/.bin/hikaro");
   report.version = (await exec(bin, ["--version"], { cwd, env })).stdout.trim();
   report.checks.push(
-    "empty-cache installed artifact, version and patched forge signatures",
+    "empty-cache installed artifact, version and official forge signature and PEM regressions",
   );
   console.log(
     "Installed " + report.version + "; starting real subscription TUI",

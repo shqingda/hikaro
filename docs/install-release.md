@@ -87,8 +87,8 @@ npm install --engine-strict --prefix "$HOME/.local/share/hikaro-app" ./hikaro-0.
 
 ## 候选包安全检查
 
-`pnpm audit:release ARTIFACT.tgz` 检查包内生产锁及实际捆绑的 node-forge Node 实现，结果绑定 SHA；`release:pack` 在打包前和打包后均执行检查。无法取得有效审计结果、未修复的 high/critical、新公告或补丁哈希不符都会阻断。
+`pnpm audit:release ARTIFACT.tgz` 检查包内生产锁及实际捆绑的 node-forge Node 实现，结果绑定 SHA；`release:pack` 在打包前和打包后均执行检查。无法取得有效审计结果、high/critical 公告或发行文件哈希不符都会阻断，没有安全回补或公告放行例外。
 
-node-forge 1.4.0 使用固定的上游 PR #1152 安全回移，版本号不变。源码通过 pnpm patchedDependencies 安装；候选包直接携带相同的 49 个 Node 源文件，安装时不需要再执行补丁。TUI 包不包含未修复的浏览器/Flash 预编译文件。原始 registry audit 仍显示该版本命中的 2 个 high 依赖节点（同一公告）；报告明确区分 `registryPassed: false` 与经过完整文件哈希核验的 `remediations`，没有忽略列表或降低审计级别。换版本或出现新公告必须重新评估。
+node-forge 固定为官方 `1.4.2`，源码安装与 npm 候选包使用同一版本。原 `1.4.0` 回补及 `patches/` 已退役。官方 npm tarball 先核验 SHA-512，再记录 [发行文件证明](../scripts/security/node-forge-1.4.2.json)：49 个 Node 源文件、package.json、README 和许可证全部逐项校验。生产锁必须指向同一官方 tarball 和 integrity；额外副本、重复归档项、缺失或改写文件均会阻断。TUI 发行包只裁剪不用的 `dist/` 和 `flash/`，不修改 Node 源码，也不在 postinstall 打补丁。
 
-安装验收还会从安装目录实际解析 forge，验证源码一致性并运行 8 组正常/畸形签名回归。见 [安全回移验收](validation/forge-backport.md)。
+安装验收从 sandbox-runtime 的实际依赖位置解析 forge，重复完整性校验；运行 8 组正常/额外嵌套字段签名回归、3 类非规范 DER 拒绝测试和 PEM Buffer 输入兼容测试。见 [官方版本迁移验收](validation/forge-official-20261030.md)。
