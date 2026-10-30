@@ -91,7 +91,7 @@ it("preserves the cursor after an explicit one-row budget and a resize", () => {
   }
 });
 
-it("maps completion clicks after the cropped input without submitting or moving the draft cursor", async () => {
+it("maps completion clicks above the cropped input without submitting or moving the draft cursor", async () => {
   const { editor } = fixture(12);
   const submit = vi.fn();
   editor.onSubmit = submit;
@@ -120,8 +120,10 @@ it("maps completion clicks after the cropped input without submitting or moving 
   const before = editor.getCursor();
   const rendered = editor.render(40);
   expect(editor.getAutocompleteMaxVisible()).toBe(3);
-  expect(rendered[2]).toContain(CURSOR_MARKER);
-  expect(stripVTControlCharacters(rendered[4]!)).toContain("file0");
+  expect(
+    rendered.findIndex((line) => line.includes(CURSOR_MARKER)),
+  ).toBeGreaterThan(3);
+  expect(stripVTControlCharacters(rendered[0]!)).toContain("file0");
   editor.focused = false;
   expect(editor.render(40).join("\n")).not.toContain(CURSOR_MARKER);
   expect(editor.focused).toBe(false);
@@ -134,11 +136,11 @@ it("maps completion clicks after the cropped input without submitting or moving 
     type: "click",
     button: "left",
     x: 4,
-    y: 5,
+    y: 1,
     width: 40,
     height: rendered.length,
     screenX: 4,
-    screenY: 5,
+    screenY: 1,
     shift: false,
     alt: false,
     ctrl: false,

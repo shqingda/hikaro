@@ -31,3 +31,9 @@ Existing performance gates passed sequentially on `90489d8`, without other build
 5. Fixed observed interaction defects, adapted existing PTY workflows, and stopped expanding validation at the user's request. Unrelated process-observation investigation was reverted.
 
 The requested ub-mode was applied during final convergence. No crapper/dryer/mutator tools were available; no replacement toolchain was introduced. Existing no-publish instructions were retained.
+
+## Input hierarchy correction
+
+After reviewing the user's terminal screenshot, moved Pi completion rows above the composer and reordered the existing mouse-coordinate mapping alongside them. Navigation now reserves the Beam selection background for keyboard focus; removed zero status counts, redundant Ready labels, repeated Actions hints and verbose empty-state instructions. No new component or dependency.
+
+Updated the existing completion-click regression: it failed before the fix and passed afterward, including draft/cursor preservation and no accidental submission. The ten editor tests, typecheck and build passed. Physical IME/mouse acceptance remains unverified. Applied ub-mode subtraction and apple-design spatial grouping; no animations or extra test matrix.

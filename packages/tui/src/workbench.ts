@@ -104,18 +104,13 @@ export class WorkbenchFrame extends VStack {
           (n, s) => n + (s.attention ?? 0),
           0,
         );
-        const lines = [
-          accent(bold(" WORKSPACE")),
-          muted(fit(` Needs attention  ${attention}`, width)),
-          muted(
-            fit(
-              ` Running  ${this.sessions.filter((s) => /working|running/i.test(s.state)).length}`,
-              width,
-            ),
-          ),
-          "",
-          accent(" Sessions"),
-        ];
+        const running = this.sessions.filter((s) =>
+          /working|running/i.test(s.state),
+        ).length;
+        const lines = [muted(" Sessions")];
+        if (attention)
+          lines.push(accent(fit(` Needs attention  ${attention}`, width)));
+        if (running) lines.push(muted(fit(` Running  ${running}`, width)));
         const room = Math.max(1, this.tui.terminal.rows - 12);
         const index = this.navigation.focused
           ? this.navigationIndex
@@ -134,15 +129,15 @@ export class WorkbenchFrame extends VStack {
             width,
           );
           lines.push(
-            (
-              this.navigation.focused
-                ? start + i === this.navigationIndex
-                : session.current
-            )
+            this.navigation.focused && start + i === this.navigationIndex
               ? selected(line)
               : line,
           );
-          if (width >= 22 && this.sessions.length <= 4) {
+          if (
+            width >= 22 &&
+            this.sessions.length <= 4 &&
+            session.state !== "Ready"
+          ) {
             this.sessionRegions.push({ row: lines.length, id: session.id });
             lines.push(muted(fit(`   ${session.state}`, width)));
           }
@@ -153,8 +148,6 @@ export class WorkbenchFrame extends VStack {
           this.navigationActions.set(lines.length, callbacks.sessions);
           lines.push(muted(fit(" Ctrl+O all sessions", width)));
         }
-        this.navigationActions.set(lines.length, callbacks.actions);
-        lines.push(muted(fit(" Ctrl+P actions", width)));
         return lines;
       },
       invalidate() {},
@@ -204,7 +197,11 @@ export class WorkbenchFrame extends VStack {
               end: offset + text.length,
             });
             offset += text.length + 1;
-            return tab === this.tab ? selected(text) : muted(text);
+            return tab === this.tab
+              ? this.tabBar.focused
+                ? selected(text)
+                : accent(bold(text))
+              : muted(text);
           })
           .join(" ");
         return [line];

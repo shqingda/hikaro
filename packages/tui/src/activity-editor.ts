@@ -127,6 +127,12 @@ export class ActivityEditor extends Editor {
     const overflowBelow = this.below + body.length - end;
     const hint = `${overflowBelow ? `↓ ${overflowBelow} · ` : ""}${this.hint}`;
     result[end - start + 1] = muted(truncateToWidth(` ${hint}`, width, ""));
+    // Keep the composer anchored below its suggestions; remap mouse rows with it.
+    const completionStart = end - start + 2;
+    const completion = result.splice(completionStart);
+    const completionRows = this.sourceRows.splice(completionStart);
+    result.unshift(...completion);
+    this.sourceRows.unshift(...completionRows);
     return focused
       ? result
       : result.map((line) =>

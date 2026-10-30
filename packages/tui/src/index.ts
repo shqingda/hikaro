@@ -1242,7 +1242,7 @@ export class HikaroView {
     if (!messages.length) {
       this.welcome = new Text(
         muted(
-          "What would you like to work on?\n\nWrite a task below. Ctrl+P opens actions; Ctrl+O switches sessions.\nUse the workspace views to review changes, activity, plans and context.",
+          "What would you like to work on?",
         ),
         1,
         1,
