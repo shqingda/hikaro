@@ -1,0 +1,40 @@
+ hikaro · /back returns to Pi                                                                                           
+ Conversation   Activity   Context                                                                                      
+ WORKSPACE              YOU                                                                                             
+ Needs attention  0                                                                                                     
+ Running  0             Review login timeout handling                                                                   
+                                                                                                                        
+ Sessions               HIKARO                                                                                          
+ › Hikaro session                                                                                                       
+   Ready                Hikaro is ready.                                                                                
+                                                                                                                        
+ Ctrl+P actions         This is offline demo mode. No model request or tool execution occurred.                         
+                                                                                                                        
+                        You wrote: Review login timeout handling                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                       ─ Message ───────────────────────────────────────────────────────────────────────────────────────
+                                                                                                                        
+                        Enter send · Ctrl+P actions · F6 views                                                          
+                        Ready · Permissions: Hikaro                                                                     

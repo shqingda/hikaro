@@ -29,10 +29,18 @@
 - 独立临时目录执行 `pnpm install --frozen-lockfile --prod --ignore-scripts --filter hikaro`，随后从实际 sandbox-runtime 位置执行官方内容、签名及 PEM 检查，通过。
 - 工作区 `pnpm audit --prod --json`：0 high、0 critical；保留一项无关的 `qs 6.16.0` moderate，未扩大本次依赖变更范围。
 
-## 候选包验证边界
+## 最终候选包验证
 
-该切片候选包 SHA-256 为 `1249205cfe7884c6c76be89b8c7b508a8315800426563dfcccea949c393ea921`，来源是 `e5c8e319ddb4e10241164b2ac5b3affc03bacef0` 上的未提交工作区。真实打包完成，打包前及包内原始 npm audit 均为零漏洞，49 个 Node 文件和生产锁核验通过。
+工作台主实现提交为 `90489d85962ab1a3b9ec87c000da0e37408f5826`。最终候选 [hikaro-0.3.0-darwin-arm64.tgz](../../artifacts/release/hikaro-0.3.0-darwin-arm64.tgz) 的 SHA-256 为 `02ad67500bf56e9bdcdefed3dbf92b4235e928f2ff27177487c865eb7269d64d`，压缩大小 8,088,416 字节。打包时 `dirty=true`，剩余变更为任务清单和工作台验证记录，不能将候选描述为干净提交产物。
 
-空缓存 `check:release` 已通过 forge 完整性、签名/PEM、bin、离线 prompt 与原生 helper 验收；随后 TUI 立即 Ctrl+D 退出暴露启动/关闭竞态，返回 `hikaro: Runtime is closing`。此时整条安装 E2E 尚未通过，不把上述局部成功声明为正式发布就绪。最终集成需要修复该竞态并重新打包、运行完整安装验收；源码变化和文档变化后的新包须绑定新的 SHA。
+最终一次运行结果：
+
+- `node scripts/package-release.mjs` 通过；staging 与包内原始 npm audit 均为零漏洞，52 个保留文件、官方来源及生产锁核验通过。
+- `pnpm check:release artifacts/release/hikaro-0.3.0-darwin-arm64.tgz` 完整通过。空缓存安装、forge 内容和签名/DER/Buffer、bin、离线 prompt、原生 helper、实际 PTY 启动退出，以及立即 Ctrl+D 多行草稿恢复、host SIGKILL 后显式恢复且只消费一次、完整 Unicode diff 分页与磁盘不变检查均通过。[机器报告](../../artifacts/release/hikaro-0.3.0-darwin-arm64.tgz.validation.json) 绑定同一 SHA。
+- `pnpm check:install` 通过：独立复制已跟踪源码，安装、类型检查、原生构建和真实 TUI 启动退出成功。
+- 独立临时目录重新执行 `pnpm install --frozen-lockfile --prod --ignore-scripts --filter hikaro`，实际 sandbox-runtime 所解析的 forge 通过官方完整性与全部签名/DER/Buffer 检查，临时目录已清理。
+- 最终工作区生产 audit 仍为 0 high、0 critical、1 项 `qs` moderate；没有新增审计例外。pnpm 的非零退出码来自该 moderate，不将其表述为零漏洞。
+
+此前切片候选曾暴露 `Runtime is closing` 早退出竞态；最终候选的完整安装验收已验证修复。此记录只证明上述候选及检查，不覆盖整个仓库的其他检查结果。
 
 未执行公开发布、签名/公证或真实 provider 调用。本记录不替代物理终端中文 IME、鼠标及滚动验收。

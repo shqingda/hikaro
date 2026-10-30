@@ -1,0 +1,26 @@
+PRODUCTION COMPONENT FIXTURE · not a real terminal capture
+light-80x24-models
+ hikaro  hikaro / main · Login timeout                      Actions Ctrl+P
+ Conversation   Context 
+ Select model                                                                   
+[Models]  Providers
+> Search…                                                                       
+ Recent
+   Fast
+ Favorites
+ → ★ Balanced
+ local
+   Careful
+ local/balanced                                                                 
+ Context 200k · Images · Reasoning                                              
+ ↑↓ select · Enter confirm · Esc cancel                                         
+ Tab page · Ctrl+S active + default                                             
+
+
+
+
+
+─ Message · draft preserved ────────────────────────────────────────────────────
+ Review timeout handling 中文 @auth.ts                                          
+ Close the panel to continue editing
+ Ready                         local/code-model · Permissions · Workspace write

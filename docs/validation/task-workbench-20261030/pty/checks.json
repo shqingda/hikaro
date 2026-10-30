@@ -1,0 +1,597 @@
+{
+  "captures": 24,
+  "failed": [],
+  "results": [
+    {
+      "name": "native-144x40-draft",
+      "mode": "native",
+      "scenario": "draft",
+      "columns": 144,
+      "rows": 40,
+      "program": "Production Hikaro",
+      "input": "Review timeout handling 中文 @auth.ts ",
+      "inputMethod": "PTY keyboard/text injection; not native IME",
+      "draftSubmitted": false,
+      "capturedAt": "2026-10-30T12:52:30.757Z",
+      "cursor": {
+        "x": 39,
+        "y": 36
+      },
+      "checks": {
+        "statusVisible": true,
+        "permissionVisible": true,
+        "cursorWithinBounds": true,
+        "focusedInputCursor": true,
+        "attachmentVisible": true,
+        "contextActionVisible": true,
+        "markdownRendered": true
+      },
+      "issues": []
+    },
+    {
+      "name": "native-144x40-context",
+      "mode": "native",
+      "scenario": "context",
+      "columns": 144,
+      "rows": 40,
+      "program": "Production Hikaro",
+      "input": "Review timeout handling 中文 @auth.ts ",
+      "inputMethod": "PTY keyboard/text injection; not native IME",
+      "draftSubmitted": false,
+      "capturedAt": "2026-10-30T12:52:31.341Z",
+      "cursor": null,
+      "checks": {
+        "statusVisible": true,
+        "permissionVisible": true,
+        "cursorWithinBounds": true,
+        "focusedInputCursor": true,
+        "attachmentVisible": true,
+        "contextActionVisible": true,
+        "markdownRendered": true
+      },
+      "issues": []
+    },
+    {
+      "name": "native-120x40",
+      "mode": "native",
+      "scenario": "conversation",
+      "columns": 120,
+      "rows": 40,
+      "program": "Production Hikaro",
+      "input": "Review login timeout handling",
+      "inputMethod": "PTY keyboard/text injection; not native IME",
+      "draftSubmitted": false,
+      "capturedAt": "2026-10-30T12:52:32.333Z",
+      "cursor": {
+        "x": 1,
+        "y": 37
+      },
+      "checks": {
+        "statusVisible": true,
+        "permissionVisible": true,
+        "cursorWithinBounds": true,
+        "focusedInputCursor": true,
+        "attachmentVisible": true,
+        "contextActionVisible": true,
+        "markdownRendered": true
+      },
+      "issues": []
+    },
+    {
+      "name": "native-120x40-draft",
+      "mode": "native",
+      "scenario": "draft",
+      "columns": 120,
+      "rows": 40,
+      "program": "Production Hikaro",
+      "input": "Review timeout handling 中文 @auth.ts ",
+      "inputMethod": "PTY keyboard/text injection; not native IME",
+      "draftSubmitted": false,
+      "capturedAt": "2026-10-30T12:52:32.558Z",
+      "cursor": {
+        "x": 39,
+        "y": 36
+      },
+      "checks": {
+        "statusVisible": true,
+        "permissionVisible": true,
+        "cursorWithinBounds": true,
+        "focusedInputCursor": true,
+        "attachmentVisible": true,
+        "contextActionVisible": true,
+        "markdownRendered": true
+      },
+      "issues": []
+    },
+    {
+      "name": "native-120x40-context",
+      "mode": "native",
+      "scenario": "context",
+      "columns": 120,
+      "rows": 40,
+      "program": "Production Hikaro",
+      "input": "Review timeout handling 中文 @auth.ts ",
+      "inputMethod": "PTY keyboard/text injection; not native IME",
+      "draftSubmitted": false,
+      "capturedAt": "2026-10-30T12:52:33.118Z",
+      "cursor": null,
+      "checks": {
+        "statusVisible": true,
+        "permissionVisible": true,
+        "cursorWithinBounds": true,
+        "focusedInputCursor": true,
+        "attachmentVisible": true,
+        "contextActionVisible": true,
+        "markdownRendered": true
+      },
+      "issues": []
+    },
+    {
+      "name": "native-80x24-draft",
+      "mode": "native",
+      "scenario": "draft",
+      "columns": 80,
+      "rows": 24,
+      "program": "Production Hikaro",
+      "input": "Review timeout handling 中文 @auth.ts ",
+      "inputMethod": "PTY keyboard/text injection; not native IME",
+      "draftSubmitted": false,
+      "capturedAt": "2026-10-30T12:52:34.174Z",
+      "cursor": {
+        "x": 39,
+        "y": 20
+      },
+      "checks": {
+        "statusVisible": true,
+        "permissionVisible": true,
+        "cursorWithinBounds": true,
+        "focusedInputCursor": true,
+        "attachmentVisible": true,
+        "contextActionVisible": true,
+        "markdownRendered": true
+      },
+      "issues": []
+    },
+    {
+      "name": "native-80x24-context",
+      "mode": "native",
+      "scenario": "context",
+      "columns": 80,
+      "rows": 24,
+      "program": "Production Hikaro",
+      "input": "Review timeout handling 中文 @auth.ts ",
+      "inputMethod": "PTY keyboard/text injection; not native IME",
+      "draftSubmitted": false,
+      "capturedAt": "2026-10-30T12:52:34.711Z",
+      "cursor": null,
+      "checks": {
+        "statusVisible": true,
+        "permissionVisible": true,
+        "cursorWithinBounds": true,
+        "focusedInputCursor": true,
+        "attachmentVisible": true,
+        "contextActionVisible": true,
+        "markdownRendered": true
+      },
+      "issues": []
+    },
+    {
+      "name": "native-60x18-draft",
+      "mode": "native",
+      "scenario": "draft",
+      "columns": 60,
+      "rows": 18,
+      "program": "Production Hikaro",
+      "input": "Review timeout handling 中文 @auth.ts ",
+      "inputMethod": "PTY keyboard/text injection; not native IME",
+      "draftSubmitted": false,
+      "capturedAt": "2026-10-30T12:52:35.719Z",
+      "cursor": {
+        "x": 39,
+        "y": 14
+      },
+      "checks": {
+        "statusVisible": true,
+        "permissionVisible": true,
+        "cursorWithinBounds": true,
+        "focusedInputCursor": true,
+        "attachmentVisible": true,
+        "contextActionVisible": true,
+        "markdownRendered": true
+      },
+      "issues": []
+    },
+    {
+      "name": "native-60x18-context",
+      "mode": "native",
+      "scenario": "context",
+      "columns": 60,
+      "rows": 18,
+      "program": "Production Hikaro",
+      "input": "Review timeout handling 中文 @auth.ts ",
+      "inputMethod": "PTY keyboard/text injection; not native IME",
+      "draftSubmitted": false,
+      "capturedAt": "2026-10-30T12:52:36.257Z",
+      "cursor": null,
+      "checks": {
+        "statusVisible": true,
+        "permissionVisible": true,
+        "cursorWithinBounds": true,
+        "focusedInputCursor": true,
+        "attachmentVisible": true,
+        "contextActionVisible": true,
+        "markdownRendered": true
+      },
+      "issues": []
+    },
+    {
+      "name": "native-40x12-draft",
+      "mode": "native",
+      "scenario": "draft",
+      "columns": 40,
+      "rows": 12,
+      "program": "Production Hikaro",
+      "input": "Review timeout handling 中文 @auth.ts ",
+      "inputMethod": "PTY keyboard/text injection; not native IME",
+      "draftSubmitted": false,
+      "capturedAt": "2026-10-30T12:52:37.290Z",
+      "cursor": {
+        "x": 39,
+        "y": 8
+      },
+      "checks": {
+        "statusVisible": true,
+        "permissionVisible": true,
+        "cursorWithinBounds": true,
+        "focusedInputCursor": true,
+        "attachmentVisible": true,
+        "contextActionVisible": true,
+        "markdownRendered": true
+      },
+      "issues": []
+    },
+    {
+      "name": "native-40x12-context",
+      "mode": "native",
+      "scenario": "context",
+      "columns": 40,
+      "rows": 12,
+      "program": "Production Hikaro",
+      "input": "Review timeout handling 中文 @auth.ts ",
+      "inputMethod": "PTY keyboard/text injection; not native IME",
+      "draftSubmitted": false,
+      "capturedAt": "2026-10-30T12:52:37.827Z",
+      "cursor": null,
+      "checks": {
+        "statusVisible": true,
+        "permissionVisible": true,
+        "cursorWithinBounds": true,
+        "focusedInputCursor": true,
+        "attachmentVisible": true,
+        "contextActionVisible": true,
+        "markdownRendered": true
+      },
+      "issues": []
+    },
+    {
+      "name": "attached-144x40-draft",
+      "mode": "attached",
+      "scenario": "draft",
+      "columns": 144,
+      "rows": 40,
+      "program": "Production Hikaro",
+      "input": "Review timeout handling 中文 @auth.ts ",
+      "inputMethod": "PTY keyboard/text injection; not native IME",
+      "draftSubmitted": false,
+      "capturedAt": "2026-10-30T12:52:39.081Z",
+      "cursor": {
+        "x": 39,
+        "y": 36
+      },
+      "checks": {
+        "statusVisible": true,
+        "permissionVisible": true,
+        "cursorWithinBounds": true,
+        "focusedInputCursor": true,
+        "attachmentVisible": true,
+        "contextActionVisible": true,
+        "markdownRendered": true
+      },
+      "issues": []
+    },
+    {
+      "name": "attached-144x40-context",
+      "mode": "attached",
+      "scenario": "context",
+      "columns": 144,
+      "rows": 40,
+      "program": "Production Hikaro",
+      "input": "Review timeout handling 中文 @auth.ts ",
+      "inputMethod": "PTY keyboard/text injection; not native IME",
+      "draftSubmitted": false,
+      "capturedAt": "2026-10-30T12:52:39.639Z",
+      "cursor": null,
+      "checks": {
+        "statusVisible": true,
+        "permissionVisible": true,
+        "cursorWithinBounds": true,
+        "focusedInputCursor": true,
+        "attachmentVisible": true,
+        "contextActionVisible": true,
+        "markdownRendered": true
+      },
+      "issues": []
+    },
+    {
+      "name": "attached-120x40",
+      "mode": "attached",
+      "scenario": "conversation",
+      "columns": 120,
+      "rows": 40,
+      "program": "Production Hikaro",
+      "input": "Review login timeout handling",
+      "inputMethod": "PTY keyboard/text injection; not native IME",
+      "draftSubmitted": false,
+      "capturedAt": "2026-10-30T12:52:40.917Z",
+      "cursor": {
+        "x": 1,
+        "y": 37
+      },
+      "checks": {
+        "statusVisible": true,
+        "permissionVisible": true,
+        "cursorWithinBounds": true,
+        "focusedInputCursor": true,
+        "attachmentVisible": true,
+        "contextActionVisible": true,
+        "markdownRendered": true
+      },
+      "issues": []
+    },
+    {
+      "name": "attached-120x40-draft",
+      "mode": "attached",
+      "scenario": "draft",
+      "columns": 120,
+      "rows": 40,
+      "program": "Production Hikaro",
+      "input": "Review timeout handling 中文 @auth.ts ",
+      "inputMethod": "PTY keyboard/text injection; not native IME",
+      "draftSubmitted": false,
+      "capturedAt": "2026-10-30T12:52:41.121Z",
+      "cursor": {
+        "x": 39,
+        "y": 36
+      },
+      "checks": {
+        "statusVisible": true,
+        "permissionVisible": true,
+        "cursorWithinBounds": true,
+        "focusedInputCursor": true,
+        "attachmentVisible": true,
+        "contextActionVisible": true,
+        "markdownRendered": true
+      },
+      "issues": []
+    },
+    {
+      "name": "attached-120x40-context",
+      "mode": "attached",
+      "scenario": "context",
+      "columns": 120,
+      "rows": 40,
+      "program": "Production Hikaro",
+      "input": "Review timeout handling 中文 @auth.ts ",
+      "inputMethod": "PTY keyboard/text injection; not native IME",
+      "draftSubmitted": false,
+      "capturedAt": "2026-10-30T12:52:41.680Z",
+      "cursor": null,
+      "checks": {
+        "statusVisible": true,
+        "permissionVisible": true,
+        "cursorWithinBounds": true,
+        "focusedInputCursor": true,
+        "attachmentVisible": true,
+        "contextActionVisible": true,
+        "markdownRendered": true
+      },
+      "issues": []
+    },
+    {
+      "name": "attached-80x24-draft",
+      "mode": "attached",
+      "scenario": "draft",
+      "columns": 80,
+      "rows": 24,
+      "program": "Production Hikaro",
+      "input": "Review timeout handling 中文 @auth.ts ",
+      "inputMethod": "PTY keyboard/text injection; not native IME",
+      "draftSubmitted": false,
+      "capturedAt": "2026-10-30T12:52:42.941Z",
+      "cursor": {
+        "x": 39,
+        "y": 20
+      },
+      "checks": {
+        "statusVisible": true,
+        "permissionVisible": true,
+        "cursorWithinBounds": true,
+        "focusedInputCursor": true,
+        "attachmentVisible": true,
+        "contextActionVisible": true,
+        "markdownRendered": true
+      },
+      "issues": []
+    },
+    {
+      "name": "attached-80x24-context",
+      "mode": "attached",
+      "scenario": "context",
+      "columns": 80,
+      "rows": 24,
+      "program": "Production Hikaro",
+      "input": "Review timeout handling 中文 @auth.ts ",
+      "inputMethod": "PTY keyboard/text injection; not native IME",
+      "draftSubmitted": false,
+      "capturedAt": "2026-10-30T12:52:43.480Z",
+      "cursor": null,
+      "checks": {
+        "statusVisible": true,
+        "permissionVisible": true,
+        "cursorWithinBounds": true,
+        "focusedInputCursor": true,
+        "attachmentVisible": true,
+        "contextActionVisible": true,
+        "markdownRendered": true
+      },
+      "issues": []
+    },
+    {
+      "name": "attached-60x18-draft",
+      "mode": "attached",
+      "scenario": "draft",
+      "columns": 60,
+      "rows": 18,
+      "program": "Production Hikaro",
+      "input": "Review timeout handling 中文 @auth.ts ",
+      "inputMethod": "PTY keyboard/text injection; not native IME",
+      "draftSubmitted": false,
+      "capturedAt": "2026-10-30T12:52:44.696Z",
+      "cursor": {
+        "x": 39,
+        "y": 14
+      },
+      "checks": {
+        "statusVisible": true,
+        "permissionVisible": true,
+        "cursorWithinBounds": true,
+        "focusedInputCursor": true,
+        "attachmentVisible": true,
+        "contextActionVisible": true,
+        "markdownRendered": true
+      },
+      "issues": []
+    },
+    {
+      "name": "attached-60x18-context",
+      "mode": "attached",
+      "scenario": "context",
+      "columns": 60,
+      "rows": 18,
+      "program": "Production Hikaro",
+      "input": "Review timeout handling 中文 @auth.ts ",
+      "inputMethod": "PTY keyboard/text injection; not native IME",
+      "draftSubmitted": false,
+      "capturedAt": "2026-10-30T12:52:45.234Z",
+      "cursor": null,
+      "checks": {
+        "statusVisible": true,
+        "permissionVisible": true,
+        "cursorWithinBounds": true,
+        "focusedInputCursor": true,
+        "attachmentVisible": true,
+        "contextActionVisible": true,
+        "markdownRendered": true
+      },
+      "issues": []
+    },
+    {
+      "name": "attached-40x12-draft",
+      "mode": "attached",
+      "scenario": "draft",
+      "columns": 40,
+      "rows": 12,
+      "program": "Production Hikaro",
+      "input": "Review timeout handling 中文 @auth.ts ",
+      "inputMethod": "PTY keyboard/text injection; not native IME",
+      "draftSubmitted": false,
+      "capturedAt": "2026-10-30T12:52:46.496Z",
+      "cursor": {
+        "x": 39,
+        "y": 7
+      },
+      "checks": {
+        "statusVisible": true,
+        "permissionVisible": true,
+        "cursorWithinBounds": true,
+        "focusedInputCursor": true,
+        "attachmentVisible": true,
+        "contextActionVisible": true,
+        "markdownRendered": true
+      },
+      "issues": []
+    },
+    {
+      "name": "attached-40x12-context",
+      "mode": "attached",
+      "scenario": "context",
+      "columns": 40,
+      "rows": 12,
+      "program": "Production Hikaro",
+      "input": "Review timeout handling 中文 @auth.ts ",
+      "inputMethod": "PTY keyboard/text injection; not native IME",
+      "draftSubmitted": false,
+      "capturedAt": "2026-10-30T12:52:47.034Z",
+      "cursor": null,
+      "checks": {
+        "statusVisible": true,
+        "permissionVisible": true,
+        "cursorWithinBounds": true,
+        "focusedInputCursor": true,
+        "attachmentVisible": true,
+        "contextActionVisible": true,
+        "markdownRendered": true
+      },
+      "issues": []
+    },
+    {
+      "name": "external-pi-120x40",
+      "mode": "external-pi",
+      "scenario": "model",
+      "columns": 120,
+      "rows": 40,
+      "program": "Installed Pi 1.4.0 and production Hikaro",
+      "input": "/model",
+      "inputMethod": "PTY keyboard/text injection; not native IME",
+      "draftSubmitted": false,
+      "capturedAt": "2026-10-30T12:52:48.926Z",
+      "cursor": {
+        "x": 2,
+        "y": 5
+      },
+      "checks": {
+        "statusVisible": true,
+        "permissionVisible": true,
+        "cursorWithinBounds": true,
+        "focusedInputCursor": true,
+        "attachmentVisible": true,
+        "contextActionVisible": true,
+        "markdownRendered": true
+      },
+      "issues": []
+    },
+    {
+      "name": "embedded-pi-120x40",
+      "mode": "embedded-pi",
+      "scenario": "conversation",
+      "columns": 120,
+      "rows": 40,
+      "program": "Installed Pi 1.4.0 and production Hikaro",
+      "input": "Review login timeout handling",
+      "inputMethod": "PTY keyboard/text injection; not native IME",
+      "draftSubmitted": false,
+      "capturedAt": "2026-10-30T12:52:50.834Z",
+      "cursor": null,
+      "checks": {
+        "statusVisible": true,
+        "permissionVisible": true,
+        "cursorWithinBounds": true,
+        "focusedInputCursor": true,
+        "attachmentVisible": true,
+        "contextActionVisible": true,
+        "markdownRendered": true
+      },
+      "issues": []
+    }
+  ]
+}

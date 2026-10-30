@@ -1,0 +1,40 @@
+ hikaro  workspace · Review login timeout handling                                                                          Actions Ctrl+P      
+ Conversation   Changes   Activity   Plan   Context                                                                                             
+ WORKSPACE              Context                                                                                                                 
+ Needs attention  0     Draft attachments, active model, workspace instructions, skills, and tools                                              
+ Running  0            > auth.ts                                                                                                                
+                        › Draft attachment · auth.ts                                                 auth.ts                                    
+ Sessions                                                                                                                                       
+ › Review login timeo…                                                                               Draft attachment                           
+   Ready                                                                                             @"auth.ts"                                 
+                                                                                                                                                
+ Ctrl+O all sessions                                                                                 auth.ts                                    
+ Ctrl+P actions                                                                                      136 bytes · Local preview; not sent        
+                                                                                                                                                
+                                                                                                     export async function authenticate(token:  
+                                                                                                     string) {                                  
+                                                                                                       if (!token) throw new Error("Missing     
+                                                                                                     token");                                   
+                                                                                                       return { authenticated: true };          
+                                                                                                     }                                          
+                                                                                                                                                
+                                                                                                                                                
+                                                                                                                                                
+                                                                                                                                                
+                                                                                                                                                
+                                                                                                                                                
+                                                                                                                                                
+                                                                                                                                                
+                                                                                                                                                
+                                                                                                                                                
+                                                                                                                                                
+                                                                                                                                                
+                                                                                                                                                
+                                                                                                                                                
+                                                                                                     1/2 Remove attachment from draft · Tab next
+                        ← list · PgUp/PgDn read · Tab action · Enter apply · / search                                                           
+ Context auth.ts ×                                                                                                                              
+─ Message ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Review timeout handling 中文 @auth.ts                                                                                                          
+ Enter send · Ctrl+P actions · @ files                                                                                                          
+ Ready                                                            demo/offline · Permissions · Ask for approval · ↑0 ↓0 est $0.000 · 32k · auto 

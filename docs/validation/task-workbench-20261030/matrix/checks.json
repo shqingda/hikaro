@@ -1,0 +1,2197 @@
+{
+  "scope": "Production HikaroView/Pi layout fixtures with deterministic data, not PTY screenshots or IME validation",
+  "frames": 90,
+  "failed": [],
+  "results": [
+    {
+      "name": "dark-144x40-conversation",
+      "theme": "dark",
+      "scenario": "conversation",
+      "columns": 144,
+      "rows": 40,
+      "cursor": [
+        {
+          "x": 38,
+          "y": 37
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-144x40-models",
+      "theme": "dark",
+      "scenario": "models",
+      "columns": 144,
+      "rows": 40,
+      "cursor": [
+        {
+          "x": 25,
+          "y": 4
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-144x40-context",
+      "theme": "dark",
+      "scenario": "context",
+      "columns": 144,
+      "rows": 40,
+      "cursor": [],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-144x40-context-search",
+      "theme": "dark",
+      "scenario": "context-search",
+      "columns": 144,
+      "rows": 40,
+      "cursor": [],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-144x40-draft",
+      "theme": "dark",
+      "scenario": "draft",
+      "columns": 144,
+      "rows": 40,
+      "cursor": [
+        {
+          "x": 41,
+          "y": 37
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-144x40-autocomplete",
+      "theme": "dark",
+      "scenario": "autocomplete",
+      "columns": 144,
+      "rows": 40,
+      "cursor": [
+        {
+          "x": 38,
+          "y": 35
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-120x40-conversation",
+      "theme": "dark",
+      "scenario": "conversation",
+      "columns": 120,
+      "rows": 40,
+      "cursor": [
+        {
+          "x": 38,
+          "y": 37
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-120x40-models",
+      "theme": "dark",
+      "scenario": "models",
+      "columns": 120,
+      "rows": 40,
+      "cursor": [
+        {
+          "x": 2,
+          "y": 4
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-120x40-context",
+      "theme": "dark",
+      "scenario": "context",
+      "columns": 120,
+      "rows": 40,
+      "cursor": [],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-120x40-context-search",
+      "theme": "dark",
+      "scenario": "context-search",
+      "columns": 120,
+      "rows": 40,
+      "cursor": [],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-120x40-draft",
+      "theme": "dark",
+      "scenario": "draft",
+      "columns": 120,
+      "rows": 40,
+      "cursor": [
+        {
+          "x": 41,
+          "y": 37
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-120x40-autocomplete",
+      "theme": "dark",
+      "scenario": "autocomplete",
+      "columns": 120,
+      "rows": 40,
+      "cursor": [
+        {
+          "x": 38,
+          "y": 35
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-80x24-conversation",
+      "theme": "dark",
+      "scenario": "conversation",
+      "columns": 80,
+      "rows": 24,
+      "cursor": [
+        {
+          "x": 38,
+          "y": 21
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-80x24-models",
+      "theme": "dark",
+      "scenario": "models",
+      "columns": 80,
+      "rows": 24,
+      "cursor": [
+        {
+          "x": 2,
+          "y": 4
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-80x24-context",
+      "theme": "dark",
+      "scenario": "context",
+      "columns": 80,
+      "rows": 24,
+      "cursor": [],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-80x24-context-search",
+      "theme": "dark",
+      "scenario": "context-search",
+      "columns": 80,
+      "rows": 24,
+      "cursor": [],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-80x24-draft",
+      "theme": "dark",
+      "scenario": "draft",
+      "columns": 80,
+      "rows": 24,
+      "cursor": [
+        {
+          "x": 41,
+          "y": 21
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-80x24-autocomplete",
+      "theme": "dark",
+      "scenario": "autocomplete",
+      "columns": 80,
+      "rows": 24,
+      "cursor": [
+        {
+          "x": 38,
+          "y": 19
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-60x18-conversation",
+      "theme": "dark",
+      "scenario": "conversation",
+      "columns": 60,
+      "rows": 18,
+      "cursor": [
+        {
+          "x": 38,
+          "y": 15
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-60x18-models",
+      "theme": "dark",
+      "scenario": "models",
+      "columns": 60,
+      "rows": 18,
+      "cursor": [
+        {
+          "x": 2,
+          "y": 4
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-60x18-context",
+      "theme": "dark",
+      "scenario": "context",
+      "columns": 60,
+      "rows": 18,
+      "cursor": [],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-60x18-context-search",
+      "theme": "dark",
+      "scenario": "context-search",
+      "columns": 60,
+      "rows": 18,
+      "cursor": [],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-60x18-draft",
+      "theme": "dark",
+      "scenario": "draft",
+      "columns": 60,
+      "rows": 18,
+      "cursor": [
+        {
+          "x": 41,
+          "y": 15
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-60x18-autocomplete",
+      "theme": "dark",
+      "scenario": "autocomplete",
+      "columns": 60,
+      "rows": 18,
+      "cursor": [
+        {
+          "x": 38,
+          "y": 13
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-40x12-conversation",
+      "theme": "dark",
+      "scenario": "conversation",
+      "columns": 40,
+      "rows": 12,
+      "cursor": [
+        {
+          "x": 38,
+          "y": 8
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-40x12-models",
+      "theme": "dark",
+      "scenario": "models",
+      "columns": 40,
+      "rows": 12,
+      "cursor": [
+        {
+          "x": 2,
+          "y": 4
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-40x12-context",
+      "theme": "dark",
+      "scenario": "context",
+      "columns": 40,
+      "rows": 12,
+      "cursor": [],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-40x12-context-search",
+      "theme": "dark",
+      "scenario": "context-search",
+      "columns": 40,
+      "rows": 12,
+      "cursor": [],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-40x12-draft",
+      "theme": "dark",
+      "scenario": "draft",
+      "columns": 40,
+      "rows": 12,
+      "cursor": [
+        {
+          "x": 9,
+          "y": 9
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "dark-40x12-autocomplete",
+      "theme": "dark",
+      "scenario": "autocomplete",
+      "columns": 40,
+      "rows": 12,
+      "cursor": [
+        {
+          "x": 38,
+          "y": 7
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-144x40-conversation",
+      "theme": "light",
+      "scenario": "conversation",
+      "columns": 144,
+      "rows": 40,
+      "cursor": [
+        {
+          "x": 38,
+          "y": 37
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-144x40-models",
+      "theme": "light",
+      "scenario": "models",
+      "columns": 144,
+      "rows": 40,
+      "cursor": [
+        {
+          "x": 25,
+          "y": 4
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-144x40-context",
+      "theme": "light",
+      "scenario": "context",
+      "columns": 144,
+      "rows": 40,
+      "cursor": [],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-144x40-context-search",
+      "theme": "light",
+      "scenario": "context-search",
+      "columns": 144,
+      "rows": 40,
+      "cursor": [],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-144x40-draft",
+      "theme": "light",
+      "scenario": "draft",
+      "columns": 144,
+      "rows": 40,
+      "cursor": [
+        {
+          "x": 41,
+          "y": 37
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-144x40-autocomplete",
+      "theme": "light",
+      "scenario": "autocomplete",
+      "columns": 144,
+      "rows": 40,
+      "cursor": [
+        {
+          "x": 38,
+          "y": 35
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-120x40-conversation",
+      "theme": "light",
+      "scenario": "conversation",
+      "columns": 120,
+      "rows": 40,
+      "cursor": [
+        {
+          "x": 38,
+          "y": 37
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-120x40-models",
+      "theme": "light",
+      "scenario": "models",
+      "columns": 120,
+      "rows": 40,
+      "cursor": [
+        {
+          "x": 2,
+          "y": 4
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-120x40-context",
+      "theme": "light",
+      "scenario": "context",
+      "columns": 120,
+      "rows": 40,
+      "cursor": [],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-120x40-context-search",
+      "theme": "light",
+      "scenario": "context-search",
+      "columns": 120,
+      "rows": 40,
+      "cursor": [],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-120x40-draft",
+      "theme": "light",
+      "scenario": "draft",
+      "columns": 120,
+      "rows": 40,
+      "cursor": [
+        {
+          "x": 41,
+          "y": 37
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-120x40-autocomplete",
+      "theme": "light",
+      "scenario": "autocomplete",
+      "columns": 120,
+      "rows": 40,
+      "cursor": [
+        {
+          "x": 38,
+          "y": 35
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-80x24-conversation",
+      "theme": "light",
+      "scenario": "conversation",
+      "columns": 80,
+      "rows": 24,
+      "cursor": [
+        {
+          "x": 38,
+          "y": 21
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-80x24-models",
+      "theme": "light",
+      "scenario": "models",
+      "columns": 80,
+      "rows": 24,
+      "cursor": [
+        {
+          "x": 2,
+          "y": 4
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-80x24-context",
+      "theme": "light",
+      "scenario": "context",
+      "columns": 80,
+      "rows": 24,
+      "cursor": [],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-80x24-context-search",
+      "theme": "light",
+      "scenario": "context-search",
+      "columns": 80,
+      "rows": 24,
+      "cursor": [],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-80x24-draft",
+      "theme": "light",
+      "scenario": "draft",
+      "columns": 80,
+      "rows": 24,
+      "cursor": [
+        {
+          "x": 41,
+          "y": 21
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-80x24-autocomplete",
+      "theme": "light",
+      "scenario": "autocomplete",
+      "columns": 80,
+      "rows": 24,
+      "cursor": [
+        {
+          "x": 38,
+          "y": 19
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-60x18-conversation",
+      "theme": "light",
+      "scenario": "conversation",
+      "columns": 60,
+      "rows": 18,
+      "cursor": [
+        {
+          "x": 38,
+          "y": 15
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-60x18-models",
+      "theme": "light",
+      "scenario": "models",
+      "columns": 60,
+      "rows": 18,
+      "cursor": [
+        {
+          "x": 2,
+          "y": 4
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-60x18-context",
+      "theme": "light",
+      "scenario": "context",
+      "columns": 60,
+      "rows": 18,
+      "cursor": [],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-60x18-context-search",
+      "theme": "light",
+      "scenario": "context-search",
+      "columns": 60,
+      "rows": 18,
+      "cursor": [],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-60x18-draft",
+      "theme": "light",
+      "scenario": "draft",
+      "columns": 60,
+      "rows": 18,
+      "cursor": [
+        {
+          "x": 41,
+          "y": 15
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-60x18-autocomplete",
+      "theme": "light",
+      "scenario": "autocomplete",
+      "columns": 60,
+      "rows": 18,
+      "cursor": [
+        {
+          "x": 38,
+          "y": 13
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-40x12-conversation",
+      "theme": "light",
+      "scenario": "conversation",
+      "columns": 40,
+      "rows": 12,
+      "cursor": [
+        {
+          "x": 38,
+          "y": 8
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-40x12-models",
+      "theme": "light",
+      "scenario": "models",
+      "columns": 40,
+      "rows": 12,
+      "cursor": [
+        {
+          "x": 2,
+          "y": 4
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-40x12-context",
+      "theme": "light",
+      "scenario": "context",
+      "columns": 40,
+      "rows": 12,
+      "cursor": [],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-40x12-context-search",
+      "theme": "light",
+      "scenario": "context-search",
+      "columns": 40,
+      "rows": 12,
+      "cursor": [],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-40x12-draft",
+      "theme": "light",
+      "scenario": "draft",
+      "columns": 40,
+      "rows": 12,
+      "cursor": [
+        {
+          "x": 9,
+          "y": 9
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "light-40x12-autocomplete",
+      "theme": "light",
+      "scenario": "autocomplete",
+      "columns": 40,
+      "rows": 12,
+      "cursor": [
+        {
+          "x": 38,
+          "y": 7
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-144x40-conversation",
+      "theme": "no-color",
+      "scenario": "conversation",
+      "columns": 144,
+      "rows": 40,
+      "cursor": [
+        {
+          "x": 38,
+          "y": 37
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-144x40-models",
+      "theme": "no-color",
+      "scenario": "models",
+      "columns": 144,
+      "rows": 40,
+      "cursor": [
+        {
+          "x": 25,
+          "y": 4
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-144x40-context",
+      "theme": "no-color",
+      "scenario": "context",
+      "columns": 144,
+      "rows": 40,
+      "cursor": [],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-144x40-context-search",
+      "theme": "no-color",
+      "scenario": "context-search",
+      "columns": 144,
+      "rows": 40,
+      "cursor": [],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-144x40-draft",
+      "theme": "no-color",
+      "scenario": "draft",
+      "columns": 144,
+      "rows": 40,
+      "cursor": [
+        {
+          "x": 41,
+          "y": 37
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-144x40-autocomplete",
+      "theme": "no-color",
+      "scenario": "autocomplete",
+      "columns": 144,
+      "rows": 40,
+      "cursor": [
+        {
+          "x": 38,
+          "y": 35
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-120x40-conversation",
+      "theme": "no-color",
+      "scenario": "conversation",
+      "columns": 120,
+      "rows": 40,
+      "cursor": [
+        {
+          "x": 38,
+          "y": 37
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-120x40-models",
+      "theme": "no-color",
+      "scenario": "models",
+      "columns": 120,
+      "rows": 40,
+      "cursor": [
+        {
+          "x": 2,
+          "y": 4
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-120x40-context",
+      "theme": "no-color",
+      "scenario": "context",
+      "columns": 120,
+      "rows": 40,
+      "cursor": [],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-120x40-context-search",
+      "theme": "no-color",
+      "scenario": "context-search",
+      "columns": 120,
+      "rows": 40,
+      "cursor": [],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-120x40-draft",
+      "theme": "no-color",
+      "scenario": "draft",
+      "columns": 120,
+      "rows": 40,
+      "cursor": [
+        {
+          "x": 41,
+          "y": 37
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-120x40-autocomplete",
+      "theme": "no-color",
+      "scenario": "autocomplete",
+      "columns": 120,
+      "rows": 40,
+      "cursor": [
+        {
+          "x": 38,
+          "y": 35
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-80x24-conversation",
+      "theme": "no-color",
+      "scenario": "conversation",
+      "columns": 80,
+      "rows": 24,
+      "cursor": [
+        {
+          "x": 38,
+          "y": 21
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-80x24-models",
+      "theme": "no-color",
+      "scenario": "models",
+      "columns": 80,
+      "rows": 24,
+      "cursor": [
+        {
+          "x": 2,
+          "y": 4
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-80x24-context",
+      "theme": "no-color",
+      "scenario": "context",
+      "columns": 80,
+      "rows": 24,
+      "cursor": [],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-80x24-context-search",
+      "theme": "no-color",
+      "scenario": "context-search",
+      "columns": 80,
+      "rows": 24,
+      "cursor": [],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-80x24-draft",
+      "theme": "no-color",
+      "scenario": "draft",
+      "columns": 80,
+      "rows": 24,
+      "cursor": [
+        {
+          "x": 41,
+          "y": 21
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-80x24-autocomplete",
+      "theme": "no-color",
+      "scenario": "autocomplete",
+      "columns": 80,
+      "rows": 24,
+      "cursor": [
+        {
+          "x": 38,
+          "y": 19
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-60x18-conversation",
+      "theme": "no-color",
+      "scenario": "conversation",
+      "columns": 60,
+      "rows": 18,
+      "cursor": [
+        {
+          "x": 38,
+          "y": 15
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-60x18-models",
+      "theme": "no-color",
+      "scenario": "models",
+      "columns": 60,
+      "rows": 18,
+      "cursor": [
+        {
+          "x": 2,
+          "y": 4
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-60x18-context",
+      "theme": "no-color",
+      "scenario": "context",
+      "columns": 60,
+      "rows": 18,
+      "cursor": [],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-60x18-context-search",
+      "theme": "no-color",
+      "scenario": "context-search",
+      "columns": 60,
+      "rows": 18,
+      "cursor": [],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-60x18-draft",
+      "theme": "no-color",
+      "scenario": "draft",
+      "columns": 60,
+      "rows": 18,
+      "cursor": [
+        {
+          "x": 41,
+          "y": 15
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-60x18-autocomplete",
+      "theme": "no-color",
+      "scenario": "autocomplete",
+      "columns": 60,
+      "rows": 18,
+      "cursor": [
+        {
+          "x": 38,
+          "y": 13
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-40x12-conversation",
+      "theme": "no-color",
+      "scenario": "conversation",
+      "columns": 40,
+      "rows": 12,
+      "cursor": [
+        {
+          "x": 38,
+          "y": 8
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-40x12-models",
+      "theme": "no-color",
+      "scenario": "models",
+      "columns": 40,
+      "rows": 12,
+      "cursor": [
+        {
+          "x": 2,
+          "y": 4
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-40x12-context",
+      "theme": "no-color",
+      "scenario": "context",
+      "columns": 40,
+      "rows": 12,
+      "cursor": [],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-40x12-context-search",
+      "theme": "no-color",
+      "scenario": "context-search",
+      "columns": 40,
+      "rows": 12,
+      "cursor": [],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-40x12-draft",
+      "theme": "no-color",
+      "scenario": "draft",
+      "columns": 40,
+      "rows": 12,
+      "cursor": [
+        {
+          "x": 9,
+          "y": 9
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    },
+    {
+      "name": "no-color-40x12-autocomplete",
+      "theme": "no-color",
+      "scenario": "autocomplete",
+      "columns": 40,
+      "rows": 12,
+      "cursor": [
+        {
+          "x": 38,
+          "y": 7
+        }
+      ],
+      "checks": {
+        "boundedRows": true,
+        "boundedColumns": true,
+        "permissionVisible": true,
+        "stateVisible": true,
+        "cursorPosition": true,
+        "correctFocus": true,
+        "selectedOrRelevantContentVisible": true,
+        "completionBelongsToFocus": true,
+        "draftPreserved": true,
+        "noColor": true
+      },
+      "issues": []
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+PRODUCTION COMPONENT FIXTURE · not a real terminal capture
+no-color-40x12-autocomplete
+ hikaro  hikaro...  Actions Ctrl+P
+ Conversation   Context 
+                                        
+ 检查 src/auth.ts，保留现有权限边界。   
+                                        
+ Context auth.ts × 
+─ Message ──────────────────────────────
+ Review timeout handling 中文 @auth.ts  
+ Enter send · Ctrl+P actions · @ files
+ → Complete auth.ts                     
+   Complete auth.test.ts                
+ Ready    Permissions · Workspace write

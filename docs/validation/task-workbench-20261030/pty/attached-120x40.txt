@@ -1,0 +1,40 @@
+ hikaro  workspace · New session                                                                    Actions Ctrl+P      
+ Conversation   Changes   Activity   Plan   Context                                                                     
+ WORKSPACE                                                                                                              
+ Needs attention  0     Attached to shared host. Ctrl+D detaches; the task continues.                                   
+ Running  0                                                                                                             
+                        YOU                                                                                             
+ Sessions                                                                                                               
+ › New session          Review login timeout handling                                                                   
+   Ready                                                                                                                
+                        HIKARO                                                                                          
+ Ctrl+O all sessions                                                                                                    
+ Ctrl+P actions         Hikaro is ready.                                                                                
+                                                                                                                        
+                        This is offline demo mode. No model request or tool execution occurred.                         
+                                                                                                                        
+                        You wrote: Review login timeout handling                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+─ Message ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                                        
+ Enter send · Ctrl+P actions · @ files                                                                                  
+ Ready                                                            demo/offline · Permissions · Host owns task approvals 

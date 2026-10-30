@@ -1,0 +1,40 @@
+ hikaro  workspace                                                                                  Actions Ctrl+P      
+ Conversation   Context                                                                                                 
+ Select model                                                                                                           
+[Models]  Providers                                                                                                     
+ Credentials: Managed by Pi                                                                                             
+> Search…                                                                                                               
+ → Manage providers / accounts                                                                                          
+ ↑↓ select · Enter select · Esc cancel                                                                                  
+ Tab page                                                                                                               
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+─ Message · draft preserved ────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                                        
+ Close the panel to continue editing                                                                                    
+ Ready                                                                    unknown/unknown · Permissions · Managed by Pi 

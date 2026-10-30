@@ -1,0 +1,12 @@
+ hikaro  worksp...  Actions Ctrl+P      
+ Context  ‹ › · F6 views                
+ Context                                
+> auth.ts                               
+ auth.ts                                
+                                        
+ Draft attachment                       
+ @"auth.ts"                             
+ 1/2 Remove attachment from draft · T...
+ ← list · PgUp/PgDn read · Tab action...
+ Ready                                  
+ Permissions · Host owns task approvals 
