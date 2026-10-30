@@ -45,3 +45,7 @@ Reviewed Grok Build's `views/welcome/top_bar.rs`: location metadata is one compa
 ## Explicit controls after local Grok trial
 
 Launched locally installed Grok Build 1.0.70 in a PTY, inspected its welcome screen and slash picker, then exited with /quit without sending a model prompt. Its named menu entries and bracketed Dashboard control distinguish actions from location text. Removed Hikaro's invisible whole-header action. Added bracketed View, Sessions and Commands controls with exact hit regions and wrapping on narrow screens; View opens selection instead of cycling invisibly. Renamed the command picker and described its model/session/change/settings contents. Existing 13 relevant checks, typecheck and build passed. No manual mouse/IME claim.
+
+## Panel boundaries and navigation
+
+Added a neutral toolbar divider and ruled panel headings. Ordinary toolbar controls are neutral; panel selection uses a neutral contrasting background, while destructive labels/headings use red plus explicit wording. Removed inline descriptions from choice rows: the selected explanation remains below. Commands now say Show conversation/changes/etc.; removed redundant Workspace view wording. Corrected the command explanation being passed as a warning (which rendered it red). Toolbar navigation aborts the previous picker before opening the next destination; clicking Commands again closes it. Approval remains protected. Three existing relevant suites (17 checks), typecheck and build passed; physical mouse acceptance not claimed.

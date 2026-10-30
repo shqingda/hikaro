@@ -406,13 +406,24 @@ export class HikaroView {
       },
     ]);
     this.frame = new WorkbenchFrame(tui, workspace, {
-      selectTab: (tab) => this.selectWorkspace(tab),
+      selectTab: (tab) => {
+        if (this.approval) return;
+        this.modelController?.abort();
+        this.selectWorkspace(tab);
+      },
+      beforeNavigate: () => {
+        if (this.approval) return false;
+        this.modelController?.abort();
+        return true;
+      },
       selectSession: (id) => {
         void options
           .onSelectSession?.(id)
           .catch((error) => this.setError(String(error)));
       },
       sessions: () => {
+        if (this.approval) return;
+        this.modelController?.abort();
         void this.command("/sessions");
       },
       actions: () => {
@@ -751,8 +762,7 @@ export class HikaroView {
           .filter((tab) => tab === "Conversation" || this.workspaceSources[tab])
           .map((tab) => ({
             id: `view.${tab}`,
-            title: `Open ${tab}`,
-            description: "Workspace view",
+            title: `Show ${tab.toLowerCase()}`,
             run: () => this.selectWorkspace(tab),
           })),
         {
@@ -902,7 +912,11 @@ export class HikaroView {
     }
   }
   async openActions() {
-    if (this.modelPanel || this.approval) return;
+    if (this.approval) return;
+    if (this.modelPanel) {
+      this.modelController?.abort();
+      return;
+    }
     const { panel, close } = this.openModelPanel();
     try {
       const choice = await panel.choose(
@@ -919,9 +933,12 @@ export class HikaroView {
             .filter(Boolean)
             .join(" · "),
         })),
-        "Find models, sessions, changes and settings",
+        "",
         undefined,
-        { search: true },
+        {
+          search: true,
+          description: "Find models, sessions, changes and settings",
+        },
       );
       close();
       await this.actions.run(choice.value);

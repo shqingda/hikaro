@@ -10,7 +10,13 @@ import {
   type Component,
   type SelectItem,
 } from "./primitives.ts";
-import { accent, muted as dim, selected, error as red } from "./theme.ts";
+import {
+  accent,
+  bold,
+  muted as dim,
+  neutralSelected as selected,
+  error as red,
+} from "./theme.ts";
 export type Selection = {
   value: string;
   makeDefault: boolean;
@@ -683,20 +689,16 @@ export class ModelPanel implements Component {
         rows.push(dim(truncateToWidth(` ${item.section}`, width, "…")));
       previousSection = item.section;
       const label = text(item.label);
-      const description = text(item.description ?? "");
       const prefix = item === current ? "→ " : "  ";
-      const inline =
-        width >= 72 &&
-        description &&
-        visibleWidth(prefix + label + "  " + description) <= width - 2
-          ? "  " + description
-          : "";
-      const row = truncateToWidth(
-        prefix + label + inline,
-        Math.max(1, width - 2),
-        "…",
+      const row = truncateToWidth(prefix + label, Math.max(1, width - 2), "…");
+      rows.push(
+        " " +
+          (item === current
+            ? selected(bold(row))
+            : /^(delete|remove)\b/i.test(label)
+              ? red(row)
+              : row),
       );
-      rows.push(" " + (item === current ? selected(row) : row));
     }
     if (
       (start || start + count < this.matches.length) &&
@@ -809,7 +811,14 @@ export class ModelPanel implements Component {
     const title = compact
       ? truncateToWidth(clean(this.title), Math.max(1, width - 2), "…")
       : this.title;
-    const lines = new Text(accent(clean(title)), 1, 0).render(width);
+    const heading = truncateToWidth(`─ ${clean(title)} `, width, "…");
+    const lines = [
+      dim("─") +
+        (/delete|remove/i.test(title)
+          ? red(bold(heading.slice(1)))
+          : bold(heading.slice(1))) +
+        dim("─".repeat(Math.max(0, width - visibleWidth(heading)))),
+    ];
     if (this.tabs.length)
       lines.push(
         truncateToWidth(

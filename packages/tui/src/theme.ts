@@ -45,3 +45,12 @@ export const markdownTheme: MarkdownTheme = {
   strikethrough: identity,
   underline: identity,
 };
+
+export const neutralSelected = (text: string) =>
+  color(
+    text,
+    light
+      ? "\x1b[48;2;225;225;220m\x1b[38;2;18;18;15m"
+      : "\x1b[48;2;55;55;50m\x1b[38;2;245;245;240m",
+    "\x1b[49m\x1b[39m",
+  );

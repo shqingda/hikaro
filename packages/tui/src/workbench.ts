@@ -97,6 +97,7 @@ export class WorkbenchFrame extends VStack {
       sessions(): void;
       actions(): void;
       inspector(): boolean;
+      beforeNavigate?(): boolean;
       sessionNavigation?: boolean;
       intrinsicHeight?: boolean;
     },
@@ -196,6 +197,7 @@ export class WorkbenchFrame extends VStack {
             {
               label: `View: ${this.tab} ▾`,
               run: () => {
+                if (callbacks.beforeNavigate?.() === false) return;
                 tui.setFocus(this.tabBar);
                 tui.requestRender();
               },
@@ -218,11 +220,11 @@ export class WorkbenchFrame extends VStack {
               end: Math.min(width, offset + text.length),
               run: button.run,
             });
-            lines[lines.length - 1] += accent(fit(text, width - offset));
+            lines[lines.length - 1] += fit(text, width - offset);
             offset += text.length + 2;
             if (offset <= width) lines[lines.length - 1] += "  ";
           }
-          return [...lines, ""];
+          return [...lines, muted("─".repeat(width))];
         }
         if (visibleWidth(full) > width) {
           this.tabRegions.push({ tab: this.tab, start: 0, end: width });
