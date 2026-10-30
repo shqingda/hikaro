@@ -4,7 +4,7 @@
 **前置：** [interview 20 RAG](../../interview/20_RAG_记忆与上下文工程.md) §2–§4（切块、向量、混合检索）；[18 Agent 架构与 MCP](../../interview/18_Agent_架构与_MCP.md) §4 多 Agent、§6 MCP、§7 Skills、§9 提示注入；[19 Coding Agent](../../interview/19_Coding_Agent_原理与产品.md) §9 子代理、§12 Skills；[15 消息队列](../../interview/15_消息队列与异步任务.md) §8 租约。
 **实验：** [`labs/07-task-graph.mjs`](labs/07-task-graph.mjs)
 
-[总目录](README.md) · 上一章：[上下文与持久化](06-上下文与持久化.md) · 下一章：[客户端、远程与可靠性](08-客户端远程与可靠性.md)
+[总目录](README.md) · 上一章：[上下文与持久化](06-上下文与持久化.md) · 下一章：[客户端与可靠性](08-客户端与可靠性.md)
 
 ---
 

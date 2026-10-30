@@ -49,7 +49,7 @@ Completed verification: `pnpm check` passed **27 files / 187 tests**, TypeScript
 
 Applied the review of `c3ffcb49121427b50a0cc6eb533de6e598474857` on top of `2906efd`, retaining and checking its existing file-queue/context-history fixes. All seven concrete findings now have regression coverage: Git control-file/process boundaries, resource authorization for search/index reads, conflicting file updates, child/job initialization cancellation, child concurrency reservations, responsive RPC control and exact-endpoint authentication. CI now runs on PRs and pushes to main, with Linux checks and a separate full macOS job.
 
-Additional cross-tool and fault-injection review covered Git clean filters reading sensitive files, detached device revocation, remote forwarding of `baseUrl`, old lease epochs, renewal while waiting on a SQLite writer lock, approval-to-execution ownership loss, file-commit ownership loss, terminal initialization cancellation, and descendants surviving a cancelled process leader. RPC compaction now uses the v2 asynchronous operation contract documented in [architecture.md](architecture.md).
+Additional cross-tool and fault-injection review covered Git clean filters reading sensitive files, client forwarding of `baseUrl`, old lease epochs, renewal while waiting on a SQLite writer lock, approval-to-execution ownership loss, file-commit ownership loss, terminal initialization cancellation, and descendants surviving a cancelled process leader. RPC compaction now uses the v2 asynchronous operation contract documented in [architecture.md](architecture.md).
 
 Validation completed on macOS with Node 26.12.0 / pnpm 12.11.2:
 

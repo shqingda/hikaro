@@ -274,26 +274,6 @@ export async function serveRpc(
   const ownAgent = (work: ScopeWork, agent: Agent) => {
     work.activeAgents.set(agent, (work.activeAgents.get(agent) ?? 0) + 1);
   };
-  const revokeClient = async (scope: string) => {
-    if (!shared || shared.localScope(scope)) return;
-    const state = scopes.get(scope);
-    if (state) {
-      cancel(state, false, scope);
-      state.unsubscribe?.();
-      state.unsubscribe = undefined;
-      state.session = undefined;
-      state.agent = undefined;
-      state.role = undefined;
-      for (const approval of approvals.values())
-        if (approval.scope === scope) approval.finish(false);
-      sendScoped({ type: "session.invalidated", scope });
-    }
-    await runtime.store.revokeScope(runtime.options.cwd, scope);
-    if (state) {
-      scopes.delete(scope);
-      releaseWork(scope, state.work);
-    }
-  };
   const handle = async (
     command: Command,
     state: ScopeState,
@@ -1205,6 +1185,5 @@ export async function serveRpc(
   send({ type: "ready", protocolVersion });
   return {
     close: shutdown,
-    revokeClient,
   };
 }

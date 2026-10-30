@@ -274,11 +274,6 @@ export class SQLiteStore implements EventStore {
       scope,
     });
   }
-  sessionAccess(workspace: string, sessionId: string) {
-    return this.request<
-      Array<{ scope: string; role: "owner" | "view" | "control" | null }>
-    >("sessionAccess", { workspace, sessionId });
-  }
   attachView(
     workspace: string,
     scope: string,

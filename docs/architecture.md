@@ -21,7 +21,7 @@ TUI and bidirectional Pi integration are active. Session grants, approval author
 | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | QuickJS ran on the host event loop                         | Separate worker, memory budget, shared interrupt flag, tool calls through the host broker |
 | Opening history loaded large transcripts                   | Cursor-based pages; bounded visible windows and streaming previews                        |
-| Each remote device could create a separate execution owner | One host RPC process with independent authenticated device scopes                         |
+| Each client could create a separate execution owner        | One host RPC process with independent authenticated local client scopes                    |
 | Pi completion used incomplete lifecycle assumptions        | `agent_settled`, handled prompts, UI response protocol and cancellation ordering          |
 | Shared jobs could execute from the wrong workspace         | Workspace-filtered job claims and execution leases                                        |
 
@@ -45,7 +45,7 @@ Session execution holds a fencing token `{owner, epoch}`. SQLite acquires or ren
 
 RPC protocol v2 accepts `session.compact` immediately with `{accepted: true, operationId}`. The scope receives `operation.completed` with the continuation session or `operation.failed` with an error. Clients must handle the completion notification instead of treating the command response as a Session. Ordinary requests queue per scope; cancellation, steering, approval replies, detach and current-state queries bypass that queue. Pending requests are bounded to 32 / 1 MiB per scope and 128 / 2 MiB overall, with eight pending compactions per scope. Agent busy state and session leases reject conflicting execution on the same session. Compact results do not overwrite a newer session selection.
 
-Remote disconnect retains execution for reconnection. Device revocation detaches and cancels every still-active operation owned by that device scope, including sessions it no longer has selected and work retained after a disconnect. Merely viewing another scope's session does not transfer ownership. Third-party in-process plugins remain trusted code; these TypeScript services do not sandbox them.
+Local client disconnect retains execution for reconnection. Merely viewing another scope's session does not transfer ownership. Third-party in-process plugins remain trusted code; these TypeScript services do not sandbox them.
 
 Context history reports storage omissions and preserves full user turns before model context fitting. Usage and cost/model-call budgets are Agent-lifetime values shared with child agents; they are not restored from session events. Restarting the host or rebuilding an Agent resets the budget. Continuation creation after compaction is still a sequence of storage operations, not a single transaction.
 

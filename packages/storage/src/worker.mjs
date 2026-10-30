@@ -245,11 +245,6 @@ const handlers = {
         : null
       : null;
   },
-  sessionAccess({ workspace, sessionId }) {
-    return prepare(
-      "SELECT scope,CASE WHEN role IN ('owner','view','control') THEN role ELSE NULL END AS role FROM session_access WHERE workspace=? AND sessionId=?",
-    ).all(workspace, sessionId);
-  },
   attachView({ workspace, scope, sessionId, local }) {
     db.exec("BEGIN IMMEDIATE");
     try {

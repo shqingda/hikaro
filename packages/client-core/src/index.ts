@@ -428,7 +428,6 @@ export class ClientState {
         "session.fork",
         "session.compact",
         "session.rename",
-        "session.access",
         "session.delete",
         "model.set",
         "client.detach",
