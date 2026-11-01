@@ -21,7 +21,7 @@ jobs:
       - run: pnpm exec vitest run --exclude tests/sandbox.test.ts --exclude tests/pty.test.ts
       - run: pnpm test:scripts
   macos:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
