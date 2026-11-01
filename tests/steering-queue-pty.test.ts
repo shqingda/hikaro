@@ -4,7 +4,8 @@ import { spawn as spawnProcess } from "node:child_process";
 import { spawn } from "node-pty";
 import { createServer } from "node:http";
 import { expect, it, vi } from "vitest";
-import { mkdtemp, mkdir, rm } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { stripVTControlCharacters } from "node:util";
@@ -16,7 +17,6 @@ it("edits, prioritizes and removes steering through attached TUI before the next
     cwd = join(home, "workspace");
   await mkdir(cwd);
   const inputs: string[][] = [];
-  let finishFirst: (() => void) | undefined;
   const server = createServer(async (req, res) => {
     let raw = "";
     for await (const part of req) raw += part;
@@ -31,16 +31,33 @@ it("edits, prioritizes and removes steering through attached TUI before the next
       res.write(
         `data: ${JSON.stringify({ id: "steering-fixture", object: "chat.completion.chunk", created: 1, model: "fixture", choices: [{ index: 0, delta, finish_reason: reason }] })}\n\n`,
       );
-    chunk({
-      role: "assistant",
-      content: inputs.length === 1 ? "First turn complete" : "Steering applied",
-    });
-    const finish = () => {
-      chunk({}, "stop");
+    // Steering cuts a streaming reply short, so it queues while a tool runs:
+    // the first turn waits in a shell command until the test finishes it.
+    if (inputs.length === 1) {
+      chunk({
+        role: "assistant",
+        tool_calls: [
+          {
+            index: 0,
+            id: "wait",
+            type: "function",
+            function: {
+              name: "shell",
+              arguments: JSON.stringify({
+                command:
+                  "touch started; while [ ! -f done ]; do sleep 0.05; done",
+              }),
+            },
+          },
+        ],
+      });
+      chunk({}, "tool_calls");
       res.end("data: [DONE]\n\n");
-    };
-    if (inputs.length === 1) finishFirst = finish;
-    else finish();
+      return;
+    }
+    chunk({ role: "assistant", content: "Steering applied" });
+    chunk({}, "stop");
+    res.end("data: [DONE]\n\n");
   });
   await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
   const port = (server.address() as { port: number }).port;
@@ -82,8 +99,14 @@ it("edits, prioritizes and removes steering through attached TUI before the next
     });
     await client.request("hello");
     const session = (await client.request("session.create")) as { id: string };
+    await client.request("permissions.set", { mode: "full" });
     await client.request("prompt", { text: "start", sessionId: session.id });
-    await vi.waitFor(() => expect(finishFirst).toBeDefined());
+    await vi.waitFor(
+      () => expect(existsSync(join(cwd, "started"))).toBe(true),
+      {
+        timeout: 8000,
+      },
+    );
     for (const text of [
       "first steering",
       "priority steering",
@@ -145,7 +168,7 @@ it("edits, prioritizes and removes steering through attached TUI before the next
     await wait("1. priority steering", send("3"));
     await keys.object("discard steering", "discard steering", "Remove message");
     await keys.confirm("4", "Remove message", "↑↓ select");
-    finishFirst!();
+    await writeFile(join(cwd, "done"), "");
     // Reading Activity must not hold steering consumption at the next turn.
     await vi.waitFor(() => expect(inputs).toHaveLength(2), { timeout: 8000 });
     await keys.tab("Conversation");

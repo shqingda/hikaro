@@ -625,9 +625,8 @@ export class HikaroView {
         {
           "/changes": "Changes",
           "/tasks": "Activity",
-          "/context": "Context",
         } as const
-      )[text as "/changes" | "/tasks" | "/context"];
+      )[text as "/changes" | "/tasks"];
       if (tabCommand && this.workspaceSources[tabCommand]) {
         this.selectWorkspace(tabCommand);
         return;
@@ -1316,6 +1315,13 @@ export class HikaroView {
     this.append(new Text(muted(sanitize(text.slice(0, 4000))), 1, 1));
   }
 
+  /** Append the /context usage view to the transcript. */
+  async showContextUsage(usage: import("./context-usage.ts").ContextUsage) {
+    const { ContextUsageBlock } = await import("./context-usage.ts");
+    this.append(new ContextUsageBlock(usage));
+    this.tui.requestRender();
+  }
+
   showMessages(
     messages: Message[],
     flags: Partial<Pick<HistoryPage, "hasOlder" | "hasNewer">> = {},
@@ -1490,6 +1496,13 @@ export class HikaroView {
         typeof event.data.runId === "string" ? event.data.runId : undefined;
       this.activity =
         event.data.operation === "compact" ? "Compacting" : "Working";
+      this.draft = undefined;
+      this.draftText = "";
+      this.liveText = "";
+      this.thinkingDraft = undefined;
+      this.thinkingText = "";
+    } else if (event.type === "sampling.preempted") {
+      // The cut-short reply stays on screen; the next reply starts fresh.
       this.draft = undefined;
       this.draftText = "";
       this.liveText = "";
@@ -1887,7 +1900,9 @@ export class HikaroView {
             "Intervention not applied · review it in Activity before sending again",
           );
         else if (this.interventionState !== "applied")
-          this.notice("Instruction sent · applies after the current step");
+          this.notice(
+            "Instruction sent · interrupts the reply; running tools finish first",
+          );
       } else
         await this.options.onPrompt(
           prepared.text,
@@ -1936,7 +1951,7 @@ export class HikaroView {
           : this.busy
             ? this.preferences.followUp || !this.options.onSteer
               ? "Ctrl+C stop · Enter queues the next task · /follow to steer"
-              : "Ctrl+C stop · Enter steers after this step · /follow to queue"
+              : "Ctrl+C stop · Enter interjects now · /follow to queue"
             : `Enter send · Ctrl+P commands · @ files${this.status.size ? " · " + [...this.status.values()].join(" · ") : ""}`,
     );
     const showActivity =

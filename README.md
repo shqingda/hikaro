@@ -30,7 +30,7 @@ For a real model, open **Actions → Models and provider accounts**, or enter `/
 pnpm start --provider xai --model grok-4.7
 ```
 
-`--models` lists the installed Pi AI catalog. `--base-url` supports OpenAI-compatible local or hosted servers. Provider credentials stay in the host process. Browsing `/model` lists built-in and cached models without reading Keychain; saved-provider status comes from metadata, not credential validation. Credentials are read when using a provider or explicitly connecting/refreshing it. Interactive provider sign-in saves credentials in Keychain; only provider/type metadata is written to `auth-index.json`. Enter saves the model with the active session. Ctrl+S also saves the default for new sessions. `/context`, `/thinking`, and `/speed` separate **active** and **default**: Enter applies the chosen value immediately; Ctrl+S also saves the default. Add `default` to edit only defaults for new sessions. `/settings` saves display, completion bell and startup preferences immediately. Plain `pnpm start` restores the last opened session in this workspace, including its model settings. Use `/new` or `pnpm start --new` for a new session. `--session ID` selects a specific session. No task is automatically replayed.
+`--models` lists the installed Pi AI catalog. `--base-url` supports OpenAI-compatible local or hosted servers. Provider credentials stay in the host process. Browsing `/model` lists built-in and cached models without reading Keychain; saved-provider status comes from metadata, not credential validation. Credentials are read when using a provider or explicitly connecting/refreshing it. Interactive provider sign-in saves credentials in Keychain; only provider/type metadata is written to `auth-index.json`. Enter saves the model with the active session. Ctrl+S also saves the default for new sessions. `/context-window`, `/thinking`, and `/speed` separate **active** and **default**: Enter applies the chosen value immediately; Ctrl+S also saves the default. Add `default` to edit only defaults for new sessions. `/settings` saves display, completion bell and startup preferences immediately. Plain `pnpm start` restores the last opened session in this workspace, including its model settings. Use `/new` or `pnpm start --new` for a new session. `--session ID` selects a specific session. No task is automatically replayed.
 
 ```sh
 pnpm start --provider local --model your-model --base-url http://localhost:11434/v1
@@ -59,7 +59,7 @@ Conversation, Changes, Activity, Plan and Context are separate working views. Ch
 
 The header displays workspace information only. Commands (Ctrl+P) opens models, sessions, tools and views; Ctrl+O opens the session picker. Conversation shows the composer; browsing views show a list, detail reader and visible action buttons, with a return-to-conversation control. F6 can focus the preserved composer. Menus and permission review share a bounded surface; drafts stay in memory while a panel is open. At 100 columns details can appear beside the list; below 100 columns they become a full page. Native and attached clients monitor up to eight sessions, including background work and approvals. Closing a running view keeps it monitored. Close an idle view through Commands to free a slot; no running session is terminated to make room.
 
-Running Enter steers the observed run, as in Pi, Claude Code and Codex: a running tool is never interrupted. The instruction applies once the current tool finishes; the step's remaining tool calls are skipped with paired results and the model sees the instruction on its next turn. `/follow` makes Enter queue a separate task instead. Submitted, applied and unapplied states follow durable receipts and consumption events. A run ending concurrently preserves the draft rather than silently starting another task. Reconnection never resends an uncertain prompt, intervention or approval automatically.
+Running Enter interjects into the observed run, as in Codex: a reply the model is still streaming or thinking is cut short (what it already wrote is kept) and the model answers again with the instruction. A running tool is never interrupted; the instruction applies once it finishes, the step's remaining tool calls are skipped with paired results and the model sees the instruction on its next turn. `/follow` makes Enter queue a separate task instead. Submitted, applied and unapplied states follow durable receipts and consumption events. A run ending concurrently preserves the draft rather than silently starting another task. Reconnection never resends an uncertain prompt, intervention or approval automatically.
 
 `/model` includes Models and Providers with a continuous return path. Disconnect removes the saved local credential, not a remote token; environment credentials can remain active. Saved credential metadata is not proof that a service call succeeded. The external Pi backend exposes its real model RPC and displays **Managed by Pi** for authentication and permissions. The embedded Hikaro view uses its own Hikaro backend and retains `/back`.
 
@@ -80,12 +80,13 @@ Running Enter steers the observed run, as in Pi, Claude Code and Codex: a runnin
 | `/login`, `/logout` | Compatibility routes into the model center; no separate authentication forms |
 | `/settings` | Tool details, thinking visibility, usage footer, completion bell and startup behavior |
 | `/permissions [ask\|auto\|full]` | Select workspace permissions; Enter applies and saves; Esc closes |
-| `/context` | Open Context: draft attachments, resources and model controls |
-| `/thinking`, `/speed`, `/context default` | Compatibility routes for model controls also available inside the model center |
+| `/context` | Context usage: used / window, a bar by category (system prompt, tools, messages, reply reserve, free) and room left before auto-compact |
+| `/context-window [SIZE] [default]` | Set the context window (for example `256k`); `default` edits the default for new sessions |
+| `/thinking`, `/speed` | Reasoning strength and service tier, also available inside the model center |
 | `!COMMAND` | Run a terminal command under the current permission mode, without a model request |
 | `/resources`, `/status` | Skills/instructions and current session/model usage |
 | `/model provider/model` | Switch model directly while idle |
-| `/steer text`, `/follow` | Add instructions to the active run; toggle whether Enter queues or steers while running |
+| `/steer text`, `/follow` | Interject into the active run; toggle whether Enter queues or interjects while running |
 | `/older`, `/newer`, `/latest` | Page through history |
 | `/read NUMBER PART` | Read a long message in bounded sections |
 | `/tools` | Toggle tool details |

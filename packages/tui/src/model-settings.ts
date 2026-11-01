@@ -2,7 +2,7 @@ import type { HikaroView } from "./index.ts";
 import type { ProviderCatalog } from "../../provider-pi/src/catalog.ts";
 import type { ModelSelection, ModelSettings } from "../../core/src/types.ts";
 import { errorMessage } from "../../core/src/util.ts";
-type ModelControl = "context" | "thinking" | "speed";
+type ModelControl = "context-window" | "thinking" | "speed";
 export function parseModelControl(field: ModelControl, argument: string) {
   const tokens = argument.trim().split(/\s+/).filter(Boolean);
   const scopes = tokens.filter((t) => t === "active" || t === "default");
@@ -12,10 +12,12 @@ export function parseModelControl(field: ModelControl, argument: string) {
   const scope = scopes[0] === "default" ? "default" : "active";
   let value: string | number | undefined = raw[0];
   if (value === "auto") value = undefined;
-  else if (field === "context" && value !== undefined) {
+  else if (field === "context-window" && value !== undefined) {
     const match = /^(\d+)(k|m)?$/i.exec(value);
     if (!match)
-      throw Error("Use /context auto, /context 128k, or /context 1000000");
+      throw Error(
+        "Use /context-window auto, /context-window 128k, or /context-window 1000000",
+      );
     value =
       Number(match[1]) *
       (match[2]?.toLowerCase() === "m"
@@ -27,7 +29,7 @@ export function parseModelControl(field: ModelControl, argument: string) {
       throw Error("Context size must be a positive safe integer");
   }
   const key =
-    field === "context"
+    field === "context-window"
       ? "contextWindow"
       : field === "thinking"
         ? "reasoning"
@@ -80,7 +82,7 @@ export async function openModelControl(
       const chosenMark = (value: unknown, label: string) =>
         `${value === current ? "✓ " : "  "}${label}`;
       let items: Array<{ value: string; label: string; description?: string }>;
-      if (field === "context") {
+      if (field === "context-window") {
         const sizes = [
           ...new Set([
             16000,
@@ -174,7 +176,7 @@ export async function openModelControl(
       const value =
         picked.value === "auto"
           ? undefined
-          : field === "context"
+          : field === "context-window"
             ? Number(picked.value)
             : picked.value;
       const settings = { ...selection.settings, [key]: value } as ModelSettings;

@@ -36,10 +36,11 @@ it("holds steering until management closes, applies edits in order and rejects c
   try {
     const run = agent.prompt("start");
     await vi.waitFor(() => expect(inputs).toHaveLength(1));
+    // Held steering does not cut the reply short.
+    const release = agent.holdQueue();
     await agent.steer("one", "owner");
     await agent.steer("two", "owner");
     await agent.steer("remove", "other");
-    const release = agent.holdQueue();
     const [a, b, c] = agent.pendingSteering();
     await agent.updateSteering(a!.id, "edited");
     await agent.prioritizeSteering(b!.id);
@@ -223,6 +224,72 @@ it("lets a running tool finish, skips the rest of its batch and applies steering
     expect(inputs).toHaveLength(2);
   } finally {
     finishTool();
+    agent.cancel();
+    await agent.queueSettled();
+    await store.close();
+  }
+});
+
+it("cuts a streaming reply short for steering, keeps what was said and answers again", async () => {
+  const store = await SQLiteStore.open(":memory:");
+  let streaming!: () => void;
+  const started = new Promise<void>((r) => (streaming = r));
+  const inputs: Message[][] = [];
+  let firstAborted = false;
+  const agent = new Agent({
+    session: await store.createSession(process.cwd()),
+    store,
+    tools: new ToolRegistry(),
+    approve: async () => false,
+    provider: {
+      id: "test",
+      model: "test",
+      contextWindow: 20000,
+      async *stream(input) {
+        inputs.push(input.messages);
+        if (inputs.length === 1) {
+          yield { type: "thinking" as const, text: "pondering" };
+          yield { type: "text" as const, text: "Partial answer" };
+          streaming();
+          // A provider that never finishes on its own: only the abort ends it.
+          await new Promise<void>((resolve) =>
+            input.signal?.addEventListener("abort", () => resolve(), {
+              once: true,
+            }),
+          );
+          firstAborted = !!input.signal?.aborted;
+          return;
+        }
+        yield {
+          type: "done" as const,
+          message: { role: "assistant" as const, text: "hi!", timestamp: 1 },
+          usage: { input: 1, output: 1, cost: 0 },
+        };
+      },
+    },
+  });
+  try {
+    const run = agent.prompt("long task");
+    await started;
+    await agent.steer("hi");
+    await run;
+    expect(firstAborted).toBe(true);
+    expect(inputs).toHaveLength(2);
+    expect(inputs[1]!.map((m) => [m.role, m.text])).toEqual([
+      ["user", "long task"],
+      ["assistant", "Partial answer"],
+      ["user", "hi"],
+    ]);
+    const saved = await store.messages(agent.options.session.id);
+    expect(saved.map((m) => [m.role, m.text])).toEqual([
+      ["user", "long task"],
+      ["assistant", "Partial answer"],
+      ["user", "hi"],
+      ["assistant", "hi!"],
+    ]);
+    expect(saved[1]!.thinking).toBe("pondering");
+    expect(agent.snapshot().runStatus).not.toBe("running");
+  } finally {
     agent.cancel();
     await agent.queueSettled();
     await store.close();

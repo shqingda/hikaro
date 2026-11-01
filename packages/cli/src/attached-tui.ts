@@ -876,6 +876,22 @@ async function createAttachedSession(
             await import("../../../packages/tui/src/commands.ts");
           return commandHelp("attached");
         }
+        case "/context": {
+          if (rest.trim())
+            throw Error("Use /context-window to change the window size");
+          const id = client.status.session?.id;
+          if (!id) throw Error("Select a connected host session first");
+          if (!client.supports("context.usage"))
+            throw Error(
+              "This host cannot report context usage; update the host first",
+            );
+          await view.showContextUsage(
+            (await client.request("context.usage", {
+              sessionId: id,
+            })) as import("../../../packages/tui/src/context-usage.ts").ContextUsage,
+          );
+          return;
+        }
         case "/storage": {
           const { storageCommand } =
             await import("../../../packages/tui/src/storage.ts");
@@ -928,7 +944,7 @@ async function createAttachedSession(
         case "/model":
         case "/settings":
         case "/permissions":
-        case "/context":
+        case "/context-window":
         case "/thinking":
         case "/speed":
         case "/resources":

@@ -149,10 +149,13 @@ it("keeps an unapplied intervention for explicit recovery after its run fails", 
   const { agent, inputs, first, fail, store } = await fixture();
   const run = agent.prompt("start").catch((error: Error) => error.message);
   await vi.waitFor(() => expect(inputs).toHaveLength(1));
+  // Held, so it neither cuts the reply short nor applies before the failure.
+  const release = agent.holdQueue();
   await agent.steer("do not leak", "owner", agent.snapshot().runId!);
   fail();
   first.resolve();
   expect(await run).toBe("Provider failed");
+  release();
   expect(agent.pendingSteering()).toMatchObject([
     {
       text: "do not leak",

@@ -707,6 +707,7 @@ export async function serveRpc(
         case "draft.save":
         case "models.list":
         case "model.capabilities":
+        case "context.usage":
         case "model.read":
         case "model.set":
         case "model.default":

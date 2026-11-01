@@ -197,8 +197,14 @@ export const commandSpecs = [
   },
   {
     name: "context",
-    usage: "[default]",
-    description: "Context budget · active or default",
+    description: "Context usage · tokens by category and room left",
+    group: "Model",
+    modes: local,
+  },
+  {
+    name: "context-window",
+    usage: "[SIZE] [default]",
+    description: "Context window size · active or default",
     group: "Model",
     modes: local,
   },
@@ -311,9 +317,9 @@ export function parseCommand(text: string) {
 
 const shortcuts: Record<CommandMode, string> = {
   native:
-    "Enter sends · while a run is active Enter steers after the current step (/follow queues instead) · Ctrl+X Enter queues a separate task · Ctrl+C stops · Ctrl+D exits · Shift+Enter adds a line · Ctrl+P actions · Ctrl+O sessions · ![--unrestricted] COMMAND runs a shell command under the current permissions · @file attaches · click [Image #N] to preview · Ctrl+Z undoes",
+    "Enter sends · while a run is active Enter interjects, cutting the reply short; running tools finish first (/follow queues instead) · Ctrl+X Enter queues a separate task · Ctrl+C stops · Ctrl+D exits · Shift+Enter adds a line · Ctrl+P actions · Ctrl+O sessions · ![--unrestricted] COMMAND runs a shell command under the current permissions · @file attaches · click [Image #N] to preview · Ctrl+Z undoes",
   attached:
-    "Enter sends · while a run is active Enter steers after the current step (/follow queues instead) · Ctrl+X Enter queues a separate task · Ctrl+C stops the selected task · Ctrl+D detaches · Ctrl+P actions · Ctrl+O sessions · ![--unrestricted] COMMAND runs on the host under its approvals · @file attaches local files · click [Image #N] to preview · Ctrl+Z undoes",
+    "Enter sends · while a run is active Enter interjects, cutting the reply short; running tools finish first (/follow queues instead) · Ctrl+X Enter queues a separate task · Ctrl+C stops the selected task · Ctrl+D detaches · Ctrl+P actions · Ctrl+O sessions · ![--unrestricted] COMMAND runs on the host under its approvals · @file attaches local files · click [Image #N] to preview · Ctrl+Z undoes",
   pi: "Enter sends · Ctrl+C stops · /back returns to Pi",
 };
 

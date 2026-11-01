@@ -2,7 +2,8 @@
 
 ## Unreleased — 2026-11-01
 
-- Steering no longer interrupts a running tool. Enter while running applies the instruction after the current tool; the step's remaining tool calls are skipped. `/follow` and Ctrl+X Enter now really queue instead of steering.
+- Enter while running interjects, as in Codex: a reply the model is still thinking or writing is cut short (what it wrote is kept) and it answers again with your message. A running tool is never interrupted; the instruction applies once it finishes and the step's remaining tool calls are skipped. `/follow` and Ctrl+X Enter queue instead.
+- `/context` now shows context usage: used / window, a bar by category and the room left before auto-compact. `/context-window` sets the window size (the old `/context` picker). The Context workbench tab stays reachable from the tab bar.
 - `/help` and slash completion come from one command list per mode. In attached mode `/delete` opens the session picker instead of being sent to plugins.
 - The header shows when a background session needs attention (Ctrl+O). Menus name the Enter action; settings show each value inline. Text questions show the question while you type.
 - Scrolling up shows "↓ PageDown" centered on its own row above the composer, on the terminal background; clicking it returns to the latest message. Offline demo mode accepts images. Pasted images become inline `[Image #N]` tokens that delete as one unit and come back with Ctrl+Z. Pasted images are copied at paste time, so a macOS screenshot thumbnail that disappears can still be sent. Clicking a token previews it in the terminal: full resolution in Kitty-protocol terminals (Warp, Ghostty, kitty, WezTerm), half blocks elsewhere.

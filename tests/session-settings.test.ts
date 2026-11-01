@@ -374,7 +374,7 @@ it("routes active, default, and Ctrl+S settings to distinct save actions", async
     await openModelControl(
       view,
       catalog,
-      "context",
+      "context-window",
       active,
       defaults,
       async (settings) => {
@@ -394,7 +394,7 @@ it("routes active, default, and Ctrl+S settings to distinct save actions", async
   expect(global.saved).toEqual([
     { ...defaults, settings: { contextWindow: 16000, reasoning: "low" } },
   ]);
-  expect(global.titles).toContain("/context · default · openai/default");
+  expect(global.titles).toContain("/context-window · default · openai/default");
   const both = await run([{ value: "64000", makeDefault: true }]);
   expect(both.applied).toEqual([active.settings]);
   expect(both.saved).toEqual([active]);
@@ -502,7 +502,10 @@ it("deletes session history and outputs, preserves branches and refuses a live s
   );
   await runtime.planning.setActive(session.id, true);
   await runtime.planning.setActive(branch.id, true);
-  const lease = (await runtime.store.acquireLease(session.id, "running-owner"))!;
+  const lease = (await runtime.store.acquireLease(
+    session.id,
+    "running-owner",
+  ))!;
   await expect(runtime.deleteSession(session.id)).rejects.toThrow(
     "Stop the active run",
   );

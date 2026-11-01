@@ -498,7 +498,7 @@ export async function nativeTui(
           await openGeneralSettings(view, preferences, applyPreferences);
         };
         const configureControl = async (
-          field: "context" | "thinking" | "speed",
+          field: "context-window" | "thinking" | "speed",
         ) => {
           if (agent.busy)
             throw Error(
@@ -704,11 +704,16 @@ export async function nativeTui(
               throw Error("Finish or cancel the run before changing settings.");
             if (arg)
               throw Error(
-                "Use /context [default], /thinking [default], or /speed [default] for model settings.",
+                "Use /context-window [default], /thinking [default], or /speed [default] for model settings.",
               );
             await configureSettings();
             return;
           case "context":
+            if (arg)
+              throw Error("Use /context-window to change the window size");
+            await view.showContextUsage(await agent.contextUsage());
+            return;
+          case "context-window":
           case "thinking":
           case "speed":
             await configureControl(command);

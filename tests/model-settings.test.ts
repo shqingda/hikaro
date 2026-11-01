@@ -37,7 +37,7 @@ it.each(["active", "default"])(
     await openModelControl(
       view,
       catalog,
-      "context",
+      "context-window",
       active,
       defaults,
       apply,
@@ -66,19 +66,19 @@ it.each(["active", "default"])(
   },
 );
 it("parses direct model controls consistently and rejects ambiguous or unsafe sizes", () => {
-  expect(parseModelControl("context", "128k default")).toEqual({
+  expect(parseModelControl("context-window", "128k default")).toEqual({
     scope: "default",
     supplied: true,
     key: "contextWindow",
     value: 128000,
   });
-  expect(parseModelControl("context", "1M").value).toBe(1000000);
+  expect(parseModelControl("context-window", "1M").value).toBe(1000000);
   expect(parseModelControl("thinking", "high active").value).toBe("high");
   expect(parseModelControl("speed", "auto")).toMatchObject({
     supplied: true,
     value: undefined,
   });
-  expect(parseModelControl("context", "default")).toMatchObject({
+  expect(parseModelControl("context-window", "default")).toMatchObject({
     scope: "default",
     supplied: false,
   });
@@ -89,7 +89,7 @@ it("parses direct model controls consistently and rejects ambiguous or unsafe si
     "128k extra",
     "active default",
   ])
-    expect(() => parseModelControl("context", value)).toThrow();
+    expect(() => parseModelControl("context-window", value)).toThrow();
 });
 it("passes the complete endpoint selection and scope to the picker and labels unknown limits", async () => {
   const selection: ModelSelection = {
@@ -118,7 +118,7 @@ it("passes the complete endpoint selection and scope to the picker and labels un
   await openModelControl(
     view,
     { capabilities },
-    "context",
+    "context-window",
     selection,
     selection,
     async () => {},

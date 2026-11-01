@@ -246,12 +246,12 @@ it("navigates sessions, model/defaults, settings, resources and login from the a
     await wait("Select model", send("/model\r"));
     await wait("Offline demo", send("demo/offline"));
     await wait("Active model: demo/offline", send("\r"));
-    await wait("/context · active", send("/context active\r"));
+    await wait("/context-window · active", send("/context-window active\r"));
     await wait("applied to this session", send("\x1b[B\r"));
     expect(
       (await probe.request("model.read")).current.settings.contextWindow,
     ).toBe(16000);
-    await wait("/context · default", send("/context default\r"));
+    await wait("/context-window · default", send("/context-window default\r"));
     await wait("default saved", send("\x1b[B".repeat(2) + "\r"));
     const model = await probe.request("model.read");
     expect(model.current.settings.contextWindow).toBe(16000);

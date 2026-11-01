@@ -535,7 +535,7 @@ describe("permissions and execution status", () => {
       await tui.wait("Permissions: Full Access", tui.send("\r"));
       const after = tui.send("activity-check\r");
       const request = await tui.nextRequest();
-      await tui.wait("Enter steers", after);
+      await tui.wait("Enter interjects", after);
       const quiet = tui.send("");
       await new Promise<void>((done) => setTimeout(done, 240));
       // Only the composer spinner may repaint while the run waits.

@@ -232,7 +232,7 @@ export class AttachedNavigation {
     if (command === "/settings") {
       if (arg)
         throw Error(
-          "Use /context, /thinking, /speed or /permissions for host settings",
+          "Use /context-window, /thinking, /speed or /permissions for host settings",
         );
       await openGeneralSettings(
         this.view,
@@ -463,11 +463,11 @@ export class AttachedNavigation {
       return;
     }
     if (
-      command === "/context" ||
+      command === "/context-window" ||
       command === "/thinking" ||
       command === "/speed"
     ) {
-      const field = command.slice(1) as "context" | "thinking" | "speed";
+      const field = command.slice(1) as "context-window" | "thinking" | "speed";
       const state = await this.request<{
         current: ModelSelection;
         default: ModelSelection;

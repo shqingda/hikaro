@@ -241,7 +241,7 @@ it("isolates attached view preferences and rejects delayed configuration reads a
       async () => {},
       async () => {},
     );
-    const command = menu.command("/context");
+    const command = menu.command("/context-window");
     const rejected = expect(command).rejects.toThrow(/Connection changed/);
     menu.disconnected();
     resolve({ current: { provider: "demo", model: "offline", settings: {} } });

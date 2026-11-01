@@ -56,6 +56,8 @@ export async function libraryRequest(
             : { provider, model },
         );
     }
+    case "context.usage":
+      return (await runtime.agent(await selected())).contextUsage();
     case "messages.search": {
       const session = await selected();
       const query = z.string().min(1).max(256).parse(p.query);
