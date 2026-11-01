@@ -58,7 +58,7 @@ it("renders picker errors before options and never displays secret input", async
     output.indexOf("Model A"),
   );
   expect(output.indexOf("Could not refresh")).toBeLessThan(
-    output.indexOf("Enter confirm"),
+    output.indexOf("Confirm ↵"),
   );
   panel.handleInput("\r");
   expect((await choice).value).toBe("a");

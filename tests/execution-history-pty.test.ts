@@ -137,7 +137,7 @@ it("reads completed execution history through attached TUI after host restart wi
     expect(stripVTControlCharacters(output)).toContain(
       String(completed!.data.runId),
     );
-    await wait("Enter inspect", send("\x1b"));
+    await wait("Enter open", send("\x1b"));
     expect(
       (await store.recentRunEvents(session.id)).filter(
         (e) => e.type === "run.start",

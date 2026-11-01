@@ -266,7 +266,7 @@ it("navigates sessions, model/defaults, settings, resources and login from the a
       permissionMode: "auto",
     });
     await wait("Settings · saved immediately", send("/settings\r"));
-    await wait("Usage footer  Hide", send("\x1b[B".repeat(2) + "\r"));
+    await wait("Usage footer · Hide", send("\x1b[B".repeat(2) + "\r"));
     expect(await files.preferences()).toMatchObject({
       showUsage: false,
     });
@@ -306,14 +306,14 @@ it("navigates sessions, model/defaults, settings, resources and login from the a
       method: "tool.manual",
     });
     await wait("Sessions · page 1", send("/sessions Renamed target\r"));
-    await wait("● Renamed target", reopened);
+    await wait("→ Renamed target", reopened);
     await wait("Enter send", send("\x1b"));
     await wait("Settings · saved immediately", send("/settings\r"));
     await wait("Hide", reopened);
     expect(await files.preferences()).toMatchObject({
       showUsage: false,
     });
-    await wait("Startup  New session", send("\x1b[B".repeat(4) + "\r"));
+    await wait("Startup · New session", send("\x1b[B".repeat(4) + "\r"));
     expect(await files.preferences()).toMatchObject({
       resumeOnStart: false,
     });
@@ -339,7 +339,7 @@ it("navigates sessions, model/defaults, settings, resources and login from the a
       await probe.request("session.list", { query: "Renamed target" }),
     ).toHaveLength(1);
     await wait("Delete “Renamed target”?", send("\x1b[3~"));
-    await wait("Enter send", send("\r"));
+    await wait("Enter send", send("\x1b[B\r"));
     await vi.waitFor(async () => {
       expect(
         await probe!.request("session.list", { query: "Renamed target" }),

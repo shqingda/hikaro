@@ -152,6 +152,7 @@ export function rpcCapabilities(sharedHost = false) {
     runSnapshotIdentity: true as const,
     durableCommandReceipts: true as const,
     runBoundSteering: true as const,
+    allProjectSessions: true as const,
   };
 }
 const id = z.string().check(z.minLength(1)).check(z.maxLength(128));
@@ -185,6 +186,7 @@ export const HelloResult = z.object({
   durableCommandReceipts: z.optional(z.boolean()),
   runSnapshotIdentity: z.optional(z.boolean()),
   runBoundSteering: z.optional(z.boolean()),
+  allProjectSessions: z.optional(z.boolean()),
 });
 export const Permission = z.object({
   id,

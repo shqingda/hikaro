@@ -161,9 +161,14 @@ describe("Pi bridge view", () => {
       cwd: "/workspace",
     });
     await settle();
-    expect(screen(view)).toContain("Conversation");
-    expect(screen(view)).toContain("Activity");
+    // F6 cycles the Pi views; a non-Conversation view offers the way back.
+    view.handleInput("\x1b[17~");
+    expect(screen(view)).toContain("No tool activity yet.");
+    expect(screen(view)).toContain("← Conversation");
     expect(screen(view)).not.toContain("Changes");
+    view.handleInput("\x1b[17~");
+    view.handleInput("\x1b[17~");
+    expect(screen(view)).not.toContain("← Conversation");
     type(view, "/model");
     await vi.waitFor(() => expect(screen(view)).toContain("Alpha"));
     view.handleInput("\r");
@@ -210,8 +215,10 @@ describe("Pi bridge view", () => {
       "messages.read",
     ]);
     expect(client.calls[0]?.params).toEqual({ sessionId: "s-1" });
-    expect(screen(view)).toMatch(/YOU\s+earlier question/);
-    expect(screen(view)).toMatch(/HIKARO\s+earlier answer/);
+    expect(screen(view)).toContain("earlier question");
+    expect(screen(view)).toContain("earlier answer");
+    expect(screen(view)).not.toContain("YOU");
+    expect(screen(view)).not.toContain("HIKARO");
     expect(screen(view)).toContain("earlier answer");
     expect(saved).toEqual(["s-1"]);
   });
@@ -335,7 +342,7 @@ it("renders one assistant label per streamed message and updates tool summaries 
     result: { text: "contents" },
   });
   const rendered = screen(view);
-  expect(rendered.match(/HIKARO/g)).toHaveLength(1);
+  expect(rendered).not.toContain("HIKARO");
   expect(rendered.match(/src\/auth.ts/g)).toHaveLength(1);
   expect(rendered).toMatch(/Done\s+read_file\s+src\/auth.ts/);
   expect(rendered).not.toContain("contents");
@@ -356,7 +363,8 @@ it.each([
     await settle();
     const lines = view.render(columns).map(sanitize);
     expect(lines).toHaveLength(rows);
-    expect(lines.filter((line) => line.includes("─"))).toHaveLength(1);
+    // Only the composer draws rules: its label line and its bottom edge.
+    expect(lines.filter((line) => line.includes("─"))).toHaveLength(2);
     expect(lines.join("\n")).toContain("Message");
     expect(lines.join("\n")).toContain("/back");
     expect(lines.at(-1)).toContain("Ready");
@@ -441,9 +449,9 @@ it("uses terminal color changes without delaying connection and respects NO_COLO
   await settle();
   expect(screen(view)).toContain("Ready");
   onScheme("light");
-  expect(view.render(80).join("\n")).toContain("38;2;107;80;0");
+  expect(view.render(80).join("\n")).toContain("38;2;196;85;72");
   onScheme("dark");
-  expect(view.render(80).join("\n")).toContain("38;2;242;181;0");
+  expect(view.render(80).join("\n")).toContain("38;2;196;85;72");
   vi.stubEnv("NO_COLOR", "1");
   try {
     view.invalidate();

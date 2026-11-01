@@ -17,6 +17,11 @@ function fixture() {
     panel,
     view: {
       openModelPanel: () => ({ panel, signal: abort.signal, close: () => {} }),
+      openQuestionPanel: () => ({
+        panel,
+        signal: abort.signal,
+        close: () => {},
+      }),
       notice: vi.fn(),
     } as unknown as HikaroView,
     wait: async (text: string) =>
@@ -90,42 +95,16 @@ it("restores unsubmitted input and selected answers, preserves back edits, and s
   await wait("Your answer");
   await wait("待确认  🌅");
   expect(submit).not.toHaveBeenCalled();
-  panel.cancelStep();
-  await wait("Recovered question 2/2");
-  panel.handleInput("\x1b[B");
-  panel.handleInput("\r");
-  await wait("Your answer");
   panel.handleInput("\x05");
   panel.handleInput(" 42");
   panel.handleInput("\r");
-  await wait("Review answers");
-  await wait("Red");
-  await wait("待确认  🌅 42");
-  panel.handleInput("\x1b[B");
-  panel.handleInput("\x1b[B");
-  panel.handleInput("\r");
-  await wait("Recovered question 1/2");
-  panel.handleInput("\x1b[B");
-  panel.handleInput("\x1b[B");
-  panel.handleInput("\r");
-  await wait("Recovered question 2/2");
-  panel.handleInput("\x1b[B");
-  panel.handleInput("\r");
-  await wait("Your answer");
-  await wait("待确认  🌅 42");
-  panel.handleInput("\r");
-  await wait("Review answers");
-  await wait("Blue");
-  expect(submit).not.toHaveBeenCalled();
-  panel.handleInput("\x1b[B");
-  panel.handleInput("\r");
   await work;
   expect(submit).toHaveBeenCalledExactlyOnceWith(
-    { color: "Blue", name: "待确认  🌅 42" },
+    { color: "Red", name: "待确认  🌅 42" },
     revision,
   );
   expect(save).toHaveBeenLastCalledWith(expect.any(Number), {
-    answers: { color: "Blue", name: "待确认  🌅 42" },
+    answers: { color: "Red", name: "待确认  🌅 42" },
     inputs: { name: "待确认  🌅 42" },
     position: { kind: "review" },
   });
@@ -174,16 +153,9 @@ it("collects a choice and custom answer, then requires explicit submission", asy
     new AbortController().signal,
   );
   await wait("Which color?");
-  panel.handleInput("\x1b[B");
-  panel.handleInput("\r");
-  await wait("What name?");
-  panel.handleInput("\x1b[B");
   panel.handleInput("\r");
   await wait("Your answer");
   panel.handleInput("Hikaro");
-  panel.handleInput("\r");
-  await wait("Review answers");
-  panel.handleInput("\x1b[B");
   panel.handleInput("\r");
   expect(await work).toEqual({ color: "Red", name: "Hikaro" });
 });

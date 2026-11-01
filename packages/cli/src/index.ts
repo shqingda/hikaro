@@ -155,12 +155,13 @@ async function main() {
     const tui = createTerminal();
     let externalExiting = false;
     let removeBackendExit: (() => void) | undefined;
-    const leave = () => {
+    const leave = async () => {
       if (externalExiting) return;
       externalExiting = true;
       removeBackendExit?.();
       view.dispose();
-      tui.stop({ preserveScreen: true });
+      const { stopTerminal } = await import("./release-terminal.ts");
+      await stopTerminal(tui);
       void backend.close();
     };
     const view = new HikaroView(tui, {

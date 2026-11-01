@@ -647,11 +647,13 @@ export async function serveRpc(
           break;
         }
         case "session.list":
+          if (p.allProjects === true && shared && !shared.localScope(scope))
+            throw Error("All-project sessions require a local client");
           result = (
             await runtime.store.sessions(
               integer(p.offset, 0),
               integer(p.limit, 50, 100),
-              runtime.options.cwd,
+              p.allProjects === true ? undefined : runtime.options.cwd,
               z.string().max(200).optional().parse(p.query),
               shared && !shared.localScope(scope) ? scope : undefined,
             )

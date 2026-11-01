@@ -24,6 +24,12 @@ import {
 } from "./primitives.ts";
 import { ModelPanel } from "./model-panel.ts";
 import { ActivityEditor } from "./activity-editor.ts";
+import {
+  detachImagePaths,
+  textWithImageReferences,
+  type ImageChip,
+} from "./image-chips.ts";
+import { openImage } from "./open-image.ts";
 import { ApprovalPanel } from "./approval-panel.ts";
 import { defaultTuiPreferences, type TuiPreferences } from "./preferences.ts";
 import { sanitize } from "./text.ts";
@@ -90,12 +96,15 @@ type UIBackend = AgentBackend & {
   respondToUI?(id: string, response: PiUIResponse): Promise<void>;
 };
 
+const attachmentsNeedQueue =
+  "Attachments can't steer a running task. Press Ctrl+X then Enter to queue it; your draft is kept.";
+
 export class HikaroView {
   readonly content = new Container();
   readonly scroll = new ScrollView(this.content, {
     primary: true,
     follow: "end",
-    scrollbar: "auto",
+    scrollbar: "hidden",
   });
   private viewStatus: ViewStatus;
   private phase = "Ready";
@@ -118,11 +127,13 @@ export class HikaroView {
   readonly inputError = new Text("", 1, 0);
   private errorMessage = "";
   readonly modelSlot = new Container();
+  readonly questionSlot = new Container();
   readonly approvalSlot = new Container();
   private panelYieldsToApproval = false;
   private modelController?: AbortController;
   private preparingPrompt?: AbortController;
   private modelPanel?: ModelPanel;
+  private questionPanel?: ModelPanel;
   readonly historyHint = new Text("", 1, 0);
   readonly header: Component;
   readonly editor: ActivityEditor;
@@ -167,6 +178,8 @@ export class HikaroView {
   private busy = false;
   private panelCancel?: () => void;
   private activity = "Working";
+  private imageChips: ImageChip[] = [];
+  private syncingImages = false;
   private disposed = false;
   private approval?: {
     resolve: (value: boolean) => void;
@@ -193,6 +206,7 @@ export class HikaroView {
   private activeTools = new Map<string, string>();
   private toolTargets = new Map<string, string>();
   private removeScheme?: () => void;
+  private themeQueried = false;
 
   constructor(
     readonly tui: TuiAltScreen,
@@ -249,7 +263,16 @@ export class HikaroView {
       cwd: options.cwd,
     };
     this.header = {
-      render: (width) => renderHeader(this.viewStatus, width),
+      render: (width) =>
+        renderHeader(
+          this.viewStatus,
+          width,
+          this.frame.sessions.reduce(
+            (count, session) =>
+              count + (session.current ? 0 : (session.attention ?? 0)),
+            0,
+          ),
+        ),
       invalidate() {},
     };
     this.editor = new ActivityEditor(
@@ -266,9 +289,13 @@ export class HikaroView {
       },
       { paddingX: 1 },
     );
+    this.editor.onOpenImage = (path) => {
+      void openImage(path).catch((error) => this.setError(String(error)));
+    };
     this.editor.onChange = () => {
-      if (!this.dialog && !this.disposed)
-        options.onDraftChange?.(this.editor.getExpandedText());
+      if (this.syncingImages || this.dialog || this.disposed) return;
+      this.syncImageChips();
+      options.onDraftChange?.(this.canonicalDraft());
     };
     this.attachments = new AttachmentStrip(
       () => this.editor.getExpandedText(),
@@ -298,6 +325,7 @@ export class HikaroView {
           },
           { name: "new", description: "Start a session" },
           { name: "sessions", description: "List sessions" },
+          { name: "delete", description: "Choose a session to delete" },
           { name: "resume", description: "Resume a session" },
           { name: "rename", description: "Rename this session" },
           { name: "attach", description: "Add a file or image: /attach PATH" },
@@ -332,6 +360,10 @@ export class HikaroView {
             description: "Select supported service tier · active / default",
           },
           { name: "steer", description: "Add instructions during a run" },
+          {
+            name: "follow",
+            description: "Toggle follow-up · Enter queues instead of steering",
+          },
           { name: "older", description: "Previous history page" },
           { name: "newer", description: "Next history page" },
           { name: "latest", description: "Return to the latest messages" },
@@ -355,6 +387,7 @@ export class HikaroView {
               "older",
               "quit",
               "steer",
+              "follow",
               ...(options.commands ?? []).map((command) => command.name),
             ].includes(command.name),
         ),
@@ -453,6 +486,12 @@ export class HikaroView {
           ),
       },
       {
+        component: this.questionSlot,
+        shrink: 0,
+        visible: () =>
+          !!this.questionPanel && !this.modelPanel && !this.approval,
+      },
+      {
         component: this.editor,
         shrink: 0,
         visible: () =>
@@ -518,6 +557,23 @@ export class HikaroView {
       this.setError("");
       this.editor.addToHistory(text);
       this.editor.setText("");
+      if (text === "/follow") {
+        const followUp = !this.preferences.followUp;
+        const next = { ...this.preferences, followUp };
+        const apply = options.onPreferences
+          ? options.onPreferences(next)
+          : Promise.resolve(this.setPreferences(next));
+        void apply
+          .then(() =>
+            this.notice(
+              followUp
+                ? "Follow-up on · Enter queues the next task while a run is active"
+                : "Steer on · Enter adds instructions to the running task",
+            ),
+          )
+          .catch((error) => this.setError(String(error)));
+        return;
+      }
       if (text === "/tools") {
         if (options.onPreferences) {
           void options
@@ -670,6 +726,10 @@ export class HikaroView {
       if (this.preparingPrompt) {
         if (matchesKey(data, "escape") || matchesKey(data, "ctrl+c"))
           this.preparingPrompt.abort();
+        return { consume: true };
+      }
+      if (this.questionPanel && !this.modelPanel && !this.approval) {
+        this.questionPanel.handleInput(data);
         return { consume: true };
       }
       if (this.modelPanel) {
@@ -1074,6 +1134,37 @@ export class HikaroView {
     controller.signal.addEventListener("abort", close, { once: true });
     return { panel, signal: controller.signal, close };
   }
+  /** Options for an agent question, kept above the composer. The transcript stays visible. */
+  openQuestionPanel() {
+    if (this.questionPanel) throw Error("A question is already open");
+    this.setError("");
+    const previousFocus = this.tui.getFocusedComponent();
+    const controller = new AbortController();
+    const panel = new ModelPanel(
+      controller.signal,
+      () => this.tui.requestRender(),
+      // Leave the transcript tail and the composer visible on short terminals.
+      () => Math.max(3, Math.min(12, this.tui.terminal.rows - 8)),
+    );
+    panel.onCancel = () => controller.abort();
+    this.questionPanel = panel;
+    this.questionSlot.addChild(panel);
+    if (this.visible) this.tui.setFocus(panel);
+    this.updateFooter();
+    this.tui.requestRender();
+    const close = () => {
+      if (this.questionPanel !== panel) return;
+      this.questionSlot.clear();
+      this.questionPanel = undefined;
+      controller.abort();
+      if (this.visible)
+        this.tui.setFocus(this.approval?.panel ?? previousFocus ?? this.editor);
+      this.updateFooter();
+      this.tui.requestRender();
+    };
+    controller.signal.addEventListener("abort", close, { once: true });
+    return { panel, signal: controller.signal, close };
+  }
   bind(backend: AgentBackend) {
     this.unsubscribe?.();
     this.answer(false);
@@ -1117,6 +1208,10 @@ export class HikaroView {
     this.tui.requestRender();
   }
   startTheme() {
+    // OSC 10/11/4 replies arrive on stdin. In cooked mode they sit in the
+    // line buffer and the shell prints them when raw mode is restored.
+    if (this.themeQueried || this.disposed || !process.stdin.isRaw) return;
+    this.themeQueried = true;
     const apply = (light: boolean) => {
       if (this.disposed) return;
       setColorScheme(light);
@@ -1324,6 +1419,7 @@ export class HikaroView {
             }
           : {}),
         textLength: message.textLength,
+        timestamp: message.timestamp,
         read:
           read && (message.textLength ?? 0) > message.text.length
             ? (offset, limit) => read(message, offset, limit)
@@ -1687,12 +1783,46 @@ export class HikaroView {
     this.updateFooter();
     this.tui.requestRender();
   }
+  /** Editor text stays short; image paths live on the chips until send or save. */
+  private syncImageChips() {
+    const current = this.editor.getExpandedText();
+    const found = detachImagePaths(current);
+    if (found.text !== current) {
+      this.syncingImages = true;
+      try {
+        this.editor.setText(found.text);
+      } finally {
+        this.syncingImages = false;
+      }
+    }
+    if (!found.chips.length) {
+      this.editor.setImageChips(this.imageChips);
+      return;
+    }
+    const known = new Set(this.imageChips.map((chip) => chip.path));
+    const added = found.chips.filter((chip) => !known.has(chip.path));
+    if (!added.length) return;
+    this.imageChips = [...this.imageChips, ...added].map((chip, index) => ({
+      path: chip.path,
+      label: `Image #${index + 1}`,
+    }));
+    this.editor.setImageChips(this.imageChips);
+  }
+  private canonicalDraft() {
+    return textWithImageReferences(
+      this.editor.getExpandedText(),
+      this.imageChips,
+    );
+  }
   private async submitPrompt(text: string, mode: "auto" | "queue" = "auto") {
+    const submitted = textWithImageReferences(text, this.imageChips);
+    // Follow-up mode and Ctrl+X Enter queue a separate task; otherwise Enter steers.
     const intervene =
       mode !== "queue" &&
+      !this.preferences.followUp &&
       this.busy &&
       !!this.options.onSteer &&
-      !text.startsWith("!");
+      !submitted.startsWith("!");
     const runId = this.runId;
     const controller = new AbortController();
     this.preparingPrompt = controller;
@@ -1700,24 +1830,23 @@ export class HikaroView {
     this.editor.disableSubmit = true;
     this.updateFooter();
     try {
-      if (intervene && parseFileReferences(text).length)
-        throw Error(
-          "Attachments require Queue. Press Ctrl+X then Enter; your draft is preserved.",
-        );
+      if (intervene && parseFileReferences(submitted).length)
+        throw Error(attachmentsNeedQueue);
       const prepared = this.options.preparePrompt
-        ? await this.options.preparePrompt(text, controller.signal)
-        : { text };
+        ? await this.options.preparePrompt(submitted, controller.signal)
+        : { text: submitted };
       controller.signal.throwIfAborted();
       if (intervene && (prepared.images?.length || prepared.files?.length))
-        throw Error(
-          "Attachments require Queue. Press Ctrl+X then Enter; your draft is preserved.",
-        );
+        throw Error(attachmentsNeedQueue);
       if (intervene && (!this.busy || runId !== this.runId))
         throw Error(
           "The run ended. Review your draft and send it as a new task.",
         );
       this.preparingPrompt = undefined;
       this.editor.disableSubmit = false;
+      this.imageChips = [];
+      this.editor.setImageChips([]);
+      // Clearing must reach draft autosave, so the sent text is not restored.
       this.editor.setText("");
       if (intervene) {
         const id = await this.options.onSteer!(prepared.text, runId);
@@ -1734,9 +1863,7 @@ export class HikaroView {
             "Intervention not applied · review it in Activity before sending again",
           );
         else if (this.interventionState !== "applied")
-          this.notice(
-            "Intervention submitted · waiting for a model turn to apply it",
-          );
+          this.notice("Instruction sent · applies after the current step");
       } else
         await this.options.onPrompt(
           prepared.text,
@@ -1772,9 +1899,9 @@ export class HikaroView {
       this.modelPanel || this.approval
         ? "Message · draft preserved"
         : this.busy
-          ? this.options.onSteer
-            ? "Message · intervene"
-            : "Message · queued on send"
+          ? this.preferences.followUp || !this.options.onSteer
+            ? "Message · follow-up"
+            : "Message · steer"
           : "Message",
     );
     this.editor.setHint(
@@ -1785,10 +1912,24 @@ export class HikaroView {
             ? "Type yes to confirm · Esc cancels"
             : "Enter submits · Esc cancels"
           : this.busy
-            ? this.options.onSteer
-              ? "Enter intervene · Ctrl+X Enter queue · Ctrl+C stop"
-              : "Ctrl+C stops · new prompts queue"
+            ? this.preferences.followUp || !this.options.onSteer
+              ? "Ctrl+C stop · Enter queues the next task · /follow to steer"
+              : "Ctrl+C stop · Enter steers after this step · /follow to queue"
             : `Enter send · Ctrl+P commands · @ files${this.status.size ? " · " + [...this.status.values()].join(" · ") : ""}`,
+    );
+    const showActivity =
+      !this.disposed &&
+      !this.approval &&
+      !this.dialog &&
+      !this.modelPanel &&
+      (!!this.preparingPrompt || this.busy);
+    this.editor.setActivity(
+      showActivity
+        ? this.preparingPrompt
+          ? "Loading attachments"
+          : this.activity
+        : "",
+      showActivity,
     );
   }
 

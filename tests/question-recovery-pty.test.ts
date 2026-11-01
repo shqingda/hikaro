@@ -172,8 +172,10 @@ it("recovers unsubmitted answer drafts after attached TUI and host SIGKILL, then
       sessionId: session.id,
       scope: "local:question-owner",
     };
-    await wait("Describe the recovery boundary", send("\x1b[B\r"));
-    await wait("Your answer", send("\x1b[B\r"));
+    // The first option is selected; the text question opens its input at once.
+    const answering = send("\r");
+    await wait("Describe the recovery boundary", answering);
+    await wait("Your answer", answering);
     // Persist the unfinished input without pressing Enter or submitting answers.
     await wait(draftText, send(draftText));
     await vi.waitFor(
@@ -208,12 +210,8 @@ it("recovers unsubmitted answer drafts after attached TUI and host SIGKILL, then
         .questions,
     ).toEqual(questions);
     await expectReadOnly();
-    const reviewAt = send("\r");
-    await wait("Review answers", reviewAt);
-    await wait("Choose recovery scope", reviewAt);
-    await wait("Small", reviewAt);
-    await wait("Describe the recovery boundary", reviewAt);
-    await wait(draftText, reviewAt);
+    // Enter submits the finished answers; the crashed run's lease still blocks saving.
+    await wait("Answers not saved", send("\r"));
     expect(
       (await store.events(session.id)).filter(
         (e) => e.type === "question.response",

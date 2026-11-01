@@ -862,7 +862,9 @@ export class PiBridgeView implements Component {
     this.editor.setBodyRows(Math.max(1, Math.min(6, rows - footer.length - 5)));
     const input = this.editor.render(width);
     this.editorHeight = input.length;
-    this.bodyHeight = Math.max(1, rows - input.length - footer.length - 2);
+    // The title row plus the tab bar, which is empty on Conversation unless focused.
+    const chrome = 1 + this.frame.tabBar.render(width).length;
+    this.bodyHeight = Math.max(1, rows - input.length - footer.length - chrome);
     const body =
       this.frame.tab === "Conversation"
         ? this.renderTranscript(width)
@@ -883,7 +885,7 @@ export class PiBridgeView implements Component {
     const start = Math.min(this.offset ?? this.maxOffset, this.maxOffset);
     const visible = body.slice(start, start + this.bodyHeight);
     while (visible.length < this.bodyHeight) visible.push("");
-    this.editorY = 2 + visible.length;
+    this.editorY = chrome + visible.length;
     return [...visible, ...input, ...footer];
   }
 

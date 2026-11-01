@@ -21,6 +21,9 @@ function ui() {
     notice,
     setError: vi.fn(),
     openModelPanel() {
+      return view.openQuestionPanel();
+    },
+    openQuestionPanel() {
       const current = new AbortController();
       controller = current;
       const currentPanel = new ModelPanel(current.signal, () => {});
@@ -93,7 +96,6 @@ it("flushes unsubmitted answer input before a normal close without settling the 
     await f.wait("Question 1/1");
     f.input("\x1b[B");
     f.input("\x1b[B");
-    f.input("\x1b[B");
     f.input("\r");
     await f.wait("Your answer");
     f.input("still typing 中文🌅");
@@ -150,7 +152,6 @@ it("drains the newest input on close while an older draft write is still pending
     await f.wait("Question 1/1");
     f.input("\x1b[B");
     f.input("\x1b[B");
-    f.input("\x1b[B");
     f.input("\r");
     await f.wait("Your answer");
     f.input("older");
@@ -201,10 +202,6 @@ it("reopens a cancelled question after its cancellation write fails without reco
     expect(await answer).toBeUndefined();
     const opened = f.local.open();
     await f.wait("Recovered question 1/1");
-    f.input("\x1b[B");
-    f.input("\r");
-    await f.wait("Review answers");
-    f.input("\x1b[B");
     f.input("\r");
     await opened;
     expect(await answer).toBeUndefined();
@@ -236,10 +233,6 @@ it("keeps a live answer available after a failed save and resumes only after exp
     const failure = vi
       .spyOn(f.runtime.store, "settleQuestion")
       .mockRejectedValueOnce(Error("Temporary storage failure"));
-    f.input("\x1b[B");
-    f.input("\r");
-    await f.wait("Review answers");
-    f.input("\x1b[B");
     f.input("\r");
     await f.wait("Answers not saved");
     expect(
@@ -258,7 +251,7 @@ it("keeps a live answer available after a failed save and resumes only after exp
 it("leaves a question answerable in the same process when another panel prevents initial display", async () => {
   const f = await fixture();
   try {
-    vi.spyOn(f.view, "openModelPanel").mockImplementationOnce(() => {
+    vi.spyOn(f.view, "openQuestionPanel").mockImplementationOnce(() => {
       throw Error("Model picker is already open");
     });
     const answer = f.local
@@ -274,10 +267,6 @@ it("leaves a question answerable in the same process when another panel prevents
     );
     const opened = f.local.open();
     await f.wait("Question 1/1");
-    f.input("\x1b[B");
-    f.input("\r");
-    await f.wait("Review answers");
-    f.input("\x1b[B");
     f.input("\r");
     await opened;
     expect(await answer).toEqual({ value: { scope: "Small" } });
@@ -298,10 +287,6 @@ it("leaves failed live answers pending when the retry panel closes", async () =>
     vi.spyOn(f.runtime.store, "settleQuestion").mockRejectedValueOnce(
       Error("Temporary storage failure"),
     );
-    f.input("\x1b[B");
-    f.input("\r");
-    await f.wait("Review answers");
-    f.input("\x1b[B");
     f.input("\r");
     await f.wait("Answers not saved");
     f.abort();
@@ -410,7 +395,7 @@ it("invalidates a delayed question read before a new session starts binding", as
     await pending;
     restored = new LocalQuestions(f.runtime, () => f.view);
     await restored.select(f.session.id);
-    const display = vi.spyOn(f.view, "openModelPanel");
+    const display = vi.spyOn(f.view, "openQuestionPanel");
     let read!: () => void;
     const started = new Promise<void>((done) => {
       read = done;
@@ -477,10 +462,6 @@ it("persists before display, preserves on exit, and recovers once without starti
     );
     const open = restored.open();
     await f.wait("Recovered question 1/1");
-    f.input("\x1b[B");
-    f.input("\r");
-    await f.wait("Review answers");
-    f.input("\x1b[B");
     f.input("\r");
     await open;
     expect(
@@ -572,10 +553,6 @@ it("retains recovered answers across a lease rejection until explicit retry", as
     );
     const work = restored.open();
     await f.wait("Recovered question 1/1");
-    f.input("\x1b[B");
-    f.input("\r");
-    await f.wait("Review answers");
-    f.input("\x1b[B");
     f.input("\r");
     await f.wait("Answers not saved");
     expect(

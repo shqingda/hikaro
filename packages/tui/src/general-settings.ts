@@ -30,6 +30,12 @@ export async function openGeneralSettings(
       on: "Resume last opened session",
       off: "New session",
     },
+    {
+      key: "followUp",
+      label: "While a run is active",
+      on: "Enter queues a follow-up",
+      off: "Enter steers the run",
+    },
   ];
   try {
     for (;;) {
@@ -37,8 +43,8 @@ export async function openGeneralSettings(
         "Settings · saved immediately",
         fields.map((field) => ({
           value: field.key,
-          label: field.label,
-          description: preferences[field.key] ? field.on : field.off,
+          // Every row shows its value so the whole menu can be scanned.
+          label: `${field.label} · ${preferences[field.key] ? field.on : field.off}`,
         })),
         warning,
         "↑↓ select · Enter toggle and save · Esc close",

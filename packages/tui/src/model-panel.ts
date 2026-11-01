@@ -19,6 +19,23 @@ import {
   neutralSelected as selected,
   error as red,
 } from "./theme.ts";
+function chooseToggleLabel(label: string) {
+  if (label === "Models") return "Choose model Ctrl+A";
+  if (label === "Providers") return "Choose provider Ctrl+A";
+  return `${label} Ctrl+A`;
+}
+
+function fitLine(text: string, width: number) {
+  if (visibleWidth(text) <= width) return text;
+  if (text.startsWith("/") || text.startsWith("~")) {
+    const room = Math.max(1, width - 1);
+    const head = Math.max(1, Math.ceil(room * 0.45));
+    const tail = Math.max(1, room - head);
+    return `${text.slice(0, head)}…${text.slice(text.length - tail)}`;
+  }
+  return truncateToWidth(text, width, "…");
+}
+
 export type Selection = {
   value: string;
   makeDefault: boolean;
@@ -291,7 +308,12 @@ export class ModelPanel implements Component {
     title: string,
     secret = false,
     initial = "",
-    options?: { cancelValue?: string; onChange?: (value: string) => void },
+    options?: {
+      cancelValue?: string;
+      onChange?: (value: string) => void;
+      /** Context shown above the input, such as the question being answered. */
+      message?: string;
+    },
   ): Promise<string> {
     this.signal.throwIfAborted();
     this.searchRevision++;
@@ -301,7 +323,7 @@ export class ModelPanel implements Component {
     this.requireNoticeVisible = false;
     this.title = title;
     this.error = "";
-    this.message = "";
+    this.message = options?.message ?? "";
     this.secret = secret;
     this.tabs = [];
     this.actions = [];
@@ -391,12 +413,14 @@ export class ModelPanel implements Component {
         event.x < b.end,
     );
     if (button) {
-      if (button.key === "provider") {
-        this.resolveSelection({
-          value: "__providers",
-          makeDefault: false,
-          action: "providers",
-        });
+      if (button.key === "toggle") {
+        const other = this.otherTab();
+        if (other)
+          this.resolveSelection({
+            value: other.value,
+            makeDefault: false,
+            action: "tab",
+          });
       } else if (button.key === "details") {
         this.detailsExpanded = !this.detailsExpanded;
         this.refresh();
@@ -427,11 +451,12 @@ export class ModelPanel implements Component {
   }
   handleInput(data: string) {
     if (!this.pending || isKeyRelease(data)) return;
-    if (this.activeTab === "models" && matchesKey(data, "ctrl+a")) {
+    const other = this.otherTab();
+    if (other && matchesKey(data, "ctrl+a")) {
       this.resolveSelection({
-        value: "__providers",
+        value: other.value,
         makeDefault: false,
-        action: "providers",
+        action: "tab",
       });
       return;
     }
@@ -681,46 +706,15 @@ export class ModelPanel implements Component {
     doc.width = width;
     this.findInDocument(false);
   }
-  private helpLines(width: number, compact: boolean) {
-    if (!this.list)
-      return new Text(
-        dim(
-          this.pending
-            ? "Enter continue · Esc cancel"
-            : "Waiting… · Esc cancel",
-        ),
-        1,
-        0,
-      ).render(width);
-    const item = this.list.getSelectedItem();
-    const action =
-      typeof this.enterAction === "function"
-        ? item
-          ? this.enterAction(item)
-          : "confirm"
-        : this.enterAction;
-    const base = compact
-      ? `↑↓ · Enter ${action} · Esc`
-      : (this.help ?? `↑↓ select · Enter ${action} · Esc cancel`);
-    const extras = [
-      ...(this.tabs.length > 1 ? ["Tab page"] : []),
-      ...this.actions
-        .filter(
-          (action) =>
-            action.enabled === undefined || this.actionEnabled(action.enabled),
-        )
-        .map(
-          (action) =>
-            `${action.key.replace("ctrl+", "Ctrl+")} ${typeof action.label === "function" ? action.label(item) : action.label}`,
-        ),
-      ...(this.actionEnabled(this.allowDefault)
-        ? ["Ctrl+S active + default"]
-        : []),
-      ...(this.actionEnabled(this.allowDelete) ? ["Del/Ctrl+D delete"] : []),
-      ...(this.actionEnabled(this.allowRename) ? ["Ctrl+R rename"] : []),
-    ];
-    const text = base + (extras.length ? "\n" + extras.join(" · ") : "");
-    return new Text(dim(clean(text)), 1, 0).render(width);
+  /** Waiting or prompt panels have no list buttons, only this hint. */
+  private helpLines(width: number) {
+    return new Text(
+      dim(
+        this.pending ? "Enter continue · Esc cancel" : "Waiting… · Esc cancel",
+      ),
+      1,
+      0,
+    ).render(width);
   }
   private choiceRows(width: number, available: number) {
     if (available <= 0) return [];
@@ -800,6 +794,18 @@ export class ModelPanel implements Component {
       );
     return rows;
   }
+  /** What Enter does for the selected row, shared by the hint line and the button. */
+  private enterLabel() {
+    if (typeof this.enterAction === "string") return this.enterAction;
+    const item = this.list?.getSelectedItem();
+    return item ? this.enterAction(item) : "confirm";
+  }
+  private otherTab() {
+    if (this.tabs.length < 2 || !this.activeTab) return;
+    const index = this.tabs.findIndex((tab) => tab.value === this.activeTab);
+    if (index < 0) return this.tabs[0];
+    return this.tabs[(index + 1) % this.tabs.length];
+  }
   private descriptionLines(width: number) {
     const item = this.list?.getSelectedItem();
     if (!item) return [];
@@ -809,10 +815,15 @@ export class ModelPanel implements Component {
         ? (item.description ?? "")
         : (item.detail ?? item.description ?? ""),
     );
-    const text = [visibleWidth(label) > width - 4 ? label : "", description]
-      .filter(Boolean)
-      .join("\n");
-    return text ? new Text(dim(text), 1, 0).render(width) : [];
+    const parts = [
+      ...(visibleWidth(label) > width - 4 ? [label] : []),
+      ...description.split("\n"),
+    ].filter((line) => line.trim());
+    const indent = "   ";
+    const room = Math.max(1, width - indent.length - 1);
+    return parts.map(
+      (line) => indent + dim(fitLine(line.replace(/\s+/g, " ").trim(), room)),
+    );
   }
   private renderDescription(lines: string[], available: number, width: number) {
     this.descriptionRows = lines.length;
@@ -916,7 +927,7 @@ export class ModelPanel implements Component {
     ];
     if (this.tabs.length) {
       this.tabRow = lines.length;
-      let x = 0;
+      let x = 1;
       for (const tab of this.tabs) {
         const length = visibleWidth(
           tab.value === this.activeTab ? `[${tab.label}]` : tab.label,
@@ -930,11 +941,12 @@ export class ModelPanel implements Component {
       }
       lines.push(
         truncateToWidth(
-          this.tabs
-            .map((tab) =>
-              tab.value === this.activeTab ? `[${tab.label}]` : tab.label,
-            )
-            .join("  "),
+          " " +
+            this.tabs
+              .map((tab) =>
+                tab.value === this.activeTab ? `[${tab.label}]` : tab.label,
+              )
+              .join("  "),
           width,
           "…",
         ),
@@ -951,19 +963,24 @@ export class ModelPanel implements Component {
           : this.input.render(width)),
       );
     }
-    const help = this.list ? ([] as string[]) : this.helpLines(width, compact);
+    const help = this.list ? ([] as string[]) : this.helpLines(width);
     if (this.list) {
       let row = help.length,
         x = 1;
       help.push(" ");
       for (const button of [
         {
-          label: `${typeof this.enterAction === "string" ? this.enterAction : "Open"} ↵`,
+          label: `${this.enterLabel()} ↵`,
           key: "\r",
         },
         { label: "Cancel Esc", key: "\x1b" },
-        ...(this.activeTab === "models"
-          ? [{ label: "Choose provider Ctrl+A", key: "provider" }]
+        ...(this.otherTab()
+          ? [
+              {
+                label: chooseToggleLabel(this.otherTab()!.label),
+                key: "toggle",
+              },
+            ]
           : []),
         ...(this.activeTab === "models"
           ? [
@@ -1009,7 +1026,7 @@ export class ModelPanel implements Component {
           )
           .map(
             (a) =>
-              `${a.key} ${typeof a.label === "function" ? a.label(this.list?.getSelectedItem()) : a.label}`,
+              `${a.key.replace("ctrl+", "Ctrl+")} ${typeof a.label === "function" ? a.label(this.list?.getSelectedItem()) : a.label}`,
           ),
         ...(this.actionEnabled(this.allowDefault)
           ? ["Ctrl+S save default"]
@@ -1059,14 +1076,13 @@ export class ModelPanel implements Component {
         : 0;
       this.choiceTop = lines.length;
       const choices = this.choiceRows(width, available - detailBudget);
-      lines.push(
-        ...choices,
-        ...this.renderDescription(
-          description,
-          available - choices.length,
-          width,
-        ),
+      const described = this.renderDescription(
+        description,
+        available - choices.length,
+        width,
       );
+      // Tabbed menus keep a stable block so switching pages does not resize the box.
+      lines.push(...choices, ...described);
     }
     this.helpTop = lines.length;
     lines.push(...help);

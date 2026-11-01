@@ -8,12 +8,14 @@ import {
   type TuiMouseEvent,
 } from "./primitives.ts";
 import { createMarkdown } from "./markdown.cjs";
+import { presentUserText } from "./image-chips.ts";
 import {
   accent,
   bold,
   muted,
   error as errorText,
   markdownTheme as theme,
+  userMessageStyle,
 } from "./theme.ts";
 import { sanitize } from "./text.ts";
 const MESSAGE_PAGE_CHARS = 16_000;
@@ -65,8 +67,10 @@ class StreamingMarkdown implements Component {
   private prefix = createMarkdown("", 1, 0, theme);
   private tail = createMarkdown("", 1, 0, theme);
   private blank = true;
+  private full = "";
   private last?: { width: number; a: string[]; b: string[]; lines: string[] };
   setText(text: string) {
+    this.full = text;
     this.blank = !text.trim();
     const split = stableMarkdownBoundary(text);
     const prefix = text.slice(0, split);
@@ -76,18 +80,21 @@ class StreamingMarkdown implements Component {
     }
     this.tail.setText(text.slice(split));
   }
-  /** Same lines as one Markdown(text, 1, 1): padding wraps both parts. */
+  /** Same lines as one Markdown(text, 1, 1): the parts omit vertical padding and this adds it once. */
   render(width: number) {
     const a = this.prefix.render(width),
       b = this.tail.render(width);
     if (this.last?.width === width && this.last.a === a && this.last.b === b)
       return this.last.lines;
-    // At paddingY 0 a part with no visible block renders a lone "" placeholder.
     const content = [a, b].flatMap((part) =>
       part.length === 1 && part[0] === "" ? [] : part,
     );
     const pad = " ".repeat(width);
-    const lines = this.blank ? [] : [pad, ...content, pad];
+    const lines = this.blank
+      ? []
+      : content.length
+        ? [pad, ...content, pad]
+        : createMarkdown(this.full, 1, 1, theme).render(width);
     this.last = { width, a, b, lines };
     return lines;
   }
@@ -143,6 +150,7 @@ export class MessageComponent implements Component {
       manual?: boolean;
       textLength?: number;
       read?: (offset: number, limit: number) => Promise<string>;
+      timestamp?: number;
     } = {},
   ) {
     this.text = role === "tool" ? sanitize(text) : text;
@@ -178,7 +186,7 @@ export class MessageComponent implements Component {
   get summary() {
     return this.options.tool
       ? `${this.options.tool.state} ${this.options.tool.name} ${this.options.tool.target}`
-      : `${this.role === "user" ? "YOU" : "HIKARO"} · ${sanitize(this.text).replace(/\s+/g, " ").slice(0, 100)}`;
+      : sanitize(this.text).replace(/\s+/g, " ").slice(0, 100);
   }
   async readPart(page: number) {
     const index = Math.max(0, Math.min(this.pages - 1, page));
@@ -277,14 +285,6 @@ export class MessageComponent implements Component {
           this.rendered = { width, lines };
           return lines;
         }
-      } else if (this.role !== "tool") {
-        this.body.addChild(
-          new Text(
-            this.role === "user" ? bold("YOU") : accent(bold("HIKARO")),
-            1,
-            0,
-          ),
-        );
       }
       if (this.options.label && !this.options.tool)
         this.body.addChild(new Text(muted(sanitize(this.options.label)), 1, 0));
@@ -293,7 +293,21 @@ export class MessageComponent implements Component {
         this.live ??= new StreamingMarkdown();
         this.live.setText(sanitize(text));
         this.body.addChild(this.live);
-      } else this.body.addChild(createMarkdown(sanitize(text), 1, 1, theme));
+      } else {
+        const body =
+          this.role === "user"
+            ? presentUserText(sanitize(text)).text
+            : sanitize(text);
+        this.body.addChild(
+          createMarkdown(
+            body,
+            1,
+            1,
+            theme,
+            this.role === "user" ? userMarkdownStyle() : undefined,
+          ),
+        );
+      }
       if (this.streaming && this.text.length > MESSAGE_PAGE_CHARS) {
         this.body.addChild(
           new Text(
@@ -327,7 +341,15 @@ export class MessageComponent implements Component {
   }
 }
 
-/** Contiguous tool activity is one expandable object; failures remain visible. */
+function userMarkdownStyle() {
+  const style = userMessageStyle();
+  if (!style) return;
+  return {
+    color: (content: string) => style.foreground + content + "\x1b[39m",
+    bgColor: (content: string) => style.background + content + "\x1b[49m",
+  };
+}
+
 export class ExecutionGroup implements Component {
   readonly messages: MessageComponent[] = [];
   private expanded = false;
@@ -348,7 +370,8 @@ export class ExecutionGroup implements Component {
     for (const message of this.messages) message.setDetails(expanded);
   }
   render(width: number) {
-    if (this.messages.length === 1) return this.messages[0]!.render(width);
+    if (this.messages.length === 1)
+      return ["", ...this.messages[0]!.render(width)];
     const counts = new Map<string, number>();
     for (const message of this.messages) {
       const name = message.toolName ?? "tool";
@@ -358,6 +381,7 @@ export class ExecutionGroup implements Component {
       .map(([name, count]) => `${count} ${name}`)
       .join(" · ");
     const lines = [
+      "",
       muted(
         truncateToWidth(
           ` ${this.expanded ? "▾" : "▸"} Execution · ${summary}`,
@@ -384,8 +408,10 @@ export class ExecutionGroup implements Component {
   }
   handleMouse(event: TuiMouseEvent) {
     if (event.type !== "click" || event.button !== "left") return;
-    if (this.messages.length === 1) return this.messages[0]!.handleMouse(event);
-    if (event.y === 0) {
+    if (event.y === 0) return { handled: true };
+    if (this.messages.length === 1)
+      return this.messages[0]!.handleMouse({ ...event, y: event.y - 1 });
+    if (event.y === 1) {
       this.setDetails(!this.expanded);
       this.refresh();
       return { handled: true, focus: true };

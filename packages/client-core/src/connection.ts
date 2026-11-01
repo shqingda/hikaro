@@ -73,6 +73,9 @@ export class ClientConnection {
   get supportsFiles(): boolean {
     return this.view.supportsFiles;
   }
+  get supportsAllProjectSessions(): boolean {
+    return this.view.supportsAllProjectSessions;
+  }
   get supportsRunBoundSteering(): boolean {
     return this.view.supportsRunBoundSteering;
   }

@@ -178,8 +178,7 @@ it("explores read-only, answers a question, revises and approves a plan before w
     await wait("Enter send");
     await wait("Choose the scope", send("/plan update sample\r"));
     expect(await readFile(join(cwd, "sample.txt"), "utf8")).toBe("original");
-    await wait("Review answers", send("\x1b[B\r"));
-    await wait("Plan review", send("\x1b[B\r"));
+    await wait("Plan review", send("\r"));
     expect(blocked).toBe(true);
     expect(answered).toBe(true);
     expect(

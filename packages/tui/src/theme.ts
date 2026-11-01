@@ -1,4 +1,5 @@
 import type { MarkdownTheme } from "./primitives.ts";
+import { highlightCode } from "./highlight.ts";
 
 let light = false;
 const color = (text: string, start: string, end = "\x1b[39m") =>
@@ -8,14 +9,39 @@ const color = (text: string, start: string, end = "\x1b[39m") =>
 export function setColorScheme(isLight: boolean) {
   light = isLight;
 }
-export const accent = (text: string) =>
-  color(text, light ? "\x1b[38;2;107;80;0m" : "\x1b[38;2;242;181;0m");
+export function isLightScheme() {
+  return light;
+}
+/** 0.3.0 terracotta. One red for day and night. */
+export const accent = (text: string) => color(text, "\x1b[38;2;196;85;72m");
 export const muted = (text: string) =>
   color(text, light ? "\x1b[38;2;98;98;90m" : "\x1b[38;2;167;167;156m");
 export const bold = (text: string) => color(text, "\x1b[1m", "\x1b[22m");
 export const error = (text: string) => color(text, "\x1b[31m");
+/** The 0.3.0 running indicator: terracotta, distinct from the Beam accent. */
+export const working = (text: string) => color(text, "\x1b[38;2;196;85;72m");
+/** Grok-style image chip. Green on both the day and night conversation bars. */
+export const imageChip = (text: string) =>
+  color(text, light ? "\x1b[38;2;22;140;62m" : "\x1b[38;2;86;214;126m");
+/** Clock on a conversation row. Dimmer than the message, not a second accent. */
+export const clock = (text: string) =>
+  color(text, light ? "\x1b[38;2;120;120;120m" : "\x1b[38;2;168;168;168m");
+
+/** User turns keep Pi's full-width bar in the 0.3.0 red wash. */
+export function userMessageStyle() {
+  if (process.env.NO_COLOR !== undefined) return;
+  return light
+    ? {
+        background: "\x1b[48;2;244;225;219m",
+        foreground: "\x1b[38;2;41;39;37m",
+      }
+    : {
+        background: "\x1b[48;2;58;39;36m",
+        foreground: "\x1b[38;2;244;237;236m",
+      };
+}
 export const selected = (text: string) =>
-  color(text, "\x1b[48;2;242;181;0m\x1b[38;2;18;18;15m", "\x1b[49m\x1b[39m");
+  color(text, "\x1b[48;2;196;85;72m\x1b[38;2;255;245;242m", "\x1b[49m\x1b[39m");
 
 export const editorTheme = {
   borderColor: muted,
@@ -36,6 +62,7 @@ export const markdownTheme: MarkdownTheme = {
   code: accent,
   codeBlock: identity,
   codeBlockBorder: muted,
+  highlightCode,
   quote: muted,
   quoteBorder: muted,
   hr: muted,

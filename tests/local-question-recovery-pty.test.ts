@@ -132,8 +132,10 @@ it("recovers ordinary TUI question drafts after SIGKILL without replay and prese
       sessionId: session.id,
       scope: "standalone:tui",
     };
-    await wait("Describe the recovery boundary", send("\x1b[B\r"));
-    await wait("Your answer", send("\x1b[B\r"));
+    // The first option is selected; the text question opens its input at once.
+    const answering = send("\r");
+    await wait("Describe the recovery boundary", answering);
+    await wait("Your answer", answering);
     // The second answer has never been submitted with Enter.
     await wait(draftText, send(draftText));
     await vi.waitFor(
@@ -166,12 +168,8 @@ it("recovers ordinary TUI question drafts after SIGKILL without replay and prese
       (await store.pendingQuestions(session.id, "standalone:tui"))[0]!
         .questions,
     ).toEqual(questions);
-    const reviewAt = send("\r");
-    await wait("Review answers", reviewAt);
-    await wait("Choose recovery scope", reviewAt);
-    await wait("Small", reviewAt);
-    await wait("Describe the recovery boundary", reviewAt);
-    await wait(draftText, reviewAt);
+    // Enter submits the finished answers; the crashed run's lease still blocks saving.
+    await wait("Answers not saved", send("\r"));
     await expectReadOnly();
     expect(
       (await store.events(session.id)).filter(
@@ -179,7 +177,6 @@ it("recovers ordinary TUI question drafts after SIGKILL without replay and prese
       ),
     ).toEqual([]);
     expect(requests).toHaveLength(1);
-    await wait("Answers not saved", send("\x1b[B\r"));
     expect(
       await store.pendingQuestions(session.id, "standalone:tui"),
     ).toHaveLength(1);

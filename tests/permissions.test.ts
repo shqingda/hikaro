@@ -204,8 +204,10 @@ describe("permissions", () => {
   });
 });
 
-it("status bar reflects execution and approval without animation or idle redraws", async () => {
+it("status bar reflects execution and the composer animates only while work is running", async () => {
   vi.useFakeTimers();
+  const previousColor = process.env.NO_COLOR;
+  delete process.env.NO_COLOR;
   const terminal: Terminal = {
     rows: 24,
     columns: 80,
@@ -247,13 +249,13 @@ it("status bar reflects execution and approval without animation or idle redraws
     event("run.start");
     const first = status();
     expect(first).toContain("Working");
-    expect(view.editor.render(80)[0]).toContain("Message");
-    expect(view.editor.render(80)[0]).not.toContain("Working");
+    expect(view.editor.render(80)[0]).toContain("Working");
+    expect(view.editor.render(80)[0]).toContain("\x1b[38;2;196;85;72m");
     render.mockClear();
     vi.advanceTimersByTime(800);
     expect(status()).toBe(first);
-    expect(render).not.toHaveBeenCalled();
-    expect(vi.getTimerCount()).toBe(0);
+    expect(render).toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(1);
     event("context.compacting");
     expect(status()).toContain("Compacting");
     event("context.checkpoint");
@@ -284,6 +286,8 @@ it("status bar reflects execution and approval without animation or idle redraws
     vi.advanceTimersByTime(800);
     expect(render).not.toHaveBeenCalled();
   } finally {
+    if (previousColor === undefined) delete process.env.NO_COLOR;
+    else process.env.NO_COLOR = previousColor;
     view.dispose();
   }
 });

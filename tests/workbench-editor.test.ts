@@ -5,7 +5,10 @@ import {
   type TUI,
   type TuiMouseEvent,
 } from "../packages/tui/src/primitives.ts";
-import { ActivityEditor } from "../packages/tui/src/activity-editor.ts";
+import {
+  ActivityEditor,
+  editorChromeRows,
+} from "../packages/tui/src/activity-editor.ts";
 import {
   accent,
   bold,
@@ -55,7 +58,7 @@ it.each([
       Array.from({ length: 20 }, (_, index) => `line ${index}`).join("\n"),
     );
     const rendered = editor.render(40);
-    expect(rendered).toHaveLength(bodyRows! + 2);
+    expect(rendered).toHaveLength(bodyRows! + editorChromeRows);
     expect(rendered[bodyRows!]).toContain(CURSOR_MARKER);
     expect(stripVTControlCharacters(rendered[bodyRows!]!)).toContain("line 19");
     expect(rendered.join("\n")).not.toContain("\0");
@@ -85,7 +88,7 @@ it("preserves the cursor after an explicit one-row budget and a resize", () => {
   editor.setBodyRows(1);
   for (const width of [120, 80, 60, 40]) {
     const rendered = editor.render(width);
-    expect(rendered).toHaveLength(3);
+    expect(rendered).toHaveLength(1 + editorChromeRows);
     expect(rendered[1]).toContain(CURSOR_MARKER);
     expect(editor.getExpandedText()).toBe("中文🙂".repeat(40));
   }
@@ -174,25 +177,36 @@ it("preserves editing coordinates, Unicode cursor placement, paste undo and comp
   expect(editor.getAutocompleteMaxVisible()).toBe(5);
 });
 
-it("does not animate or repaint unchanged hints", () => {
+it("does not repaint an unchanged hint and animates only while work is active", () => {
   vi.useFakeTimers();
+  delete process.env.NO_COLOR;
   const { editor, render } = fixture();
   editor.setHint("Enter send");
   render.mockClear();
   editor.setHint("Enter send");
-  editor.setActivity("Working", true);
-  vi.advanceTimersByTime(1000);
   expect(render).not.toHaveBeenCalled();
+  editor.setActivity("Working", true);
+  const resting = stripVTControlCharacters(editor.render(40)[0]!);
+  expect(resting).toContain("Working");
+  expect(resting).not.toContain("Message");
+  expect(editor.render(40)[0]).toContain("\x1b[38;2;196;85;72m");
+  render.mockClear();
+  vi.advanceTimersByTime(80);
+  expect(render).toHaveBeenCalledOnce();
+  expect(stripVTControlCharacters(editor.render(40)[0]!)).not.toBe(resting);
+  editor.setActivity();
   expect(vi.getTimerCount()).toBe(0);
+  expect(stripVTControlCharacters(editor.render(40)[0]!)).toContain("Message");
   editor.dispose();
 });
 
 it("uses readable light emphasis and honors NO_COLOR for every presentation helper", () => {
   delete process.env.NO_COLOR;
   setColorScheme(false);
-  const dark = accent("Hikaro");
+  const dark = muted("Hikaro");
   setColorScheme(true);
-  expect(accent("Hikaro")).not.toBe(dark);
+  // The terracotta accent is shared by both schemes; secondary text adapts.
+  expect(muted("Hikaro")).not.toBe(dark);
   expect(stripVTControlCharacters(selected("Choice"))).toBe("Choice");
   process.env.NO_COLOR = "1";
   for (const format of [accent, bold, error, muted, selected])

@@ -20,8 +20,12 @@ const single = (text: string) => sanitize(text).replace(/[\r\n\t]+/g, " ");
 const fit = (text: string, width: number) =>
   truncateToWidth(text, Math.max(0, width));
 
-export function renderHeader(status: ViewStatus, width: number) {
-  const room = Math.max(0, width - 2);
+export function renderHeader(status: ViewStatus, width: number, attention = 0) {
+  // Other sessions waiting on the user stay visible while the sidebar is hidden.
+  const badge = attention
+    ? `  ${accent(`! ${attention} needs attention · Ctrl+O`)}`
+    : "";
+  const room = Math.max(0, width - 2 - visibleWidth(badge));
   const title = accent(bold("hikaro"));
   const workspace = single(
     status.cwd.replace(/\/$/, "").split("/").at(-1) ?? "",
@@ -30,7 +34,7 @@ export function renderHeader(status: ViewStatus, width: number) {
     `${workspace}${status.branch ? ` / ${single(status.branch)}` : ""}${status.sessionTitle && status.sessionTitle !== "New session" ? ` · ${single(status.sessionTitle)}` : ""}`,
     Math.max(0, room - 8),
   );
-  return [fit(` ${title}  ${muted(context)}`, width)];
+  return [fit(` ${title}  ${muted(context)}${badge}`, width)];
 }
 
 export function renderStatus(

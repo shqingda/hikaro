@@ -47,6 +47,11 @@ export class AttachedNavigation {
     private synchronize: () => Promise<void>,
     private sessions?: {
       open(id: string): Promise<Session>;
+      mutateSession?(
+        id: string,
+        method: "session.delete" | "session.rename",
+        params: Record<string, unknown>,
+      ): Promise<any>;
       create(): Promise<Session>;
       removed?(id: string): Promise<void>;
       prepareRemoval?(id: string): Promise<boolean>;
@@ -162,14 +167,29 @@ export class AttachedNavigation {
       }
       return;
     }
-    if (command === "/sessions" || command === "/resume") {
+    if (
+      command === "/sessions" ||
+      command === "/resume" ||
+      command === "/delete"
+    ) {
       let replacementPrepared = false;
       await sessionCommand(
         this.view,
-        command.slice(1) as "sessions" | "resume",
+        command.slice(1) as "sessions" | "resume" | "delete",
         arg,
         {
           current: () => this.client.state.session?.id ?? "",
+          ...(this.client.supportsAllProjectSessions
+            ? {
+                listAll: (offset: number, limit: number, query?: string) =>
+                  this.request<Session[]>("session.list", {
+                    offset,
+                    limit,
+                    query,
+                    allProjects: true,
+                  }),
+              }
+            : {}),
           list: (offset, limit, query) =>
             this.request<Session[]>("session.list", { offset, limit, query }),
           flush: this.flush,
@@ -185,15 +205,25 @@ export class AttachedNavigation {
           remove: async (sessionId) => {
             replacementPrepared =
               (await this.sessions?.prepareRemoval?.(sessionId)) ?? false;
-            const result = await this.request<{ cleanupError?: string }>(
-              "session.delete",
-              { sessionId },
-            );
+            const result = this.sessions?.mutateSession
+              ? await this.sessions.mutateSession(
+                  sessionId,
+                  "session.delete",
+                  {},
+                )
+              : await this.request<{ cleanupError?: string }>(
+                  "session.delete",
+                  { sessionId },
+                );
             await this.sessions?.removed?.(sessionId);
             return result.cleanupError;
           },
           rename: async (sessionId, title) => {
-            await this.request("session.rename", { sessionId, title });
+            if (this.sessions?.mutateSession)
+              await this.sessions.mutateSession(sessionId, "session.rename", {
+                title,
+              });
+            else await this.request("session.rename", { sessionId, title });
           },
         },
       );

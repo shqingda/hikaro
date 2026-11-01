@@ -9,6 +9,8 @@ const schema = z.object({
   showUsage: z._default(z.boolean(), true),
   completionBell: z._default(z.boolean(), false),
   resumeOnStart: z._default(z.boolean(), true),
+  /** While a run is active, Enter queues a later task instead of steering it. */
+  followUp: z._default(z.boolean(), false),
 });
 export const parseTuiPreferences = (value: unknown) => schema.parse(value);
 export type TuiPreferences = z.infer<typeof schema>;

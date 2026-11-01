@@ -14,9 +14,7 @@ export async function askQuestions(
   draft?: QuestionDraftSaver,
 ): Promise<Record<string, string> | undefined> {
   runSignal.throwIfAborted();
-  const { panel, signal, close } = view.openModelPanel({
-    interruptYielding: true,
-  });
+  const { panel, signal, close } = view.openQuestionPanel();
   runSignal.addEventListener("abort", close, { once: true });
   const answers: Record<string, string> = Object.assign(
     Object.create(null),
@@ -34,6 +32,7 @@ export async function askQuestions(
         ? questions.findIndex((q) => q.id === position.questionId)
         : 0;
   let writingInput = position?.kind === "input";
+  let resumingReview = position?.kind === "review";
   const save = () =>
     draft?.update({
       answers,
@@ -51,6 +50,10 @@ export async function askQuestions(
       throw Error("Saved answer draft does not match this question");
     for (;;) {
       if (index === questions.length) {
+        // Live answers submit at once. A restored, finished draft still needs
+        // an explicit submit: reopening a question never answers it.
+        if (!resumingReview) return answers;
+        resumingReview = false;
         const choice = await panel.readDocument(
           "Review answers",
           questions.map((q) => `${q.question}\n${answers[q.id]}`).join("\n\n"),
@@ -60,55 +63,55 @@ export async function askQuestions(
           ],
         );
         if (choice.value === "submit") return answers;
-        index = choice.value === "revise" ? 0 : questions.length - 1;
+        if (choice.value !== "revise") return;
+        index = 0;
         save();
         continue;
       }
       const q = questions[index]!;
-      const choice = writingInput
-        ? { value: "custom" }
-        : await panel.readDocument(
-            `${recovered ? "Recovered question" : "Question"} ${index + 1}/${questions.length}`,
-            (recovered
-              ? "Previous execution interrupted. Answers will be saved to this session; send a new message to continue. No previous operation will run automatically.\n\n"
-              : "") + q.question,
-            [
-              ...(q.options ?? []).map((label, i) => ({
-                value: String(i),
-                label,
-              })),
-              { value: "custom", label: "Write my answer…" },
-            ],
-          );
-      if (choice.value === "back") {
-        if (!index) return;
-        index--;
-        save();
-        continue;
-      }
-      if (choice.value === "custom") {
-        writingInput = true;
-        save();
-        const text = await panel.prompt(
-          "Your answer",
-          false,
-          inputs[q.id] ?? answers[q.id] ?? "",
-          {
-            cancelValue: "",
-            onChange: (value) => {
-              inputs[q.id] = value;
-              save();
-            },
-          },
+      if (q.options?.length && !writingInput) {
+        const choice = await panel.choose(
+          `${recovered ? "Recovered question" : "Question"} ${index + 1}/${questions.length}`,
+          [
+            ...q.options.map((label, i) => ({ value: String(i), label })),
+            { value: "custom", label: "Write my answer…" },
+          ],
+          q.question,
+          "↑↓ · Enter",
+          { search: false, cancelValue: "" },
         );
-        writingInput = false;
-        if (!text.trim()) {
+        if (!choice.value) return;
+        if (choice.value !== "custom") {
+          answers[q.id] = q.options[Number(choice.value)]!;
+          index++;
           save();
           continue;
         }
-        answers[q.id] = text;
-        inputs[q.id] = text;
-      } else answers[q.id] = q.options![Number(choice.value)]!;
+      }
+      writingInput = true;
+      save();
+      const text = await panel.prompt(
+        "Your answer",
+        false,
+        inputs[q.id] ?? answers[q.id] ?? "",
+        {
+          message: `${recovered ? "Recovered question" : "Question"} ${index + 1}/${questions.length} · ${q.question}`,
+          cancelValue: "",
+          onChange: (value) => {
+            inputs[q.id] = value;
+            save();
+          },
+        },
+      );
+      writingInput = false;
+      if (!text.trim()) {
+        // An empty answer returns to the choices; without choices it dismisses.
+        if (!q.options?.length) return;
+        save();
+        continue;
+      }
+      answers[q.id] = text;
+      inputs[q.id] = text;
       index++;
       save();
     }

@@ -1,7 +1,6 @@
 node_modules
 pnpm-lock.yaml
 dist
-.wrangler
 artifacts
 brand
 README.md

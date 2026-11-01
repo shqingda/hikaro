@@ -107,6 +107,10 @@ export class ClientState {
   }
   private generalFiles = false;
   private runBoundSteering = false;
+  private allProjectSessions = false;
+  get supportsAllProjectSessions() {
+    return this.allProjectSessions;
+  }
   get supportsFiles(): boolean {
     return this.generalFiles;
   }
@@ -151,6 +155,7 @@ export class ClientState {
     this.methods.clear();
     this.generalFiles = false;
     this.runBoundSteering = false;
+    this.allProjectSessions = false;
     this.hostNegotiated = false;
     this.helloId = undefined;
     this.snapshotId = undefined;
@@ -379,6 +384,7 @@ export class ClientState {
       )
         throw Error("Invalid handshake methods");
       this.generalFiles = hello.fileAttachments === true;
+      this.allProjectSessions = hello.allProjectSessions === true;
       this.runBoundSteering =
         hello.runBoundSteering === true && hello.methods.includes("steer");
       this.methods = new Set(

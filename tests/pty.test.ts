@@ -389,8 +389,8 @@ describe("critical TUI workflows", () => {
       await tui.wait("Settings · saved immediately", tui.send("/settings\r"));
       for (let i = 0; i < 4; i++) tui.send("\x1b[B");
       await tui.wait("→ Startup", tui.send("\x1b[A\x1b[B"));
-      await tui.wait("New session", tui.send("\r"));
-      await tui.wait("Resume last opened session", tui.send("\r"));
+      await tui.wait("Startup · New", tui.send("\r"));
+      await tui.wait("Startup · Resume", tui.send("\r"));
       await tui.wait("Enter send", tui.send("\x1b"));
       await tui.wait(
         "Permissions · this workspace",
@@ -535,11 +535,15 @@ describe("permissions and execution status", () => {
       await tui.wait("Permissions: Full Access", tui.send("\r"));
       const after = tui.send("activity-check\r");
       const request = await tui.nextRequest();
-      await tui.wait("Enter intervene", after);
+      await tui.wait("Enter steers", after);
       const quiet = tui.send("");
       await new Promise<void>((done) => setTimeout(done, 240));
-      expect(tui.outputSince(quiet)).toBe("");
-      expect(tui.outputSince(after)).not.toMatch(/[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/);
+      // Only the composer spinner may repaint while the run waits.
+      expect(
+        tui
+          .outputSince(quiet)
+          .replace(/[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏─\s]|Working|Running|Thinking/g, ""),
+      ).toBe("");
       await request.write("activity-completed");
       const finished = tui.send("");
       request.finish();
@@ -566,7 +570,7 @@ describe("permissions and execution status", () => {
 describe("TUI interaction fixes", () => {
   it("searches session titles and preserves settings focus with a persistent permission mode", async () => {
     await withCriticalTui(async (tui) => {
-      await tui.wait("Permissions · Ask for approval", 0);
+      await tui.wait("Permissions: Ask for approval", 0);
       const a = await tui.session();
       await tui.wait("Sessions · page 1", tui.send("/sessions\r"));
       // Search is asynchronous; wait for a selectable result, not the echoed query.
@@ -584,7 +588,7 @@ describe("TUI interaction fixes", () => {
       // differential renderer only emits the restored input hint.
       await tui.wait("Enter send", tui.send("\x1b"));
       await tui.wait(
-        "Permissions · Full Access",
+        "Permissions: Full Access",
         tui.send("/permissions full\r"),
       );
       return (db) => {

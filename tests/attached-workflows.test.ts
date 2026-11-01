@@ -157,6 +157,9 @@ it("does not send an old answer after the same question changes to recovered dur
       return { panel, signal: current.signal, close: () => current.abort() };
     },
     closeModelPanel: () => controller?.abort(),
+    openQuestionPanel(this: HikaroView) {
+      return this.openModelPanel();
+    },
     notice: vi.fn(),
     setError: vi.fn(),
     setPermissionLabel: vi.fn(),
@@ -166,11 +169,6 @@ it("does not send an old answer after the same question changes to recovered dur
   try {
     await vi.advanceTimersByTimeAsync(750);
     expect(screen()).toContain("Question 1/1");
-    panel!.handleInput("\x1b[B");
-    panel!.handleInput("\r");
-    await vi.advanceTimersByTimeAsync(0);
-    expect(screen()).toContain("Review answers");
-    panel!.handleInput("\x1b[B");
     panel!.handleInput("\r");
     await vi.advanceTimersByTimeAsync(0);
     expect(
@@ -230,6 +228,9 @@ it.each(["poll", "response"] as const)(
         return { panel, signal: current.signal, close: () => current.abort() };
       },
       closeModelPanel: () => controller?.abort(),
+      openQuestionPanel(this: HikaroView) {
+        return this.openModelPanel();
+      },
       notice,
       setError: vi.fn(),
       setPermissionLabel: vi.fn(),
@@ -251,11 +252,6 @@ it.each(["poll", "response"] as const)(
           ),
         ).toEqual([]);
       }
-      panel!.handleInput("\x1b[B");
-      panel!.handleInput("\r");
-      await vi.advanceTimersByTimeAsync(0);
-      expect(screen()).toContain("Review answers");
-      panel!.handleInput("\x1b[B");
       panel!.handleInput("\r");
       await vi.advanceTimersByTimeAsync(0);
       expect(notice).toHaveBeenCalledWith(
@@ -632,6 +628,9 @@ it.each([
         return { panel, signal: next.signal, close: () => next.abort() };
       },
       closeModelPanel: () => controller?.abort(),
+      openQuestionPanel(this: HikaroView) {
+        return this.openModelPanel();
+      },
       notice: vi.fn(),
       setError,
       setPermissionLabel: vi.fn(),

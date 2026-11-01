@@ -75,6 +75,47 @@ it("replaces only a deleted current session and keeps the cleanup warning", asyn
   expect((choose.mock.calls as unknown[][])[4]![2]).toBe("branch kept");
 });
 
+it("switches session scope between the current project and every project", async () => {
+  const controller = new AbortController();
+  const picks = [
+    { value: "", action: "scope" },
+    { value: "current", action: "tab" },
+    { value: "b" },
+  ];
+  const choose = vi.fn(async () => picks.shift()!);
+  const view = {
+    openModelPanel: () => ({
+      panel: { choose, progress() {}, setTitle() {}, prompt: vi.fn() },
+      signal: controller.signal,
+      close() {},
+    }),
+    setError(error: string) {
+      throw Error(error);
+    },
+  } as unknown as HikaroView;
+  const list = vi.fn(async () => [row("a")]);
+  const listAll = vi.fn(async () => [{ ...row("b"), cwd: "/other" }]);
+  const calls: string[] = [];
+  const backend: SessionBackend = {
+    current: () => "a",
+    list,
+    listAll,
+    flush: async () => {
+      calls.push("flush");
+    },
+    open: async (id) => {
+      calls.push(`open ${id}`);
+    },
+    create: async () => {},
+    remove: async () => undefined,
+  };
+  await sessionCommand(view, "sessions", "", backend);
+  expect(list).toHaveBeenCalledTimes(2);
+  expect(listAll).toHaveBeenCalledTimes(1);
+  expect(listAll).toHaveBeenCalledWith(0, 51, "");
+  expect(calls).toEqual(["flush", "open b"]);
+});
+
 it("passes the /sessions argument as the initial search but not /resume's", async () => {
   for (const [command, query] of [
     ["sessions", "needle"],

@@ -268,7 +268,7 @@ describe("TUI immediate cancellation feedback", () => {
       expect(fixture.view.editor.getText()).toBe("Saved draft");
       expect(fixture.view.footer.render(36).join("\n")).toContain("Working");
       expect(fixture.view.editor.render(36).join("\n")).toContain(
-        "Ctrl+C stops",
+        "Ctrl+C stop",
       );
       expect(respondToUI).toHaveBeenCalledWith("dialog", { cancelled: true });
     } finally {
@@ -313,7 +313,7 @@ describe("TUI shortcut capabilities", () => {
         {
           id: "demo",
           name: "Demo",
-          configured: false,
+          configured: login.mock.calls.length > 0,
           methods: [{ id: "api_key", label: "API key" }],
         },
       ],
@@ -340,7 +340,7 @@ describe("TUI shortcut capabilities", () => {
       panel.handleInput("\r");
       await waitFor(/Select model/);
       expect(login).toHaveBeenCalledOnce();
-      expect(screen()).toContain("Ctrl+S active + default");
+      expect(screen()).toContain("Ctrl+S save default");
       panel.handleInput("\x1b[B");
       expect(screen()).not.toContain("Ctrl+S");
       panel.handleInput("\x13");
@@ -391,7 +391,7 @@ describe("TUI shortcut capabilities", () => {
         if (scope === "active") {
           for (let i = 0; i < 3; i++) fixture.panel.handleInput("\x1b[B");
           expect(fixture.screen()).not.toContain("Ctrl+S");
-          expect(fixture.screen()).toContain("Enter switch scope");
+          expect(fixture.screen()).toContain("Switch scope ↵");
           fixture.panel.handleInput("\x13");
           await Promise.resolve();
           expect(apply).not.toHaveBeenCalled();
@@ -400,7 +400,7 @@ describe("TUI shortcut capabilities", () => {
         }
         fixture.panel.handleInput("\x1b[B");
         if (scope === "active") {
-          expect(fixture.screen()).toContain("Ctrl+S active + default");
+          expect(fixture.screen()).toContain("Ctrl+S save default");
           fixture.panel.handleInput("\x13");
         } else {
           expect(fixture.screen()).not.toContain("Ctrl+S");
@@ -489,17 +489,17 @@ describe("TUI interaction fixes", () => {
       await fixture.waitFor(/Sessions · page 1/);
       for (let index = 0; index < 50; index++)
         fixture.panel.handleInput("\x1b[B");
-      expect(fixture.screen()).toContain("Enter next page");
-      expect(fixture.screen()).not.toMatch(/delete|rename/);
+      expect(fixture.screen()).toContain("Next page ↵");
+      expect(fixture.screen()).not.toMatch(/delete|rename/i);
       fixture.panel.handleInput("\x04");
       fixture.panel.handleInput("\x12");
       await Promise.resolve();
       expect(list).toHaveBeenCalledTimes(1);
       fixture.panel.handleInput("\r");
       await fixture.waitFor(/Sessions · page 2/);
-      expect(fixture.screen()).toContain("Enter resume");
-      expect(fixture.screen()).toMatch(/delete/);
-      expect(fixture.screen()).toMatch(/rename/);
+      expect(fixture.screen()).toContain("Resume ↵");
+      expect(fixture.screen()).toMatch(/delete/i);
+      expect(fixture.screen()).toMatch(/rename/i);
       fixture.panel.handleInput("\r");
       await work;
       expect(resume).toHaveBeenCalledWith("50");
@@ -630,13 +630,13 @@ describe("TUI interaction fixes", () => {
       const screen = stripVTControlCharacters(
         view.layout.render(80).join("\n"),
       );
-      expect(screen).toContain("Permissions · Full Access");
+      expect(screen).toContain("Permissions: Full Access");
       expect(screen).not.toContain("↑12345");
       view.setPermissionLabel("Ask for approval");
       const updated = stripVTControlCharacters(
         view.layout.render(80).join("\n"),
       );
-      expect(updated).toContain("Permissions · Ask for approval");
+      expect(updated).toContain("Permissions: Ask for approval");
       expect(updated).not.toContain("Full Access");
     } finally {
       view.dispose();

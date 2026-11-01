@@ -94,20 +94,96 @@ export async function nativeTui(
     await runtime.close();
     throw error;
   }
+  const projectRuntimes = new Map([[options.cwd, runtime]]);
+  const projectQuestions = new Map([[options.cwd, localQuestions]]);
+  const pendingProjects = new Map<string, Promise<Runtime>>();
+  /** Which runtime owns each open session, so exit and close never reopen one. */
+  const handleRuntimes = new Map<string, Runtime>();
+  const primary = runtime;
+  /** Close another project's runtime once its last open session closes. */
+  const releaseProject = async (id: string) => {
+    const project = handleRuntimes.get(id);
+    handleRuntimes.delete(id);
+    if (!project || project === primary || exiting) return;
+    if ([...handleRuntimes.values()].includes(project)) return;
+    const cwd = project.options.cwd;
+    const questions = projectQuestions.get(cwd);
+    projectRuntimes.delete(cwd);
+    projectQuestions.delete(cwd);
+    questions?.close();
+    await project.close(() => questions?.ready() ?? Promise.resolve());
+  };
+  const runtimeFor = async (id: string) => {
+    const session = await runtime.store.session(id);
+    if (!session) throw Error("Session not found");
+    const existing = projectRuntimes.get(session.cwd);
+    if (existing) return existing;
+    let pending = pendingProjects.get(session.cwd);
+    if (!pending) {
+      pending = (async () => {
+        let project: Runtime;
+        project = await Runtime.open({
+          ...options,
+          cwd: session.cwd,
+          permissionMode: await loadPermissionMode(
+            runtime.options.home!,
+            session.cwd,
+          ),
+          approve: async (request, signal) => {
+            const handle =
+              workspace.get(project.approvalAuthority(request.sessionId)) ??
+              (await workspace.open(
+                project.approvalAuthority(request.sessionId),
+                false,
+              ));
+            return exiting || signal.aborted
+              ? false
+              : handle.view.approve(request, signal);
+          },
+          askUser: (questions, signal, sessionId, scope) =>
+            projectQuestions
+              .get(session.cwd)!
+              .ask(questions, signal, sessionId, scope),
+        });
+        projectRuntimes.set(session.cwd, project);
+        projectQuestions.set(
+          session.cwd,
+          new LocalQuestions(project, () => workspace.current!.view),
+        );
+        project.startJobs();
+        return project;
+      })();
+      pendingProjects.set(session.cwd, pending);
+      void pending
+        .finally(() => pendingProjects.delete(session.cwd))
+        .catch(() => {});
+    }
+    return pending;
+  };
   const shutdown = async () => {
     if (exiting) return;
     exiting = true;
     removeWorkspaceInput();
-    localQuestions.close();
-    for (const handle of workspace.values())
-      (await runtime.agent(await runtime.session(handle.id))).cancel(true);
-    tui.stop({ preserveScreen: true });
+    // A project still opening must be closed with the others.
+    await Promise.allSettled(pendingProjects.values());
+    for (const questions of projectQuestions.values()) questions.close();
+    for (const handle of workspace.values()) {
+      const project = handleRuntimes.get(handle.id);
+      if (project)
+        (await project.agent(await project.session(handle.id))).cancel(true);
+    }
+    const { stopTerminal } = await import("./release-terminal.ts");
+    await stopTerminal(tui);
     process.off("SIGTERM", exit);
     process.off("SIGHUP", exit);
     try {
       await workspace.dispose();
     } finally {
-      await runtime.close(() => localQuestions.ready());
+      await Promise.all(
+        [...projectRuntimes].map(([cwd, project]) =>
+          project.close(() => projectQuestions.get(cwd)!.ready()),
+        ),
+      );
     }
     console.log("\nContinue: pnpm start · New session: pnpm start --new");
   };
@@ -120,14 +196,17 @@ export async function nativeTui(
   workspace = new SessionWorkspace(
     createSession,
     (view) => {
-      localQuestions.invalidate();
+      for (const questions of projectQuestions.values()) questions.invalidate();
       tui.setLayoutRoot(view.layout);
       tui.requestRender(true);
     },
     async (id) => {
       if (exiting) return;
       await runtime.store.rememberSession(id);
-      if (!exiting) await localQuestions.select(id);
+      if (!exiting) {
+        const project = await runtimeFor(id);
+        await projectQuestions.get(project.options.cwd)!.select(id);
+      }
     },
   );
   const { matchesKey } = await import("../../tui/src/primitives.ts");
@@ -139,6 +218,10 @@ export async function nativeTui(
     return undefined;
   });
   async function createSession(id: string): Promise<WorkspaceHandle> {
+    const runtime = await runtimeFor(id);
+    handleRuntimes.set(id, runtime);
+    const options = runtime.options;
+    const localQuestions = projectQuestions.get(options.cwd)!;
     let view: import("../../tui/src/index.ts").HikaroView;
     let session = await runtime.session(id);
     let disposed = false;
@@ -710,7 +793,7 @@ export async function nativeTui(
             return "Attachment added. Add your question and press Enter.";
           }
           case "help":
-            return '/plan [TASK] · Read-only exploration, questions and plan review\n/plan cancel · Leave without executing\n/plan history · Read saved plan versions\n/plan progress · Read reported step status of the approved plan\n/questions · Answer or dismiss saved questions\n/tasks · Manage queued messages, background terminals and child agents\n/tasks history [RUN_ID] · Read saved runs without pausing the queue\n/search [TEXT] · Search this session and read matching messages\n/changes · Review and roll back recorded file edits\n/new  /sessions  /resume [ID]  /rename TITLE  /export\n/fork  /compact  /model provider/model\n/attach PATH · @file or @"path with spaces" attaches text/images\n/settings  /permissions [ask|auto|full]\n/context [default]  /thinking [default]  /speed [default]\n/status  /resources  /storage\n/steer instructions  /tools  /older  /newer  /latest  /quit\n![--unrestricted] COMMAND follows the current permission mode. Ctrl+C cancels. Ctrl+D exits. Shift+Enter adds a line.\nEnter intervenes during a run. Ctrl+X Enter queues a separate task. Ctrl+P opens actions; Ctrl+O switches sessions. /model includes provider accounts.';
+            return '/plan [TASK] · Read-only exploration, questions and plan review\n/plan cancel · Leave without executing\n/plan history · Read saved plan versions\n/plan progress · Read reported step status of the approved plan\n/questions · Answer or dismiss saved questions\n/tasks · Manage queued messages, background terminals and child agents\n/tasks history [RUN_ID] · Read saved runs without pausing the queue\n/search [TEXT] · Search this session and read matching messages\n/changes · Review and roll back recorded file edits\n/new  /sessions  /resume [ID]  /delete  /rename TITLE  /export\n/fork  /compact  /model provider/model\n/attach PATH · @file or @"path with spaces" attaches text/images\n/settings  /permissions [ask|auto|full]\n/context [default]  /thinking [default]  /speed [default]\n/status  /resources  /storage\n/steer instructions  /tools  /older  /newer  /latest  /quit\n![--unrestricted] COMMAND follows the current permission mode. Ctrl+C cancels. Ctrl+D exits. Shift+Enter adds a line.\nEnter intervenes during a run. Ctrl+X Enter queues a separate task. Ctrl+P opens actions; Ctrl+O switches sessions. /model includes provider accounts.';
           case "close":
             await workspace.close(session.id);
             return;
@@ -725,12 +808,15 @@ export async function nativeTui(
           case "export":
             return `Exported: ${await runtime.exportSession(session.id, preferences.showThinking)}\nIf an .assets folder is present beside the Markdown, copy it together with the file.`;
           case "resume":
+          case "delete":
           case "sessions": {
             let replacementPrepared = false;
             const { sessionCommand } =
               await import("../../../packages/tui/src/sessions.ts");
             await sessionCommand(view, command, arg, {
               current: () => session.id,
+              listAll: (offset, limit, query) =>
+                runtime.store.sessions(offset, limit, undefined, query),
               list: (offset, limit, query) =>
                 runtime.store.sessions(
                   offset,
@@ -739,7 +825,9 @@ export async function nativeTui(
                   query,
                 ),
               flush: () => drafts.flush(),
-              open: async (id) => bind(await runtime.session(id)),
+              open: async (id) => {
+                await workspace.open(id);
+              },
               create: async () => {
                 if (!replacementPrepared) await bind(await runtime.session());
               },
@@ -753,12 +841,14 @@ export async function nativeTui(
                   );
                   replacementPrepared = true;
                 }
-                const result = await runtime.deleteSession(id);
+                const result = await (await runtimeFor(id)).deleteSession(id);
                 await workspace.forget(id);
                 return result.cleanupError;
               },
               rename: async (id, title) => {
-                const next = await runtime.renameSession(id, title);
+                const next = await (
+                  await runtimeFor(id)
+                ).renameSession(id, title);
                 if (id === session.id) session = next;
               },
             });
@@ -980,6 +1070,7 @@ export async function nativeTui(
         removeStatus();
         for (const reader of executionReaders) reader.abort();
         view.dispose();
+        await releaseProject(session.id);
       },
     };
   }
@@ -990,6 +1081,7 @@ export async function nativeTui(
     process.once("SIGHUP", exit);
     runtime.startJobs();
     tui.start();
+    for (const handle of workspace.values()) handle.view.startTheme();
     tui.requestRender(true);
   } catch (error) {
     if (!exiting) {

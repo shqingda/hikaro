@@ -208,15 +208,32 @@ it("recognizes the device-code URL used by xAI authorization", () => {
     }),
   ).toBe("https://auth.example.com/login");
 });
-it("uses explicit role headings on the terminal background", () => {
-  const user = new MessageComponent(1, "user", "hi");
-  const assistant = new MessageComponent(2, "assistant", "hello");
-  const a = user.render(40).join("\n"),
-    b = assistant.render(40).join("\n");
-  expect(a).not.toContain("\x1b[48;");
-  expect(a).toContain("YOU");
-  expect(b).toContain("HIKARO");
-  expect(b).not.toContain("\x1b[48;");
+it("draws user turns on a neutral bar without role headings", () => {
+  const previous = process.env.NO_COLOR;
+  delete process.env.NO_COLOR;
+  try {
+    const user = new MessageComponent(
+      1,
+      "user",
+      "hi @" + JSON.stringify("/tmp/shot.png"),
+      false,
+      {
+        timestamp: Date.UTC(2026, 9, 31, 4, 2),
+      },
+    );
+    const assistant = new MessageComponent(2, "assistant", "hello");
+    const a = user.render(60).join("\n");
+    const b = assistant.render(40).join("\n");
+    expect(a).toContain("[Image #1]");
+    expect(a).not.toContain("/tmp/shot.png");
+    expect(a).not.toContain("YOU");
+    expect(a).toContain("\x1b[48;2;58;39;36m");
+    expect(b).not.toContain("HIKARO");
+    expect(b).not.toContain("\x1b[48;2;58;39;36m");
+  } finally {
+    if (previous === undefined) delete process.env.NO_COLOR;
+    else process.env.NO_COLOR = previous;
+  }
 });
 
 it("folds all history pages during compaction instead of dropping early goals", async () => {

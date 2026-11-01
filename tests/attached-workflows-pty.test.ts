@@ -237,8 +237,7 @@ it("runs Plan, questions, rollback and execution management through an attached 
     await wait("Attached to shared host");
     await wait("Choose the scope", send("/plan update sample\r"));
     expect(await readFile(join(cwd, "sample.txt"), "utf8")).toBe("original");
-    await wait("Review answers", send("\x1b[B\r"));
-    await wait("Plan review", send("\x1b[B\r"));
+    await wait("Plan review", send("\r"));
     expect(blocked).toBe(true);
     expect(answered).toBe(true);
     expect(
@@ -300,10 +299,14 @@ it("runs Plan, questions, rollback and execution management through an attached 
     await wait("Send terminal input?", send("hello\r"));
     send("\x1b[B\r");
     await keys.refresh("RESPONSE:hello");
-    await keys.confirm("3", "Stop terminal", "1/");
+    await keys.confirm("3", "Stop terminal", "Running tasks, queued messages");
     await keys.refresh("State: exited");
     await keys.object("children", "child fixture", "Stop child agent");
-    await keys.confirm("2", "Stop child agent", "1/");
+    await keys.confirm(
+      "2",
+      "Stop child agent",
+      "Running tasks, queued messages",
+    );
     await keys.refresh("State: cancelled");
     // Task completion releases queued prompts even while this reader remains open.
     await vi.waitFor(

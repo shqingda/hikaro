@@ -126,7 +126,7 @@ export default { id: "multi", apiVersion: 1, setup(host) {
       const searched = output.length;
       terminal.write(title);
       await wait(`→ ${title}`, searched);
-      await wait("Enter resume", searched);
+      await wait("Resume ↵", searched);
       terminal.write("\r");
       await wait(`workspace · ${title}`, mark);
     };
@@ -143,12 +143,12 @@ export default { id: "multi", apiVersion: 1, setup(host) {
         { timeout: 8000 },
       );
       terminal.write(`/resume ${second.id}\r`);
-      await wait("› Second task");
+      await wait("workspace · Second task");
       terminal.write("second draft 中文");
       await wait("second draft 中文");
       const background = output.length;
       await writeFile(gate, "go");
-      await wait("Needs attention  1", background);
+      await wait("1 needs attention", background);
       expect(output.slice(background)).not.toContain("Permission required");
       await expect(
         readFile(join(home, "approved.txt"), "utf8"),
@@ -163,7 +163,7 @@ export default { id: "multi", apiVersion: 1, setup(host) {
         done = observe();
         await wait("workspace · Second task", reopened);
         await wait("second draft 中文", reopened);
-        await wait("Needs attention  1", reopened);
+        await wait("1 needs attention", reopened);
         expect(output.slice(reopened)).not.toContain("Permission required");
       }
       await switchTo("First task");
@@ -199,7 +199,8 @@ export default { id: "multi", apiVersion: 1, setup(host) {
       await wait("Sessions · page 1", deleting);
       terminal.write("\x1b[3~");
       await wait("Delete “First task”?", deleting);
-      terminal.write("\r");
+      // Keep is the default; choose Delete explicitly.
+      terminal.write("\x1b[B\r");
       await vi.waitFor(
         async () => expect(await readFile(creating, "utf8")).toBe("creating"),
         { timeout: 8000 },

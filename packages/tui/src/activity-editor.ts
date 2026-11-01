@@ -8,7 +8,17 @@ import {
   type TUI,
   type TuiMouseEvent,
 } from "./primitives.ts";
-import { accent, muted, editorTheme } from "./theme.ts";
+import type { ImageChip } from "./image-chips.ts";
+import { accent, imageChip, muted, working, editorTheme } from "./theme.ts";
+
+/** Rows the composer adds around its body: label line, bottom rule and hint. */
+export const editorChromeRows = 3;
+
+const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
+function fillChipRow(line: string, width: number) {
+  return line + " ".repeat(Math.max(0, width - visibleWidth(line)));
+}
 import { sanitize } from "./text.ts";
 
 // Used only inside super.render(); never returned to the terminal.
@@ -24,6 +34,14 @@ export class ActivityEditor extends Editor {
   private bodyRows?: number;
   private sourceRows: number[] = [];
   private sourceHeight = 0;
+  private activity = "";
+  private frame = 0;
+  private timer?: ReturnType<typeof setInterval>;
+  private animated = false;
+  private chips: ImageChip[] = [];
+  private chipRow = -1;
+  private chipHits: Array<{ start: number; end: number; path: string }> = [];
+  onOpenImage?: (path: string) => void;
 
   constructor(
     tui: TUI,
@@ -58,8 +76,37 @@ export class ActivityEditor extends Editor {
     this.tui.requestRender();
   }
 
-  // Kept for callers migrating activity to the independent status bar.
-  setActivity(_label = "", _animate = true) {}
+  setImageChips(chips: ImageChip[]) {
+    const same =
+      chips.length === this.chips.length &&
+      chips.every(
+        (chip, index) =>
+          chip.path === this.chips[index]?.path &&
+          chip.label === this.chips[index]?.label,
+      );
+    if (same) return;
+    this.chips = chips;
+    this.tui.requestRender();
+  }
+
+  /** Busy work replaces the composer label with the 0.3.0 spinner. Idle stays still. */
+  setActivity(label = "", animate = true) {
+    const animated = !!label && animate;
+    if (this.activity === label && this.animated === animated) return;
+    this.activity = label;
+    this.animated = animated;
+    if (this.timer) clearInterval(this.timer);
+    this.timer = undefined;
+    this.frame = 0;
+    if (animated) {
+      this.timer = setInterval(() => {
+        this.frame = (this.frame + 1) % frames.length;
+        this.tui.requestRender();
+      }, 80);
+      this.timer.unref?.();
+    }
+    this.tui.requestRender();
+  }
 
   protected override renderTopBorder(_width: number, hiddenLineCount: number) {
     this.above = hiddenLineCount;
@@ -112,27 +159,66 @@ export class ActivityEditor extends Editor {
       this.sourceRows.push(row);
     const result = this.sourceRows.map((row) => source[row]!);
     const overflowAbove = this.above + start;
-    const label = truncateToWidth(
-      `${this.label}${overflowAbove ? ` · ↑ ${overflowAbove}` : ""}`,
-      Math.max(0, width - 4),
-      "",
-    );
-    result[0] = truncateToWidth(
-      muted("─ ") +
-        accent(label) +
-        muted(` ${"─".repeat(Math.max(0, width - visibleWidth(label) - 3))}`),
-      width,
-      "",
-    );
+    if (this.activity) {
+      const text = `${this.animated ? frames[this.frame] + " " : ""}${this.activity}${overflowAbove ? ` · ↑ ${overflowAbove}` : ""}`;
+      const label = truncateToWidth(text, Math.max(1, width - 4), "");
+      result[0] = truncateToWidth(
+        working(
+          `── ${label} ${"─".repeat(Math.max(0, width - visibleWidth(label) - 4))}`,
+        ),
+        width,
+        "",
+      );
+    } else {
+      const label = truncateToWidth(
+        `${this.label}${overflowAbove ? ` · ↑ ${overflowAbove}` : ""}`,
+        Math.max(0, width - 4),
+        "",
+      );
+      result[0] = truncateToWidth(
+        muted("─ ") +
+          accent(label) +
+          muted(` ${"─".repeat(Math.max(0, width - visibleWidth(label) - 3))}`),
+        width,
+        "",
+      );
+    }
     const overflowBelow = this.below + body.length - end;
     const hint = `${overflowBelow ? `↓ ${overflowBelow} · ` : ""}${this.hint}`;
-    result[end - start + 1] = muted(truncateToWidth(` ${hint}`, width, ""));
+    const rule = this.activity ? working : muted;
+    result[end - start + 1] = rule("─".repeat(Math.max(0, width)));
+    result.splice(
+      end - start + 2,
+      0,
+      muted(truncateToWidth(` ${hint}`, width, "")),
+    );
+    this.sourceRows.splice(end - start + 2, 0, -2);
     // Keep the composer anchored below its suggestions; remap mouse rows with it.
-    const completionStart = end - start + 2;
+    const completionStart = end - start + 3;
     const completion = result.splice(completionStart);
     const completionRows = this.sourceRows.splice(completionStart);
     result.unshift(...completion);
     this.sourceRows.unshift(...completionRows);
+    this.chipRow = -1;
+    this.chipHits = [];
+    if (this.chips.length) {
+      let column = 1;
+      let painted = " ";
+      for (const chip of this.chips) {
+        const token = `[${chip.label}]`;
+        if (column > 1 && column + token.length + 1 > width) break;
+        this.chipHits.push({
+          start: column,
+          end: column + token.length,
+          path: chip.path,
+        });
+        painted += imageChip(token) + " ";
+        column += token.length + 1;
+      }
+      result.splice(1, 0, fillChipRow(painted, width));
+      this.sourceRows.splice(1, 0, -1);
+      this.chipRow = 1;
+    }
     return focused
       ? result
       : result.map((line) =>
@@ -144,8 +230,15 @@ export class ActivityEditor extends Editor {
   }
 
   override handleMouse(event: TuiMouseEvent) {
+    if (event.y === this.chipRow && event.type === "click") {
+      const hit = this.chipHits.find(
+        (chip) => event.x >= chip.start && event.x < chip.end,
+      );
+      if (hit) this.onOpenImage?.(hit.path);
+      return { handled: true };
+    }
     const sourceY = this.sourceRows[event.y];
-    if (sourceY === undefined) return undefined;
+    if (sourceY === undefined || sourceY < 0) return { handled: true };
     return super.handleMouse({
       ...event,
       y: sourceY,
@@ -153,5 +246,7 @@ export class ActivityEditor extends Editor {
     });
   }
 
-  dispose() {}
+  dispose() {
+    this.setActivity();
+  }
 }

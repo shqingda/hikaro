@@ -158,10 +158,14 @@ it("manages queued messages, terminal input/exit, and child cancellation from a 
     await wait("Send terminal input?", send("hello\r"));
     send("\x1b[B\r");
     await keys.refresh("RESPONSE:hello");
-    await keys.confirm("3", "Stop terminal", "1/");
+    await keys.confirm("3", "Stop terminal", "Running tasks, queued messages");
     await keys.refresh("State: exited");
     await keys.object("children", "child fixture", "Stop child agent");
-    await keys.confirm("2", "Stop child agent", "1/");
+    await keys.confirm(
+      "2",
+      "Stop child agent",
+      "Running tasks, queued messages",
+    );
     await keys.refresh("State: cancelled");
     // No page-level queue hold: completion dispatches the queued edit while Activity stays open.
     await vi.waitFor(

@@ -150,7 +150,8 @@ it("reconstructs history summaries without inventing missing targets", () => {
         timestamp: 4,
       },
     ]);
-    expect(screen()).toContain("YOU");
+    expect(screen()).toContain("Read it");
+    expect(screen()).not.toContain("YOU");
     expect(screen()).toContain("Execution · 1 read_file · 1 shell");
     expect(screen()).toMatch(/Failed[^\n]*shell/);
     view.setPreferences({ ...defaultTuiPreferences, showToolDetails: true });

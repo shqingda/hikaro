@@ -1,3 +1,4 @@
+import { screenText } from "./helpers/screen.ts";
 import { expect, it } from "vitest";
 import { mkdtemp, mkdir, realpath, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -139,7 +140,7 @@ it("signs in through the real secret-input panel without sending credentials to 
       async () => {},
     );
     const wait = (text: string) =>
-      vi.waitFor(() => expect(panel.render(100).join("\n")).toContain(text));
+      vi.waitFor(() => expect(screenText(panel.render(100))).toContain(text));
     const login = menu.command("/login");
     await wait("Select provider to configure");
     panel!.handleInput("opencode-go");
@@ -166,7 +167,7 @@ it("signs in through the real secret-input panel without sending credentials to 
     const before = reloads();
     const declined = menu.command("/login", "opencode-go");
     await wait("Replace sign-in");
-    expect(panel!.render(100).join("\n")).toContain("shared Hikaro host home");
+    expect(screenText(panel!.render(100))).toContain("shared Hikaro host home");
     panel!.handleInput("\r");
     await wait("Select provider to configure");
     abort.abort();

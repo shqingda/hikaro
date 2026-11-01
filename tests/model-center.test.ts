@@ -334,6 +334,10 @@ it("opens provider selection with Ctrl+A from the model center", async () => {
   await vi.waitFor(() =>
     expect(ui.output()).toContain("Select provider to configure"),
   );
+  expect(ui.output()).toContain("Choose model Ctrl+A");
+  ui.panel.handleInput("\x01");
+  await vi.waitFor(() => expect(ui.output()).toContain("Alpha"));
+  expect(ui.output()).toContain("Choose provider Ctrl+A");
   expect(ui.select).not.toHaveBeenCalled();
   ui.abort.abort();
   await ui.run;

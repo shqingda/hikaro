@@ -33,6 +33,10 @@ type AttachOptions = {
 };
 type AttachedHandle = WorkspaceHandle & {
   clientId: string;
+  mutateSession(
+    method: "session.delete" | "session.rename",
+    params: Record<string, unknown>,
+  ): Promise<any>;
   session(): import("../../core/src/types.ts").Session;
   refreshWorkflow(): void;
 };
@@ -131,7 +135,8 @@ export async function attachTui(options: AttachOptions) {
     try {
       await persist();
     } finally {
-      tui.stop({ preserveScreen: true });
+      const { stopTerminal } = await import("./release-terminal.ts");
+      await stopTerminal(tui);
       await workspace.dispose();
     }
   };
@@ -154,9 +159,32 @@ export async function attachTui(options: AttachOptions) {
         ? transport.clientId
         : (known.get(id) ??
           `${transport.clientId.slice(0, 24)}-${id === "__new" ? randomUUID() : createHash("sha256").update(id).digest("hex").slice(0, 32)}`);
+      let cwd = options.cwd;
+      if (!initial) {
+        if (id === "__new")
+          cwd =
+            (workspace.current as AttachedHandle | undefined)?.session().cwd ??
+            options.cwd;
+        else {
+          const matches = await transport.request("session.list", {
+            allProjects: true,
+            query: id,
+            limit: 1,
+          });
+          const session = (
+            matches as import("../../core/src/types.ts").Session[]
+          ).find((s) => s.id === id);
+          if (!session)
+            throw Error(
+              "Session unavailable; its host may need upgrading for cross-project access",
+            );
+          cwd = session.cwd;
+        }
+      }
       const handle = await createAttachedSession(
         {
           ...options,
+          cwd,
           clientId,
           session: initial || id === "__new" ? undefined : id,
           newSession: !initial && id === "__new",
@@ -166,6 +194,11 @@ export async function attachTui(options: AttachOptions) {
           workspace,
           leave,
           open,
+          mutateSession: async (id, method, params) => {
+            const target = (workspace.get(id) ??
+              (await workspace.open(id, false))) as AttachedHandle;
+            return target.mutateSession(method, { ...params, sessionId: id });
+          },
           preferenceFiles: workspaceFiles,
           preferences: () => workspacePreferences,
           preferencesChanged: (value) => {
@@ -246,6 +279,7 @@ export async function attachTui(options: AttachOptions) {
     process.once("SIGTERM", leave);
     process.once("SIGHUP", leave);
     tui.start();
+    for (const handle of workspace.values()) handle.view.startTheme();
     tui.requestRender(true);
   } catch (error) {
     if (!exiting) {
@@ -262,6 +296,11 @@ async function createAttachedSession(
     leave(): void;
     open(id: string): Promise<import("../../core/src/types.ts").Session>;
     close(id: string): Promise<void>;
+    mutateSession(
+      id: string,
+      method: "session.delete" | "session.rename",
+      params: Record<string, unknown>,
+    ): Promise<any>;
     removed(id: string): Promise<void>;
     prepareRemoval(id: string): Promise<boolean>;
     preferenceFiles: ClientFiles;
@@ -343,6 +382,7 @@ async function createAttachedSession(
         () => refresh(),
         {
           open: owner.open,
+          mutateSession: owner.mutateSession,
           create: () => owner.open("__new"),
           removed: owner.removed,
           prepareRemoval: owner.prepareRemoval,
@@ -711,6 +751,7 @@ async function createAttachedSession(
         "plugins",
         "sessions",
         "resume",
+        "delete",
         "model",
         "settings",
         "permissions",
@@ -1032,6 +1073,7 @@ async function createAttachedSession(
       id: fixedId,
       view,
       clientId: transport.clientId,
+      mutateSession: (method, params) => client.request(method, params),
       session: () =>
         client.status.session as import("../../core/src/types.ts").Session,
       title: () => client.status.session?.title ?? fixedId,

@@ -322,7 +322,7 @@ it("keeps text attachment interventions as drafts before reading or submitting a
     view.editor.handleInput("\r");
     await vi.waitFor(() =>
       expect(view.inputError.render(120).join("\n")).toContain(
-        "Attachments require Queue",
+        "Ctrl+X then Enter to queue",
       ),
     );
     expect(view.editor.getExpandedText()).toBe("review @auth.ts");

@@ -1,3 +1,4 @@
+import { screenText } from "./helpers/screen.ts";
 import { expect, it, vi } from "vitest";
 import { stripVTControlCharacters } from "node:util";
 import { AttachedWorkflows } from "../packages/cli/src/attached-workflows.ts";
@@ -89,8 +90,7 @@ function fixture(
     setPermissionLabel: vi.fn(),
   } as unknown as HikaroView;
   const workflows = new AttachedWorkflows(client, view, "/workspace");
-  const screen = () =>
-    stripVTControlCharacters(current.panel.render(120).join("\n"));
+  const screen = () => screenText(current.panel.render(120));
   return {
     state,
     sent,
