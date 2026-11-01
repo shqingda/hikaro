@@ -271,7 +271,7 @@ export async function preparePrompt(
         throw Error(
           options.supportsImages === false
             ? "This model does not support images. Choose an image-capable model before sending."
-            : "Image support is unknown. Declare images:true in the custom endpoint capabilities before sending images.",
+            : "Image support is unknown for this model. Choose an image-capable model, or declare images:true for a custom endpoint.",
         );
       images.push({ mimeType, data: bytes.toString("base64") });
       records.push({

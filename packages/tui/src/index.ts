@@ -100,12 +100,12 @@ type UIBackend = AgentBackend & {
 const attachmentsNeedQueue =
   "Attachments can't steer a running task. Press Ctrl+X then Enter to queue it; your draft is kept.";
 
-/** The transcript scroll view; it reports when the view returns to the latest line. */
+/** The transcript scroll view; it reports when the view leaves or returns to the latest line. */
 class TranscriptScroll extends ScrollView {
-  private atEnd = true;
+  atEnd = true;
   constructor(
     content: Container,
-    private readonly onReturnToEnd: () => void,
+    private readonly onEndChange: () => void,
   ) {
     super(content, { primary: true, follow: "end", scrollbar: "hidden" });
   }
@@ -115,23 +115,42 @@ class TranscriptScroll extends ScrollView {
     requestRender: () => void,
   ) {
     super.updateLayout(contentHeight, viewportHeight, requestRender);
-    const atEnd = this.isFollowingEnd;
-    if (atEnd && !this.atEnd) this.onReturnToEnd();
-    this.atEnd = atEnd;
+    if (this.isFollowingEnd === this.atEnd) return;
+    this.atEnd = this.isFollowingEnd;
+    this.onEndChange();
   }
 }
 
-/** Centered over the transcript's last row while it is above the end; a click returns there. */
-export const scrollToEndIndicator = () => muted("↓ PageDown");
+/**
+ * Its own row under the transcript, on the terminal background, while the view
+ * is above the latest line (as in Grok Build). A click returns to the end.
+ */
+class ScrollToEnd implements Component {
+  constructor(private readonly scroll: ScrollView) {}
+  invalidate() {}
+  render(width: number) {
+    const label = "↓ PageDown";
+    return [
+      " ".repeat(Math.max(0, Math.floor((width - label.length) / 2))) +
+        muted(label),
+    ];
+  }
+  handleMouse(event: { type: string }) {
+    if (event.type === "click") this.scroll.scrollToEnd();
+    return { handled: true };
+  }
+}
 
 export class HikaroView {
   readonly content = new Container();
   readonly scroll = new TranscriptScroll(this.content, () => {
-    if (!this.pendingMessages) return;
-    this.pendingMessages = false;
-    this.updateHistoryHint();
+    if (this.scroll.atEnd && this.pendingMessages) {
+      this.pendingMessages = false;
+      this.updateHistoryHint();
+    }
     this.tui.requestRender();
   });
+  readonly scrollToEnd = new ScrollToEnd(this.scroll);
   private viewStatus: ViewStatus;
   private phase = "Ready";
   private interventionState?: "pending" | "applied" | "unapplied";
@@ -379,6 +398,11 @@ export class HikaroView {
         grow: 1,
         minSize: 1,
         visible: conversation,
+      },
+      {
+        component: this.scrollToEnd,
+        shrink: 0,
+        visible: () => conversation() && !this.scroll.isFollowingEnd,
       },
       {
         component: this.pageSlot,
@@ -2050,7 +2074,5 @@ export class HikaroView {
   }
 }
 export function createTerminal() {
-  return new TuiAltScreen(new ProcessTerminal(), true, undefined, {
-    scrollToEndIndicator,
-  });
+  return new TuiAltScreen(new ProcessTerminal(), true);
 }

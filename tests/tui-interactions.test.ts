@@ -10,7 +10,7 @@ import {
   defaultTuiPreferences,
   type TuiPreferences,
 } from "../packages/tui/src/preferences.ts";
-import { HikaroView, scrollToEndIndicator } from "../packages/tui/src/index.ts";
+import { HikaroView } from "../packages/tui/src/index.ts";
 import { isLightScheme, setColorScheme } from "../packages/tui/src/theme.ts";
 import { openModelPicker } from "../packages/tui/src/model-picker.ts";
 import { openModelControl } from "../packages/tui/src/model-settings.ts";
@@ -766,7 +766,6 @@ it("clears the new-messages notice once the transcript is back at the end", () =
     view.scroll.scrollToEnd();
     layout();
     expect(hint()).toBe("");
-    expect(stripVTControlCharacters(scrollToEndIndicator())).toBe("↓ PageDown");
   } finally {
     view.dispose();
   }
@@ -852,6 +851,25 @@ it("follows terminal appearance changes and re-reads colors on focus", async () 
     if (raw) Object.defineProperty(process.stdin, "isRaw", raw);
     else delete (process.stdin as { isRaw?: boolean }).isRaw;
     setColorScheme(false);
+    view.dispose();
+  }
+});
+
+it("shows ↓ PageDown on its own centered row while scrolled up; a click returns to the end", () => {
+  const { view } = interactionView();
+  const layout = () => view.scroll.updateLayout(40, 10, () => {});
+  try {
+    layout();
+    expect(view.scroll.isFollowingEnd).toBe(true);
+    view.scroll.scrollBy(-4);
+    layout();
+    const row = view.scrollToEnd.render(36)[0]!;
+    expect(stripVTControlCharacters(row)).toBe("             ↓ PageDown");
+    // No background: only the foreground colour is set.
+    expect(row).not.toMatch(/\x1b\[48;/);
+    view.scrollToEnd.handleMouse({ type: "click" });
+    expect(view.scroll.isFollowingEnd).toBe(true);
+  } finally {
     view.dispose();
   }
 });

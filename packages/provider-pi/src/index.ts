@@ -242,9 +242,15 @@ export function demoProvider(): ProviderAdapter {
     id: "demo",
     model: "offline",
     contextWindow: 32000,
+    // Accept images so attachment flows can be exercised offline.
+    supportsImages: true,
     async *stream({ messages, signal }) {
-      const prompt = messages.at(-1)?.text ?? "";
-      const text = `Hikaro is ready.\n\nThis is **offline demo mode**. No model request or tool execution occurred.\n\nYou wrote: ${prompt}`;
+      const last = messages.at(-1);
+      const prompt = last?.text ?? "";
+      const images = last?.images?.length
+        ? `\n\nReceived ${last.images.length} image${last.images.length === 1 ? "" : "s"}.`
+        : "";
+      const text = `Hikaro is ready.\n\nThis is **offline demo mode**. No model request or tool execution occurred.\n\nYou wrote: ${prompt}${images}`;
       for (const part of text.match(/.{1,12}/gs) ?? []) {
         signal.throwIfAborted();
         yield { type: "text", text: part };
