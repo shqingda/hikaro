@@ -19,6 +19,7 @@ import {
   neutralSelected as selected,
   error as red,
 } from "./theme.ts";
+import { errorMessage } from "../../core/src/util.ts";
 function chooseToggleLabel(label: string) {
   if (label === "Models") return "Choose model Ctrl+A";
   if (label === "Providers") return "Choose provider Ctrl+A";
@@ -648,7 +649,7 @@ export class ModelPanel implements Component {
         )
           return;
         if (query !== this.searchQuery) continue;
-        this.error = error instanceof Error ? error.message : String(error);
+        this.error = errorMessage(error);
       }
       this.searching = false;
       this.updateList();

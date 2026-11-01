@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { constants } from "node:os";
@@ -22,12 +22,11 @@ import {
 } from "./secure-files.ts";
 
 const execute = promisify(execFile);
-const hash = (value: string) =>
-  createHash("sha256").update(value).digest("hex");
 import {
   changeOriginSchema,
   type ChangeOrigin,
 } from "../../core/src/change-evidence.ts";
+import { sha256Hex } from "../../core/src/util.ts";
 const digest = z
   .string()
   .regex(/^[a-f0-9]{64}$/)
@@ -60,7 +59,7 @@ export class ChangeObservations {
   private failures = new Map<string, string>();
   constructor(private readonly home: string) {}
   private folder(session: string) {
-    return join(this.root ?? this.home, "observations", hash(session));
+    return join(this.root ?? this.home, "observations", sha256Hex(session));
   }
   private async save(session: string, name: string, text: string) {
     this.root ??= await realpath(this.home);
@@ -294,8 +293,8 @@ export class ChangeObservations {
             id: randomUUID(),
             path,
             timestamp,
-            before: a === undefined ? null : hash(a),
-            after: b === undefined ? null : hash(b),
+            before: a === undefined ? null : sha256Hex(a),
+            after: b === undefined ? null : sha256Hex(b),
             ...origin,
           };
           if (a !== undefined)
@@ -416,7 +415,8 @@ export class ChangeObservations {
           );
         throw error;
       });
-      if (hash(text) !== digest) throw Error("Observation snapshot is damaged");
+      if (sha256Hex(text) !== digest)
+        throw Error("Observation snapshot is damaged");
       return text;
     };
     return {

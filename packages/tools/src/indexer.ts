@@ -1,10 +1,10 @@
 import * as z from "zod";
-import { createHash } from "node:crypto";
 import { runProcess, resolvePath } from "./index.ts";
 import { sensitivePath } from "./workspace.ts";
 import { readTextFile, isFileTooLarge } from "./secure-files.ts";
 import { cleanProcessEnv } from "./process.ts";
 import type { Plugin, ToolContext } from "../../core/src/types.ts";
+import { sha256Hex } from "../../core/src/util.ts";
 export type Chunk = {
   id: string;
   workspace: string;
@@ -133,16 +133,14 @@ export function indexPlugin(
               throw error;
             }
             if (text.includes("\0")) continue;
-            const hash = createHash("sha256").update(text).digest("hex");
+            const hash = sha256Hex(text);
             const lines = text.split("\n");
             const chunks: Chunk[] = [];
             for (let i = 0; i < lines.length; i += 60) {
               if (++count > 2000)
                 throw Error("Index quota exceeded: maximum 2000 chunks");
               chunks.push({
-                id: createHash("sha256")
-                  .update(ctx.cwd + "\0" + path + "\0" + i)
-                  .digest("hex"),
+                id: sha256Hex(ctx.cwd + "\0" + path + "\0" + i),
                 workspace: ctx.cwd,
                 path,
                 line: i + 1,
@@ -207,8 +205,7 @@ export function indexPlugin(
               )
                 continue;
               const text = await readTextFile(target.path, ctx.signal, 256000);
-              if (createHash("sha256").update(text).digest("hex") === hit.hash)
-                fresh.push(hit);
+              if (sha256Hex(text) === hit.hash) fresh.push(hit);
             } catch {}
           }
           return {

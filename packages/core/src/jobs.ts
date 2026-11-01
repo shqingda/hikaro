@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { sleep } from "./util.ts";
 export type Job = {
   id: string;
   sessionId: string;
@@ -81,7 +82,6 @@ export class JobScheduler {
     clearTimeout(this.timer);
     this.current?.abort.abort();
     const deadline = Date.now() + 5000;
-    while (this.current && Date.now() < deadline)
-      await new Promise((r) => setTimeout(r, 10));
+    while (this.current && Date.now() < deadline) await sleep(10);
   }
 }

@@ -28,6 +28,7 @@ import {
   RunCancelParams,
   SteerParams,
 } from "../../../packages/protocol/src/contracts.ts";
+import { errorMessage } from "../../core/src/util.ts";
 const integer = (
   value: unknown,
   fallback: number,
@@ -812,8 +813,7 @@ export async function serveRpc(
                     scope,
                     operationId,
                     method: command.method,
-                    error:
-                      error instanceof Error ? error.message : String(error),
+                    error: errorMessage(error),
                   });
               })
               .finally(() => {
@@ -1091,7 +1091,7 @@ export async function serveRpc(
         id,
         type: "response",
         scope,
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage(error),
       });
     }
   };
@@ -1163,7 +1163,7 @@ export async function serveRpc(
         type: "response",
         scope:
           typeof rawCommand.scope === "string" ? rawCommand.scope : "default",
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage(error),
       });
     }
   });

@@ -1,6 +1,7 @@
 import type { HikaroView } from "./index.ts";
 import type { ProviderCatalog } from "../../provider-pi/src/catalog.ts";
 import type { ModelSelection, ModelSettings } from "../../core/src/types.ts";
+import { errorMessage } from "../../core/src/util.ts";
 export type ModelControl = "context" | "thinking" | "speed";
 export function parseModelControl(field: ModelControl, argument: string) {
   const tokens = argument.trim().split(/\s+/).filter(Boolean);
@@ -188,7 +189,7 @@ export async function openModelControl(
         );
         return;
       } catch (e) {
-        warning = e instanceof Error ? e.message : String(e);
+        warning = errorMessage(e);
       }
     }
   } catch (e) {

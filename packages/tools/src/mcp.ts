@@ -4,6 +4,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { Ajv } from "ajv";
 import type { Plugin, Tool } from "../../core/src/types.ts";
+import { errorMessage } from "../../core/src/util.ts";
 const Server = z.union([
   z.object({
     command: z.string(),
@@ -256,9 +257,7 @@ export function mcpPlugin(servers: z.infer<typeof MCPConfig>): Plugin {
           state.error = undefined;
           return `Connected ${server}; ${tools.length} tools available; use tool_search to discover their schemas`;
         } catch (error) {
-          state.error = (
-            error instanceof Error ? error.message : String(error)
-          ).slice(0, 500);
+          state.error = errorMessage(error).slice(0, 500);
           if (opened) {
             if (state.client === opened) await stop(state);
             else await opened.close();

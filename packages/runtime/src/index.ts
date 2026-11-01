@@ -66,13 +66,14 @@ import {
 import { codemodePlugin } from "../../tools/src/codemode.ts";
 import * as z from "zod";
 import { JobScheduler } from "../../core/src/jobs.ts";
-import { randomUUID, createHash } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import {
   canAutoApprove,
   permissionModeSchema,
   savePermissionMode,
   type PermissionMode,
 } from "./permissions.ts";
+import { sha256Hex, errorMessage, sleep } from "../../core/src/util.ts";
 export type RuntimeOptions = {
   cwd: string;
   home?: string;
@@ -712,8 +713,7 @@ export class Runtime {
                 return work;
               });
             } catch (error) {
-              record.output =
-                error instanceof Error ? error.message : String(error);
+              record.output = errorMessage(error);
               throw error;
             } finally {
               record.state = child.snapshot().runStatus;
@@ -1043,10 +1043,7 @@ export class Runtime {
       saveArtifact: async (callId, result) => {
         const folder = join(this.options.home!, "artifacts", session.id);
         await mkdir(folder, { recursive: true, mode: 0o700 });
-        const path = join(
-          folder,
-          createHash("sha256").update(callId).digest("hex") + ".json",
-        );
+        const path = join(folder, sha256Hex(callId) + ".json");
         await writeFile(path, JSON.stringify(result), { mode: 0o600 });
         return path;
       },
@@ -1421,7 +1418,7 @@ export class Runtime {
         [...this.agents.values()].some((a) => a.busy)) &&
       Date.now() < deadline
     )
-      await new Promise((r) => setTimeout(r, 10));
+      await sleep(10);
     await this.plugins.close();
     // RPC owners flush command outcomes after runs stop, while SQLite is live.
     try {

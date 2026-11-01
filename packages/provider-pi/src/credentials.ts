@@ -1,21 +1,19 @@
 import { mkdir, readFile, writeFile, rename, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import type {
   Credential,
   CredentialStore,
   CredentialInfo,
   AuthOperationOptions,
 } from "@earendil-works/pi-ai";
+import { sha256Hex, sleep } from "../../core/src/util.ts";
 export class KeychainCredentials implements CredentialStore {
   private namespace: string;
   private cache: Record<string, CredentialInfo> = {};
   private checked = 0;
   constructor(private home: string) {
-    this.namespace = createHash("sha256")
-      .update(home)
-      .digest("hex")
-      .slice(0, 16);
+    this.namespace = sha256Hex(home).slice(0, 16);
   }
   invalidate() {
     this.checked = 0;
@@ -83,7 +81,7 @@ export class KeychainCredentials implements CredentialStore {
         }
         if (Date.now() > until)
           throw Error("Credential store is busy; retry sign-in.");
-        await new Promise((r) => setTimeout(r, 25));
+        await sleep(25);
       }
     }
     try {

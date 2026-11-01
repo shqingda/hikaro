@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, extname, join, relative, resolve } from "node:path";
@@ -85,6 +84,7 @@ export {
   attachmentReference,
 } from "../../core/src/file-references.ts";
 import { parseFileReferences } from "../../core/src/file-references.ts";
+import { sha256Hex } from "../../core/src/util.ts";
 
 function imageMime(bytes: Buffer): string | undefined {
   // Verify format framing before forwarding bytes. The provider owns image
@@ -195,7 +195,7 @@ export function validateFileInputs(
     if (
       total > maxTotalBytes ||
       bytes.toString("base64") !== file.data ||
-      createHash("sha256").update(bytes).digest("hex") !== file.sha256
+      sha256Hex(bytes) !== file.sha256
     )
       throw Error(
         "File attachment is damaged or exceeds the combined 4 MiB limit",
@@ -264,7 +264,7 @@ export async function preparePrompt(
     const source = {
       path: resolved.inside ? relative(cwd, resolved.path) : resolved.path,
       bytes: bytes.length,
-      sha256: createHash("sha256").update(bytes).digest("hex"),
+      sha256: sha256Hex(bytes),
     };
     if (mimeType) {
       if (options.supportsImages !== true)

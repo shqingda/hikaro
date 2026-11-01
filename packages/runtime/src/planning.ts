@@ -2,10 +2,11 @@ import type {
   PlanReference,
   StepEvidence,
 } from "../../core/src/change-evidence.ts";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile, rename, rm, link } from "node:fs/promises";
 import { join } from "node:path";
 import * as z from "zod";
+import { sha256Hex } from "../../core/src/util.ts";
 export const questionsSchema = z.object({
   questions: z
     .array(
@@ -87,11 +88,7 @@ export class Planning {
   private reads = new Map<string, Promise<void>>();
   constructor(private home: string) {}
   private path(session: string) {
-    return join(
-      this.home,
-      "plans",
-      createHash("sha256").update(session).digest("hex") + ".json",
-    );
+    return join(this.home, "plans", sha256Hex(session) + ".json");
   }
   async load(session: string, refresh = false) {
     if (!refresh && this.states.has(session)) return;

@@ -1,5 +1,6 @@
 import type { Session } from "../../core/src/types.ts";
 import type { HikaroView } from "./index.ts";
+import { errorMessage } from "../../core/src/util.ts";
 
 /** What each TUI mode supplies; local guards and host epochs stay inside these calls. */
 export type SessionBackend = {
@@ -198,7 +199,7 @@ export async function openSessions(
           return;
         }
       } catch (e) {
-        warning = e instanceof Error ? e.message : String(e);
+        warning = errorMessage(e);
       }
     }
   } catch (e) {

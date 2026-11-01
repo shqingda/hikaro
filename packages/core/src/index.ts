@@ -23,6 +23,7 @@ import type {
   RunBudget,
   SessionLease,
 } from "./types.ts";
+import { errorMessage } from "./util.ts";
 export * from "./types.ts";
 export class ToolRegistry {
   private tools = new Map<string, Tool>();
@@ -1103,7 +1104,7 @@ export class Agent implements AgentBackend {
         : tool.execute(parsed.data, context));
     } catch (e) {
       result = {
-        text: e instanceof Error ? e.message : String(e),
+        text: errorMessage(e),
         isError: true,
       };
     }
@@ -1333,7 +1334,7 @@ export class Agent implements AgentBackend {
         await this.emit("run.end", {
           runId,
           status: signal.aborted ? "cancelled" : "failed",
-          error: e instanceof Error ? e.message : String(e),
+          error: errorMessage(e),
           usage: this.usage,
         });
       signal.throwIfAborted();

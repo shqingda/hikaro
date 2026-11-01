@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import type { ToolContext, ToolResult } from "../../core/src/types.ts";
 import { ProcessGroup } from "./process-group.ts";
 import { ProcessObservation } from "./process-observation.ts";
+import { errorMessage } from "../../core/src/util.ts";
 export function cleanProcessEnv() {
   return Object.fromEntries(
     ["PATH", "HOME", "TMPDIR", "LANG", "TERM"].flatMap((key) =>
@@ -106,7 +107,7 @@ export async function runProcess(
     })()
       .catch((error: unknown) => {
         cleanup = "failed";
-        stopError = error instanceof Error ? error.message : String(error);
+        stopError = errorMessage(error);
       })
       .finally(() => lifecycleDone());
   };

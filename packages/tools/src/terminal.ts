@@ -6,6 +6,7 @@ import type { IPty } from "node-pty";
 import { ProcessObservation } from "./process-observation.ts";
 import { ProcessGroup } from "./process-group.ts";
 import { cleanProcessEnv } from "./process.ts";
+import { errorMessage } from "../../core/src/util.ts";
 type TerminalRecord = {
   pty: IPty;
   processes: ProcessObservation;
@@ -95,7 +96,7 @@ export class TerminalManager {
     t.stopError = undefined;
     t.stopTask = this.stopGroup(t)
       .catch((error: unknown) => {
-        t.stopError = error instanceof Error ? error.message : String(error);
+        t.stopError = errorMessage(error);
       })
       .finally(() => {
         t.stopTask = undefined;

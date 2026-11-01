@@ -1,4 +1,4 @@
-import { randomUUID, createHash } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { SessionWorkspace, type WorkspaceHandle } from "./session-workspace.ts";
 import { attachedBackgroundSettled } from "./session-monitor.ts";
 import { parseManualCommand } from "../../../packages/tui/src/manual-command.ts";
@@ -20,6 +20,7 @@ import type {
   Message,
   MessagePage,
 } from "../../../packages/core/src/types.ts";
+import { sha256Hex } from "../../core/src/util.ts";
 
 type AttachOptions = {
   cwd: string;
@@ -155,7 +156,7 @@ export async function attachTui(options: AttachOptions) {
       const clientId = initial
         ? transport.clientId
         : (known.get(id) ??
-          `${transport.clientId.slice(0, 24)}-${id === "__new" ? randomUUID() : createHash("sha256").update(id).digest("hex").slice(0, 32)}`);
+          `${transport.clientId.slice(0, 24)}-${id === "__new" ? randomUUID() : sha256Hex(id).slice(0, 32)}`);
       let cwd = options.cwd;
       if (!initial) {
         if (id === "__new")

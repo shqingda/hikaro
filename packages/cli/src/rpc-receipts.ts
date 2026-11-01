@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto";
 import type { Command } from "../../../packages/protocol/src/index.ts";
 import { rpcReadMethods } from "../../../packages/protocol/src/contracts.ts";
+import { sha256Hex } from "../../core/src/util.ts";
 
 // Autosaved question drafts use their own revision CAS, not task receipts.
 // This classification does not grant read-only clients mutation permission.
@@ -20,5 +20,5 @@ export function commandDigest(command: Command): string {
           )
         : value,
   );
-  return createHash("sha256").update(canonical).digest("hex");
+  return sha256Hex(canonical);
 }

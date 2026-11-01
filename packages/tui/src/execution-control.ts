@@ -11,6 +11,7 @@ import {
   type ExecutionKind as Kind,
   type ExecutionItem as Item,
 } from "../../runtime/src/execution-items.ts";
+import { errorMessage } from "../../core/src/util.ts";
 type LocalSource = {
   agent: Pick<
     Agent,
@@ -330,14 +331,13 @@ export async function openExecutionControl(
           }
         } catch (error) {
           if (signal.aborted) throw error;
-          message = error instanceof Error ? error.message : String(error);
+          message = errorMessage(error);
           view.setError(message);
         }
       }
     }
   } catch (error) {
-    if (!signal.aborted)
-      view.setError(error instanceof Error ? error.message : String(error));
+    if (!signal.aborted) view.setError(errorMessage(error));
   } finally {
     selectionSignal?.removeEventListener("abort", close);
     close();

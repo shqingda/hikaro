@@ -1,6 +1,5 @@
 /** Lazy client library APIs. This module is not on the TUI startup path. */
 import * as z from "zod";
-import { createHash } from "node:crypto";
 import type { Runtime } from "../../../packages/runtime/src/index.ts";
 import type { Session } from "../../../packages/core/src/types.ts";
 import { readSessionArtifact } from "../../../packages/runtime/src/session-artifacts.ts";
@@ -21,6 +20,7 @@ import {
   modelSettingsSchema as settingsSchema,
   validateSettings,
 } from "./rpc-configuration.ts";
+import { sha256Hex } from "../../core/src/util.ts";
 const publicSelection = (selection: Session["modelSelection"]) =>
   selection && {
     provider: selection.provider,
@@ -68,7 +68,7 @@ export async function libraryRequest(
     }
     case "workspace.current":
       return {
-        id: createHash("sha256").update(runtime.options.cwd).digest("hex"),
+        id: sha256Hex(runtime.options.cwd),
         cwd: runtime.options.cwd,
         permissionMode: runtime.permissionMode,
         arbitraryWorkspaceSelection: false,
@@ -239,7 +239,7 @@ export async function libraryRequest(
         path,
         AbortSignal.timeout(5000),
       );
-      const digest = createHash("sha256").update(bytes).digest("hex");
+      const digest = sha256Hex(bytes);
       if (p.digest !== undefined && p.digest !== digest)
         throw Error("Artifact changed; restart reading explicitly");
       const offset = integer(p.offset, 0),

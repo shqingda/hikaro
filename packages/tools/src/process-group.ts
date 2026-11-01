@@ -1,3 +1,4 @@
+import { sleep } from "../../core/src/util.ts";
 /** Owns only the original process group, never observed detached descendants. */
 export class ProcessGroup {
   private gone = false;
@@ -25,7 +26,7 @@ export class ProcessGroup {
       const deadline = Date.now() + ms;
       do {
         if (!this.signal(0) && exited()) return true;
-        await new Promise((resolve) => setTimeout(resolve, 25));
+        await sleep(25);
       } while (Date.now() < deadline);
       return false;
     };

@@ -1,9 +1,8 @@
-import { createHash } from "node:crypto";
 import { lstat, readdir, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { replaceTextFile } from "../../tools/src/secure-files.ts";
+import { sha256Hex } from "../../core/src/util.ts";
 
-const hash = (text: string) => createHash("sha256").update(text).digest("hex");
 const warning =
   "Snapshot cleanup removes saved diff, rollback and redo content. Change metadata, transcripts, drafts, plans, credentials, recovery receipts and tool outputs are retained. Shared files are excluded. No automatic expiry.";
 type Candidate = {
@@ -32,7 +31,7 @@ export async function previewStorageCleanup(home: string, sessionId: string) {
       root,
       kind,
       kind === "changes" || kind === "observations"
-        ? hash(sessionId)
+        ? sha256Hex(sessionId)
         : sessionId,
     );
     let names: string[];
@@ -79,7 +78,7 @@ export async function previewStorageCleanup(home: string, sessionId: string) {
   return {
     preview: {
       sessionId,
-      token: hash(JSON.stringify({ sessionId, files })),
+      token: sha256Hex(JSON.stringify({ sessionId, files })),
       bytes,
       files: files.length,
       usage,
@@ -110,7 +109,7 @@ export async function cleanStorageSnapshots(
         (text) => {
           if (
             text === undefined ||
-            !candidate.path.endsWith(hash(text) + ".txt")
+            !candidate.path.endsWith(sha256Hex(text) + ".txt")
           )
             throw Error("Snapshot changed or is damaged; cleanup refused");
           return undefined;

@@ -5,6 +5,7 @@ import type { FileChange } from "../../tools/src/changes.ts";
 import type { HikaroView } from "./index.ts";
 
 import { changeDiff } from "../../core/src/change-diff.ts";
+import { errorMessage } from "../../core/src/util.ts";
 export type DisplayChange = FileChange | ReviewEntry;
 export { changeDiff } from "../../core/src/change-diff.ts";
 /**
@@ -299,13 +300,12 @@ export async function openChangeReview(
         view.notice(message);
       } catch (error) {
         if (signal.aborted) throw error;
-        message = error instanceof Error ? error.message : String(error);
+        message = errorMessage(error);
         view.setError(message);
       }
     }
   } catch (error) {
-    if (!signal.aborted)
-      view.setError(error instanceof Error ? error.message : String(error));
+    if (!signal.aborted) view.setError(errorMessage(error));
   } finally {
     close();
   }

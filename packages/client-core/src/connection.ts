@@ -3,6 +3,7 @@ import {
   rpcTransientMethods,
   type RpcMethod,
 } from "../../protocol/src/contracts.ts";
+import { errorMessage } from "../../core/src/util.ts";
 
 export type ClientCommand = {
   id: string;
@@ -127,7 +128,7 @@ export class ClientConnection {
       if (this.options.intents && epoch === this.epoch) await this.reconcile();
     } catch (error) {
       if (epoch === this.epoch) {
-        this.error = error instanceof Error ? error.message : String(error);
+        this.error = errorMessage(error);
         this.disconnected();
       }
       throw error;
@@ -294,7 +295,7 @@ export class ClientConnection {
     try {
       this.view.receive(this.epoch, frame);
     } catch (error) {
-      this.error = error instanceof Error ? error.message : String(error);
+      this.error = errorMessage(error);
       this.disconnected();
       return;
     }

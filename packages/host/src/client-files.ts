@@ -1,20 +1,16 @@
 import { constants } from "node:fs";
 import { open, mkdir, lstat, rename, unlink } from "node:fs/promises";
 import { join } from "node:path";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import type { IntentStore, Intent } from "../../client-core/src/connection.ts";
+import { sha256Hex } from "../../core/src/util.ts";
 
 /** Private per-workspace/per-view files. Payloads are never automatically sent. */
 export class ClientFiles implements IntentStore {
   private constructor(private path: string) {}
   static async open(home: string, key: string, scope: string) {
     const root = join(home, "shared-clients");
-    const path = join(
-      root,
-      createHash("sha256")
-        .update(key + "\0" + scope)
-        .digest("hex"),
-    );
+    const path = join(root, sha256Hex(key + "\0" + scope));
     for (const directory of [root, path]) {
       await mkdir(directory, { mode: 0o700 }).catch((e) => {
         if (e.code !== "EEXIST") throw e;
@@ -98,7 +94,7 @@ export class ClientFiles implements IntentStore {
     return this.write("intents.json", intents);
   }
   private draftName(session: string) {
-    return createHash("sha256").update(session).digest("hex") + ".draft.json";
+    return sha256Hex(session) + ".draft.json";
   }
   async draft(session: string, initial?: () => Promise<string>) {
     const value = await this.read(this.draftName(session));

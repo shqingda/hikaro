@@ -11,6 +11,7 @@ import type {
 import type { AuthPrompt, AuthType } from "@earendil-works/pi-ai";
 import type { HikaroView } from "./index.ts";
 import type { PanelItem } from "./model-panel.ts";
+import { errorMessage } from "../../core/src/util.ts";
 
 export type ModelPickerCatalog = Pick<
   ProviderCatalog,
@@ -47,8 +48,7 @@ const reference = (model: ModelChoice) => ({
   provider: model.provider,
   model: model.id,
 });
-const message = (error: unknown) =>
-  error instanceof Error ? error.message : String(error);
+const message = (error: unknown) => errorMessage(error);
 const cancelled = () => new DOMException("Cancelled", "AbortError");
 
 /** The adapter can finish late; a closed surface must stop awaiting it and ignore its result. */

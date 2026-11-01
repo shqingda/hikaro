@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import type { ModelSelection } from "../../core/src/types.ts";
 import { endpointCapabilitiesSchema, reasoningLevels } from "./settings.ts";
 import type {
@@ -7,6 +6,7 @@ import type {
   Model,
   Provider,
 } from "@earendil-works/pi-ai";
+import { sha256Hex } from "../../core/src/util.ts";
 
 export function normalizeEndpointUrl(baseUrl: string): string {
   const url = new URL(baseUrl);
@@ -25,10 +25,7 @@ export function normalizeEndpointUrl(baseUrl: string): string {
 
 /** A custom endpoint never shares a built-in provider's credential namespace. */
 export function endpointCredentialId(baseUrl: string): string {
-  return (
-    "endpoint-" +
-    createHash("sha256").update(normalizeEndpointUrl(baseUrl)).digest("hex")
-  );
+  return "endpoint-" + sha256Hex(normalizeEndpointUrl(baseUrl));
 }
 
 /** Pi's Model fields drive both request construction and capability validation. */

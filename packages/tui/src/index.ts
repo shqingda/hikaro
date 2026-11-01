@@ -61,6 +61,7 @@ import {
   MessageComponent,
   warmTextShaping,
 } from "./messages.ts";
+import { errorMessage } from "../../core/src/util.ts";
 export {
   MessageComponent,
   warmTextShaping,
@@ -574,9 +575,7 @@ export class HikaroView {
         : this.submitPrompt(text, mode);
       void work.catch((error) => {
         if (error instanceof Error && error.name === "AbortError") return;
-        this.setError(
-          `Error: ${error instanceof Error ? error.message : String(error)}`,
-        );
+        this.setError(`Error: ${errorMessage(error)}`);
       });
     };
     this.removeInput = tui.addInputListener((data) => {
@@ -1808,9 +1807,7 @@ export class HikaroView {
     } catch (error) {
       if (!this.editor.getExpandedText()) this.editor.setText(text);
       if (!(error instanceof Error && error.name === "AbortError"))
-        this.setError(
-          `Error: ${error instanceof Error ? error.message : String(error)}`,
-        );
+        this.setError(`Error: ${errorMessage(error)}`);
       throw error;
     } finally {
       if (this.preparingPrompt === controller) this.preparingPrompt = undefined;

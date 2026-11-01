@@ -1,5 +1,6 @@
 import type { HikaroView } from "./index.ts";
 import type { TuiPreferences } from "./preferences.ts";
+import { errorMessage } from "../../core/src/util.ts";
 export async function openGeneralSettings(
   view: HikaroView,
   current: TuiPreferences,
@@ -58,7 +59,7 @@ export async function openGeneralSettings(
         preferences = next;
         warning = "";
       } catch (e) {
-        warning = e instanceof Error ? e.message : String(e);
+        warning = errorMessage(e);
       }
     }
   } catch (e) {

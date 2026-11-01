@@ -1,8 +1,8 @@
 import { constants } from "node:fs";
 import { mkdir, realpath, lstat, open } from "node:fs/promises";
-import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { sha256Hex } from "../../core/src/util.ts";
 
 export async function hostEndpoint(options: { cwd: string; home?: string }) {
   const home = options.home ?? join(homedir(), ".hikaro");
@@ -20,10 +20,7 @@ export async function hostEndpoint(options: { cwd: string; home?: string }) {
     (info.mode & 0o777) !== 0o700
   )
     throw Error("Unsafe shared host directory");
-  const key = createHash("sha256")
-    .update(canonicalHome + "\0" + cwd)
-    .digest("hex")
-    .slice(0, 24);
+  const key = sha256Hex(canonicalHome + "\0" + cwd).slice(0, 24);
   return {
     home: canonicalHome,
     cwd,

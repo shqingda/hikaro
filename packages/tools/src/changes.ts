@@ -2,7 +2,7 @@ import {
   changeOriginSchema,
   type ChangeOrigin,
 } from "../../core/src/change-evidence.ts";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { mkdir, open, readdir, realpath, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { constants } from "node:os";
@@ -13,9 +13,8 @@ import {
   SecureFileError,
 } from "./secure-files.ts";
 import { updateTextFile } from "./workspace.ts";
+import { sha256Hex } from "../../core/src/util.ts";
 
-const digest = (value: string) =>
-  createHash("sha256").update(value).digest("hex");
 const recordSchema = z.object({
   id: z.string().uuid(),
   path: z.string().startsWith("/"),
@@ -48,7 +47,7 @@ export class ChangeJournal {
     this.root = await realpath(this.home);
   }
   private folder(session: string) {
-    return join(this.root ?? this.home, "changes", digest(session));
+    return join(this.root ?? this.home, "changes", sha256Hex(session));
   }
   async removeSession(session: string) {
     await this.initialize();
@@ -99,7 +98,7 @@ export class ChangeJournal {
     await this.save(this.recordPath(session, entry.id), JSON.stringify(entry));
   }
   private async snapshot(session: string, text: string) {
-    const hash = digest(text);
+    const hash = sha256Hex(text);
     await this.save(join(this.folder(session), `${hash}.txt`), text);
     return hash;
   }
@@ -159,7 +158,7 @@ export class ChangeJournal {
           );
         throw error;
       });
-      if (digest(text) !== hash)
+      if (sha256Hex(text) !== hash)
         throw Error("Change snapshot is damaged; rollback refused");
       return text;
     };

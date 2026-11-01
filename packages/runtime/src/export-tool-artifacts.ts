@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { mkdir, writeFile, type FileHandle } from "node:fs/promises";
 import { basename, join } from "node:path";
 import type { SQLiteStore } from "../../storage/src/index.ts";
@@ -8,6 +7,7 @@ import {
   sessionArtifactPath,
   SessionArtifactError,
 } from "./session-artifacts.ts";
+import { sha256Hex } from "../../core/src/util.ts";
 
 const maxCandidates = 100;
 const maxTotalBytes = 64 * 1024 * 1024;
@@ -158,7 +158,7 @@ export async function exportToolArtifacts(options: {
     const name = `tool-${number}.${json ? "json" : "log"}`;
     await writeFile(join(assets, name), bytes, { flag: "wx", mode: 0o600 });
     writtenBytes += bytes.length;
-    const digest = createHash("sha256").update(bytes).digest("hex");
+    const digest = sha256Hex(bytes);
     await file.write(
       `- ${label}: [${name}](${basename(assets)}/${name}) — ${bytes.length} bytes; SHA-256 ${digest}${json ? "; user-visible text/error fields only" : ""}.\n\n`,
     );

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { parseArgs } from "node:util";
+import { errorMessage } from "../../core/src/util.ts";
 const cliArgs = process.argv.slice(2);
 // Accept the separator forwarded by package-manager run commands.
 if (cliArgs[0] === "--") cliArgs.shift();
@@ -9,7 +10,7 @@ if (cliArgs[0] === "update") {
     await selfUpdate();
     process.exit(0);
   } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
+    console.error(errorMessage(error));
     process.exit(1);
   }
 }
@@ -309,8 +310,6 @@ async function main() {
   await nativeTui(options, values, endpointCapabilities);
 }
 main().catch((error) => {
-  console.error(
-    `hikaro: ${error instanceof Error ? error.message : String(error)}`,
-  );
+  console.error(`hikaro: ${errorMessage(error)}`);
   process.exitCode = 1;
 });

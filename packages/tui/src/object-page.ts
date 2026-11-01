@@ -20,6 +20,7 @@ import {
   error as errorText,
 } from "./theme.ts";
 import { sanitize } from "./text.ts";
+import { errorMessage } from "../../core/src/util.ts";
 
 export type ObjectAction = {
   id: string;
@@ -355,7 +356,7 @@ export class ObjectPage extends VStack {
     } catch (error) {
       if (controller.signal.aborted || this.disposed) return;
       this.failure = true;
-      this.message = error instanceof Error ? error.message : String(error);
+      this.message = errorMessage(error);
     }
     this.tui.requestRender();
   }

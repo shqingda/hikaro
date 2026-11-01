@@ -20,6 +20,7 @@ import type {
   CredentialStore,
   MutableModels,
 } from "@earendil-works/pi-ai";
+import { sleep } from "../../core/src/util.ts";
 const emptyUsage = {
   input: 0,
   output: 0,
@@ -247,7 +248,7 @@ export function demoProvider(): ProviderAdapter {
       for (const part of text.match(/.{1,12}/gs) ?? []) {
         signal.throwIfAborted();
         yield { type: "text", text: part };
-        await new Promise((r) => setTimeout(r, 12));
+        await sleep(12);
       }
       yield {
         type: "done",
