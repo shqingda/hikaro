@@ -3,7 +3,7 @@ import { ProcessClient } from "../packages/protocol/src/client.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-it("keeps device scopes independent and preserves command idempotency", async () => {
+it("keeps client scopes independent and preserves command idempotency", async () => {
   const home = await mkdtemp(join(tmpdir(), "hikaro-scopes-"));
   const client = new ProcessClient(process.execPath, [
     "--import",

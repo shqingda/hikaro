@@ -5,6 +5,7 @@ import {
 } from "../packages/provider-pi/src/settings.ts";
 import { authenticationUrl } from "../packages/tui/src/auth-browser.ts";
 import { MessageComponent } from "../packages/tui/src/index.ts";
+import { userMessageStyle } from "../packages/tui/src/theme.ts";
 import type { Model, Api } from "@earendil-works/pi-ai";
 import {
   openModelControl,
@@ -227,9 +228,9 @@ it("draws user turns on a neutral bar without role headings", () => {
     expect(a).toContain("[Image #1]");
     expect(a).not.toContain("/tmp/shot.png");
     expect(a).not.toContain("YOU");
-    expect(a).toContain("\x1b[48;2;58;39;36m");
+    expect(a).toContain(userMessageStyle()!.background);
     expect(b).not.toContain("HIKARO");
-    expect(b).not.toContain("\x1b[48;2;58;39;36m");
+    expect(b).not.toContain(userMessageStyle()!.background);
   } finally {
     if (previous === undefined) delete process.env.NO_COLOR;
     else process.env.NO_COLOR = previous;

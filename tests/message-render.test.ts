@@ -1,7 +1,8 @@
 import { afterEach, expect, it } from "vitest";
 import { stripVTControlCharacters } from "node:util";
 import { MessageComponent } from "../packages/tui/src/index.ts";
-import { setColorScheme } from "../packages/tui/src/theme.ts";
+import { highlightCode } from "../packages/tui/src/highlight.ts";
+import { setColorScheme, userMessageStyle } from "../packages/tui/src/theme.ts";
 
 afterEach(() => setColorScheme(false));
 
@@ -12,12 +13,14 @@ it("washes user turns, highlights fenced code, and invalidates text and width", 
   const previous = process.env.NO_COLOR;
   delete process.env.NO_COLOR;
   setColorScheme(true);
+  const lightWash = userMessageStyle()!.background;
+  const lightKeyword = highlightCode("const", "ts");
   const message = new MessageComponent(1, "user", "**Hello** `there`");
   const first = message.render(60);
   expect(message.render(60)).toBe(first);
   expect(plain(first)).not.toContain("YOU");
   expect(plain(first)).toContain("Hello");
-  expect(first.join("\n")).toContain("\x1b[48;2;244;225;219m");
+  expect(first.join("\n")).toContain(lightWash);
   expect(message.render(40)).not.toBe(first);
   message.setText("Changed");
   expect(plain(message.render(40))).toContain("Changed");
@@ -32,16 +35,19 @@ it("washes user turns, highlights fenced code, and invalidates text and width", 
   );
   const code = assistant.render(40).join("\n");
   expect(plain(assistant.render(40))).toContain("const n = 1;");
-  expect(code).toContain("\x1b[38;2;0;80;168mconst\x1b[39m");
-  expect(code).not.toContain("\x1b[48;2;244;225;219m");
+  expect(code).toContain(lightKeyword);
+  expect(code).not.toContain(lightWash);
   expect(plain(assistant.render(40))).not.toContain("HIKARO");
   setColorScheme(false);
+  expect(userMessageStyle()!.background).not.toBe(lightWash);
   message.invalidate();
-  expect(message.render(40).join("\n")).toContain("\x1b[48;2;58;39;36m");
-  assistant.invalidate();
-  expect(assistant.render(40).join("\n")).toContain(
-    "\x1b[38;2;130;177;255mconst\x1b[39m",
+  expect(message.render(40).join("\n")).toContain(
+    userMessageStyle()!.background,
   );
+  assistant.invalidate();
+  const darkKeyword = highlightCode("const", "ts");
+  expect(darkKeyword).not.toBe(lightKeyword);
+  expect(assistant.render(40).join("\n")).toContain(darkKeyword);
   if (previous === undefined) delete process.env.NO_COLOR;
   else process.env.NO_COLOR = previous;
 });

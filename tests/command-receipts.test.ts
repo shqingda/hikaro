@@ -139,7 +139,7 @@ it("treats legacy unscoped claims as unknown without disclosing their session", 
   }
   const command = {
     workspace,
-    scope: "new-device",
+    scope: "new-client",
     id: "legacy-command",
     method: "prompt" as const,
     digest: "d".repeat(64),

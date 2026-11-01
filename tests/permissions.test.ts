@@ -16,6 +16,7 @@ import {
   savePermissionMode,
 } from "../packages/runtime/src/permissions.ts";
 import { HikaroView } from "../packages/tui/src/index.ts";
+import { working } from "../packages/tui/src/theme.ts";
 import { TuiAltScreen, type Terminal } from "@earendil-works/pi-tui";
 import type {
   AgentEvent,
@@ -250,7 +251,7 @@ it("status bar reflects execution and the composer animates only while work is r
     const first = status();
     expect(first).toContain("Working");
     expect(view.editor.render(80)[0]).toContain("Working");
-    expect(view.editor.render(80)[0]).toContain("\x1b[38;2;196;85;72m");
+    expect(view.editor.render(80)[0]).toContain(working("·").split("·")[0]);
     render.mockClear();
     vi.advanceTimersByTime(800);
     expect(status()).toBe(first);

@@ -20,23 +20,23 @@ it("atomically elects one host and persists scoped session access and view recov
     await a.releaseHost("/workspace", claims[0] ? "a" : "b");
     expect(await b.claimHost("/workspace", "other")).toBe(true);
     const session = await a.createSession("/workspace");
-    await a.setSessionAccess("/workspace", session.id, "device", "control");
-    await a.saveClientView("/workspace", "device", session.id);
-    expect(await b.sessionRole("/workspace", session.id, "device")).toBe(
+    await a.setSessionAccess("/workspace", session.id, "client", "control");
+    await a.saveClientView("/workspace", "client", session.id);
+    expect(await b.sessionRole("/workspace", session.id, "client")).toBe(
       "control",
     );
-    expect(await b.clientView("/workspace", "device")).toBe(session.id);
-    expect(await b.sessionRole("/other", session.id, "device")).toBeNull();
+    expect(await b.clientView("/workspace", "client")).toBe(session.id);
+    expect(await b.sessionRole("/other", session.id, "client")).toBeNull();
     expect(await b.sessions(0, 20, "/workspace", "", "stranger")).toEqual([]);
-    expect((await b.sessions(0, 20, "/workspace", "", "device"))[0]?.id).toBe(
+    expect((await b.sessions(0, 20, "/workspace", "", "client"))[0]?.id).toBe(
       session.id,
     );
     await expect(
-      a.setSessionAccess("/other", session.id, "device", "control"),
+      a.setSessionAccess("/other", session.id, "client", "control"),
     ).rejects.toThrow(/workspace/);
-    await b.revokeScope("/workspace", "device");
-    expect(await a.sessionRole("/workspace", session.id, "device")).toBeNull();
-    expect(await a.clientView("/workspace", "device")).toBeNull();
+    await b.revokeScope("/workspace", "client");
+    expect(await a.sessionRole("/workspace", session.id, "client")).toBeNull();
+    expect(await a.clientView("/workspace", "client")).toBeNull();
   } finally {
     await Promise.allSettled([a.close(), b.close()]);
     await rm(home, { recursive: true, force: true });

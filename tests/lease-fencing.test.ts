@@ -60,12 +60,7 @@ it("rejects an expired owner's append in the database transaction", async () => 
   expect(lease.owner).toBe("old-owner");
   expire();
   await expect(
-    first.append(
-      session.id,
-      "message",
-      { text: "stale" },
-      lease,
-    ),
+    first.append(session.id, "message", { text: "stale" }, lease),
   ).rejects.toThrow(/lease/i);
   expect(await first.events(session.id)).toEqual([]);
 });
@@ -268,12 +263,13 @@ it("checks renewal expiry after obtaining the writer lock", async () => {
   const lease = (await first.acquireLease(session.id, "owner"))!;
   const blocker = new DatabaseSync(path);
   try {
-    blocker
-      .prepare("UPDATE leases SET expires=? WHERE sessionId=?")
-      .run(Date.now() + 60, session.id);
     blocker.exec("BEGIN IMMEDIATE");
     const renewal = first.renewLease(session.id, lease);
-    await new Promise<void>((resolve) => setTimeout(resolve, 120));
+    await new Promise<void>((resolve) => setTimeout(resolve, 50));
+    // The lease expires while the renewal waits for the writer lock.
+    blocker
+      .prepare("UPDATE leases SET expires=? WHERE sessionId=?")
+      .run(Date.now() - 1, session.id);
     blocker.exec("COMMIT");
     expect(await renewal).toBe(false);
   } finally {

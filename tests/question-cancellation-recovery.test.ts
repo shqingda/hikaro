@@ -25,15 +25,15 @@ async function fixture() {
     other = await runtime.session();
   const agent = await runtime.agent(session);
   await runtime.setPlanning(session, true);
-  await runtime.store.setSessionAccess(home, session.id, "device", "control");
+  await runtime.store.setSessionAccess(home, session.id, "client", "control");
   const workflows = new RpcWorkflows(runtime, "same-process", true);
   const abort = new AbortController();
-  const answer = workflows.ask(questions, abort.signal, session.id, "device");
+  const answer = workflows.ask(questions, abort.signal, session.id, "client");
   await workflows.ready();
   const invoke = (
     method: string,
     p: Record<string, unknown> = {},
-    scope = "device",
+    scope = "client",
   ) => workflows.handle(method, p, session, agent, scope);
   const question = (await invoke("questions.read")) as {
     id: string;
@@ -76,10 +76,10 @@ it("recovers failed cancellation in the same process with identity, role, lease 
       id: f.question.id,
       recovered: true,
     });
-    expect(await f.invoke("questions.read", {}, "another-device")).toBeNull();
+    expect(await f.invoke("questions.read", {}, "another-client")).toBeNull();
     const response = { id: f.question.id, answers: { scope: "Small" } };
     await expect(
-      f.invoke("questions.respond", response, "another-device"),
+      f.invoke("questions.respond", response, "another-client"),
     ).rejects.toThrow(/expired|identity/);
     await expect(
       f.workflows.handle(
@@ -87,7 +87,7 @@ it("recovers failed cancellation in the same process with identity, role, lease 
         response,
         f.other,
         await f.runtime.agent(f.other),
-        "device",
+        "client",
       ),
     ).rejects.toThrow(/expired|identity/);
     const lease = await f.runtime.store.acquireLease(f.session.id, "new-run");
@@ -101,7 +101,7 @@ it("recovers failed cancellation in the same process with identity, role, lease 
     await f.runtime.store.setSessionAccess(
       f.home,
       f.session.id,
-      "device",
+      "client",
       "view",
     );
     await expect(f.invoke("questions.respond", response)).rejects.toThrow(
@@ -110,11 +110,11 @@ it("recovers failed cancellation in the same process with identity, role, lease 
     await f.runtime.store.setSessionAccess(
       f.home,
       f.session.id,
-      "device",
+      "client",
       "control",
     );
     expect(
-      (await f.runtime.store.pendingQuestions(f.session.id, "device"))[0]!
+      (await f.runtime.store.pendingQuestions(f.session.id, "client"))[0]!
         .hostInstanceId,
     ).toBe("same-process");
     const outcomes = await Promise.allSettled([
@@ -187,7 +187,7 @@ it("does not accept RPC recovery flags for live or unknown same-instance questio
       id,
       sessionId: f.session.id,
       executionSessionId: f.session.id,
-      scope: "device",
+      scope: "client",
       hostInstanceId: "same-process",
       questions,
     });
@@ -200,7 +200,7 @@ it("does not accept RPC recovery flags for live or unknown same-instance questio
       }),
     ).rejects.toThrow(/expired/);
     expect(
-      await f.runtime.store.pendingQuestions(f.session.id, "device"),
+      await f.runtime.store.pendingQuestions(f.session.id, "client"),
     ).toHaveLength(1);
   } finally {
     await f.close();
@@ -252,7 +252,7 @@ it.each(["pending", "failed"] as const)(
       releaseRead();
       await rejected;
       expect(
-        await f.runtime.store.pendingQuestions(f.session.id, "device"),
+        await f.runtime.store.pendingQuestions(f.session.id, "client"),
       ).toHaveLength(1);
       expect(await f.runtime.store.messages(f.session.id)).toEqual([]);
       if (state === "pending")
@@ -305,7 +305,7 @@ it("does not reveal another identity's cancellation state to a delayed response"
     const response = f.invoke(
       "questions.respond",
       { id: f.question.id, answers: { scope: "Small" } },
-      "another-device",
+      "another-client",
     );
     const rejected = expect(response).rejects.toThrow(/expired|identity/);
     await reading;
@@ -314,7 +314,7 @@ it("does not reveal another identity's cancellation state to a delayed response"
     releaseRead();
     await rejected;
     expect(
-      await f.runtime.store.pendingQuestions(f.session.id, "device"),
+      await f.runtime.store.pendingQuestions(f.session.id, "client"),
     ).toHaveLength(1);
   } finally {
     releaseRead?.();

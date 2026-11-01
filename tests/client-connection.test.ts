@@ -18,7 +18,7 @@ it("uses a caller command ID and rechecks authority after the durable journal co
         }),
   );
   const client = new ClientConnection(
-    "device",
+    "client",
     {
       observe(fn) {
         receive = fn;
@@ -51,7 +51,7 @@ it("uses a caller command ID and rechecks authority after the durable journal co
                     approvals: [],
                   };
         queueMicrotask(() =>
-          receive({ type: "response", scope: "device", id: frame.id, result }),
+          receive({ type: "response", scope: "client", id: frame.id, result }),
         );
       },
     },
@@ -104,7 +104,7 @@ it("retries failed journal writes and skips only successfully persisted identica
   const sent: string[] = [];
   const save = vi.fn(async (_intents: unknown[]) => {});
   const client = new ClientConnection(
-    "device",
+    "client",
     {
       observe(fn) {
         receive = fn;
@@ -120,7 +120,7 @@ it("retries failed journal writes and skips only successfully persisted identica
                   receipt: completed
                     ? {
                         id: "mutation",
-                        scope: "device",
+                        scope: "client",
                         method: "approval.respond",
                         digest: "a".repeat(64),
                         hostInstanceId: "host",
@@ -141,7 +141,7 @@ it("retries failed journal writes and skips only successfully persisted identica
                   approvals: [],
                 };
         queueMicrotask(() =>
-          receive({ type: "response", scope: "device", id: frame.id, result }),
+          receive({ type: "response", scope: "client", id: frame.id, result }),
         );
       },
     },
@@ -180,7 +180,7 @@ it("does not turn a successful mutation into a failure when an older host lacks 
   const methods: string[] = [];
   let id = 0;
   const client = new ClientConnection(
-    "device",
+    "client",
     {
       observe(fn) {
         receive = fn;
@@ -206,7 +206,7 @@ it("does not turn a successful mutation into a failure when an older host lacks 
                   approvals: [],
                 };
         queueMicrotask(() =>
-          receive({ type: "response", scope: "device", id: frame.id, result }),
+          receive({ type: "response", scope: "client", id: frame.id, result }),
         );
       },
     },
@@ -236,7 +236,7 @@ it("synchronizes a raw transport and fences interrupted commands without replay"
   const sent: any[] = [];
   let sequence = 0;
   const client = new ClientConnection(
-    "device",
+    "client",
     {
       observe(fn) {
         receive = fn;
@@ -249,7 +249,7 @@ it("synchronizes a raw transport and fences interrupted commands without replay"
           receive({
             type: "response",
             id: frame.id,
-            scope: "device",
+            scope: "client",
             result:
               frame.method === "hello"
                 ? { ...rpcCapabilities(), hostInstanceId: "host" }
@@ -293,7 +293,7 @@ it("durably records intent before send and fences a delayed write across connect
     block = false;
   const journal: Array<{ id: string; method: any }> = [];
   const client = new ClientConnection(
-    "device",
+    "client",
     {
       observe(fn) {
         receive = fn;
@@ -304,7 +304,7 @@ it("durably records intent before send and fences a delayed write across connect
         queueMicrotask(() =>
           receive({
             type: "response",
-            scope: "device",
+            scope: "client",
             id: frame.id,
             result:
               frame.method === "hello"
@@ -365,7 +365,7 @@ it("reclaims durable terminal receipts across more than 64 sequential runs", asy
   const durable = new Map<string, any>();
   const prompts: string[] = [];
   const client = new ClientConnection(
-    "device",
+    "client",
     {
       observe(fn) {
         receive = fn;
@@ -388,7 +388,7 @@ it("reclaims durable terminal receipts across more than 64 sequential runs", asy
           prompts.push(frame.id);
           durable.set(frame.id, {
             id: frame.id,
-            scope: "device",
+            scope: "client",
             method: "prompt",
             digest: "a".repeat(64),
             hostInstanceId: "host",
@@ -404,7 +404,7 @@ it("reclaims durable terminal receipts across more than 64 sequential runs", asy
           };
         }
         queueMicrotask(() =>
-          receive({ type: "response", scope: "device", id: frame.id, result }),
+          receive({ type: "response", scope: "client", id: frame.id, result }),
         );
       },
     },

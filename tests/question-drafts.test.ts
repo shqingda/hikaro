@@ -43,7 +43,7 @@ async function fixture() {
     approve: async () => false,
   });
   const session = await runtime.session();
-  await runtime.store.setSessionAccess(home, session.id, "device", "control");
+  await runtime.store.setSessionAccess(home, session.id, "client", "control");
   const service = new QuestionService(runtime, "first", true);
   const answer = service.ask(
     [
@@ -52,14 +52,14 @@ async function fixture() {
     ],
     new AbortController().signal,
     session.id,
-    "device",
+    "client",
   );
   await service.ready();
-  const question = (await service.read(session.id, "device"))!;
+  const question = (await service.read(session.id, "client"))!;
   const identity = {
     id: question.id,
     sessionId: session.id,
-    scope: "device",
+    scope: "client",
     workspace: home,
   };
   const db = new DatabaseSync(join(home, "sessions.sqlite"));
@@ -75,10 +75,10 @@ async function fixture() {
 it("restores partial answers and unsubmitted input without settling or resuming a question", async () => {
   const f = await fixture();
   expect(
-    await f.service.readDraft(f.session.id, "device", { id: f.question.id }),
+    await f.service.readDraft(f.session.id, "client", { id: f.question.id }),
   ).toEqual({ revision: 0, draft: null });
   expect(
-    await f.service.saveDraft(f.session.id, "device", {
+    await f.service.saveDraft(f.session.id, "client", {
       id: f.question.id,
       expectedRevision: 0,
       draft,
@@ -88,7 +88,7 @@ it("restores partial answers and unsubmitted input without settling or resuming 
   expect(await f.answer).toBeUndefined();
   const restored = new QuestionService(f.runtime, "second", true);
   expect(
-    await restored.readDraft(f.session.id, "device", { id: f.question.id }),
+    await restored.readDraft(f.session.id, "client", { id: f.question.id }),
   ).toEqual({ revision: 1, draft });
   expect(await f.runtime.store.messages(f.session.id)).toEqual([]);
   expect(
@@ -139,7 +139,7 @@ it("allows editing under a live lease but rejects stale settlement and atomicall
   const f = await fixture();
   const lease = await f.runtime.store.acquireLease(f.session.id, "execution");
   expect(
-    await f.service.saveDraft(f.session.id, "device", {
+    await f.service.saveDraft(f.session.id, "client", {
       id: f.question.id,
       expectedRevision: 0,
       draft,
@@ -149,7 +149,7 @@ it("allows editing under a live lease but rejects stale settlement and atomicall
   const recovered = new QuestionService(f.runtime, "second", true);
   const answers = { choice: "Small", detail: "Final text" };
   await expect(
-    recovered.respond(f.session.id, "device", {
+    recovered.respond(f.session.id, "client", {
       id: f.question.id,
       answers,
       draftRevision: 1,
@@ -157,17 +157,17 @@ it("allows editing under a live lease but rejects stale settlement and atomicall
   ).rejects.toThrow(/lease/);
   await f.runtime.store.releaseLease(f.session.id, lease!);
   await expect(
-    recovered.respond(f.session.id, "device", {
+    recovered.respond(f.session.id, "client", {
       id: f.question.id,
       answers,
       draftRevision: 0,
     }),
   ).rejects.toThrow(/draft.*changed|revision/i);
   expect(
-    await recovered.readDraft(f.session.id, "device", { id: f.question.id }),
+    await recovered.readDraft(f.session.id, "client", { id: f.question.id }),
   ).toEqual({ revision: 1, draft });
   expect(
-    await recovered.respond(f.session.id, "device", {
+    await recovered.respond(f.session.id, "client", {
       id: f.question.id,
       answers,
       draftRevision: 1,
@@ -194,7 +194,7 @@ it("cleans drafts on explicit cancellation and session deletion while old client
     expectedRevision: 0,
     draft,
   });
-  await f.service.respond(f.session.id, "device", {
+  await f.service.respond(f.session.id, "client", {
     id: f.question.id,
     cancelled: true,
   });
@@ -206,10 +206,10 @@ it("cleans drafts on explicit cancellation and session deletion while old client
     [{ id: "detail", question: "More?" }],
     new AbortController().signal,
     f.session.id,
-    "device",
+    "client",
   );
   await f.service.ready();
-  const q = (await f.service.read(f.session.id, "device"))!;
+  const q = (await f.service.read(f.session.id, "client"))!;
   await f.runtime.store.saveQuestionDraft({
     ...f.identity,
     id: q.id,
@@ -253,14 +253,14 @@ it("checks question identity, current control rights, and workspace for reads an
   await f.runtime.store.setSessionAccess(
     f.home,
     f.session.id,
-    "device",
+    "client",
     "view",
   );
   await expect(
-    f.service.readDraft(f.session.id, "device", { id: f.question.id }),
+    f.service.readDraft(f.session.id, "client", { id: f.question.id }),
   ).rejects.toThrow(/access/);
   await expect(
-    f.service.saveDraft(f.session.id, "device", {
+    f.service.saveDraft(f.session.id, "client", {
       id: f.question.id,
       expectedRevision: 1,
       draft,
@@ -320,7 +320,7 @@ it("advertises responsive draft methods without task receipts or view-role write
       { id: f.question.id, expectedRevision: 0, draft },
       f.session,
       agent,
-      "device",
+      "client",
     ),
   ).toEqual({ revision: 1 });
   expect(
@@ -329,7 +329,7 @@ it("advertises responsive draft methods without task receipts or view-role write
       { id: f.question.id },
       f.session,
       agent,
-      "device",
+      "client",
     ),
   ).toEqual({ revision: 1, draft });
   workflows.close();
@@ -346,7 +346,7 @@ it("rolls back settlement cleanup and preserves the last saved draft after a sto
     "CREATE TRIGGER fail_question_settle BEFORE INSERT ON events WHEN NEW.type='question.response' BEGIN SELECT RAISE(ABORT,'Injected settlement failure'); END",
   );
   await expect(
-    f.service.respond(f.session.id, "device", {
+    f.service.respond(f.session.id, "client", {
       id: f.question.id,
       cancelled: true,
       draftRevision: 1,
@@ -357,10 +357,10 @@ it("rolls back settlement cleanup and preserves the last saved draft after a sto
     draft,
   });
   expect(
-    await f.runtime.store.pendingQuestions(f.session.id, "device"),
+    await f.runtime.store.pendingQuestions(f.session.id, "client"),
   ).toHaveLength(1);
   f.db.exec("DROP TRIGGER fail_question_settle");
-  await f.service.respond(f.session.id, "device", {
+  await f.service.respond(f.session.id, "client", {
     id: f.question.id,
     cancelled: true,
     draftRevision: 1,
@@ -386,7 +386,7 @@ it("discards delayed reads after abort or close and drains saves admitted before
   const abort = new AbortController();
   const read = f.service.readDraft(
     f.session.id,
-    "device",
+    "client",
     { id: f.question.id },
     abort.signal,
   );
@@ -396,7 +396,7 @@ it("discards delayed reads after abort or close and drains saves admitted before
   gate.resolve();
   await rejectedRead;
 
-  const saved = f.service.saveDraft(f.session.id, "device", {
+  const saved = f.service.saveDraft(f.session.id, "client", {
     id: f.question.id,
     expectedRevision: 0,
     draft,
@@ -406,14 +406,14 @@ it("discards delayed reads after abort or close and drains saves admitted before
   expect(await saved).toEqual({ revision: 1 });
   expect(await storedRead(f.identity)).toEqual({ revision: 1, draft });
   await expect(
-    f.service.saveDraft(f.session.id, "device", {
+    f.service.saveDraft(f.session.id, "client", {
       id: f.question.id,
       expectedRevision: 1,
       draft,
     }),
   ).rejects.toThrow(/closing/);
   await expect(
-    f.service.readDraft(f.session.id, "device", { id: f.question.id }),
+    f.service.readDraft(f.session.id, "client", { id: f.question.id }),
   ).rejects.toThrow(/closing/);
 });
 
@@ -436,7 +436,7 @@ it("serves drafts while a normal RPC request waits and creates no durable action
   const request = (method: string, params: Record<string, unknown> = {}) => {
     const id = `draft-${++sequence}`;
     const result = new Promise<any>((resolve) => pending.set(id, resolve));
-    input.write(JSON.stringify({ id, scope: "device", method, params }) + "\n");
+    input.write(JSON.stringify({ id, scope: "client", method, params }) + "\n");
     return { id, result };
   };
   const gate = deferred<void>(),

@@ -74,7 +74,7 @@ it("restores unanswered questions by identity and saves answers once without exe
   }
 });
 
-it("rechecks current remote control rights, preserves questions on close and persists dismissal", async () => {
+it("rechecks current scoped access, preserves questions on close and persists dismissal", async () => {
   const home = await mkdtemp(join(tmpdir(), "hikaro-question-access-"));
   const runtime = await Runtime.open({
     home,
@@ -91,7 +91,7 @@ it("rechecks current remote control rights, preserves questions on close and per
       [{ id: "q", question: "Confirm scope" }],
       new AbortController().signal,
       session.id,
-      "device",
+      "client",
     );
     await original.ready();
     original.close();
@@ -102,7 +102,7 @@ it("rechecks current remote control rights, preserves questions on close and per
       {},
       session,
       agent,
-      "device",
+      "client",
     )) as { id: string };
     await expect(
       restored.handle(
@@ -110,13 +110,13 @@ it("rechecks current remote control rights, preserves questions on close and per
         { id: q.id, answers: { q: "yes" } },
         other,
         await runtime.agent(other),
-        "device",
+        "client",
       ),
     ).rejects.toThrow(/expired/);
     await runtime.store.setSessionAccess(
       runtime.options.cwd,
       session.id,
-      "device",
+      "client",
       "view",
     );
     await expect(
@@ -125,16 +125,16 @@ it("rechecks current remote control rights, preserves questions on close and per
         { id: q.id, answers: { q: "yes" } },
         session,
         agent,
-        "device",
+        "client",
       ),
     ).rejects.toThrow(/access denied/);
     expect(
-      await runtime.store.pendingQuestions(session.id, "device"),
+      await runtime.store.pendingQuestions(session.id, "client"),
     ).toHaveLength(1);
     await runtime.store.setSessionAccess(
       runtime.options.cwd,
       session.id,
-      "device",
+      "client",
       "control",
     );
     await restored.handle(
@@ -142,9 +142,9 @@ it("rechecks current remote control rights, preserves questions on close and per
       { id: q.id, cancelled: true },
       session,
       agent,
-      "device",
+      "client",
     );
-    expect(await runtime.store.pendingQuestions(session.id, "device")).toEqual(
+    expect(await runtime.store.pendingQuestions(session.id, "client")).toEqual(
       [],
     );
     expect(await runtime.store.messages(session.id)).toEqual([]);

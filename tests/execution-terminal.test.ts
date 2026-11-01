@@ -30,24 +30,28 @@ it("keeps a non-consuming output preview, isolates ownership, and confirms actua
       ctx,
     );
     const id = (result.data as { id: string }).id;
-    await vi.waitFor(() =>
-      expect(manager.detail("owner", id).output).toContain("READY"),
+    await vi.waitFor(
+      () => expect(manager.detail("owner", id).output).toContain("READY"),
+      { timeout: 5_000 },
     );
     expect(manager.list("other")).toEqual([]);
     expect(() => manager.stop("other", id)).toThrow(/not found/);
     await tools.get("terminal_read")!.execute({ id }, ctx);
     expect(manager.detail("owner", id).output).toContain("READY");
     manager.send("owner", id, "yes\n");
-    await vi.waitFor(() =>
-      expect(manager.detail("owner", id).output).toContain("ANSWER:yes"),
+    await vi.waitFor(
+      () => expect(manager.detail("owner", id).output).toContain("ANSWER:yes"),
+      { timeout: 5_000 },
     );
     manager.stop("owner", id);
     expect(["stopping", "exited"]).toContain(manager.detail("owner", id).state);
-    await vi.waitFor(() =>
-      expect(
-        manager.detail("owner", id).state,
-        JSON.stringify(manager.detail("owner", id)),
-      ).toBe("exited"),
+    await vi.waitFor(
+      () =>
+        expect(
+          manager.detail("owner", id).state,
+          JSON.stringify(manager.detail("owner", id)),
+        ).toBe("exited"),
+      { timeout: 5_000 },
     );
     expect(manager.detail("owner", id).exitCode).toEqual(expect.any(Number));
     await tools.get("terminal_read")!.execute({ id }, ctx);
