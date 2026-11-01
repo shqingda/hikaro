@@ -1,9 +1,10 @@
+import { cliBin } from "./helpers/cli.ts";
 import { spawn as spawnProcess } from "node:child_process";
 import { spawn } from "node-pty";
 import { expect, it, vi } from "vitest";
 import { mkdtemp, mkdir, rm, realpath, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import { stripVTControlCharacters } from "node:util";
 import { SQLiteStore } from "../packages/storage/src/index.ts";
 import { SharedHostClient } from "../packages/host/src/client.ts";
@@ -21,13 +22,7 @@ it.each([false, true])(
     let hostExit: Promise<unknown> | undefined;
     let terminal: ReturnType<typeof spawn> | undefined;
     let terminalExit: Promise<number> | undefined;
-    const args = [
-      resolve(process.env.HIKARO_TEST_BIN ?? "dist/hikaro.mjs"),
-      "--home",
-      home,
-      "--cwd",
-      cwd,
-    ];
+    const args = [cliBin(), "--home", home, "--cwd", cwd];
     try {
       const session = await store.createSession(
         cwd,

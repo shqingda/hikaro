@@ -1,3 +1,4 @@
+import { cliBin } from "./helpers/cli.ts";
 import {
   mkdtemp,
   mkdir,
@@ -7,7 +8,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { stripVTControlCharacters } from "node:util";
 import { spawn } from "node-pty";
 import { expect, it, vi } from "vitest";
@@ -79,7 +80,7 @@ it("renders external Pi tools, cancels, and preserves the draft and authority af
     terminal = spawn(
       process.execPath,
       [
-        resolve(process.env.HIKARO_TEST_BIN ?? "dist/hikaro.mjs"),
+        cliBin(),
         "--backend",
         "pi",
         "--pi-command",

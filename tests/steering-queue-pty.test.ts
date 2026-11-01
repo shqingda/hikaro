@@ -1,3 +1,4 @@
+import { cliBin } from "./helpers/cli.ts";
 import { workbenchKeys } from "./workbench-pty-helpers.ts";
 import { spawn as spawnProcess } from "node:child_process";
 import { spawn } from "node-pty";
@@ -170,7 +171,7 @@ it("edits, prioritizes and removes steering through attached TUI before the next
 it("restores steering after SIGKILL in the built TUI and applies only the explicitly confirmed item", async () => {
   const home = await mkdtemp(join(tmpdir(), "hikaro-steering-restart-"));
   const cwd = join(home, "workspace"),
-    cli = resolve("dist/hikaro.mjs");
+    cli = cliBin();
   await mkdir(cwd);
   const hosts: Array<{
     process: ReturnType<typeof spawnProcess>;

@@ -1,3 +1,4 @@
+import { cliBin } from "./helpers/cli.ts";
 import { workbenchKeys } from "./workbench-pty-helpers.ts";
 import { spawn as spawnProcess } from "node:child_process";
 import { spawn } from "node-pty";
@@ -11,7 +12,7 @@ import {
   rm,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { stripVTControlCharacters } from "node:util";
 import { SQLiteStore } from "../packages/storage/src/index.ts";
 import { ChangeJournal } from "../packages/tools/src/changes.ts";
@@ -42,7 +43,7 @@ it("confirms and cancels redo through built attached TUI and preserves later edi
     await journal.update(session.id, path, signal, () => "after 中文");
     const [entry] = await journal.list(session.id);
     await journal.rollback(session.id, entry!.id, signal);
-    const args = [resolve("dist/hikaro.mjs"), "--home", home, "--cwd", cwd];
+    const args = [cliBin(), "--home", home, "--cwd", cwd];
     host = spawnProcess(process.execPath, [...args, "--host", "--demo"]);
     hostExit = new Promise((done) => host!.once("exit", done));
     let hostOutput = "";
