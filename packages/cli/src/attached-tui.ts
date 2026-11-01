@@ -13,10 +13,7 @@ import type {
   HistoryDirection,
 } from "../../../packages/tui/src/index.ts";
 import { DraftSaver } from "../../../packages/tui/src/drafts.ts";
-import {
-  preparePrompt,
-  attachmentReference,
-} from "../../../packages/runtime/src/attachments.ts";
+import { preparePrompt } from "../../../packages/runtime/src/attachments.ts";
 import type {
   AgentBackend,
   AgentEvent,
@@ -735,59 +732,24 @@ async function createAttachedSession(
       });
     },
     detachOnCtrlD: true,
-    commands: [
-      {
-        name: "close",
-        description: "Close an idle session; keep running work monitored",
-      },
-      {
-        name: "storage",
-        description: "Preview host session storage and clean snapshots",
-      },
-      { name: "search", description: "Search full messages in this session" },
-      ...[
-        "recovery",
-        "export",
-        "plugins",
-        "sessions",
-        "resume",
-        "delete",
-        "model",
-        "settings",
-        "permissions",
-        "context",
-        "thinking",
-        "speed",
-        "resources",
-      ].map((name) => ({ name, description: "Open " + name })),
-      { name: "changes", description: "Review and roll back host edits" },
-      { name: "tasks", description: "Manage host execution" },
-      { name: "plan", description: "Read-only planning and plan review" },
-    ],
+    commandMode: "attached",
     onDraftChange: (text) => {
       if (sessionId) drafts.update(sessionId, text);
     },
     previewAttachment: async (path, signal) => {
-      const { previewAttachment } =
-        await import("../../runtime/src/attachments.ts");
       if (!sessionId)
         throw Error("Select a session before previewing an attachment");
-      return previewAttachment(path, {
-        cwd: transport.endpoint.cwd,
+      const { previewWithApproval } = await import("./composer-commands.ts");
+      return previewWithApproval(
+        view,
+        {
+          cwd: transport.endpoint.cwd,
+          sessionId,
+          model: "the host model",
+        },
+        path,
         signal,
-        approve: (file) =>
-          view.approve(
-            {
-              id: randomUUID(),
-              sessionId: sessionId!,
-              tool: "preview_attachment",
-              arguments: { path: file.path },
-              reason: `Read ${file.path} for local preview only; nothing is sent to the host model`,
-              capability: { kind: "file", path: file.path, write: false },
-            },
-            signal,
-          ),
-      });
+      );
     },
     preparePrompt: async (text, signal) => {
       if (!client.state.canAct || loading)
@@ -869,8 +831,11 @@ async function createAttachedSession(
       return content.data;
     },
     onCommand: async (text) => {
-      const [command, ...parts] = text.trim().split(/\s+/);
-      const rest = parts.join(" ");
+      const { parseCommand } =
+        await import("../../../packages/tui/src/commands.ts");
+      const parsed = parseCommand(text);
+      const command = `/${parsed.name}`;
+      const rest = parsed.arg;
       switch (command) {
         case "/search": {
           if (!client.supports("messages.search"))
@@ -904,8 +869,11 @@ async function createAttachedSession(
         case "/quit":
           owner.leave();
           return;
-        case "/help":
-          return "Shared host: /recovery, /export, /plugins, ![--unrestricted] COMMAND (host approvals apply), /search [text], /changes, /tasks, /tasks history [RUN_ID], /plan [TASK], /plan cancel, /plan history, /plan progress · host workflows. /sessions [query], /resume ID, /new, /rename title, /compact, /fork, /steer text, /status, /model [PROVIDER/MODEL] and provider accounts, /settings, /permissions, /context [default], /thinking [default], /speed [default], /resources [query], /storage, /attach PATH. Enter intervenes during a run; Ctrl+X Enter queues. Ctrl+P actions; Ctrl+O sessions. Ctrl+C stops the selected task; Ctrl+D detaches. Local files use the existing @ completion.";
+        case "/help": {
+          const { commandHelp } =
+            await import("../../../packages/tui/src/commands.ts");
+          return commandHelp("attached");
+        }
         case "/storage": {
           const { storageCommand } =
             await import("../../../packages/tui/src/storage.ts");
@@ -952,6 +920,7 @@ async function createAttachedSession(
         case "/plugins":
         case "/sessions":
         case "/resume":
+        case "/delete":
         case "/login":
         case "/logout":
         case "/model":
@@ -988,23 +957,21 @@ async function createAttachedSession(
           return;
         case "/paste-image": {
           const target = client.state.session?.id;
-          const draft = view.editor.getExpandedText();
-          const { saveClipboardImage } =
-            await import("../../../packages/runtime/src/clipboard-image.ts");
-          const path = await saveClipboardImage();
-          if (exiting) return;
-          if (
-            !client.state.canAct ||
-            client.state.session?.id !== target ||
-            view.editor.getExpandedText() !== draft
-          )
-            return `Input or connection changed; clipboard image saved at ${path}. Use /attach PATH to add it when ready.`;
-          view.editor.setText(attachmentReference(path) + " ");
-          return "Clipboard image attached. Add your question and press Enter. The private temporary file is retained for draft recovery.";
+          const { pasteClipboardImage } =
+            await import("./composer-commands.ts");
+          const result = await pasteClipboardImage(
+            view,
+            () =>
+              !exiting &&
+              client.state.canAct &&
+              client.state.session?.id === target,
+          );
+          return exiting ? undefined : result;
         }
-        case "/attach":
-          view.editor.setText(attachmentReference(text.slice(7)));
-          return;
+        case "/attach": {
+          const { attachPath } = await import("./composer-commands.ts");
+          return attachPath(view, rest);
+        }
         case "/reconnect":
           await client.connected();
           await client.reconcile();

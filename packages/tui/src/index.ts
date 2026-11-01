@@ -53,6 +53,7 @@ import {
   setColorScheme,
 } from "./theme.ts";
 import { renderHeader, renderStatus, type ViewStatus } from "./status.ts";
+import { commandCompletions, type CommandMode } from "./commands.ts";
 const STREAM_PREVIEW_CHARS = 64_000;
 const MAX_VISIBLE_ITEMS = 40;
 import {
@@ -245,7 +246,10 @@ export class HikaroView {
       ) => Promise<string>;
       onPreferences?: (patch: Partial<TuiPreferences>) => Promise<void>;
       onDraftChange?: (text: string) => void;
+      /** Extra slash commands such as skills and plugins. */
       commands?: Array<{ name: string; description: string }>;
+      /** Which built-in commands from the registry this client runs. */
+      commandMode?: CommandMode;
       /** An explicit backend capability set; omitted by full Hikaro clients. */
       availableActions?: readonly string[];
       active?: boolean;
@@ -311,86 +315,17 @@ export class HikaroView {
       },
       () => tui.requestRender(),
     );
+    const builtIn = commandCompletions(options.commandMode ?? "native");
+    const names = new Set<string>(builtIn.map((command) => command.name));
     this.editor.setAutocompleteProvider(
       new FileAutocompleteProvider(
         [
-          { name: "help", description: "Commands and shortcuts" },
-          {
-            name: "resources",
-            description: "Loaded skills and workspace instructions",
-          },
-          {
-            name: "status",
-            description: "Model, context, usage and session status",
-          },
-          { name: "new", description: "Start a session" },
-          { name: "sessions", description: "List sessions" },
-          { name: "delete", description: "Choose a session to delete" },
-          { name: "resume", description: "Resume a session" },
-          { name: "rename", description: "Rename this session" },
-          { name: "attach", description: "Add a file or image: /attach PATH" },
-          {
-            name: "paste-image",
-            description: "Attach a clipboard image (macOS)",
-          },
-          {
-            name: "export",
-            description: "Export the conversation as Markdown",
-          },
-          { name: "fork", description: "Branch this conversation" },
-          {
-            name: "model",
-            description: "Select a model or connect a provider",
-          },
-          {
-            name: "settings",
-            description: "Display, notifications and startup preferences",
-          },
-          { name: "permissions", description: "Workspace approval policy" },
-          {
-            name: "context",
-            description: "Select context budget · active / default",
-          },
-          {
-            name: "thinking",
-            description: "Select reasoning strength · active / default",
-          },
-          {
-            name: "speed",
-            description: "Select supported service tier · active / default",
-          },
-          { name: "steer", description: "Add instructions during a run" },
-          {
-            name: "follow",
-            description: "Toggle follow-up · Enter queues instead of steering",
-          },
-          { name: "older", description: "Previous history page" },
-          { name: "newer", description: "Next history page" },
-          { name: "latest", description: "Return to the latest messages" },
-          {
-            name: "read",
-            description: "Read a part of a long message: /read NUMBER PART",
-          },
-          { name: "tools", description: "Toggle tool details" },
-          { name: "quit", description: "Exit" },
+          ...builtIn,
+          // Skills and plugin commands; built-ins keep their registry entry.
           ...(options.commands ?? []).filter(
-            (command) => !["login", "logout"].includes(command.name),
+            (command) => !names.has(command.name),
           ),
-        ].filter(
-          (command) =>
-            !options.availableActions ||
-            [
-              "model",
-              "tools",
-              "read",
-              "latest",
-              "older",
-              "quit",
-              "steer",
-              "follow",
-              ...(options.commands ?? []).map((command) => command.name),
-            ].includes(command.name),
-        ),
+        ],
         options.cwd,
       ),
     );

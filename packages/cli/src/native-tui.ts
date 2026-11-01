@@ -380,48 +380,16 @@ export async function nativeTui(
       onPreferences: (patch) => applyPreferences({ ...preferences, ...patch }),
       onDraftChange: (text) => drafts.update(draftSessionId, text),
       previewAttachment: async (path, signal) => {
-        const { previewAttachment } =
-          await import("../../runtime/src/attachments.ts");
-        return previewAttachment(path, {
-          cwd: options.cwd,
+        const { previewWithApproval } = await import("./composer-commands.ts");
+        return previewWithApproval(
+          view,
+          { cwd: options.cwd, sessionId: session.id, model: "the model" },
+          path,
           signal,
-          approve: (file) =>
-            view.approve(
-              {
-                id: crypto.randomUUID(),
-                sessionId: session.id,
-                tool: "preview_attachment",
-                arguments: { path: file.path },
-                reason: `Read ${file.path} for local preview only; nothing is sent to the model`,
-                capability: { kind: "file", path: file.path, write: false },
-              },
-              signal,
-            ),
-        });
+        );
       },
+      commandMode: "native",
       commands: [
-        {
-          name: "close",
-          description: "Close an idle session; keep running work monitored",
-        },
-        {
-          name: "storage",
-          description: "Preview session storage and explicitly clean snapshots",
-        },
-        { name: "search", description: "Search full messages in this session" },
-        { name: "questions", description: "Answer or dismiss saved questions" },
-        {
-          name: "plan",
-          description: "Read-only planning, questions and plan review",
-        },
-        {
-          name: "tasks",
-          description: "Manage pending messages, terminals and child agents",
-        },
-        {
-          name: "changes",
-          description: "Review file edits and safely roll them back",
-        },
         ...runtime.resources.skills.map((skill) => ({
           name: "skill:" + skill.name,
           description: skill.description.slice(0, 120),
@@ -478,8 +446,9 @@ export async function nativeTui(
       onCancelRun: (runId) => agent.cancelRun(runId),
       onHistory: history,
       onCommand: async (text) => {
-        const [command, ...parts] = text.slice(1).split(" ");
-        const arg = parts.join(" ");
+        const { parseCommand } =
+          await import("../../../packages/tui/src/commands.ts");
+        const { name: command, arg } = parseCommand(text);
         const reviewChanges = async (
           filter: import("../../../packages/runtime/src/change-review.ts").ReviewFilter = {},
         ) => {
@@ -768,32 +737,23 @@ export async function nativeTui(
             return;
           case "paste-image": {
             const target = session.id;
-            const draft = view.editor.getExpandedText();
-            const { saveClipboardImage } =
-              await import("../../../packages/runtime/src/clipboard-image.ts");
-            const { attachmentReference } =
-              await import("../../../packages/runtime/src/attachments.ts");
-            const path = await saveClipboardImage();
-            if (exiting) return;
-            if (
-              session.id !== target ||
-              view.editor.getExpandedText() !== draft
-            )
-              return `Input changed; clipboard image saved at ${path}. Use /attach PATH to add it when ready.`;
-            view.editor.setText(attachmentReference(path) + " ");
-            return "Clipboard image attached. Add your question and press Enter. The private temporary file is retained for draft recovery.";
+            const { pasteClipboardImage } =
+              await import("./composer-commands.ts");
+            const result = await pasteClipboardImage(
+              view,
+              () => !exiting && session.id === target,
+            );
+            return exiting ? undefined : result;
           }
           case "attach": {
-            if (!arg.trim())
-              return 'Use /attach PATH, then add your question and send. You can also type @file or @"path with spaces" directly.';
-            const { attachmentReference } =
-              await import("../../../packages/runtime/src/attachments.ts");
-            // Accept quoted or shell-escaped paths from terminal drag-and-drop.
-            view.editor.setText(attachmentReference(arg) + " ");
-            return "Attachment added. Add your question and press Enter.";
+            const { attachPath } = await import("./composer-commands.ts");
+            return attachPath(view, arg);
           }
-          case "help":
-            return '/plan [TASK] · Read-only exploration, questions and plan review\n/plan cancel · Leave without executing\n/plan history · Read saved plan versions\n/plan progress · Read reported step status of the approved plan\n/questions · Answer or dismiss saved questions\n/tasks · Manage queued messages, background terminals and child agents\n/tasks history [RUN_ID] · Read saved runs without pausing the queue\n/search [TEXT] · Search this session and read matching messages\n/changes · Review and roll back recorded file edits\n/new  /sessions  /resume [ID]  /delete  /rename TITLE  /export\n/fork  /compact  /model provider/model\n/attach PATH · @file or @"path with spaces" attaches text/images\n/settings  /permissions [ask|auto|full]\n/context [default]  /thinking [default]  /speed [default]\n/status  /resources  /storage\n/steer instructions  /tools  /older  /newer  /latest  /quit\n![--unrestricted] COMMAND follows the current permission mode. Ctrl+C cancels. Ctrl+D exits. Shift+Enter adds a line.\nEnter intervenes during a run. Ctrl+X Enter queues a separate task. Ctrl+P opens actions; Ctrl+O switches sessions. /model includes provider accounts.';
+          case "help": {
+            const { commandHelp } =
+              await import("../../../packages/tui/src/commands.ts");
+            return commandHelp("native");
+          }
           case "close":
             await workspace.close(session.id);
             return;

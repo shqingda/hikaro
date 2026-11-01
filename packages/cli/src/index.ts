@@ -169,6 +169,7 @@ async function main() {
       model: backend.currentModel
         ? `${backend.currentModel.provider}/${backend.currentModel.id}`
         : "external Pi · model unknown",
+      commandMode: "pi",
       availableActions: [
         "model",
         "queue",

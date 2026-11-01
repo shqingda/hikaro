@@ -65,6 +65,8 @@ it("renders one permissions suggestion in attached views and keeps completion fr
     onPrompt: async () => {},
     onCommand,
     onExit: () => {},
+    commandMode: "attached",
+    // A duplicate extra never replaces the registry entry.
     commands: [{ name: "permissions", description: "Open permissions" }],
   });
   tui.setFocus(view.editor);
@@ -72,9 +74,12 @@ it("renders one permissions suggestion in attached views and keeps completion fr
     stripVTControlCharacters(view.editor.render(100).join("\n"));
   try {
     view.editor.handleInput("/per");
-    await vi.waitFor(() => expect(screen()).toContain("Open permissions"));
-    expect(screen().match(/permissions/g)).toHaveLength(2); // command and description in one row
-    expect(screen()).not.toContain("Workspace approval policy");
+    await vi.waitFor(() =>
+      expect(screen()).toContain("Workspace approval policy"),
+    );
+    // One row: the command and its usage hint.
+    expect(screen().match(/permissions/g)).toHaveLength(2);
+    expect(screen()).not.toContain("Open permissions");
     view.editor.handleInput("\t");
     expect(view.editor.getText()).toBe("/permissions ");
     expect(onCommand).not.toHaveBeenCalled();
