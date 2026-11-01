@@ -9,7 +9,8 @@ import { stripVTControlCharacters } from "node:util";
 import { SQLiteStore } from "../packages/storage/src/index.ts";
 import { defaultTuiPreferences } from "../packages/tui/src/preferences.ts";
 
-it.each([false, true])(
+// Native paging is covered by tests/tui-tool-output.test.ts; this drives the host path.
+it.each([true])(
   "reads complete tool output in TUI (attached=%s)",
   async (attached) => {
     const home = await realpath(

@@ -7,6 +7,7 @@ import {
   rm,
   access,
   chmod,
+  readdir,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -291,7 +292,19 @@ it("attaches the real TUI, restores its draft and pending approval after exit, a
       "approved",
     );
     terminal!.write("unsent-恢复");
-    await new Promise((done) => setTimeout(done, 400));
+    // Kill only once autosave has written the draft, not after a fixed delay.
+    await vi.waitFor(
+      async () => {
+        const files = await readdir(options.home, { recursive: true });
+        const drafts = await Promise.all(
+          files
+            .filter((file) => file.endsWith(".draft.json"))
+            .map((file) => readFile(join(options.home, file), "utf8")),
+        );
+        expect(drafts.some((text) => text.includes("unsent-恢复"))).toBe(true);
+      },
+      { timeout: 5000 },
+    );
     terminal!.kill("SIGKILL");
     await exited;
     terminal = undefined;

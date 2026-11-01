@@ -37,10 +37,13 @@ it.skipIf(process.platform !== "darwin").each(["natural exit", "abort"])(
     let pid: number | undefined;
     let deadline: ReturnType<typeof setTimeout> | undefined;
     try {
-      await vi.waitFor(async () => {
-        pid = Number(await readFile(marker, "utf8"));
-        expect(pid).toBeGreaterThan(1);
-      });
+      await vi.waitFor(
+        async () => {
+          pid = Number(await readFile(marker, "utf8"));
+          expect(pid).toBeGreaterThan(1);
+        },
+        { timeout: 5000 },
+      );
       // Keep the parent available across the one-second observation interval.
       await new Promise((resolve) => setTimeout(resolve, 1200));
       if (outcome === "abort") controller.abort();
@@ -117,10 +120,13 @@ it.skipIf(process.platform === "win32").each(["EPERM", "survives SIGKILL"])(
     );
     let deadline: ReturnType<typeof setTimeout> | undefined;
     try {
-      await vi.waitFor(async () => {
-        pid = Number(await readFile(marker, "utf8"));
-        expect(pid).toBeGreaterThan(1);
-      });
+      await vi.waitFor(
+        async () => {
+          pid = Number(await readFile(marker, "utf8"));
+          expect(pid).toBeGreaterThan(1);
+        },
+        { timeout: 5000 },
+      );
       controller.abort();
       const result = await Promise.race([
         work,

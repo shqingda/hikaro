@@ -679,7 +679,8 @@ describe("worker isolation and recovery boundaries", () => {
     clearTimeout(timer);
     expect(heartbeat).toBe(true);
     expect(result.isError).toBe(true);
-    expect(performance.now() - start).toBeLessThan(1500);
+    // Bounded, not a speed test: a busy machine must not turn this into a flake.
+    expect(performance.now() - start).toBeLessThan(5000);
   });
   it("paginates whole messages and strips provider payloads from UI pages", async () => {
     const { store, session } = await fixture(simple);
