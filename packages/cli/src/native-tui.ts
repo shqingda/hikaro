@@ -425,6 +425,10 @@ export async function nativeTui(
           );
         try {
           await work;
+        } catch {
+          // The prompt is already in the session. Its failure or cancellation
+          // is shown by run events; it is not a failed send to restore.
+          return;
         } finally {
           if (promptWork === work) promptWork = undefined;
         }
