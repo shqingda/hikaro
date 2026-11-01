@@ -42,27 +42,40 @@ it("draws two pixel rows per terminal row from a bottom-up BMP", () => {
   expect(lines[0]).toContain("\x1b[38;2;255;0;0m\x1b[48;2;0;0;255m▀");
 });
 
-it("previews in the terminal, opens externally on O and closes on Esc", async () => {
+it("previews in a box with the image facts, opens externally on O and closes on Esc", async () => {
   const close = vi.fn();
   const open = vi.fn();
   const render = vi.fn();
-  const draw = vi.fn(async () => ({ lines: ["▀▀"], width: 640, height: 480 }));
+  const draw = vi.fn(() => ["▀▀"]);
   const preview = new ImagePreview(
     "Image #1",
     "/tmp/shot.png",
-    () => ({ columns: 80, rows: 24 }),
+    () => 12,
     render,
     close,
     open,
-    draw,
+    async () => ({
+      format: "PNG",
+      width: 1476,
+      height: 894,
+      bytes: 2.4 * 1024 * 1024,
+      draw,
+    }),
   );
   expect(stripVTControlCharacters(preview.render(60).join("\n"))).toContain(
     "Loading…",
   );
   await vi.waitFor(() => expect(render).toHaveBeenCalled());
-  const screen = stripVTControlCharacters(preview.render(60).join("\n"));
-  expect(screen).toContain("Image #1 · shot.png · 640×480");
+  const lines = preview.render(60);
+  const screen = stripVTControlCharacters(lines.join("\n"));
+  expect(screen).toContain("Image #1 · PNG · 1476×894 · 2.4 MB · shot.png");
+  expect(screen).toContain("Path: /tmp/shot.png");
+  expect(screen).toContain("Esc close · O open in Preview");
   expect(screen).toContain("▀▀");
+  expect(draw).toHaveBeenCalledWith(56, 8);
+  for (const line of lines)
+    expect(stripVTControlCharacters(line).length).toBe(60);
+  preview.render(60);
   expect(draw).toHaveBeenCalledOnce();
   preview.handleInput("o");
   expect(open).toHaveBeenCalledOnce();

@@ -10,7 +10,7 @@ import {
   defaultTuiPreferences,
   type TuiPreferences,
 } from "../packages/tui/src/preferences.ts";
-import { HikaroView } from "../packages/tui/src/index.ts";
+import { HikaroView, scrollToEndIndicator } from "../packages/tui/src/index.ts";
 import { isLightScheme, setColorScheme } from "../packages/tui/src/theme.ts";
 import { openModelPicker } from "../packages/tui/src/model-picker.ts";
 import { openModelControl } from "../packages/tui/src/model-settings.ts";
@@ -752,29 +752,21 @@ it("does not redraw an unchanged shared-host status during idle polling", () => 
   }
 });
 
-it("shows how far the transcript sits above the latest line", () => {
-  const tui = new TuiAltScreen(terminalStub);
-  vi.spyOn(tui, "requestRender").mockImplementation(() => {});
-  const view = new HikaroView(tui, {
-    cwd: "/tmp",
-    model: "demo",
-    onPrompt: async () => {},
-    onCommand: async () => {},
-    onExit: () => {},
-  });
-  // The layout pass reports content and viewport heights to the scroll view.
+it("clears the new-messages notice once the transcript is back at the end", () => {
+  const { view, event } = interactionView();
   const layout = () => view.scroll.updateLayout(40, 10, () => {});
   const hint = () =>
-    stripVTControlCharacters(view.scrollHint.render(80)[0] ?? "");
+    stripVTControlCharacters(view.historyHint.render(80)[0] ?? "");
   try {
     layout();
-    expect(hint()).toBe("");
     view.scroll.scrollBy(-4);
     layout();
-    expect(hint()).toContain("↓ 4 more lines");
+    event("text.delta", { text: "more" });
+    expect(hint()).toContain("New messages available");
     view.scroll.scrollToEnd();
     layout();
     expect(hint()).toBe("");
+    expect(stripVTControlCharacters(scrollToEndIndicator())).toBe("↓ PageDown");
   } finally {
     view.dispose();
   }

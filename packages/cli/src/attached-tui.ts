@@ -868,6 +868,7 @@ async function createAttachedSession(
           await workflows!.command(command, rest);
           return;
         case "/quit":
+        case "/exit":
           owner.leave();
           return;
         case "/help": {

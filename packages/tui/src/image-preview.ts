@@ -1,9 +1,13 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import {
+  allocateImageId,
+  getCapabilities,
+  getPngDimensions,
   matchesKey,
+  renderImage,
   truncateToWidth,
   visibleWidth,
   type Component,
@@ -61,114 +65,203 @@ export function halfBlocks(pixels: Pixels) {
   return lines;
 }
 
-/** Scale an image to fit `columns` × `rows` cells with macOS `sips`, then draw it. */
-async function renderImage(path: string, columns: number, rows: number) {
-  if (process.platform !== "darwin")
-    throw Error("Inline preview needs macOS; press O to open the image.");
+/** An opened image: its facts plus a way to draw it into a cell box. */
+export type Picture = {
+  format: string;
+  width: number;
+  height: number;
+  bytes: number;
+  draw(columns: number, rows: number): Promise<string[]> | string[];
+};
+
+const sipsSize = async (path: string) => {
   const info = await run("/usr/bin/sips", [
     "-g",
     "pixelWidth",
     "-g",
     "pixelHeight",
+    "-g",
+    "format",
     path,
   ]);
-  const width = Number(/pixelWidth: (\d+)/.exec(info)?.[1]);
-  const height = Number(/pixelHeight: (\d+)/.exec(info)?.[1]);
-  if (!width || !height) throw Error("Cannot read the image size");
-  const scale = Math.min(columns / width, (rows * 2) / height, 1);
-  const w = Math.max(1, Math.round(width * scale));
-  const h = Math.max(1, Math.round(height * scale));
+  return {
+    width: Number(/pixelWidth: (\d+)/.exec(info)?.[1]),
+    height: Number(/pixelHeight: (\d+)/.exec(info)?.[1]),
+    format: /format: (\w+)/.exec(info)?.[1]?.toUpperCase() ?? "IMAGE",
+  };
+};
+
+/** Convert with `sips` into a temporary file and read the result. */
+async function convert(path: string, args: string[], extension: string) {
   const directory = await mkdtemp(join(tmpdir(), "hikaro-preview-"));
   try {
-    const out = join(directory, "preview.bmp");
-    await run("/usr/bin/sips", [
-      "-s",
-      "format",
-      "bmp",
-      "-z",
-      String(h),
-      String(w),
-      path,
-      "--out",
-      out,
-    ]);
-    return { lines: halfBlocks(decodeBmp(await readFile(out))), width, height };
+    const out = join(directory, `preview.${extension}`);
+    await run("/usr/bin/sips", [...args, path, "--out", out]);
+    return await readFile(out);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
 }
 
+/**
+ * Open an image for preview. Kitty-protocol terminals (kitty, Ghostty, WezTerm,
+ * Warp) get the real pixels, as in Grok Build; others get half blocks.
+ */
+export async function openPicture(path: string): Promise<Picture> {
+  if (process.platform !== "darwin")
+    throw Error("Inline preview needs macOS; press O to open the image.");
+  const [{ width, height, format }, info] = await Promise.all([
+    sipsSize(path),
+    stat(path),
+  ]);
+  if (!width || !height) throw Error("Cannot read the image size");
+  const base = { format, width, height, bytes: info.size };
+  if (getCapabilities().images === "kitty") {
+    // Kitty takes PNG only; sips keeps colour profiles while converting.
+    const png = (
+      format === "PNG"
+        ? await readFile(path)
+        : await convert(path, ["-s", "format", "png"], "png")
+    ).toString("base64");
+    const dimensions = getPngDimensions(png) ?? {
+      widthPx: width,
+      heightPx: height,
+    };
+    const imageId = allocateImageId();
+    return {
+      ...base,
+      draw(columns, rows) {
+        const image = renderImage(png, dimensions, {
+          maxWidthCells: columns,
+          maxHeightCells: rows,
+          imageId,
+          moveCursor: false,
+        });
+        if (!image) return [];
+        const pad = " ".repeat(Math.floor((columns - image.columns) / 2));
+        // The placement keeps the cursor still; spaces hold its cells.
+        return [
+          pad + image.sequence + " ".repeat(columns - pad.length),
+          ...Array.from({ length: image.rows - 1 }, () => ""),
+        ];
+      },
+    };
+  }
+  return {
+    ...base,
+    async draw(columns, rows) {
+      const scale = Math.min(columns / width, (rows * 2) / height, 1);
+      const w = Math.max(1, Math.round(width * scale));
+      const h = Math.max(1, Math.round(height * scale));
+      const bmp = await convert(
+        path,
+        ["-s", "format", "bmp", "-z", String(h), String(w)],
+        "bmp",
+      );
+      return halfBlocks(decodeBmp(bmp));
+    },
+  };
+}
+
+const size = (bytes: number) =>
+  bytes >= 1024 * 1024
+    ? `${(bytes / 1024 / 1024).toFixed(1)} MB`
+    : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+
 /** A closable in-terminal image viewer for a composer image chip. */
 export class ImagePreview implements Component {
-  private lines: string[] = [];
+  private picture?: Picture;
   private status = "Loading…";
-  private size?: {
-    width: number;
-    height: number;
-    columns: number;
-    rows: number;
-  };
+  private lines: string[] = [];
+  private box?: string;
 
   constructor(
     private readonly label: string,
     private readonly path: string,
-    private readonly screen: () => { columns: number; rows: number },
+    private readonly rows: () => number,
     private readonly requestRender: () => void,
     private readonly close: () => void,
     private readonly openExternal: () => void,
-    private readonly draw = renderImage,
-  ) {}
-
-  invalidate() {}
-
-  render(width: number) {
-    const { rows } = this.screen();
-    const columns = Math.max(1, width - 2);
-    // The overlay takes at most 90% of the rows; five go to title, spacing and keys.
-    const imageRows = Math.max(1, Math.floor(rows * 0.9) - 5);
-    if (
-      !this.size ||
-      this.size.columns !== columns ||
-      this.size.rows !== imageRows
-    )
-      this.load(columns, imageRows);
-    const pad = (line: string) =>
-      line + " ".repeat(Math.max(0, width - visibleWidth(line)));
-    const center = (line: string) =>
-      pad(
-        " ".repeat(Math.max(0, Math.floor((width - visibleWidth(line)) / 2))) +
-          line,
-      );
-    const title = `${this.label} · ${basename(this.path)}${this.size?.width ? ` · ${this.size.width}×${this.size.height}` : ""}`;
-    return [
-      pad(accent(truncateToWidth(` ${title}`, width, "…"))),
-      pad(""),
-      ...(this.lines.length
-        ? this.lines.map(center)
-        : [center(muted(this.status))]),
-      pad(""),
-      pad(muted(truncateToWidth(" Esc close · O open in Preview", width, ""))),
-    ];
-  }
-
-  private load(columns: number, rows: number) {
-    this.size = { width: 0, height: 0, columns, rows };
-    const size = this.size;
-    void this.draw(this.path, columns, rows).then(
-      (image) => {
-        if (this.size !== size) return;
-        this.lines = image.lines;
-        size.width = image.width;
-        size.height = image.height;
+    open = openPicture,
+    /** Where the user pasted it from, when `path` is Hikaro's copy. */
+    private readonly shown = path,
+  ) {
+    void open(path).then(
+      (picture) => {
+        this.picture = picture;
         this.requestRender();
       },
       (error: unknown) => {
-        if (this.size !== size) return;
-        this.lines = [];
         this.status = error instanceof Error ? error.message : String(error);
         this.requestRender();
       },
     );
+  }
+
+  invalidate() {
+    this.box = undefined;
+  }
+
+  render(width: number) {
+    const inner = Math.max(1, width - 4);
+    // Border, title, path line and bottom border.
+    const imageRows = Math.max(1, this.rows() - 4);
+    const picture = this.picture;
+    const key = `${inner}x${imageRows}`;
+    if (picture && this.box !== key) {
+      this.box = key;
+      const drawn = picture.draw(inner, imageRows);
+      if (Array.isArray(drawn)) this.lines = drawn;
+      else
+        void drawn.then(
+          (lines) => {
+            if (this.box !== key) return;
+            this.lines = lines;
+            this.requestRender();
+          },
+          (error: unknown) => {
+            this.status =
+              error instanceof Error ? error.message : String(error);
+            this.requestRender();
+          },
+        );
+    }
+    const border = muted;
+    const row = (line: string) => {
+      const fill = Math.max(0, inner - visibleWidth(line));
+      return border("│ ") + line + " ".repeat(fill) + border(" │");
+    };
+    const center = (line: string) => {
+      const left = Math.max(0, Math.floor((inner - visibleWidth(line)) / 2));
+      return " ".repeat(left) + line;
+    };
+    const facts = picture
+      ? ` · ${picture.format} · ${picture.width}×${picture.height} · ${size(picture.bytes)}`
+      : "";
+    const title = truncateToWidth(
+      ` ${this.label}${facts} · ${basename(this.shown)} `,
+      Math.max(1, width - 6),
+      "…",
+    );
+    const titleWidth = visibleWidth(title);
+    const left = Math.max(1, Math.floor((width - 2 - titleWidth) / 2));
+    const keys = " Esc close · O open in Preview ";
+    const bottomLeft = Math.max(1, width - 3 - visibleWidth(keys));
+    const body = this.lines.length
+      ? this.lines.map((line) =>
+          line.includes("\x1b_G")
+            ? border("│ ") + line + border(" │")
+            : row(center(line)),
+        )
+      : [row(center(muted(this.status)))];
+    return [
+      border("╭" + "─".repeat(left)) +
+        accent(title) +
+        border("─".repeat(Math.max(0, width - 2 - left - titleWidth)) + "╮"),
+      ...body,
+      row(muted(truncateToWidth(`Path: ${this.shown}`, inner, "…"))),
+      border("╰" + "─".repeat(bottomLeft)) + muted(keys) + border("─╯"),
+    ];
   }
 
   handleInput(data: string) {

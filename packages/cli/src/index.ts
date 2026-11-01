@@ -218,7 +218,7 @@ async function main() {
           });
           return;
         }
-        if (text === "/quit") {
+        if (text === "/quit" || text === "/exit") {
           leave();
           return;
         }

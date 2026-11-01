@@ -274,6 +274,12 @@ export const commandSpecs = [
     modes: all,
   },
   { name: "quit", description: "Exit", group: "View", modes: all },
+  {
+    name: "exit",
+    description: "Exit, same as /quit",
+    group: "View",
+    modes: all,
+  },
 ] as const satisfies readonly CommandSpec[];
 
 export type CommandName = (typeof commandSpecs)[number]["name"];

@@ -15,6 +15,12 @@ export { HStack } from "@earendil-works/pi-tui/dist/components/h-stack.js";
 export { matchesKey, isKeyRelease } from "@earendil-works/pi-tui/dist/keys.js";
 export { getKeybindings } from "@earendil-works/pi-tui/dist/keybindings.js";
 export {
+  allocateImageId,
+  getCapabilities,
+  getPngDimensions,
+  renderImage,
+} from "@earendil-works/pi-tui/dist/terminal-image.js";
+export {
   visibleWidth,
   truncateToWidth,
 } from "@earendil-works/pi-tui/dist/utils.js";

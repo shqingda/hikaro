@@ -447,9 +447,9 @@ export class PiBridgeView implements Component {
     this.draft = undefined;
     if (draft && text.startsWith(draft)) {
       const command = text.slice(draft.length).trim();
-      if (command === "/back" || command === "/quit") text = command;
+      if (["/back", "/quit", "/exit"].includes(command)) text = command;
     }
-    if (text === "/back" || text === "/quit") {
+    if (text === "/back" || text === "/quit" || text === "/exit") {
       if (draft) this.editor.setText(draft);
       this.exit();
       return;

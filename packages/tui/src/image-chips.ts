@@ -5,7 +5,8 @@ import {
 
 const imagePath = /\.(?:png|jpe?g|gif|webp)$/i;
 
-export type ImageChip = { label: string; path: string };
+/** `path` is the file sent; `source` is what was pasted, when the file was copied. */
+export type ImageChip = { label: string; path: string; source?: string };
 
 /** `[Image #N]` as typed in the composer. */
 export const imageToken = (chip: ImageChip) => `[${chip.label}]`;
@@ -14,14 +15,25 @@ export const imageToken = (chip: ImageChip) => `[${chip.label}]`;
  * Replace pasted image paths with inline `[Image #N]` tokens, numbered after
  * `known`. The chips remember the files; the composer keeps only the tokens.
  */
-export function inlineImagePaths(text: string, known: ImageChip[] = []) {
+export function inlineImagePaths(
+  text: string,
+  known: ImageChip[] = [],
+  stash: (path: string) => string = (path) => path,
+) {
   const spans = imageSpans(text);
   const chips = [...known];
   const tokens: string[] = [];
   for (const span of spans) {
-    let chip = chips.find((item) => item.path === span.path);
+    let chip = chips.find(
+      (item) => item.path === span.path || item.source === span.path,
+    );
     if (!chip) {
-      chip = { label: `Image #${nextImageNumber(chips)}`, path: span.path };
+      const path = stash(span.path);
+      chip = {
+        label: `Image #${nextImageNumber(chips)}`,
+        path,
+        ...(path === span.path ? {} : { source: span.path }),
+      };
       chips.push(chip);
     }
     tokens.push(imageToken(chip));

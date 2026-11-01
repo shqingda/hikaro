@@ -32,6 +32,7 @@ import {
 } from "./image-chips.ts";
 import { openImage } from "./open-image.ts";
 import { ImagePreview } from "./image-preview.ts";
+import { stashImage } from "./image-stash.ts";
 import { ApprovalPanel } from "./approval-panel.ts";
 import { defaultTuiPreferences, type TuiPreferences } from "./preferences.ts";
 import { sanitize } from "./text.ts";
@@ -99,12 +100,12 @@ type UIBackend = AgentBackend & {
 const attachmentsNeedQueue =
   "Attachments can't steer a running task. Press Ctrl+X then Enter to queue it; your draft is kept.";
 
-/** The transcript scroll view, reporting how many lines sit below the viewport. */
+/** The transcript scroll view; it reports when the view returns to the latest line. */
 class TranscriptScroll extends ScrollView {
-  linesBelow = 0;
+  private atEnd = true;
   constructor(
     content: Container,
-    private readonly onLinesBelow: () => void,
+    private readonly onReturnToEnd: () => void,
   ) {
     super(content, { primary: true, follow: "end", scrollbar: "hidden" });
   }
@@ -114,19 +115,20 @@ class TranscriptScroll extends ScrollView {
     requestRender: () => void,
   ) {
     super.updateLayout(contentHeight, viewportHeight, requestRender);
-    const below = this.isFollowingEnd
-      ? 0
-      : Math.max(0, contentHeight - viewportHeight - this.scrollTop);
-    if (below === this.linesBelow) return;
-    this.linesBelow = below;
-    this.onLinesBelow();
+    const atEnd = this.isFollowingEnd;
+    if (atEnd && !this.atEnd) this.onReturnToEnd();
+    this.atEnd = atEnd;
   }
 }
+
+/** Centered over the transcript's last row while it is above the end; a click returns there. */
+export const scrollToEndIndicator = () => muted("↓ PageDown");
 
 export class HikaroView {
   readonly content = new Container();
   readonly scroll = new TranscriptScroll(this.content, () => {
-    if (!this.scroll.linesBelow) this.pendingMessages = false;
+    if (!this.pendingMessages) return;
+    this.pendingMessages = false;
     this.updateHistoryHint();
     this.tui.requestRender();
   });
@@ -153,14 +155,13 @@ export class HikaroView {
   readonly modelSlot = new Container();
   readonly questionSlot = new Container();
   readonly approvalSlot = new Container();
+  readonly previewSlot = new Container();
   private panelYieldsToApproval = false;
   private modelController?: AbortController;
   private preparingPrompt?: AbortController;
   private modelPanel?: ModelPanel;
   private questionPanel?: ModelPanel;
   readonly historyHint = new Text("", 1, 0);
-  /** Below the transcript, next to the composer, while the view is above the latest line. */
-  readonly scrollHint = new Text("", 1, 0);
   readonly header: Component;
   readonly editor: ActivityEditor;
   readonly attachments: AttachmentStrip;
@@ -364,33 +365,20 @@ export class HikaroView {
         options.cwd,
       ),
     );
+    // Image preview, model panels and approvals replace the work area in turn.
+    const conversation = () =>
+      this.frame.tab === "Conversation" &&
+      !this.imagePreview &&
+      !this.modelPanel &&
+      !this.approval;
     const workspace = new VStack([
-      {
-        component: this.historyHint,
-        shrink: 0,
-        visible: () =>
-          this.frame.tab === "Conversation" &&
-          !this.modelPanel &&
-          !this.approval,
-      },
+      { component: this.historyHint, shrink: 0, visible: conversation },
       {
         component: this.scroll,
         basis: 0,
         grow: 1,
         minSize: 1,
-        visible: () =>
-          this.frame.tab === "Conversation" &&
-          !this.modelPanel &&
-          !this.approval,
-      },
-      {
-        component: this.scrollHint,
-        shrink: 0,
-        visible: () =>
-          this.scroll.linesBelow > 0 &&
-          this.frame.tab === "Conversation" &&
-          !this.modelPanel &&
-          !this.approval,
+        visible: conversation,
       },
       {
         component: this.pageSlot,
@@ -399,8 +387,17 @@ export class HikaroView {
         minSize: 1,
         visible: () =>
           this.frame.tab !== "Conversation" &&
+          !this.imagePreview &&
           !this.modelPanel &&
           !this.approval,
+      },
+      {
+        component: this.previewSlot,
+        basis: 0,
+        grow: 1,
+        minSize: 1,
+        visible: () =>
+          !!this.imagePreview && !this.modelPanel && !this.approval,
       },
       {
         component: this.modelSlot,
@@ -1366,14 +1363,6 @@ export class HikaroView {
             )
           : "",
     );
-    const below = this.scroll.linesBelow;
-    this.scrollHint.setText(
-      below
-        ? accent(
-            `↓ ${below} more ${below === 1 ? "line" : "lines"}${this.pendingMessages ? " · new messages" : ""} · PageDown`,
-          )
-        : "",
-    );
   }
   private messageComponent(
     message: Message & { textLength?: number },
@@ -1770,37 +1759,44 @@ export class HikaroView {
   }
   /** Show an image chip inside the terminal; Esc closes, O opens the system viewer. */
   previewImage(chip: ImageChip) {
-    this.imagePreview?.hide();
+    const close = () => {
+      this.imagePreview = undefined;
+      this.previewSlot.clear();
+      this.tui.requestRender();
+    };
     const component = new ImagePreview(
       chip.label,
       chip.path,
-      () => ({
-        columns: this.tui.terminal.columns,
-        rows: this.tui.terminal.rows,
-      }),
-      () => this.tui.requestRender(),
       () => {
-        this.imagePreview?.hide();
-        this.imagePreview = undefined;
-        this.tui.requestRender();
+        const width = this.tui.terminal.columns;
+        return Math.max(
+          3,
+          this.tui.terminal.rows -
+            this.header.render(width).length -
+            this.editor.render(width).length -
+            this.footer.render(width).length -
+            1,
+        );
       },
+      () => this.tui.requestRender(),
+      close,
       () =>
         void openImage(chip.path).catch((error) =>
           this.setError(String(error)),
         ),
+      undefined,
+      chip.source,
     );
-    const overlay = this.tui.showOverlay(component, {
-      width: "90%",
-      maxHeight: "90%",
-      nonCapturing: true,
-    });
-    this.imagePreview = { component, hide: () => overlay.hide() };
+    this.previewSlot.clear();
+    this.previewSlot.addChild(component);
+    this.imagePreview = { component, hide: close };
     this.tui.requestRender();
   }
+
   /** Pasted image paths become inline `[Image #N]` tokens; the chips keep the files. */
   private syncImageChips() {
     const current = this.editor.getExpandedText();
-    const found = inlineImagePaths(current, this.imageChips);
+    const found = inlineImagePaths(current, this.imageChips, stashImage);
     // Tokens deleted from the text stay known, so undo brings them back intact.
     this.imageChips = found.chips;
     this.editor.setImageChips(this.imageChips);
@@ -2054,5 +2050,7 @@ export class HikaroView {
   }
 }
 export function createTerminal() {
-  return new TuiAltScreen(new ProcessTerminal(), true);
+  return new TuiAltScreen(new ProcessTerminal(), true, undefined, {
+    scrollToEndIndicator,
+  });
 }

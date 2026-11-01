@@ -991,10 +991,10 @@ export class ModelPanel implements Component {
             ]
           : []),
         ...(this.actionEnabled(this.allowDelete)
-          ? [{ label: "Delete", key: "\x04" }]
+          ? [{ label: "Delete Ctrl+D", key: "\x04" }]
           : []),
         ...(this.actionEnabled(this.allowRename)
-          ? [{ label: "Rename", key: "\x12" }]
+          ? [{ label: "Rename Ctrl+R", key: "\x12" }]
           : []),
       ]) {
         const label = `[${button.label.charAt(0).toUpperCase()}${button.label.slice(1)}]`;

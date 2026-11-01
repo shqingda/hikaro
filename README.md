@@ -93,9 +93,9 @@ Running Enter steers the observed run, as in Pi, Claude Code and Codex: a runnin
 | `F6`, `Shift+F6`, `Esc` | Move focus between regions; return from the current local view |
 | `Enter`, `Ctrl+X` then `Enter` | Send when idle; intervene when running. The separate shortcut queues a later task |
 | `Ctrl+C` | Stop the selected run; exit when idle |
-| `Ctrl+D`, `/quit` | Exit |
+| `Ctrl+D`, `/quit`, `/exit` | Exit |
 | `Shift+Enter` | New line |
-| Paste or drag an image | Inserts an `[Image #N]` token that deletes as one unit; click it to preview in the terminal (Esc closes, O opens Preview) |
+| Paste or drag an image | Inserts an `[Image #N]` token that deletes as one unit; the file is copied at paste time. Click the token to preview it in the terminal (Esc closes, O opens Preview) |
 | `Ctrl+Z` (or `Ctrl+-`) | Undo in the composer, including a deleted image |
 | `Ctrl+Shift+F` | Search the visible terminal document |
 

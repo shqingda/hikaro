@@ -737,6 +737,7 @@ export async function nativeTui(
           case "status":
             return `Model (active): ${agent.options.provider.id}/${agent.options.provider.model}\nContext budget: ${agent.options.provider.contextWindow}\nReasoning: ${agent.options.session.modelSelection?.settings.reasoning ?? "auto"}\nSpeed: ${agent.options.session.modelSelection?.settings.speed ?? "default"}\nPermissions: ${runtime.permissionMode}\nSession: ${session.id}\nWorkspace: ${session.cwd}\nSkills: ${runtime.resources.skills.length}\nInput/output: ${agent.usage.input}/${agent.usage.output}\nEstimated API cost: $${agent.usage.cost.toFixed(4)}\nBudget: $${agent.budget.maxCost}; ${agent.budget.modelCallsLeft} model calls remain. Current Agent lifetime only; recreating the Agent or restarting resets usage and limits.`;
           case "quit":
+          case "exit":
             exit();
             return;
           case "paste-image": {
