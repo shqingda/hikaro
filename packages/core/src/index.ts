@@ -1295,10 +1295,19 @@ export class Agent implements AgentBackend {
           });
           return;
         }
+        // A new instruction never stops a running tool. Once the current tool
+        // finishes, the rest of this batch is skipped with paired results so
+        // the next turn sees the instruction before doing more work.
+        let skip = false;
         for (const call of final.toolCalls) {
           let result: ToolResult;
           if (signal.aborted)
             result = { text: "Cancelled before execution", isError: true };
+          else if (skip)
+            result = {
+              text: "Skipped: the user sent a new instruction",
+              isError: true,
+            };
           else
             result = await this.invoke(
               call.name,
@@ -1315,6 +1324,7 @@ export class Agent implements AgentBackend {
             isError: result.isError,
             timestamp: Date.now(),
           });
+          skip ||= this.steering.ready && !this.queueHolds;
         }
       }
       throw Error("Turn limit reached");
