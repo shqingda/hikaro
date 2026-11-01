@@ -81,8 +81,11 @@ export async function verifyReleaseDiff({
   await terminal.text("Part 2 · final", terminal.send("1"));
   await terminal.text("release-diff-tail", terminal.send("\x1b[6~".repeat(60)));
   await terminal.text("No newline at end of file");
-  await terminal.text("Search commands and actions", terminal.send("\x10"));
-  await terminal.text("Open Conversation", terminal.send("Open Conversation"));
+  await terminal.text(
+    "Find models, sessions, changes and settings",
+    terminal.send("\x10"),
+  );
+  await terminal.text("Show conversation", terminal.send("Show conversation"));
   await terminal.text("Enter send", terminal.send("\r"));
   assert.equal(
     await readFile(file, "utf8"),

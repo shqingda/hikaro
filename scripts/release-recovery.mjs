@@ -168,10 +168,13 @@ export async function verifyReleaseRecovery({ bin, spawn, home, workspace }) {
       attached.send("2"),
     );
     await attached.text("Pending next model turn", attached.send("\x1b[B\r"));
-    await attached.text("Search commands and actions", attached.send("\x10"));
     await attached.text(
-      "Open Conversation",
-      attached.send("Open Conversation"),
+      "Find models, sessions, changes and settings",
+      attached.send("\x10"),
+    );
+    await attached.text(
+      "Show conversation",
+      attached.send("Show conversation"),
     );
     await attached.text("Enter send", attached.send("\r"));
     assert.equal(
