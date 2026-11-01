@@ -102,7 +102,7 @@ type Backend = {
   ): Promise<{ items: ResourceEntry[]; hasMore: boolean }>;
   model(): string;
 };
-export type WorkspaceSources = Record<
+type WorkspaceSources = Record<
   "Changes" | "Activity" | "Plan" | "Context",
   ObjectSource
 >;

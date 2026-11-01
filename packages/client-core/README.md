@@ -1,6 +1,6 @@
 # Client core — C0 contract
 
-This package contains a portable execution-state reducer and an optional raw-transport controller, not a GUI or a new execution owner. Its import closure uses portable Zod wire contracts with no Node/DOM ambient types. Platforms inject the transport, unique IDs and a cancellable clock. Native transports and credentials remain outside this package.
+This package contains the execution-state reducer and raw-transport controller that the attached TUI and the shared host use. It is not a GUI or a new execution owner. Callers inject the transport, unique IDs and a cancellable clock; transports and credentials stay outside this package.
 
 ## Contract before implementation
 
@@ -15,7 +15,7 @@ This package contains a portable execution-state reducer and an optional raw-tra
 
 ## Verification plan
 
-Targeted tests only: `tests/client-core.test.ts` for duplicates/gaps/epochs/approvals/unknown/bounds and `tests/rpc-handshake.test.ts` for the real serveRpc handler + SQLite + offline demo, with no spawned CLI or provider network. Run existing `tests/rpc-control.test.ts` once after implementation for control-method compatibility. The real spawned CLI + SQLite restart test is in `tests/rpc-receipts.test.ts`; storage claim/conflict tests are in `tests/command-receipts.test.ts`. A package-local `tsconfig.json` with ES2023 and no ambient Node/DOM types proves the portable import closure.
+Targeted tests only: `tests/client-core.test.ts` for duplicates/gaps/epochs/approvals/unknown/bounds and `tests/rpc-handshake.test.ts` for the real serveRpc handler + SQLite + offline demo, with no spawned CLI or provider network. Run existing `tests/rpc-control.test.ts` once after implementation for control-method compatibility. The real spawned CLI + SQLite restart test is in `tests/rpc-receipts.test.ts`; storage claim/conflict tests are in `tests/command-receipts.test.ts`.
 
 ## Connecting an existing local transport
 
@@ -40,8 +40,8 @@ Capabilities now enumerate `workspace.current`, session rename/delete/export and
 
 ## Implemented verification
 
-The handshake test first failed because the old protocol rejected `hello`; portable tests first failed because the package did not exist. Targeted tests now cover the real RPC handler, real SQLite event sequence consumed by two independent scopes, offline demo completion/reconnect, raw ProcessClient response ordering, malformed image rejection before run.start, and the reducer's bounded state/recovery rules. Existing RPC control tests remain compatible. Exact run counts are reported in the work summary; no full suite or performance benchmark is implied.
+The handshake test first failed because the old protocol rejected `hello`; client-core tests first failed because the package did not exist. Targeted tests now cover the real RPC handler, real SQLite event sequence consumed by two independent scopes, offline demo completion/reconnect, raw ProcessClient response ordering, malformed image rejection before run.start, and the reducer's bounded state/recovery rules. Existing RPC control tests remain compatible. Exact run counts are reported in the work summary; no full suite or performance benchmark is implied.
 
-`pnpm exec tsc -p packages/client-core/tsconfig.json` checks the import closure with `lib: ["ES2023"]` and `types: []`. New snapshots restore explicit `runId/runStatus`; reopened unmatched starts are unknown, not live. Host incarnation mismatch requires reconnect. Read the [durable command receipt contract](../../docs/specs/command-receipts.md) for status, scope, legacy and retention boundaries.
+New snapshots restore explicit `runId/runStatus`; reopened unmatched starts are unknown, not live. Host incarnation mismatch requires reconnect. Read the [durable command receipt contract](../../docs/specs/command-receipts.md) for status, scope, legacy and retention boundaries.
 
 The shared host authenticates local clients through private Unix sockets. Selection and durable receipts survive restart; unmatched runs remain unknown.

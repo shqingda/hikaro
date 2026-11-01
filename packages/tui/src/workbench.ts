@@ -28,7 +28,7 @@ export type WorkspaceSession = {
   attention?: number;
   current?: boolean;
 };
-export type WorkbenchAction = {
+type WorkbenchAction = {
   id: string;
   title: string;
   description?: string;

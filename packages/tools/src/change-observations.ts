@@ -41,7 +41,7 @@ const observationSchema = z.object({
   runId: z.string().max(128).optional(),
   ...changeOriginSchema.shape,
 });
-export type ObservedChange = z.infer<typeof observationSchema>;
+type ObservedChange = z.infer<typeof observationSchema>;
 type Origin = ChangeOrigin & { source: "shell" | "plugin"; runId?: string };
 type Snapshot = {
   files: Map<string, string>;

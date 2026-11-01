@@ -374,7 +374,7 @@ const stepMarks = {
   skipped: "– Skipped",
 } as const;
 
-export function planProgressText(progress: PlanProgress) {
+function planProgressText(progress: PlanProgress) {
   const done = progress.steps.filter(
     (step) => step.status === "completed",
   ).length;

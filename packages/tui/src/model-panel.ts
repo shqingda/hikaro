@@ -49,7 +49,7 @@ export type PanelItem = SelectItem & {
   searchText?: string;
 };
 type ActionCapability = boolean | ((item: PanelItem) => boolean);
-export type PanelAction = {
+type PanelAction = {
   id: string;
   key: Parameters<typeof matchesKey>[1];
   label: string | ((item: PanelItem | undefined) => string);
@@ -110,7 +110,6 @@ export class ModelPanel implements Component {
     [];
   private tabHits: { start: number; end: number; value: string }[] = [];
   private tabRow = -1;
-  private help?: string;
   private actions: PanelAction[] = [];
   private tabs: Array<{ value: string; label: string }> = [];
   private activeTab?: string;
@@ -160,7 +159,8 @@ export class ModelPanel implements Component {
     title: string,
     items: PanelItem[],
     warning = "",
-    help?: string,
+    /** Unused: list panels show their keys as buttons. Kept for call sites. */
+    _help?: string,
     options?: {
       allowDelete?: ActionCapability;
       allowRename?: ActionCapability;
@@ -189,7 +189,6 @@ export class ModelPanel implements Component {
     this.title = title;
     this.message = options?.description ?? "";
     this.error = warning;
-    this.help = help;
     this.actions = options?.actions ?? [];
     this.tabs = options?.tabs ?? [];
     this.activeTab = options?.activeTab;

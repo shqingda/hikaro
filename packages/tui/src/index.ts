@@ -62,13 +62,9 @@ import {
   warmTextShaping,
 } from "./messages.ts";
 import { errorMessage } from "../../core/src/util.ts";
-export {
-  MessageComponent,
-  warmTextShaping,
-  stableMarkdownBoundary,
-} from "./messages.ts";
+export { MessageComponent, warmTextShaping } from "./messages.ts";
 export type HistoryDirection = "older" | "newer" | "latest";
-export type HistoryPage = {
+type HistoryPage = {
   messages: Message[];
   hasOlder: boolean;
   hasNewer: boolean;

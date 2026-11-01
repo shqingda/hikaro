@@ -38,7 +38,7 @@ export function textWithImageReferences(text: string, chips: ImageChip[]) {
   return text && !/\s$/.test(text) ? `${text} ${refs}` : text + refs;
 }
 
-export type DisplayChip = { label: string; path: string; index: number };
+type DisplayChip = { label: string; path: string; index: number };
 
 /** Transcript text: image paths become `[Image #N]`, attachment metadata stays hidden. */
 export function presentUserText(text: string): {

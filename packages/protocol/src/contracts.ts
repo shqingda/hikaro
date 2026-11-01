@@ -164,10 +164,6 @@ export const SteerParams = z.object({
   expectedRunId: z.optional(id),
 });
 /** Acceptance records a stop request; the run's terminal event proves its outcome. */
-export const RunCancelResult = z.object({
-  accepted: z.literal(true),
-  runId: id,
-});
 const sequence = z.int().check(z.gte(0)).check(z.lte(Number.MAX_SAFE_INTEGER));
 export const HelloResult = z.object({
   fileAttachments: z.optional(z.boolean()),

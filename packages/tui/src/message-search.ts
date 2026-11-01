@@ -3,7 +3,7 @@ import type { MessageSearchPage } from "../../protocol/src/contracts.ts";
 
 export type SearchContent = { data: string; nextOffset: number | null };
 /** Both backends forward this as `messages.content` params. */
-export type SearchContentRequest = {
+type SearchContentRequest = {
   seq: number;
   field: "text";
   offset: number;

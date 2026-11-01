@@ -58,7 +58,7 @@ type ScopeState = {
   generation: number;
   work: ScopeWork;
 };
-export type SharedRpcOptions = {
+type SharedRpcOptions = {
   instanceId: string;
   store: import("../../../packages/storage/src/index.ts").SQLiteStore;
   localScope(scope: string): boolean;

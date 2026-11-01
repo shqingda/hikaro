@@ -46,7 +46,7 @@ type TranscriptEntry = {
   streaming?: boolean;
 };
 
-export interface PiBridgeSession {
+interface PiBridgeSession {
   /** Hikaro session to continue; a new one is created if it cannot be resumed. */
   resumeSessionId?: string;
   onSession?(id: string): void;

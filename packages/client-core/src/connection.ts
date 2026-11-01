@@ -5,13 +5,13 @@ import {
 } from "../../protocol/src/contracts.ts";
 import { errorMessage } from "../../core/src/util.ts";
 
-export type ClientCommand = {
+type ClientCommand = {
   id: string;
   scope: string;
   method: RpcMethod;
   params: Record<string, unknown>;
 };
-export interface RawTransport {
+interface RawTransport {
   send(frame: ClientCommand): void | Promise<void>;
   observe(fn: (frame: unknown) => void): () => void;
 }

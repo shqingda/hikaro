@@ -9,7 +9,6 @@ export const FAKE_CURSOR_END = "\x1b_pi:/fc\x07";
 export { Text } from "@earendil-works/pi-tui/dist/components/text.js";
 export { Editor } from "@earendil-works/pi-tui/dist/components/editor.js";
 export { Input } from "@earendil-works/pi-tui/dist/components/input.js";
-export { SelectList } from "@earendil-works/pi-tui/dist/components/select-list.js";
 export { ScrollView } from "@earendil-works/pi-tui/dist/components/scroll-view.js";
 export { VStack } from "@earendil-works/pi-tui/dist/components/v-stack.js";
 export { HStack } from "@earendil-works/pi-tui/dist/components/h-stack.js";

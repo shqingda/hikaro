@@ -2,7 +2,7 @@ import type { HikaroView } from "./index.ts";
 import type { ProviderCatalog } from "../../provider-pi/src/catalog.ts";
 import type { ModelSelection, ModelSettings } from "../../core/src/types.ts";
 import { errorMessage } from "../../core/src/util.ts";
-export type ModelControl = "context" | "thinking" | "speed";
+type ModelControl = "context" | "thinking" | "speed";
 export function parseModelControl(field: ModelControl, argument: string) {
   const tokens = argument.trim().split(/\s+/).filter(Boolean);
   const scopes = tokens.filter((t) => t === "active" || t === "default");

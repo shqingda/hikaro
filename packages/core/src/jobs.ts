@@ -10,7 +10,7 @@ export type Job = {
   leaseUntil?: number;
   error?: string;
 };
-export interface JobStore {
+interface JobStore {
   putJob(job: Job): Promise<void>;
   jobs(): Promise<Job[]>;
   claimJob(owner: string, cwd?: string): Promise<Job | undefined>;

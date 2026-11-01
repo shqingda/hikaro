@@ -30,11 +30,11 @@ Node 26.12.1+, pnpm 12.14.0, `rg`, and a C11 compiler are required to run from s
 
 ## Brand Commitments
 
-The name is *hikaro*; the user confirms it is tied to light and illumination. The redesign is a full replacement: the incumbent terracotta-and-cream palette, the four-tile H icon, and the uppercase geometric wordmark are evidence, not authority. The identity is a serif `h` with a round sun behind the shoulder and one horizon line; the wordmark is lowercase Literata with a round Beam tittle. The macOS app icon uses the system squircle (824 / 1024, 100 px margin, 185 corner) as its canvas; this is not a generic monogram tile. Forbidden by the brief: gradients or glow, a light shape inside the `h`, a generic rounded-tile monogram (the macOS squircle canvas is allowed), Japanese-symbol pastiche (torii, sakura, brush strokes, seals), and minimalism that is clean but empty. A compact mark must remain legible at 16 px and one terminal cell.
+The name is _hikaro_; the user confirms it is tied to light and illumination. The redesign is a full replacement: the incumbent terracotta-and-cream palette, the four-tile H icon, and the uppercase geometric wordmark are evidence, not authority. The identity is a serif `h` with a round sun behind the shoulder and one horizon line; the wordmark is lowercase Literata with a round Beam tittle. The macOS app icon uses the system squircle (824 / 1024, 100 px margin, 185 corner) as its canvas; this is not a generic monogram tile. Forbidden by the brief: gradients or glow, a light shape inside the `h`, a generic rounded-tile monogram (the macOS squircle canvas is allowed), Japanese-symbol pastiche (torii, sakura, brush strokes, seals), and minimalism that is clean but empty. A compact mark must remain legible at 16 px and one terminal cell.
 
 ## Evidence on Hand
 
-`brand/hikaro-icon.png`, `brand/hikaro-icon-transparent.png`, and `brand/hikaro-wordmark.png` are the superseded assets. Product documentation is in `README.md`, `PLAN.md`, `TODO.md`, and `docs/`. There are no approved customer stories, press, or marketing claims; none may be invented.
+The current identity lives in `brand/identity/`; superseded icon, wordmark and exploration files were removed on 2026-11-01 and remain in git history. Product documentation is in `README.md`, `PLAN.md`, `TODO.md`, and `docs/`. There are no approved customer stories, press, or marketing claims; none may be invented.
 
 ## Product Principles
 

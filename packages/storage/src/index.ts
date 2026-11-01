@@ -26,13 +26,13 @@ import type {
   ContextCheckpointInput,
   ContextHistory,
 } from "../../core/src/types.ts";
-export type RunHistoryRecord = {
+type RunHistoryRecord = {
   id: string;
   /** Metadata is bounded for display; output remains in the session transcript. */
   start?: AgentEvent;
   end?: AgentEvent;
 };
-export type ToolArtifactPage = {
+type ToolArtifactPage = {
   items: Array<{
     seq: number;
     name: string;

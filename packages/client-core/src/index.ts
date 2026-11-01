@@ -25,7 +25,7 @@ function utf8Bytes(value: string): number {
   }
   return bytes;
 }
-export type CommandReceipt = {
+type CommandReceipt = {
   id: string;
   method: RpcMethod;
   status: "pending" | "acknowledged" | "completed" | "failed" | "unknown";

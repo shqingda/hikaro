@@ -6,7 +6,7 @@ export type RunBudget = {
   maxCost: number;
   modelCallsLeft: number;
 };
-export type ToolCall = {
+type ToolCall = {
   id: string;
   name: string;
   arguments: Record<string, unknown>;

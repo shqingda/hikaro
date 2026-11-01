@@ -2,18 +2,6 @@ import * as z from "zod/mini";
 import type { AgentEvent, Message, Session } from "../../core/src/types.ts";
 import { rpcMethods } from "./contracts.ts";
 export { protocolVersion } from "./contracts.ts";
-export type AcceptedOperation = { accepted: true; operationId: string };
-export type OperationEvent = {
-  scope: string;
-  operationId: string;
-  method: "session.compact";
-} & (
-  | {
-      type: "operation.completed";
-      result: import("../../core/src/types.ts").Session;
-    }
-  | { type: "operation.failed"; error: string }
-);
 export const isControlMethod = (method: string) =>
   [
     "hello",

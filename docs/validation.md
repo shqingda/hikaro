@@ -19,7 +19,7 @@ Verification on macOS arm64, Node 26.12.0 / pnpm 12.11.2:
 
 Performance: lazy provider SDK loading reduced the 30-run offline startup p50 **291.64 → 229.37 ms**, p95 **405.24 → 324.81 ms**, and ready RSS p95 **96.70 → 81.39 MiB**. Input echo p95 was **3.26 ms**. The **200 ms startup target remains unmet**; the benchmark preserves it and reports failure. Fixed 10k storage/core workload budgets passed, including lossless live and persisted text checks. See [harness-performance.md](harness-performance.md) for raw report locations, workload details, retained/rejected experiments and remaining measurements. Real provider startup and 30-minute stability were not measured.
 
-They do not prove native lifecycle, secure storage, production connectivity or performance. The brand candidate is separate from `brand/identity` and still requires final small-size optical work.
+They do not prove native lifecycle, secure storage, production connectivity or performance. The brand identity is in `brand/identity` and still requires final small-size optical work.
 
 ## Approval panel: 2026-10-17
 

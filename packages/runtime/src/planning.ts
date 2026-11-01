@@ -37,7 +37,7 @@ export const stepStatusSchema = z.enum([
   "blocked",
   "skipped",
 ]);
-export const stepUpdateSchema = z.object({
+const stepUpdateSchema = z.object({
   planId: z.string().uuid(),
   step: z.number().int().min(1).max(12),
   status: stepStatusSchema,

@@ -91,7 +91,7 @@ it("renders every streaming prefix byte-for-byte like the final message", () => 
 
 it("keeps the parsed prefix while only the live tail grows", async () => {
   const { stableMarkdownBoundary } =
-    await import("../packages/tui/src/index.ts");
+    await import("../packages/tui/src/messages.ts");
   const head = "## Title\n\n- a\n- b\n\n";
   expect(stableMarkdownBoundary(head + "tail")).toBe(0);
   expect(stableMarkdownBoundary(head + "tail\n")).toBe(head.length);

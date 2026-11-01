@@ -280,7 +280,7 @@ export function codingPlugin(options: {
     },
   };
 }
-export type SkillResource = { name: string; description: string; path: string };
+type SkillResource = { name: string; description: string; path: string };
 export type Resources = { skills: SkillResource[]; instructions: string[] };
 export async function loadInstructions(
   cwd: string,

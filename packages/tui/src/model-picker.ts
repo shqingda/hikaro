@@ -70,7 +70,7 @@ function abortable<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
   });
 }
 
-export function providerStatus(provider: ProviderChoice, owner: string) {
+function providerStatus(provider: ProviderChoice, owner: string) {
   if (provider.stored)
     return `${provider.credentialType === "oauth" ? "Account" : "Credential"} saved · ${owner} · availability unverified`;
   if (provider.source === "environment" || provider.configured)
@@ -80,7 +80,7 @@ export function providerStatus(provider: ProviderChoice, owner: string) {
   return "Not configured";
 }
 
-export function modelDetails(model: ModelChoice) {
+function modelDetails(model: ModelChoice) {
   const cap = model.capabilities;
   if (!cap)
     return `${model.provider}/${model.id}\nCapabilities not reported by this backend`;

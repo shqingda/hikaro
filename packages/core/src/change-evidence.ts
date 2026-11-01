@@ -1,5 +1,5 @@
 import * as z from "zod";
-export const planReferenceSchema = z.object({
+const planReferenceSchema = z.object({
   sessionId: z.string().max(128),
   planId: z.string().uuid(),
   step: z.number().int().min(1).max(12).optional(),
@@ -25,7 +25,7 @@ export const toolEvidenceSchema = z.object({
   preview: z.string().max(160),
 });
 export type ToolEvidence = z.infer<typeof toolEvidenceSchema>;
-export const stepEvidenceSchema = z.object({
+const stepEvidenceSchema = z.object({
   reliable: z.number().int().nonnegative(),
   observed: z.number().int().nonnegative(),
   tools: z.array(toolEvidenceSchema).max(60),

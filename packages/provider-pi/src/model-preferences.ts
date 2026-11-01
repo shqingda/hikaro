@@ -7,8 +7,7 @@ export type ModelPreferences = {
   favorites: ModelReference[];
   recent: ModelReference[];
 };
-export const modelKey = (model: ModelReference) =>
-  `${model.provider}/${model.model}`;
+const modelKey = (model: ModelReference) => `${model.provider}/${model.model}`;
 const writes = new Map<string, Promise<unknown>>();
 
 function references(value: unknown): ModelReference[] {

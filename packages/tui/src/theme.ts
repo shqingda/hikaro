@@ -23,9 +23,6 @@ export const working = (text: string) => color(text, "\x1b[38;2;196;85;72m");
 /** Grok-style image chip. Green on both the day and night conversation bars. */
 export const imageChip = (text: string) =>
   color(text, light ? "\x1b[38;2;22;140;62m" : "\x1b[38;2;86;214;126m");
-/** Clock on a conversation row. Dimmer than the message, not a second accent. */
-export const clock = (text: string) =>
-  color(text, light ? "\x1b[38;2;120;120;120m" : "\x1b[38;2;168;168;168m");
 
 /** User turns keep Pi's full-width bar in the 0.3.0 red wash. */
 export function userMessageStyle() {
