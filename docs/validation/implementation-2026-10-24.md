@@ -1,5 +1,7 @@
 # 本轮实现与精简 · 2026-10-24
 
+> 本文引用的原始数据已于 2026-11-01 从工作树移除，结论以本文为准；需要时可用 `git show b0cf1fa:docs/validation/<路径>` 取回。
+
 基线 main@5d9f04d。历史测试数量不是本轮通过证据。
 
 ## 复杂度与处理顺序
@@ -69,10 +71,10 @@
 
 - 该阶段 `pnpm check`：123 个文件、631 项应用测试，15 项脚本检查，类型检查与构建通过。此前首次全量运行有一项批量回退 PTY 30 秒超时；单项和三项 PTY 组复核通过，未调整超时或断言。依赖修复后重跑全量才记为最终通过。
 - 候选包代码提交 `8acaa538e990b7b822e393248a862070d22aa607`，干净工作区；SHA-256 `3086e6e7d6449aebd28b519026b7285d445045b827f10fcbced00803fe39e5fe`。`e370fb5` 是其后的未使用绑定/注释整理，没有产品行为变化；不把该整理冒称已包含在候选包中。
-- [包来源](evidence-20261024/release-manifest.json)、[实际安装检查](evidence-20261024/release-install.json)、[真实账号计划和取消](evidence-20261024/live-plan.json)。本机 macOS arm64、Node 26.12.1；未新跑最低 Node CI、签名、公证或公开发布。
+- 包来源（`evidence-20261024/release-manifest.json`）、实际安装检查（`evidence-20261024/release-install.json`）、真实账号计划和取消（`evidence-20261024/live-plan.json`）。本机 macOS arm64、Node 26.12.1；未新跑最低 Node CI、签名、公证或公开发布。
 - 实际安装包用正常 xAI 订阅凭据：模型提交计划，显式批准后读文件、修复加法、保持测试与 package.json 不变、执行测试并读 diff；第 1 步含 1 次可靠修改和 6 项工具结果。开始步骤的调用正确归入未关联。独立测试通过，拒绝越界命令无副作用，Ctrl+C 后 run.cancelled 与 Shell PID 退出均确认。
-- 首轮模型计划 120 秒未返回，[失败记录](evidence-20261024/live-plan-timeout.json)保留；一次重新安装失败后，另一次同包空缓存安装/在线验收成功。成功轮的诊断仅记录请求域名、路径、状态，未记录令牌、请求正文或刷新响应。未将首次超时归咎于已证实的产品缺陷。
-- 原始本机日志和临时验收驱动的 [SHA](evidence-20261024/local-evidence-sha256.json) 留档；测试工作区、会话与真实用户项目隔离。
+- 首轮模型计划 120 秒未返回，失败记录（`evidence-20261024/live-plan-timeout.json`）保留；一次重新安装失败后，另一次同包空缓存安装/在线验收成功。成功轮的诊断仅记录请求域名、路径、状态，未记录令牌、请求正文或刷新响应。未将首次超时归咎于已证实的产品缺陷。
+- 原始本机日志和临时验收驱动的 SHA（`evidence-20261024/local-evidence-sha256.json`） 留档；测试工作区、会话与真实用户项目隔离。
 
 ## 最终审阅补正
 
@@ -84,9 +86,9 @@
 
 最终候选来自干净提交 `7fbe09a1aa7d7a98f72b5282c2aff465813e7606`，包含 `97efb31` 取消竞争修复与 `e370fb5` 精简。SHA-256 为 `29748c60c74c3341e130bc9f326b654a104e0fcf6ed2043d1ca0fd4ca0f1d016`。本轮包已归档至本机 `artifacts/release/hikaro-0.2.1-darwin-arm64-7fbe09a.tgz`；`5411801` 更新验收文档与截图。之后的进程探测候选及其独立证据见 [后代观察](terminal-process-observation.md)。
 
-- [最终包来源](evidence-20261024/final-release-manifest.json)
-- [最终安装与恢复验收](evidence-20261024/final-release-install.json)
-- [最终真实账号计划与取消验收](evidence-20261024/final-live-plan.json)
+- 最终包来源（`evidence-20261024/final-release-manifest.json`）
+- 最终安装与恢复验收（`evidence-20261024/final-release-install.json`）
+- 最终真实账号计划与取消验收（`evidence-20261024/final-live-plan.json`）
 
 取消补正后再次运行 `pnpm check`：123 个应用文件、634 项测试、15 项脚本检查全部通过。最后一次重新打包后，空缓存安装检查与真实账号读/改/测/diff、步骤证据和真实 Shell 取消都在同一个最终 SHA 上复验通过。没有重复故障注入或放宽断言。
 

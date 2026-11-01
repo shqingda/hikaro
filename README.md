@@ -59,7 +59,7 @@ Conversation, Changes, Activity, Plan and Context are separate working views. Ch
 
 The header displays workspace information only. Commands (Ctrl+P) opens models, sessions, tools and views; Ctrl+O opens the session picker. Conversation shows the composer; browsing views show a list, detail reader and visible action buttons, with a return-to-conversation control. F6 can focus the preserved composer. Menus and permission review share a bounded surface; drafts stay in memory while a panel is open. At 100 columns details can appear beside the list; below 100 columns they become a full page. Native and attached clients monitor up to eight sessions, including background work and approvals. Closing a running view keeps it monitored. Close an idle view through Commands to free a slot; no running session is terminated to make room.
 
-Running Enter submits an intervention to the observed run. Submitted, applied and unapplied states follow durable receipts and consumption events; they do not imply a tool was interrupted. A run ending concurrently preserves the draft rather than silently starting another task. Reconnection never resends an uncertain prompt, intervention or approval automatically.
+Running Enter steers the observed run, as in Pi, Claude Code and Codex: a running tool is never interrupted. The instruction applies once the current tool finishes; the step's remaining tool calls are skipped with paired results and the model sees the instruction on its next turn. `/follow` makes Enter queue a separate task instead. Submitted, applied and unapplied states follow durable receipts and consumption events. A run ending concurrently preserves the draft rather than silently starting another task. Reconnection never resends an uncertain prompt, intervention or approval automatically.
 
 `/model` includes Models and Providers with a continuous return path. Disconnect removes the saved local credential, not a remote token; environment credentials can remain active. Saved credential metadata is not proof that a service call succeeded. The external Pi backend exposes its real model RPC and displays **Managed by Pi** for authentication and permissions. The embedded Hikaro view uses its own Hikaro backend and retains `/back`.
 
@@ -67,7 +67,10 @@ Running Enter submits an intervention to the observed run. Submitted, applied an
 
 | Command | Action |
 | --- | --- |
+| `/help` | Commands available in this mode, grouped, with keys; completion uses the same list |
 | `/new`, `/sessions [QUERY]`, `/resume [ID]` | Session picker searches titles and IDs across the current workspace, with bounded result pages; Delete/Ctrl+D opens confirmation; Keep session is selected by default; select Delete session to confirm, or Esc to cancel |
+| `/delete [QUERY]`, `/close` | Choose a session to delete; close an idle view while running work stays monitored |
+| `/plan`, `/tasks`, `/changes`, `/search [TEXT]` | Planning, queued work and terminals, file-change review, full-text search in this session |
 | `/rename TITLE` | Rename the current session; Ctrl+R renames a selected session in `/sessions` |
 | `/export` | Export all saved text messages as Markdown; hidden thinking stays excluded |
 | `/skill:NAME [TASK]` | Invoke a discovered Skill; Skill and plugin commands appear in completion |
@@ -82,7 +85,7 @@ Running Enter submits an intervention to the observed run. Submitted, applied an
 | `!COMMAND` | Run a terminal command under the current permission mode, without a model request |
 | `/resources`, `/status` | Skills/instructions and current session/model usage |
 | `/model provider/model` | Switch model directly while idle |
-| `/steer text` | Add instructions to the active run |
+| `/steer text`, `/follow` | Add instructions to the active run; toggle whether Enter queues or steers while running |
 | `/older`, `/newer`, `/latest` | Page through history |
 | `/read NUMBER PART` | Read a long message in bounded sections |
 | `/tools` | Toggle tool details |
@@ -92,6 +95,7 @@ Running Enter submits an intervention to the observed run. Submitted, applied an
 | `Ctrl+C` | Stop the selected run; exit when idle |
 | `Ctrl+D`, `/quit` | Exit |
 | `Shift+Enter` | New line |
+| `Backspace` at the composer start | Remove the last image chip; `Ctrl+-` right after restores it |
 | `Ctrl+Shift+F` | Search the visible terminal document |
 
 Draft edits are coalesced and scheduled for saving after 300 ms, including during continuous typing. Saves are serialized per TUI instance, flushed on submission/session switches/orderly exit, and restored after a process crash. The last interval plus any pending storage write can still be lost; this is not recovery of in-memory queued prompts or an interrupted model run. Expanded pasted text is saved, while transient extension-dialog answers are excluded. Storage failures appear near the editor. The existing 100,000-character draft limit remains. Each monitored session retains its editor, view selection, search and reading position. Deleting the current session first activates an available replacement or a new blank session.

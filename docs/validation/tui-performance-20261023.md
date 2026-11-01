@@ -1,5 +1,7 @@
 # 当前 TUI 启动与输入复测 · 2026-10-23
 
+> 本文引用的原始数据已于 2026-11-01 从工作树移除，结论以本文为准；需要时可用 `git show b0cf1fa:docs/validation/<路径>` 取回。
+
 ## 2026-10-24 复测 · HEAD `d2611d7` 与重建 `4a0b75f`（通过）
 
 2026-10-24 11:13–11:15（Asia/Taipei）按原命令 `pnpm bench:check`、`pnpm bench:attach:check` 复测，仍为 30 次测量、3 次预热及 200/16 ms 门槛，未删样本、未调预算。顺序运行，此前 `pnpm check` 已结束（113 个文件、604 项测试通过）；无并行构建或测试，但并非独占环境。
@@ -11,7 +13,7 @@
 | HEAD `d2611d7` | 附着复测 | 187.313 ms | 0.879 ms | 1 / 30         | 通过 |
 | 重建 `4a0b75f` | 附着 TUI | 193.842 ms | 1.226 ms | —              | 通过 |
 
-HEAD 构建摘要 `9f561d6c5f10…`；`4a0b75f` 在临时 detached worktree 中重建（共享主仓 `node_modules`），摘要 `2a9380ca…`，与 10-23 记录的 `ccff679b…` 不同，因此不是逐字节相同的产物，只能证明同一源码当前可过门槛。原始报告见 [普通](performance-20261024/head-d2611d7-standalone.json)、[附着](performance-20261024/head-d2611d7-attached.json)、[附着复测](performance-20261024/head-d2611d7-attached-recheck.json)、[重建 `4a0b75f`](performance-20261024/rebuild-4a0b75f-attached.json)。
+HEAD 构建摘要 `9f561d6c5f10…`；`4a0b75f` 在临时 detached worktree 中重建（共享主仓 `node_modules`），摘要 `2a9380ca…`，与 10-23 记录的 `ccff679b…` 不同，因此不是逐字节相同的产物，只能证明同一源码当前可过门槛。原始报告见 普通（`performance-20261024/head-d2611d7-standalone.json`）、附着（`performance-20261024/head-d2611d7-attached.json`）、附着复测（`performance-20261024/head-d2611d7-attached-recheck.json`）、重建 `4a0b75f`（`performance-20261024/rebuild-4a0b75f-attached.json`）。
 
 环境差异：负载约 2.9–3.9（10-23 为 4.2–4.8），空闲内存约 564–1215 MiB（10-23 为 121–404 MiB）。同一源码在内存压力较低时通过，支持 10-23 附着超限主要来自主机内存/负载压力的判断，但这仍是相关性证据，不是因果证明。`4a0b75f` p95 余量仅约 6 ms，附着启动仍贴近门槛；下文分阶段诊断中进程启动前约 81–91 ms 的段落仍值得后续细分。10-23 的失败报告保留，不被本次结果覆盖。
 
@@ -25,7 +27,7 @@ HEAD 构建摘要 `9f561d6c5f10…`；`4a0b75f` 在临时 detached worktree 中�
 | 附着 TUI       | 240.851 ms | 2.561 ms | 启动未通过 |
 | 同构建附着复测 | 270.987 ms | 3.410 ms | 启动未通过 |
 
-原始报告分别为 [普通](performance-20261023/execution-pages-standalone.json)、[附着](performance-20261023/execution-pages-attached.json)、[附着复测](performance-20261023/execution-pages-attached-recheck.json)。源码构建均对应 `4a0b75f00f3dcfcee13f6b38641dafd2e10f7237`；复测期间 export 源码正在编辑，但未重建，构建逐文件摘要一致。dirty 标志包含新文档、报告和后续源码修改。
+原始报告分别为 普通（`performance-20261023/execution-pages-standalone.json`）、附着（`performance-20261023/execution-pages-attached.json`）、附着复测（`performance-20261023/execution-pages-attached-recheck.json`）。源码构建均对应 `4a0b75f00f3dcfcee13f6b38641dafd2e10f7237`；复测期间 export 源码正在编辑，但未重建，构建逐文件摘要一致。dirty 标志包含新文档、报告和后续源码修改。
 
 首次附着 30 次中有 6 次超过 200 ms，不能将其当单个离群值忽略。与上一版相比，主机负载更高、空闲内存显著减少；第二轮运行窗口为 19:48:11.861–19:48:28.904，其中约 19:48:17–19 与一项约 703 ms 的轻量测试重叠，不能称为隔离测量。环境差异支持继续调查，但不能据此断定所有超限来自外部负载。
 
@@ -33,7 +35,7 @@ HEAD 构建摘要 `9f561d6c5f10…`；`4a0b75f` 在临时 detached worktree 中�
 
 ### 分阶段诊断（非门槛）
 
-19:53:41–19:53:44 对同一构建进行了 6 次诊断启动。原 host 使用未改动的构建，客户端使用临时复制并插入内存时间戳的构建；原构建开始和结束摘要均为上述 `ccff679b…`。每次新建数据目录和 V8 缓存，无预热、无输入测量。插桩会增加 Promise 和少量计时开销，追踪文件只在进程退出时写入，因此本轮不能替代原 30 次性能门槛。完整时间戳、插桩位置和环境记录见 [分阶段原始数据](performance-20261023/execution-pages-startup-phases.json)。
+19:53:41–19:53:44 对同一构建进行了 6 次诊断启动。原 host 使用未改动的构建，客户端使用临时复制并插入内存时间戳的构建；原构建开始和结束摘要均为上述 `ccff679b…`。每次新建数据目录和 V8 缓存，无预热、无输入测量。插桩会增加 Promise 和少量计时开销，追踪文件只在进程退出时写入，因此本轮不能替代原 30 次性能门槛。完整时间戳、插桩位置和环境记录见 分阶段原始数据（`performance-20261023/execution-pages-startup-phases.json`）。
 
 6 次端到端启动分别为 192.071、200.383、188.023、193.765、186.389、208.707 ms。阶段时长如下；模块加载和连接相互重叠，不应相加。
 
@@ -61,7 +63,7 @@ HEAD 构建摘要 `9f561d6c5f10…`；`4a0b75f` 在临时 detached worktree 中�
 | 普通 TUI             | 171.380 ms | 2.8615 ms | 通过 |
 | 独立 host + 附着 TUI | 189.094 ms | 1.3135 ms | 通过 |
 
-两组源码均为完整提交 `f4c52a8f15eb37ca36495ea9f7d20d85d790b23d`，构建摘要均为 `ae9f173efebb7323abf84b45bc0b327e58f7d975af2f6fd3ce6a190d2dff9a48`。普通组开始/结束工作区干净；附着组记录 dirty，此时有前一组生成的未跟踪报告，源码与构建未改变。原始元数据、首轮、全部样本和逐文件摘要见 [普通数据](performance-20261023/answer-drafts-standalone.json) 与 [附着数据](performance-20261023/answer-drafts-attached.json)。
+两组源码均为完整提交 `f4c52a8f15eb37ca36495ea9f7d20d85d790b23d`，构建摘要均为 `ae9f173efebb7323abf84b45bc0b327e58f7d975af2f6fd3ce6a190d2dff9a48`。普通组开始/结束工作区干净；附着组记录 dirty，此时有前一组生成的未跟踪报告，源码与构建未改变。原始元数据、首轮、全部样本和逐文件摘要见 普通数据（`performance-20261023/answer-drafts-standalone.json`） 与 附着数据（`performance-20261023/answer-drafts-attached.json`）。
 
 命令仍为 `pnpm bench:check` 和 `pnpm bench:attach:check`，仅用 `HIKARO_BENCH_OUTPUT` 指定新报告路径，两者退出码为 0。旧报告保留。此结果覆盖本机当前源码构建的 PTY 启动与输入，不扩大为分发包、物理屏幕/IME、流式或长期内存证据；下文的计时与缓存边界继续适用。
 
@@ -69,7 +71,7 @@ HEAD 构建摘要 `9f561d6c5f10…`；`4a0b75f` 在临时 detached worktree 中�
 
 源码功能基线 `5ebe846`，采样时 HEAD 为仅补文档的 `94407c4`，两组开始与结束工作区均干净。当前支持的最低 Node 26.12.1，macOS 27.0.0 / arm64，Apple M3 Pro，11 个逻辑 CPU。使用本机 CLI 构建产物，不是已发布安装包或新的真实订阅模型验收。
 
-两组使用同一构建集合，SHA-256 `a9304d815b8cdff011dd4298d8be271c5d35270e968d0568f1000b453b8af585`。完整文件摘要、原始样本、首轮及主机负载均保存在 [普通模式数据](performance-20261023/standalone.json) 和 [附着模式数据](performance-20261023/attached.json)。
+两组使用同一构建集合，SHA-256 `a9304d815b8cdff011dd4298d8be271c5d35270e968d0568f1000b453b8af585`。完整文件摘要、原始样本、首轮及主机负载均保存在 普通模式数据（`performance-20261023/standalone.json`） 和 附着模式数据（`performance-20261023/attached.json`）。
 
 | 模式                 | 启动 p95  | 输入 p95 | 原门槛                      | 结果 |
 | -------------------- | --------- | -------- | --------------------------- | ---- |

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — 2026-11-01
+
+- Steering no longer interrupts a running tool. Enter while running applies the instruction after the current tool; the step's remaining tool calls are skipped. `/follow` and Ctrl+X Enter now really queue instead of steering.
+- `/help` and slash completion come from one command list per mode. In attached mode `/delete` opens the session picker instead of being sent to plugins.
+- The header shows when a background session needs attention (Ctrl+O). Menus name the Enter action; settings show each value inline. Text questions show the question while you type.
+- Scrolling up shows how many lines sit below the view. Backspace at the start of the composer removes the last image chip; Ctrl+- right after restores it.
+- Sent prompts are no longer restored into the next draft. The Pi extension builds again and its view no longer loses a row.
+
 ## 0.3.0 — 2026-10-26
 
 - Install the macOS Apple Silicon CLI with `curl -fsSL https://github.com/shqingda/hikaro/releases/latest/download/install.sh | sh`. The package bundles Node.js 26.12.1; `hk` is a short alias and `hikaro update` reinstalls the latest release, keeping the previous one for rollback.
@@ -37,7 +45,7 @@ Stop all writers and back up the complete data directory before upgrading. Keep 
 
 ### Remaining release acceptance
 
-The user passed Chinese input, mixed-character editing, multiline paste, resize and the fixed Ctrl+D draft recovery checks. Candidate e0fb56a includes durable steering and the paged diff protocol, and passed clean-machine installation/recovery and same-package real subscription acceptance. Process-local network/rate-limit/stream failures and cancellation recover through explicit subscription requests. Assistive-technology results and final publication remain open. The current engineering record is [release readiness](docs/release-readiness.md); a candidate build is not a completed public release.
+The user passed Chinese input, mixed-character editing, multiline paste, resize and the fixed Ctrl+D draft recovery checks. Candidate e0fb56a includes durable steering and the paged diff protocol, and passed clean-machine installation/recovery and same-package real subscription acceptance. Process-local network/rate-limit/stream failures and cancellation recover through explicit subscription requests. Assistive-technology results and final publication remain open. The current engineering record is [release readiness](docs/history/release-readiness-through-20261026.md); a candidate build is not a completed public release.
 
 ### Known boundaries
 

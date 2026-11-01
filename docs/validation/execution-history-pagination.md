@@ -1,5 +1,7 @@
 # 执行历史分页验收 · 2026-10-23
 
+> 本文引用的原始数据已于 2026-11-01 从工作树移除，结论以本文为准；需要时可用 `git show b0cf1fa:docs/validation/<路径>` 取回。
+
 普通和附着 TUI 的 `/tasks history` 现在查看全部已保留、具有有效运行 ID 的运行记录；`/tasks history RUN_ID` 可直接读取旧详情。直接阅读不暂停队列。管理器 `/tasks` 的历史分类复用相同浏览器，保留管理器原有的暂停语义。后台终端、子任务的独立持久索引与全文搜索仍未交付。
 
 ## 已验证行为
@@ -20,9 +22,9 @@
 
 ## 旧库升级观察
 
-[原始报告](performance-20261023/execution-history-migration.json)记录 100,000 条总事件、20,000 条运行事件、10,000 次运行，升级前数据库 37,486,592 字节。两连接首次打开并读取首屏共 98.64 ms；后续页 1.98 ms，最旧详情 0.72 ms。查询计划分别使用范围索引与运行 ID 索引，没有全表扫描或临时排序。
+原始报告（`performance-20261023/execution-history-migration.json`）记录 100,000 条总事件、20,000 条运行事件、10,000 次运行，升级前数据库 37,486,592 字节。两连接首次打开并读取首屏共 98.64 ms；后续页 1.98 ms，最旧详情 0.72 ms。查询计划分别使用范围索引与运行 ID 索引，没有全表扫描或临时排序。
 
-这是有并发仓库测试负载的一次合成观察，证明该规模升级与查询正确，不是静默性能基线或性能门槛验收。首次建索引仍需要扫描旧事件。复现脚本保留为 [execution-history-migration.mjs](performance-20261023/execution-history-migration.mjs)，从仓库执行 `node --import tsx docs/validation/performance-20261023/execution-history-migration.mjs`；脚本使用隔离临时数据库，并覆盖同目录观察报告。
+这是有并发仓库测试负载的一次合成观察，证明该规模升级与查询正确，不是静默性能基线或性能门槛验收。首次建索引仍需要扫描旧事件。复现脚本保留为 execution-history-migration.mjs（`performance-20261023/execution-history-migration.mjs`），从仓库执行 `node --import tsx docs/validation/performance-20261023/execution-history-migration.mjs`；脚本使用隔离临时数据库，并覆盖同目录观察报告。
 
 ## 集成与边界
 

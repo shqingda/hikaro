@@ -1,5 +1,7 @@
 # 启动性能与升级回退验收 · 2026-10-20
 
+> 本文引用的原始数据已于 2026-11-01 从工作树移除，结论以本文为准；需要时可用 `git show b0cf1fa:docs/validation/<路径>` 取回。
+
 ## 性能
 
 CPU 采样及临时分段计时显示：TUI 同步模块初始化推迟 SQLite worker 创建。独立入口提前创建 worker，再并行加载 TUI 与 Runtime；早期 Runtime 失败也关闭已创建的 store。附着入口改为并行连接 host 与加载 UI/workflow，沿用 openInteractive 的失败清理，不提前宣布 ready。
@@ -13,7 +15,7 @@ macOS arm64 / Apple M3 Pro / Node v26.12.0。原门槛保持启动 p95 ≤ 200 m
 | 最终输入 p95 | 1.43 ms | 0.99 ms |
 | 最终客户端 RSS p95 | 79.30 MiB | 63.89 MiB |
 
-最终两个报告对应同一 bundle graph SHA-256：`9fa3e9491706fc279316aeb95088362f53dd1bb0b1879d4388d62deca0bef2e5`。完整样本与环境见 [standalone-before](release-performance-data/standalone-before.json)、[attached-before](release-performance-data/attached-before.json)、[standalone-final](release-performance-data/standalone-final.json)、[attached-final](release-performance-data/attached-final.json)。候选阶段独立 176.92 ms、附着 188.93 ms 通过，最终报告替代候选结果，未隐藏初始失败。
+最终两个报告对应同一 bundle graph SHA-256：`9fa3e9491706fc279316aeb95088362f53dd1bb0b1879d4388d62deca0bef2e5`。完整样本与环境见 standalone-before（`release-performance-data/standalone-before.json`）、attached-before（`release-performance-data/attached-before.json`）、standalone-final（`release-performance-data/standalone-final.json`）、attached-final（`release-performance-data/attached-final.json`）。候选阶段独立 176.92 ms、附着 188.93 ms 通过，最终报告替代候选结果，未隐藏初始失败。
 
 共享 host RSS p95 72.16 MiB，host+TUI 合计 p95 **135.89 MiB**。客户端门槛通过不代表共享合计内存通过，原合计预算问题仍须解决。当前只是单机离线合成测量，不代表真实 provider、冷磁盘或 30 分钟稳定性。
 

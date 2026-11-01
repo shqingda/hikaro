@@ -1,5 +1,7 @@
 # 前台进程边界验收 · 2026-10-24
 
+> 本文引用的原始数据已于 2026-11-01 从工作树移除，结论以本文为准；需要时可用 `git show b0cf1fa:docs/validation/<路径>` 取回。
+
 ## 交付
 
 前台 Shell 复用后台的原组停止器和 macOS 身份探针。取消/超时会核实原组终止；失败保留未知退出码并报告仍可能存活。主进程退出与输出管道关闭分开处理，继承管道的脱离后代不再使调用永久等待。输出及日志可能缺失时明确提示，脱离后代不作为信号目标。详见 [规范与限制](../specs/foreground-process-boundary.md)。
@@ -30,6 +32,6 @@
 
 干净提交 `d49e5a5213b069e58b7fdecc3394f59cf4ccb410`，SHA-256 `8c8a5c66e93c8bd289f9adc37d1c59dc205ea562ccdf84f9f56677f424c79bec`。本机 macOS arm64 / Node 26.12.1，包为 `artifacts/release/hikaro-0.2.1-darwin-arm64.tgz`。
 
-[来源](evidence-20261024/foreground-release-manifest.json)与[实际空缓存安装验收](evidence-20261024/foreground-release-install.json)：发布审计、原生 helper、安装 TUI 启停及既有恢复流程通过。[首次安装](evidence-20261024/foreground-release-network-failure.json)在 npm 下载阶段报 ECONNRESET，尚未运行应用；同一 SHA 重试通过，没有改依赖或放宽检查。
+来源（`evidence-20261024/foreground-release-manifest.json`）与实际空缓存安装验收（`evidence-20261024/foreground-release-install.json`）：发布审计、原生 helper、安装 TUI 启停及既有恢复流程通过。首次安装（`evidence-20261024/foreground-release-network-failure.json`）在 npm 下载阶段报 ECONNRESET，尚未运行应用；同一 SHA 重试通过，没有改依赖或放宽检查。
 
 前台 Shell 取消的专项 PTY 证据来自上面的 `1fbe134` 本地构建；安装包检查验证其后仅文档变更的候选。没有公开发布。

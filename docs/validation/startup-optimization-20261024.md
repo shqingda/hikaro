@@ -1,5 +1,7 @@
 # 启动优化与收尾 · 2026-10-24
 
+> 本文引用的原始数据已于 2026-11-01 从工作树移除，结论以本文为准；需要时可用 `git show b0cf1fa:docs/validation/<路径>` 取回。
+
 保留应用提交 `6c0785d`、`bd19762`、`4c6e416`。**附着启动连续三轮通过原 200 ms p95 门槛；普通启动仍有超限长尾，整体目标尚未完成。** 用户要求尽快收尾后，停止新增实验和重复测试，撤回没有明确收益的普通启动并行试验。
 
 ## 保留的改动
@@ -26,12 +28,12 @@ Node 26.12.1，macOS arm64，Apple M3 Pro。正式单轮与交替对照均为每
 
 最终保留构建最后两组普通均有 3/30 超过 200 ms。三组附着 p95 为 188.103、191.405、173.007 ms，均没有单个样本超过 200 ms；相应输入 p95 为 1.465、1.626、1.036 ms。普通最后两组输入 p95 为 3.247、3.385 ms，输入门槛通过。
 
-原始报告全部保留在 [数据目录](startup-20261024/)，关键证据：[原版普通](startup-20261024/startup-opt-baseline.json)、[原版附着](startup-20261024/attached-opt-baseline.json)、[最终附着单轮](startup-20261024/attached-opt-first-frame.json)、[最终构建对原版](startup-20261024/startup-opt-first-frame-paired.json)、[最后一组交替](startup-20261024/startup-opt-early-worker-paired.json)。最后一组的 **baseline 才是保留构建**，candidate 是已撤回试验。
+原始报告全部保留在 数据目录（`startup-20261024/`），关键证据：原版普通（`startup-20261024/startup-opt-baseline.json`）、原版附着（`startup-20261024/attached-opt-baseline.json`）、最终附着单轮（`startup-20261024/attached-opt-first-frame.json`）、最终构建对原版（`startup-20261024/startup-opt-first-frame-paired.json`）、最后一组交替（`startup-20261024/startup-opt-early-worker-paired.json`）。最后一组的 **baseline 才是保留构建**，candidate 是已撤回试验。
 
 ## 撤回的试验与验证
 
 - 关闭 esbuild splitting 的诊断构建（每模式 5 次）：普通/附着 p95 266.463/273.726 ms，未采用，不算正式验收。
-- 将普通模式的 Runtime 导入移到存储 worker 启动之后：单轮 p95 313.863 ms；同组交替原版/试验 p50 172.285/171.277 ms、p95 283.297/269.432 ms，普通超限样本 3/30 与 4/30。收益接近噪声且两者都未过线，撤回源码，保存[试验差异](startup-20261024/startup-opt-early-worker.patch)和全部失败数据。
+- 将普通模式的 Runtime 导入移到存储 worker 启动之后：单轮 p95 313.863 ms；同组交替原版/试验 p50 172.285/171.277 ms、p95 283.297/269.432 ms，普通超限样本 3/30 与 4/30。收益接近噪声且两者都未过线，撤回源码，保存试验差异（`startup-20261024/startup-opt-early-worker.patch`）和全部失败数据。
 - Markdown 回归先复现空会话导入时已构建 6 个 CJK 正则，再验证导入时为零、首次消息渲染保留中文和粗体。最初 `.cts` 方案不兼容现有测试加载器，改为 `.cjs` 加类型声明后完整通过。
 - 日志回归先复现空日志仍被写入；验证新命令等待提交、提交后再次检查权限、失败写入重试、相同成功内容不重复写、完成回执仍清除旧日志。现有跨连接延迟写入与不重放测试保持。
 - Markdown 和日志改动后：126 个测试文件、654 项应用测试、16 项脚本检查通过。最后首帧改动后：根目录类型检查及 3 个真实附着 PTY 场景通过，覆盖导航/草稿恢复、工作流及 redo。最终保留构建已构建成功；没有因用户要求收尾而重新跑全套，也没有删断言或降低门槛。
@@ -42,7 +44,7 @@ Node 26.12.1，macOS arm64，Apple M3 Pro。正式单轮与交替对照均为每
 
 `00366d23271182be420be18f2fbfe8407322e5b7dd4b459babb4aeb4607972ef`
 
-[恢复后指纹](startup-20261024/startup-opt-retained-build.json)。本机归档：`artifacts/startup-opt-first-frame-dist`；初始基线：`artifacts/startup-opt-baseline-dist`；被撤回构建：`artifacts/startup-opt-early-worker-dist`。原生 helper 重建含随机签名标识，因此恢复已测产物后没有再重建，以免将新字节冒充已测 SHA。
+恢复后指纹（`startup-20261024/startup-opt-retained-build.json`）。本机归档：`artifacts/startup-opt-first-frame-dist`；初始基线：`artifacts/startup-opt-baseline-dist`；被撤回构建：`artifacts/startup-opt-early-worker-dist`。原生 helper 重建含随机签名标识，因此恢复已测产物后没有再重建，以免将新字节冒充已测 SHA。
 
 交替驱动复用原基准的就绪、输入和清理逻辑；每对交替先跑旧版或新版。仓库根目录运行：
 

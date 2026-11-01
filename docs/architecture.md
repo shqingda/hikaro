@@ -70,3 +70,11 @@ Run-bound steering adds negotiated optional `expectedRunId` validation inside Ag
 ProviderCatalog keeps credential ownership at the selected Hikaro home; Models/Providers share one center and call the existing login/logout APIs. The Pi extension imports the host TUI and Markdown through the build's external module mapping. It must not bundle a second terminal instance. CLI Markdown retains its lazy import path.
 
 CLI migration: active `apps/cli` paths moved to `packages/cli`; the package name, `hikaro` binary and `dist/hikaro.mjs` remain unchanged. Historical validation/diff records retain old paths. Official `node-forge` 1.4.2 is pinned and verified against its release integrity and complete file manifest. Historical backport files live under `docs/validation/forge-backport-source`; they do not participate in install or release.
+
+## Commands, steering and project runtimes (2026-11-01)
+
+`packages/tui/src/commands.ts` is the single list of built-in slash commands, with each command's usage, group and the modes (native, attached, Pi) that offer it. Completion and `/help` are generated from it, and `tests/command-registry.test.ts` checks that every listed command has a handler in each mode's dispatcher, so a built-in never falls through to plugin commands.
+
+Steering follows Pi, Claude Code and Codex. Agent never aborts a running tool or stream for a new instruction. After each tool in a batch it checks the steering queue; when an instruction is ready, the batch's remaining calls receive a `Skipped` error result so every call stays paired, and the instruction is applied at the start of the next turn. Esc and Ctrl+C remain the explicit interrupt.
+
+The native workspace can monitor sessions from other projects. Each project gets its own Runtime, opened on demand and closed with that project's last monitored session; shutdown waits for runtimes still opening. Runtimes keep separate SQLite connections because closing one must not close another project's store.

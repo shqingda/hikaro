@@ -1,5 +1,7 @@
 # 后台终端后代观察 · 2026-10-24
 
+> 本文引用的原始数据已于 2026-11-01 从工作树移除，结论以本文为准；需要时可用 `git show b0cf1fa:docs/validation/<路径>` 取回。
+
 ## 结果与边界
 
 macOS 后台 PTY 现在按父子关系观察后代，并用 PID + 启动时间持续核实身份。原始进程组停止或主进程自然退出后，已观察后代仍存活时显示 `descendants_running`；探针暂时失败显示 `descendants_unknown`，恢复后重新显示实际观察结果。二者仅供查看，既不提供控制按钮，也不向脱离进程组的 PID 发信号。原始进程组确认消失后不会再次向同一数字 PGID 发信号。
@@ -27,6 +29,6 @@ macOS 后台 PTY 现在按父子关系观察后代，并用 PID + 启动时间�
 
 干净代码提交 `e8802f40cb78279d8ac02bc434488b1e6d653e1d`，SHA-256 `4442661147cd0bb9e181d78c0593945ea196f0d2257cadd55874422dfea43492`。本机 macOS arm64 / Node 26.12.1，该候选已归档至 `artifacts/release/hikaro-0.2.1-darwin-arm64-e8802f4.tgz`；更新候选见[前台边界验收](foreground-process-boundary.md)。
 
-[包来源](evidence-20261024/process-release-manifest.json)与[空缓存实际安装验收](evidence-20261024/process-release-install.json)：打包审计、原生文件读取、安装后的进程 helper 对直属 PTY 身份读取、TUI 启停及原有恢复场景全部通过。未公开发布。
+包来源（`evidence-20261024/process-release-manifest.json`）与空缓存实际安装验收（`evidence-20261024/process-release-install.json`）：打包审计、原生文件读取、安装后的进程 helper 对直属 PTY 身份读取、TUI 启停及原有恢复场景全部通过。未公开发布。
 
 上轮包已保存在本机 `artifacts/release/hikaro-0.2.1-darwin-arm64-7fbe09a.tgz`，SHA 不变。
