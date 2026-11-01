@@ -158,6 +158,8 @@ export class HikaroView {
   private modelPanel?: ModelPanel;
   private questionPanel?: ModelPanel;
   readonly historyHint = new Text("", 1, 0);
+  /** Below the transcript, next to the composer, while the view is above the latest line. */
+  readonly scrollHint = new Text("", 1, 0);
   readonly header: Component;
   readonly editor: ActivityEditor;
   readonly attachments: AttachmentStrip;
@@ -231,6 +233,7 @@ export class HikaroView {
   private activeTools = new Map<string, string>();
   private toolTargets = new Map<string, string>();
   private removeScheme?: () => void;
+  private light?: boolean;
   private themeQueried = false;
 
   constructor(
@@ -368,6 +371,15 @@ export class HikaroView {
         grow: 1,
         minSize: 1,
         visible: () =>
+          this.frame.tab === "Conversation" &&
+          !this.modelPanel &&
+          !this.approval,
+      },
+      {
+        component: this.scrollHint,
+        shrink: 0,
+        visible: () =>
+          this.scroll.linesBelow > 0 &&
           this.frame.tab === "Conversation" &&
           !this.modelPanel &&
           !this.approval,
@@ -604,6 +616,8 @@ export class HikaroView {
     this.removeInput = tui.addInputListener((data) => {
       if (this.disposed || !this.visible) return undefined;
       if (isKeyRelease(data)) return { consume: true };
+      // Returning to the terminal, e.g. after switching the system appearance.
+      if (data === "\x1b[I" && this.themeQueried) this.queryScheme();
       if (
         options.detachOnCtrlD &&
         !this.modelPanel &&
@@ -1170,40 +1184,34 @@ export class HikaroView {
     // line buffer and the shell prints them when raw mode is restored.
     if (this.themeQueried || this.disposed || !process.stdin.isRaw) return;
     this.themeQueried = true;
-    const apply = (light: boolean) => {
-      if (this.disposed) return;
-      setColorScheme(light);
-      this.editor.invalidate();
-      this.modelPanel?.invalidate();
-      this.content.invalidate();
-      this.tui.requestRender();
-    };
     this.removeScheme = this.tui.onTerminalColorSchemeChange((scheme) =>
-      apply(scheme === "light"),
+      this.applyScheme(scheme === "light"),
     );
+    // Terminals with mode 2031 report appearance changes; others are re-read on focus.
+    this.tui.setTerminalColorSchemeNotifications(true);
+    this.queryScheme();
+  }
+  private queryScheme() {
+    const apply = (colors: {
+      background?: { r: number; g: number; b: number };
+    }) => {
+      const bg = colors.background;
+      if (bg) this.applyScheme((bg.r + bg.g + bg.b) / 3 > 128);
+    };
     void this.tui
-      .queryTerminalColors({
-        timeoutMs: 100,
-        onLateReply: (colors) => {
-          if (colors.background)
-            apply(
-              (colors.background.r +
-                colors.background.g +
-                colors.background.b) /
-                3 >
-                128,
-            );
-        },
-      })
-      .then((colors) => {
-        if (colors.background)
-          apply(
-            (colors.background.r + colors.background.g + colors.background.b) /
-              3 >
-              128,
-          );
-      })
+      .queryTerminalColors({ timeoutMs: 100, onLateReply: apply })
+      .then(apply)
       .catch(() => {});
+  }
+  private applyScheme(light: boolean) {
+    // The scheme is module-wide; each view still repaints its own cached lines.
+    if (this.disposed || light === this.light) return;
+    this.light = light;
+    setColorScheme(light);
+    this.editor.invalidate();
+    this.modelPanel?.invalidate();
+    this.content.invalidate();
+    this.tui.requestRender();
   }
   setStatus(patch: Partial<ViewStatus>) {
     const next = { ...this.viewStatus, ...patch };
@@ -1341,14 +1349,19 @@ export class HikaroView {
     this.historyHint.setText(
       this.historyLoading
         ? muted("Loading history…")
-        : this.history.hasOlder ||
-            this.history.hasNewer ||
-            this.pendingMessages ||
-            this.scroll.linesBelow
+        : this.history.hasOlder || this.history.hasNewer || this.pendingMessages
           ? muted(
-              `${this.scroll.linesBelow ? `↓ ${this.scroll.linesBelow} more ${this.scroll.linesBelow === 1 ? "line" : "lines"} · ` : ""}${this.pendingMessages ? "New messages available · " : ""}Ctrl+P → ${this.history.hasOlder ? "Read earlier / " : ""}Return to latest messages`,
+              `${this.pendingMessages ? "New messages available · " : ""}Ctrl+P → ${this.history.hasOlder ? "Read earlier / " : ""}Return to latest messages`,
             )
           : "",
+    );
+    const below = this.scroll.linesBelow;
+    this.scrollHint.setText(
+      below
+        ? accent(
+            `↓ ${below} more ${below === 1 ? "line" : "lines"}${this.pendingMessages ? " · new messages" : ""} · PageDown`,
+          )
+        : "",
     );
   }
   private messageComponent(

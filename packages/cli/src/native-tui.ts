@@ -885,13 +885,13 @@ export async function nativeTui(
 
             const slash = arg.indexOf("/");
             if (slash < 1) throw Error("Use /model provider/model");
-            await bind(
-              await runtime.setModel(
-                session,
-                arg.slice(0, slash),
-                arg.slice(slash + 1),
-              ),
+            const updated = await runtime.setModel(
+              session,
+              arg.slice(0, slash),
+              arg.slice(slash + 1),
             );
+            await bind(updated);
+            await runtime.saveDefaultSelection(updated.modelSelection!);
             return;
           }
           default:

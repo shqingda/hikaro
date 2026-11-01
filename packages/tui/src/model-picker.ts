@@ -515,11 +515,8 @@ export async function openModelPicker(
           emptyMessage: "No matching models · Tab opens Providers",
           tabs,
           activeTab: page,
-          enterAction: "select",
-          allowDefault: (item) =>
-            options.saveDefault !== false &&
-            !blocked &&
-            rows.some((row) => row.value === item.value),
+          enterAction:
+            options.saveDefault !== false ? "select as default" : "select",
           actions: catalog.setFavorite
             ? [
                 {
@@ -625,7 +622,9 @@ export async function openModelPicker(
         // A successful selection may rebind the view and close this panel. Record
         // the actual selection even then, without painting into the new surface.
         await wait(
-          select(model.provider, model.id, picked.makeDefault).then(
+          // Like Pi, Claude Code and opencode, a chosen model also becomes the
+          // global default for new sessions; existing sessions keep theirs.
+          select(model.provider, model.id, options.saveDefault !== false).then(
             async () => {
               try {
                 await catalog.recordRecent?.(reference(model));

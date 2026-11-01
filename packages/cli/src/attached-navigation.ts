@@ -385,7 +385,7 @@ export class AttachedNavigation {
       if (command === "/model" && arg) {
         const slash = arg.indexOf("/");
         if (slash < 1) throw Error("Use /model provider/model");
-        await select(arg.slice(0, slash), arg.slice(slash + 1), false);
+        await select(arg.slice(0, slash), arg.slice(slash + 1), true);
         return;
       }
       const local = await this.catalog();

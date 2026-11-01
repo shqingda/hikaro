@@ -11,6 +11,7 @@ import {
   type TuiPreferences,
 } from "../packages/tui/src/preferences.ts";
 import { HikaroView } from "../packages/tui/src/index.ts";
+import { isLightScheme, setColorScheme } from "../packages/tui/src/theme.ts";
 import { openModelPicker } from "../packages/tui/src/model-picker.ts";
 import { openModelControl } from "../packages/tui/src/model-settings.ts";
 import { openSessions } from "../packages/tui/src/sessions.ts";
@@ -303,7 +304,7 @@ describe("TUI immediate cancellation feedback", () => {
 });
 
 describe("TUI shortcut capabilities", () => {
-  it("ignores default shortcuts in provider, authentication and utility choices", async () => {
+  it("saves the chosen model as the default and ignores Ctrl+S", async () => {
     const fixture = shortcutFixture();
     const { panel, screen, waitFor, view } = fixture;
     const login = vi.fn(async () => {});
@@ -340,15 +341,13 @@ describe("TUI shortcut capabilities", () => {
       panel.handleInput("\r");
       await waitFor(/Select model/);
       expect(login).toHaveBeenCalledOnce();
-      expect(screen()).toContain("Ctrl+S save default");
-      panel.handleInput("\x1b[B");
+      // Enter on a model also saves it for new sessions; Ctrl+S does nothing.
       expect(screen()).not.toContain("Ctrl+S");
+      expect(screen()).toContain("Select as default");
       panel.handleInput("\x13");
       await Promise.resolve();
-      expect(screen()).toContain("Select model");
       expect(select).not.toHaveBeenCalled();
-      panel.handleInput("\x1b[A");
-      panel.handleInput("\x13");
+      panel.handleInput("\r");
       await work;
       expect(select).toHaveBeenCalledExactlyOnceWith("demo", "model", true);
       expect(fixture.setError).not.toHaveBeenCalled();
@@ -766,7 +765,7 @@ it("shows how far the transcript sits above the latest line", () => {
   // The layout pass reports content and viewport heights to the scroll view.
   const layout = () => view.scroll.updateLayout(40, 10, () => {});
   const hint = () =>
-    stripVTControlCharacters(view.historyHint.render(80)[0] ?? "");
+    stripVTControlCharacters(view.scrollHint.render(80)[0] ?? "");
   try {
     layout();
     expect(hint()).toBe("");
@@ -808,6 +807,46 @@ it("removes the last image with Backspace at the start and restores it with undo
     expect(input("\x1f")).toBeUndefined();
     expect(drafts.at(-1)).not.toContain("b.png");
   } finally {
+    view.dispose();
+  }
+});
+
+it("follows terminal appearance changes and re-reads colors on focus", async () => {
+  const { view, input } = interactionView();
+  const raw = Object.getOwnPropertyDescriptor(process.stdin, "isRaw");
+  Object.defineProperty(process.stdin, "isRaw", {
+    value: true,
+    configurable: true,
+  });
+  let report!: (scheme: "light" | "dark") => void;
+  vi.spyOn(view.tui, "onTerminalColorSchemeChange").mockImplementation(
+    (listener) => {
+      report = listener;
+      return () => {};
+    },
+  );
+  const notify = vi
+    .spyOn(view.tui, "setTerminalColorSchemeNotifications")
+    .mockImplementation(() => {});
+  const query = vi
+    .spyOn(view.tui, "queryTerminalColors")
+    .mockResolvedValue({ background: { r: 250, g: 250, b: 250 } } as never);
+  const invalidate = vi.spyOn(view.content, "invalidate");
+  try {
+    view.startTheme();
+    expect(notify).toHaveBeenCalledWith(true);
+    await vi.waitFor(() => expect(isLightScheme()).toBe(true));
+    invalidate.mockClear();
+    report("dark");
+    expect(isLightScheme()).toBe(false);
+    expect(invalidate).toHaveBeenCalledOnce();
+    input("\x1b[I");
+    expect(query).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(isLightScheme()).toBe(true));
+  } finally {
+    if (raw) Object.defineProperty(process.stdin, "isRaw", raw);
+    else delete (process.stdin as { isRaw?: boolean }).isRaw;
+    setColorScheme(false);
     view.dispose();
   }
 });
