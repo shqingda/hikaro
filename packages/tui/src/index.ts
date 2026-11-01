@@ -18,6 +18,7 @@ import {
   VStack,
   matchesKey,
   isKeyRelease,
+  getKeybindings,
   visibleWidth,
   truncateToWidth,
   type Component,
@@ -97,12 +98,36 @@ type UIBackend = AgentBackend & {
 const attachmentsNeedQueue =
   "Attachments can't steer a running task. Press Ctrl+X then Enter to queue it; your draft is kept.";
 
+/** The transcript scroll view, reporting how many lines sit below the viewport. */
+class TranscriptScroll extends ScrollView {
+  linesBelow = 0;
+  constructor(
+    content: Container,
+    private readonly onLinesBelow: () => void,
+  ) {
+    super(content, { primary: true, follow: "end", scrollbar: "hidden" });
+  }
+  override updateLayout(
+    contentHeight: number,
+    viewportHeight: number,
+    requestRender: () => void,
+  ) {
+    super.updateLayout(contentHeight, viewportHeight, requestRender);
+    const below = this.isFollowingEnd
+      ? 0
+      : Math.max(0, contentHeight - viewportHeight - this.scrollTop);
+    if (below === this.linesBelow) return;
+    this.linesBelow = below;
+    this.onLinesBelow();
+  }
+}
+
 export class HikaroView {
   readonly content = new Container();
-  readonly scroll = new ScrollView(this.content, {
-    primary: true,
-    follow: "end",
-    scrollbar: "hidden",
+  readonly scroll = new TranscriptScroll(this.content, () => {
+    if (!this.scroll.linesBelow) this.pendingMessages = false;
+    this.updateHistoryHint();
+    this.tui.requestRender();
   });
   private viewStatus: ViewStatus;
   private phase = "Ready";
@@ -178,6 +203,8 @@ export class HikaroView {
   private activity = "Working";
   private imageChips: ImageChip[] = [];
   private syncingImages = false;
+  /** The chip Backspace just removed, restorable by the editor's undo key. */
+  private removedImage?: { chip: ImageChip; index: number };
   private disposed = false;
   private approval?: {
     resolve: (value: boolean) => void;
@@ -630,6 +657,7 @@ export class HikaroView {
           return { consume: true };
         }
         if (this.tui.getFocusedComponent() === this.editor) {
+          if (this.editImageChips(data)) return { consume: true };
           if (matchesKey(data, "ctrl+x")) {
             this.queuePrefix = true;
             this.editor.setHint(
@@ -1313,9 +1341,12 @@ export class HikaroView {
     this.historyHint.setText(
       this.historyLoading
         ? muted("Loading history…")
-        : this.history.hasOlder || this.history.hasNewer || this.pendingMessages
+        : this.history.hasOlder ||
+            this.history.hasNewer ||
+            this.pendingMessages ||
+            this.scroll.linesBelow
           ? muted(
-              `${this.pendingMessages ? "New messages available · " : ""}Ctrl+P → ${this.history.hasOlder ? "Read earlier / " : ""}Return to latest messages`,
+              `${this.scroll.linesBelow ? `↓ ${this.scroll.linesBelow} more ${this.scroll.linesBelow === 1 ? "line" : "lines"} · ` : ""}${this.pendingMessages ? "New messages available · " : ""}Ctrl+P → ${this.history.hasOlder ? "Read earlier / " : ""}Return to latest messages`,
             )
           : "",
     );
@@ -1737,6 +1768,42 @@ export class HikaroView {
       label: `Image #${index + 1}`,
     }));
     this.editor.setImageChips(this.imageChips);
+  }
+  /** Backspace at the composer start removes the last image; undo right after restores it. */
+  private editImageChips(data: string) {
+    const keys = getKeybindings();
+    const removed = this.removedImage;
+    this.removedImage = undefined;
+    if (removed && keys.matches(data, "tui.editor.undo")) {
+      const chips = [...this.imageChips];
+      chips.splice(removed.index, 0, removed.chip);
+      this.setImageChips(chips);
+      return true;
+    }
+    if (removed) this.updateFooter();
+    if (
+      !this.imageChips.length ||
+      !keys.matches(data, "tui.editor.deleteCharBackward")
+    )
+      return false;
+    const cursor = this.editor.getCursor();
+    if (cursor.line || cursor.col) return false;
+    const index = this.imageChips.length - 1;
+    this.removedImage = { chip: this.imageChips[index]!, index };
+    this.setImageChips(this.imageChips.slice(0, index));
+    this.editor.setHint(
+      `Removed ${this.removedImage.chip.label} · Ctrl+- restores`,
+    );
+    return true;
+  }
+  private setImageChips(chips: ImageChip[]) {
+    this.imageChips = chips.map((chip, index) => ({
+      path: chip.path,
+      label: `Image #${index + 1}`,
+    }));
+    this.editor.setImageChips(this.imageChips);
+    this.updateFooter();
+    this.options.onDraftChange?.(this.canonicalDraft());
   }
   private canonicalDraft() {
     return textWithImageReferences(

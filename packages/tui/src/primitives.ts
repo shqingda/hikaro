@@ -13,6 +13,7 @@ export { ScrollView } from "@earendil-works/pi-tui/dist/components/scroll-view.j
 export { VStack } from "@earendil-works/pi-tui/dist/components/v-stack.js";
 export { HStack } from "@earendil-works/pi-tui/dist/components/h-stack.js";
 export { matchesKey, isKeyRelease } from "@earendil-works/pi-tui/dist/keys.js";
+export { getKeybindings } from "@earendil-works/pi-tui/dist/keybindings.js";
 export {
   visibleWidth,
   truncateToWidth,

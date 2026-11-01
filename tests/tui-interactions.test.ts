@@ -752,3 +752,62 @@ it("does not redraw an unchanged shared-host status during idle polling", () => 
     view.dispose();
   }
 });
+
+it("shows how far the transcript sits above the latest line", () => {
+  const tui = new TuiAltScreen(terminalStub);
+  vi.spyOn(tui, "requestRender").mockImplementation(() => {});
+  const view = new HikaroView(tui, {
+    cwd: "/tmp",
+    model: "demo",
+    onPrompt: async () => {},
+    onCommand: async () => {},
+    onExit: () => {},
+  });
+  // The layout pass reports content and viewport heights to the scroll view.
+  const layout = () => view.scroll.updateLayout(40, 10, () => {});
+  const hint = () =>
+    stripVTControlCharacters(view.historyHint.render(80)[0] ?? "");
+  try {
+    layout();
+    expect(hint()).toBe("");
+    view.scroll.scrollBy(-4);
+    layout();
+    expect(hint()).toContain("↓ 4 more lines");
+    view.scroll.scrollToEnd();
+    layout();
+    expect(hint()).toBe("");
+  } finally {
+    view.dispose();
+  }
+});
+
+it("removes the last image with Backspace at the start and restores it with undo", () => {
+  const drafts: string[] = [];
+  const { view, input } = interactionView(undefined, (text) =>
+    drafts.push(text),
+  );
+  try {
+    view.editor.handleInput("\x1b[200~/tmp/a.png /tmp/b.png look\x1b[201~");
+    expect(view.editor.getText()).toBe("look");
+    expect(drafts.at(-1)).toMatch(/a\.png[\s\S]*b\.png/);
+    // Backspace inside the text edits the text, not the images.
+    expect(input("\x7f")).toBeUndefined();
+    view.editor.handleInput("\x1b[H");
+    expect(input("\x7f")).toEqual({ consume: true });
+    expect(drafts.at(-1)).toContain("a.png");
+    expect(drafts.at(-1)).not.toContain("b.png");
+    expect(
+      stripVTControlCharacters(view.editor.render(36).join("\n")),
+    ).toContain("Removed Image #2");
+    expect(input("\x1f")).toEqual({ consume: true });
+    expect(drafts.at(-1)).toMatch(/a\.png[\s\S]*b\.png/);
+    // Undo only restores the image removed by the key just before it.
+    view.editor.handleInput("\x1b[H");
+    input("\x7f");
+    input("x");
+    expect(input("\x1f")).toBeUndefined();
+    expect(drafts.at(-1)).not.toContain("b.png");
+  } finally {
+    view.dispose();
+  }
+});
