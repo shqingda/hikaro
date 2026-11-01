@@ -5,7 +5,8 @@
 - Steering no longer interrupts a running tool. Enter while running applies the instruction after the current tool; the step's remaining tool calls are skipped. `/follow` and Ctrl+X Enter now really queue instead of steering.
 - `/help` and slash completion come from one command list per mode. In attached mode `/delete` opens the session picker instead of being sent to plugins.
 - The header shows when a background session needs attention (Ctrl+O). Menus name the Enter action; settings show each value inline. Text questions show the question while you type.
-- Scrolling up shows how many lines sit below the view. Backspace at the start of the composer removes the last image chip; Ctrl+- right after restores it.
+- Scrolling up shows how many lines sit below the view, just above the composer. Pasted images become inline `[Image #N]` tokens that delete as one unit and come back with Ctrl+Z; clicking one previews it inside the terminal.
+- The user-message background follows a terminal or system appearance switch without restarting. Choosing a model also makes it the default for new sessions.
 - Sent prompts are no longer restored into the next draft. The Pi extension builds again and its view no longer loses a row.
 
 ## 0.3.0 — 2026-10-26

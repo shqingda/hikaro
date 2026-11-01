@@ -7,35 +7,68 @@ const imagePath = /\.(?:png|jpe?g|gif|webp)$/i;
 
 export type ImageChip = { label: string; path: string };
 
-/** Drop pasted image paths out of the composer. The chips remember the files. */
-export function detachImagePaths(text: string) {
+/** `[Image #N]` as typed in the composer. */
+export const imageToken = (chip: ImageChip) => `[${chip.label}]`;
+
+/**
+ * Replace pasted image paths with inline `[Image #N]` tokens, numbered after
+ * `known`. The chips remember the files; the composer keeps only the tokens.
+ */
+export function inlineImagePaths(text: string, known: ImageChip[] = []) {
   const spans = imageSpans(text);
-  let next = text;
-  const paths: string[] = [];
-  for (const span of [...spans].reverse()) {
-    paths.unshift(span.path);
-    let start = span.start;
-    let end = span.end;
-    if (next[end] === " ") end++;
-    else if (start > 0 && /\s/.test(next[start - 1]!)) start--;
-    next = next.slice(0, start) + next.slice(end);
+  const chips = [...known];
+  const tokens: string[] = [];
+  for (const span of spans) {
+    let chip = chips.find((item) => item.path === span.path);
+    if (!chip) {
+      chip = { label: `Image #${nextImageNumber(chips)}`, path: span.path };
+      chips.push(chip);
+    }
+    tokens.push(imageToken(chip));
   }
-  const chips = paths.map((path, index) => ({
-    label: `Image #${index + 1}`,
-    path,
-  }));
-  return {
-    text: next.replace(/[ \t]+\n/g, "\n").replace(/[ \t]{2,}/g, " "),
-    chips,
-  };
+  let next = text;
+  for (let index = spans.length - 1; index >= 0; index--) {
+    const span = spans[index]!;
+    next = next.slice(0, span.start) + tokens[index] + next.slice(span.end);
+  }
+  return { text: next, chips };
 }
 
-/** Composer text plus the hidden references submit and draft recovery need. */
+function nextImageNumber(chips: ImageChip[]) {
+  let max = 0;
+  for (const chip of chips)
+    max = Math.max(max, Number(/#(\d+)$/.exec(chip.label)?.[1] ?? 0));
+  return max + 1;
+}
+
+/** Chips whose token is still in the composer text, in text order. */
+export function imagesInText(text: string, chips: ImageChip[]) {
+  return chips
+    .map((chip) => ({ chip, at: text.indexOf(imageToken(chip)) }))
+    .filter((item) => item.at >= 0)
+    .sort((a, b) => a.at - b.at)
+    .map((item) => item.chip);
+}
+
+/** Composer text with each `[Image #N]` token replaced by its attachment reference. */
 export function textWithImageReferences(text: string, chips: ImageChip[]) {
-  // The typed text stays byte for byte; references only follow it.
-  if (!chips.length) return text;
-  const refs = chips.map((chip) => attachmentReference(chip.path)).join(" ");
-  return text && !/\s$/.test(text) ? `${text} ${refs}` : text + refs;
+  let next = text;
+  for (const chip of imagesInText(text, chips)) {
+    const token = imageToken(chip);
+    const at = next.indexOf(token);
+    const before = at > 0 && !/\s/.test(next[at - 1]!) ? " " : "";
+    const after =
+      at + token.length < next.length && !/\s/.test(next[at + token.length]!)
+        ? " "
+        : "";
+    next =
+      next.slice(0, at) +
+      before +
+      attachmentReference(chip.path) +
+      after +
+      next.slice(at + token.length);
+  }
+  return next;
 }
 
 type DisplayChip = { label: string; path: string; index: number };

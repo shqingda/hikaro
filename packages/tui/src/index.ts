@@ -26,11 +26,12 @@ import {
 import { ModelPanel } from "./model-panel.ts";
 import { ActivityEditor } from "./activity-editor.ts";
 import {
-  detachImagePaths,
+  inlineImagePaths,
   textWithImageReferences,
   type ImageChip,
 } from "./image-chips.ts";
 import { openImage } from "./open-image.ts";
+import { ImagePreview } from "./image-preview.ts";
 import { ApprovalPanel } from "./approval-panel.ts";
 import { defaultTuiPreferences, type TuiPreferences } from "./preferences.ts";
 import { sanitize } from "./text.ts";
@@ -205,8 +206,7 @@ export class HikaroView {
   private activity = "Working";
   private imageChips: ImageChip[] = [];
   private syncingImages = false;
-  /** The chip Backspace just removed, restorable by the editor's undo key. */
-  private removedImage?: { chip: ImageChip; index: number };
+  private imagePreview?: { component: ImagePreview; hide: () => void };
   private disposed = false;
   private approval?: {
     resolve: (value: boolean) => void;
@@ -320,9 +320,17 @@ export class HikaroView {
       },
       { paddingX: 1 },
     );
-    this.editor.onOpenImage = (path) => {
-      void openImage(path).catch((error) => this.setError(String(error)));
-    };
+    this.editor.onOpenImage = (chip) => this.previewImage(chip);
+    // Ctrl+Z undoes like other editors; Pi keeps its own bindings.
+    const keys = getKeybindings();
+    if (
+      options.commandMode !== "pi" &&
+      !keys.getUserBindings()["tui.editor.undo"]
+    )
+      keys.setUserBindings({
+        ...keys.getUserBindings(),
+        "tui.editor.undo": ["ctrl+-", "ctrl+z"],
+      });
     this.editor.onChange = () => {
       if (this.syncingImages || this.dialog || this.disposed) return;
       this.syncImageChips();
@@ -615,6 +623,10 @@ export class HikaroView {
     };
     this.removeInput = tui.addInputListener((data) => {
       if (this.disposed || !this.visible) return undefined;
+      if (this.imagePreview) {
+        if (!isKeyRelease(data)) this.imagePreview.component.handleInput(data);
+        return { consume: true };
+      }
       if (isKeyRelease(data)) return { consume: true };
       // Returning to the terminal, e.g. after switching the system appearance.
       if (data === "\x1b[I" && this.themeQueried) this.queryScheme();
@@ -671,7 +683,6 @@ export class HikaroView {
           return { consume: true };
         }
         if (this.tui.getFocusedComponent() === this.editor) {
-          if (this.editImageChips(data)) return { consume: true };
           if (matchesKey(data, "ctrl+x")) {
             this.queuePrefix = true;
             this.editor.setHint(
@@ -1757,66 +1768,49 @@ export class HikaroView {
     this.updateFooter();
     this.tui.requestRender();
   }
-  /** Editor text stays short; image paths live on the chips until send or save. */
+  /** Show an image chip inside the terminal; Esc closes, O opens the system viewer. */
+  previewImage(chip: ImageChip) {
+    this.imagePreview?.hide();
+    const component = new ImagePreview(
+      chip.label,
+      chip.path,
+      () => ({
+        columns: this.tui.terminal.columns,
+        rows: this.tui.terminal.rows,
+      }),
+      () => this.tui.requestRender(),
+      () => {
+        this.imagePreview?.hide();
+        this.imagePreview = undefined;
+        this.tui.requestRender();
+      },
+      () =>
+        void openImage(chip.path).catch((error) =>
+          this.setError(String(error)),
+        ),
+    );
+    const overlay = this.tui.showOverlay(component, {
+      width: "90%",
+      maxHeight: "90%",
+      nonCapturing: true,
+    });
+    this.imagePreview = { component, hide: () => overlay.hide() };
+    this.tui.requestRender();
+  }
+  /** Pasted image paths become inline `[Image #N]` tokens; the chips keep the files. */
   private syncImageChips() {
     const current = this.editor.getExpandedText();
-    const found = detachImagePaths(current);
-    if (found.text !== current) {
-      this.syncingImages = true;
-      try {
-        this.editor.setText(found.text);
-      } finally {
-        this.syncingImages = false;
-      }
-    }
-    if (!found.chips.length) {
-      this.editor.setImageChips(this.imageChips);
-      return;
-    }
-    const known = new Set(this.imageChips.map((chip) => chip.path));
-    const added = found.chips.filter((chip) => !known.has(chip.path));
-    if (!added.length) return;
-    this.imageChips = [...this.imageChips, ...added].map((chip, index) => ({
-      path: chip.path,
-      label: `Image #${index + 1}`,
-    }));
+    const found = inlineImagePaths(current, this.imageChips);
+    // Tokens deleted from the text stay known, so undo brings them back intact.
+    this.imageChips = found.chips;
     this.editor.setImageChips(this.imageChips);
-  }
-  /** Backspace at the composer start removes the last image; undo right after restores it. */
-  private editImageChips(data: string) {
-    const keys = getKeybindings();
-    const removed = this.removedImage;
-    this.removedImage = undefined;
-    if (removed && keys.matches(data, "tui.editor.undo")) {
-      const chips = [...this.imageChips];
-      chips.splice(removed.index, 0, removed.chip);
-      this.setImageChips(chips);
-      return true;
+    if (found.text === current) return;
+    this.syncingImages = true;
+    try {
+      this.editor.setText(found.text);
+    } finally {
+      this.syncingImages = false;
     }
-    if (removed) this.updateFooter();
-    if (
-      !this.imageChips.length ||
-      !keys.matches(data, "tui.editor.deleteCharBackward")
-    )
-      return false;
-    const cursor = this.editor.getCursor();
-    if (cursor.line || cursor.col) return false;
-    const index = this.imageChips.length - 1;
-    this.removedImage = { chip: this.imageChips[index]!, index };
-    this.setImageChips(this.imageChips.slice(0, index));
-    this.editor.setHint(
-      `Removed ${this.removedImage.chip.label} · Ctrl+- restores`,
-    );
-    return true;
-  }
-  private setImageChips(chips: ImageChip[]) {
-    this.imageChips = chips.map((chip, index) => ({
-      path: chip.path,
-      label: `Image #${index + 1}`,
-    }));
-    this.editor.setImageChips(this.imageChips);
-    this.updateFooter();
-    this.options.onDraftChange?.(this.canonicalDraft());
   }
   private canonicalDraft() {
     return textWithImageReferences(

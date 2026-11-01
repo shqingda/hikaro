@@ -780,32 +780,45 @@ it("shows how far the transcript sits above the latest line", () => {
   }
 });
 
-it("removes the last image with Backspace at the start and restores it with undo", () => {
+it("keeps pasted images inline, deletes them whole and restores them with Ctrl+Z", () => {
   const drafts: string[] = [];
-  const { view, input } = interactionView(undefined, (text) =>
-    drafts.push(text),
-  );
+  const { view } = interactionView(undefined, (text) => drafts.push(text));
+  const preview = vi.spyOn(view, "previewImage").mockImplementation(() => {});
   try {
-    view.editor.handleInput("\x1b[200~/tmp/a.png /tmp/b.png look\x1b[201~");
-    expect(view.editor.getText()).toBe("look");
-    expect(drafts.at(-1)).toMatch(/a\.png[\s\S]*b\.png/);
-    // Backspace inside the text edits the text, not the images.
-    expect(input("\x7f")).toBeUndefined();
-    view.editor.handleInput("\x1b[H");
-    expect(input("\x7f")).toEqual({ consume: true });
-    expect(drafts.at(-1)).toContain("a.png");
+    view.editor.handleInput("\x1b[200~look /tmp/a.png /tmp/b.png\x1b[201~");
+    expect(view.editor.getText()).toBe("look [Image #1] [Image #2]");
+    expect(drafts.at(-1)).toBe('look @"/tmp/a.png" @"/tmp/b.png"');
+    // The composer has no separate chip row: the tokens sit on the text line.
+    const rows = view.editor
+      .render(60)
+      .map((line) => stripVTControlCharacters(line));
+    expect(rows.filter((line) => line.includes("[Image #")).length).toBe(1);
+    view.editor.handleInput("\x7f");
+    expect(view.editor.getText()).toBe("look [Image #1] ");
     expect(drafts.at(-1)).not.toContain("b.png");
-    expect(
-      stripVTControlCharacters(view.editor.render(36).join("\n")),
-    ).toContain("Removed Image #2");
-    expect(input("\x1f")).toEqual({ consume: true });
-    expect(drafts.at(-1)).toMatch(/a\.png[\s\S]*b\.png/);
-    // Undo only restores the image removed by the key just before it.
-    view.editor.handleInput("\x1b[H");
-    input("\x7f");
-    input("x");
-    expect(input("\x1f")).toBeUndefined();
-    expect(drafts.at(-1)).not.toContain("b.png");
+    view.editor.handleInput("\x1a");
+    expect(view.editor.getText()).toBe("look [Image #1] [Image #2]");
+    expect(drafts.at(-1)).toContain("b.png");
+    const row = view.editor
+      .render(60)
+      .findIndex((line) =>
+        stripVTControlCharacters(line).includes("[Image #1]"),
+      );
+    const column = stripVTControlCharacters(
+      view.editor.render(60)[row]!,
+    ).indexOf("[Image #1]");
+    view.editor.handleMouse({
+      type: "click",
+      button: "left",
+      x: column + 2,
+      y: row,
+      width: 60,
+      height: 10,
+    } as never);
+    expect(preview).toHaveBeenCalledWith({
+      label: "Image #1",
+      path: "/tmp/a.png",
+    });
   } finally {
     view.dispose();
   }

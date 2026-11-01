@@ -305,9 +305,9 @@ export function parseCommand(text: string) {
 
 const shortcuts: Record<CommandMode, string> = {
   native:
-    "Enter sends · while a run is active Enter steers after the current step (/follow queues instead) · Ctrl+X Enter queues a separate task · Ctrl+C stops · Ctrl+D exits · Shift+Enter adds a line · Ctrl+P actions · Ctrl+O sessions · ![--unrestricted] COMMAND runs a shell command under the current permissions · @file attaches · Backspace at the start removes the last image (Ctrl+- restores)",
+    "Enter sends · while a run is active Enter steers after the current step (/follow queues instead) · Ctrl+X Enter queues a separate task · Ctrl+C stops · Ctrl+D exits · Shift+Enter adds a line · Ctrl+P actions · Ctrl+O sessions · ![--unrestricted] COMMAND runs a shell command under the current permissions · @file attaches · click [Image #N] to preview · Ctrl+Z undoes",
   attached:
-    "Enter sends · while a run is active Enter steers after the current step (/follow queues instead) · Ctrl+X Enter queues a separate task · Ctrl+C stops the selected task · Ctrl+D detaches · Ctrl+P actions · Ctrl+O sessions · ![--unrestricted] COMMAND runs on the host under its approvals · @file attaches local files · Backspace at the start removes the last image (Ctrl+- restores)",
+    "Enter sends · while a run is active Enter steers after the current step (/follow queues instead) · Ctrl+X Enter queues a separate task · Ctrl+C stops the selected task · Ctrl+D detaches · Ctrl+P actions · Ctrl+O sessions · ![--unrestricted] COMMAND runs on the host under its approvals · @file attaches local files · click [Image #N] to preview · Ctrl+Z undoes",
   pi: "Enter sends · Ctrl+C stops · /back returns to Pi",
 };
 

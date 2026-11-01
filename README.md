@@ -95,7 +95,8 @@ Running Enter steers the observed run, as in Pi, Claude Code and Codex: a runnin
 | `Ctrl+C` | Stop the selected run; exit when idle |
 | `Ctrl+D`, `/quit` | Exit |
 | `Shift+Enter` | New line |
-| `Backspace` at the composer start | Remove the last image chip; `Ctrl+-` right after restores it |
+| Paste or drag an image | Inserts an `[Image #N]` token that deletes as one unit; click it to preview in the terminal (Esc closes, O opens Preview) |
+| `Ctrl+Z` (or `Ctrl+-`) | Undo in the composer, including a deleted image |
 | `Ctrl+Shift+F` | Search the visible terminal document |
 
 Draft edits are coalesced and scheduled for saving after 300 ms, including during continuous typing. Saves are serialized per TUI instance, flushed on submission/session switches/orderly exit, and restored after a process crash. The last interval plus any pending storage write can still be lost; this is not recovery of in-memory queued prompts or an interrupted model run. Expanded pasted text is saved, while transient extension-dialog answers are excluded. Storage failures appear near the editor. The existing 100,000-character draft limit remains. Each monitored session retains its editor, view selection, search and reading position. Deleting the current session first activates an available replacement or a new blank session.

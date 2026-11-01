@@ -16,10 +16,41 @@ export const editorChromeRows = 3;
 
 const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
-function fillChipRow(line: string, width: number) {
-  return line + " ".repeat(Math.max(0, width - visibleWidth(line)));
+type Segment = { segment: string; index: number; input?: string };
+type Segmenter = (text: string, mode: "grapheme" | "word") => Iterable<Segment>;
+
+/** Merge each known `[Image #N]` token into one segment, as Pi does for paste markers. */
+function mergeTokens(
+  segments: Iterable<Segment>,
+  text: string,
+  tokens: string[],
+) {
+  const spans: { start: number; end: number }[] = [];
+  for (const token of tokens)
+    for (
+      let at = text.indexOf(token);
+      at >= 0;
+      at = text.indexOf(token, at + 1)
+    )
+      spans.push({ start: at, end: at + token.length });
+  if (!spans.length) return segments;
+  const merged: Segment[] = [];
+  for (const segment of segments) {
+    const span = spans.find(
+      (item) => segment.index >= item.start && segment.index < item.end,
+    );
+    if (!span) merged.push(segment);
+    else if (segment.index === span.start)
+      merged.push({
+        segment: text.slice(span.start, span.end),
+        index: span.start,
+        input: text,
+      });
+  }
+  return merged;
 }
 import { sanitize } from "./text.ts";
+import { stripVTControlCharacters } from "node:util";
 
 // Used only inside super.render(); never returned to the terminal.
 const bottomBoundary = "\0hikaro-editor-bottom\0";
@@ -39,9 +70,8 @@ export class ActivityEditor extends Editor {
   private timer?: ReturnType<typeof setInterval>;
   private animated = false;
   private chips: ImageChip[] = [];
-  private chipRow = -1;
-  private chipHits: Array<{ start: number; end: number; path: string }> = [];
-  onOpenImage?: (path: string) => void;
+  private rendered: string[] = [];
+  onOpenImage?: (chip: ImageChip) => void;
 
   constructor(
     tui: TUI,
@@ -49,6 +79,15 @@ export class ActivityEditor extends Editor {
     options: ConstructorParameters<typeof Editor>[2] = {},
   ) {
     super(tui, theme, { ...options, paddingX: 1, autocompleteMaxVisible: 5 });
+    // Pi keeps segmentation private; wrap it so image tokens move and delete whole.
+    const self = this as unknown as { segment: Segmenter };
+    const base = self.segment.bind(this);
+    self.segment = (text, mode) =>
+      mergeTokens(
+        base(text, mode),
+        text,
+        this.chips.map((chip) => `[${chip.label}]`),
+      );
   }
 
   setHint(text: string) {
@@ -199,26 +238,13 @@ export class ActivityEditor extends Editor {
     const completionRows = this.sourceRows.splice(completionStart);
     result.unshift(...completion);
     this.sourceRows.unshift(...completionRows);
-    this.chipRow = -1;
-    this.chipHits = [];
-    if (this.chips.length) {
-      let column = 1;
-      let painted = " ";
-      for (const chip of this.chips) {
-        const token = `[${chip.label}]`;
-        if (column > 1 && column + token.length + 1 > width) break;
-        this.chipHits.push({
-          start: column,
-          end: column + token.length,
-          path: chip.path,
-        });
-        painted += imageChip(token) + " ";
-        column += token.length + 1;
-      }
-      result.splice(1, 0, fillChipRow(painted, width));
-      this.sourceRows.splice(1, 0, -1);
-      this.chipRow = 1;
+    for (const chip of this.chips) {
+      const token = `[${chip.label}]`;
+      for (let row = completion.length; row < result.length; row++)
+        if (result[row]!.includes(token))
+          result[row] = result[row]!.replaceAll(token, imageChip(token));
     }
+    this.rendered = result;
     return focused
       ? result
       : result.map((line) =>
@@ -230,12 +256,12 @@ export class ActivityEditor extends Editor {
   }
 
   override handleMouse(event: TuiMouseEvent) {
-    if (event.y === this.chipRow && event.type === "click") {
-      const hit = this.chipHits.find(
-        (chip) => event.x >= chip.start && event.x < chip.end,
-      );
-      if (hit) this.onOpenImage?.(hit.path);
-      return { handled: true };
+    if (event.type === "click") {
+      const chip = this.chipAt(event.x, event.y);
+      if (chip) {
+        this.onOpenImage?.(chip);
+        return { handled: true };
+      }
     }
     const sourceY = this.sourceRows[event.y];
     if (sourceY === undefined || sourceY < 0) return { handled: true };
@@ -244,6 +270,29 @@ export class ActivityEditor extends Editor {
       y: sourceY,
       height: this.sourceHeight,
     });
+  }
+
+  /** The image token under a click on the rendered composer, if any. */
+  private chipAt(x: number, y: number) {
+    const line = this.rendered[y];
+    if (!line || !this.chips.length) return;
+    const plain = stripVTControlCharacters(
+      line
+        .replaceAll(CURSOR_MARKER, "")
+        .replaceAll(FAKE_CURSOR_START, "")
+        .replaceAll(FAKE_CURSOR_END, ""),
+    );
+    for (const chip of this.chips) {
+      const token = `[${chip.label}]`;
+      for (
+        let at = plain.indexOf(token);
+        at >= 0;
+        at = plain.indexOf(token, at + 1)
+      ) {
+        const start = visibleWidth(plain.slice(0, at));
+        if (x >= start && x < start + visibleWidth(token)) return chip;
+      }
+    }
   }
 
   dispose() {
