@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — 2026-11-01
+## 0.4.0 — 2026-11-01
 
 - Enter while running interjects, as in Codex: a reply the model is still thinking or writing is cut short (what it wrote is kept) and it answers again with your message. A running tool is never interrupted; the instruction applies once it finishes and the step's remaining tool calls are skipped. `/follow` and Ctrl+X Enter queue instead.
 - `/context` now shows context usage: used / window, a bar by category and the room left before auto-compact. `/context-window` sets the window size (the old `/context` picker). The Context workbench tab stays reachable from the tab bar.
