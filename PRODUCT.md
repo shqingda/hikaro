@@ -6,7 +6,7 @@
 
 web
 
-<!-- The product itself is a terminal TUI. This file scopes the brand presentation surface; the identity must also survive at one terminal cell and as an app icon. -->
+<!-- The product itself is a terminal TUI. This file scopes the brand presentation surface; the identity must also survive at one terminal cell. -->
 
 ## Users
 
@@ -22,7 +22,7 @@ The agent loop, the file boundaries, and the approval surface are Hikaro's own; 
 
 ## Operating Context
 
-A fullscreen TUI for an 18–36 row terminal; keyboard-first navigation; approval panels above the editor; session history in SQLite; data in `~/.hikaro`; macOS workspace sandbox for commands; optional MCP, Skills, LSP, index, browser, plugins, subagents, scheduled jobs. The brand also appears in the README, package metadata, an app icon, documentation, and release pages. A terminal cell, a 16 px favicon, and a 1024 px app icon are all first-class sizes.
+A fullscreen TUI for an 18–36 row terminal; keyboard-first navigation; approval panels above the editor; session history in SQLite; data in `~/.hikaro`; macOS workspace sandbox for commands; optional MCP, Skills, LSP, index, browser, plugins, subagents, scheduled jobs. The brand also appears in the README, package metadata, documentation, and release pages. A terminal cell is a first-class size.
 
 ## Capabilities and Constraints
 
@@ -30,7 +30,7 @@ Node 26.12.1+, pnpm 12.14.0, `rg`, and a C11 compiler are required to run from s
 
 ## Brand Commitments
 
-The name is _hikaro_; the user confirms it is tied to light and illumination. The redesign is a full replacement: the incumbent terracotta-and-cream palette, the four-tile H icon, and the uppercase geometric wordmark are evidence, not authority. The identity is a serif `h` with a round sun behind the shoulder and one horizon line; the wordmark is lowercase Literata with a round Beam tittle. The macOS app icon uses the system squircle (824 / 1024, 100 px margin, 185 corner) as its canvas; this is not a generic monogram tile. Forbidden by the brief: gradients or glow, a light shape inside the `h`, a generic rounded-tile monogram (the macOS squircle canvas is allowed), Japanese-symbol pastiche (torii, sakura, brush strokes, seals), and minimalism that is clean but empty. A compact mark must remain legible at 16 px and one terminal cell.
+The name is _hikaro_; the user confirms it is tied to light and illumination. The redesign is a full replacement: the incumbent terracotta-and-cream palette, the four-tile H icon, and the uppercase geometric wordmark are evidence, not authority. The identity is a serif `h` with a round sun behind the shoulder and one horizon line; the wordmark is lowercase Literata with a round Beam tittle. Forbidden by the brief: gradients or glow, a light shape inside the `h`, a generic rounded-tile monogram, Japanese-symbol pastiche (torii, sakura, brush strokes, seals), and minimalism that is clean but empty. A compact mark must remain legible at 16 px and one terminal cell.
 
 ## Evidence on Hand
 
